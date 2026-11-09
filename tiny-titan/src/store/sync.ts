@@ -2,14 +2,21 @@
 // step: newest `updatedAt` wins, pushes are debounced.
 
 import { api } from '../api/client';
-import { useStore, pickSaved, parseSavedState } from './useStore';
+import { useStore, pickSaved, parseSavedState, referencedPhotoIds } from './useStore';
 import { useUi } from './ui';
+import { syncPhotos } from './photos';
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let lastPushed = 0;
-let started = false;
+let subscribed = false;
+
+function usable(): boolean {
+  const ui = useUi.getState();
+  return ui.serverOnline === true && !ui.serverLocked;
+}
 
 async function push() {
+  if (!usable()) return;
   const s = useStore.getState();
   if (!s.updatedAt || s.updatedAt === lastPushed) return;
   try {
@@ -21,47 +28,62 @@ async function push() {
 }
 
 export function schedulePush() {
-  if (useUi.getState().serverOnline === false) return;
+  if (!usable()) return;
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(push, 1500);
 }
 
 export async function refreshHealth(): Promise<boolean> {
+  const ui = useUi.getState();
   try {
     const h = await api.health();
-    useUi.getState().setServerOnline(true);
-    useUi.getState().setStravaStatus(h.strava.configured, h.strava.connected);
+    ui.setServerOnline(true);
+    ui.setServerLocked(h.auth.required && !h.auth.ok);
+    ui.setStravaStatus(h.strava.configured, h.strava.connected);
     if (h.strava.athlete && useStore.getState().strava.athleteName !== h.strava.athlete) {
       useStore.getState().setStrava({ athleteName: h.strava.athlete });
     }
     return true;
   } catch {
-    useUi.getState().setServerOnline(false);
+    ui.setServerOnline(false);
     return false;
   }
 }
 
-export async function startSync() {
-  if (started) return;
-  started = true;
-  const online = await refreshHealth();
-  if (online) {
-    try {
-      const { state } = await api.getState();
-      const local = useStore.getState();
-      if (state && state.updatedAt > (local.updatedAt || 0)) {
-        useStore.getState().replaceAll(parseSavedState(state));
-        lastPushed = state.updatedAt;
-      } else if (local.updatedAt && (!state || local.updatedAt > state.updatedAt)) {
-        await push();
-      } else if (state) {
-        lastPushed = state.updatedAt;
-      }
-    } catch {
-      /* ignore */
+/** Reconcile with the server copy: newest wins. */
+async function reconcile() {
+  if (!usable()) return;
+  try {
+    const { state } = await api.getState();
+    const local = useStore.getState();
+    if (state && state.updatedAt > (local.updatedAt || 0)) {
+      useStore.getState().replaceAll(parseSavedState(state));
+      lastPushed = state.updatedAt;
+    } else if (local.updatedAt && (!state || local.updatedAt > state.updatedAt)) {
+      await push();
+    } else if (state) {
+      lastPushed = state.updatedAt;
     }
+  } catch {
+    /* ignore */
   }
-  useStore.subscribe((s, prev) => {
-    if (s.updatedAt !== prev.updatedAt) schedulePush();
-  });
+  void syncPhotos(referencedPhotoIds(useStore.getState().body));
+}
+
+export async function startSync() {
+  const online = await refreshHealth();
+  if (online) await reconcile();
+  if (!subscribed) {
+    subscribed = true;
+    useStore.subscribe((s, prev) => {
+      if (s.updatedAt !== prev.updatedAt) schedulePush();
+    });
+  }
+}
+
+/** Log in to a password-protected server, then sync. */
+export async function unlockServer(password: string): Promise<void> {
+  await api.login(password);
+  await refreshHealth();
+  await reconcile();
 }

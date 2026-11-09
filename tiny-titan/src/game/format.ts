@@ -1,4 +1,5 @@
 import type { Settings } from './types';
+import type { Progress, ProgressUnit } from './goals';
 
 export const KG_PER_LB = 0.45359237;
 export const M_PER_MI = 1609.344;
@@ -74,6 +75,37 @@ export function parseDurationInput(h: string | number, m: string | number, s: st
   const mm = Number(m) || 0;
   const ss = Number(s) || 0;
   return Math.max(0, Math.round(hh * 3600 + mm * 60 + ss));
+}
+
+/** Format a goal value in the player's units. */
+export function fmtGoalValue(n: number, unit: ProgressUnit, settings: Pick<Settings, 'weightUnit' | 'distanceUnit'>): string {
+  switch (unit) {
+    case 'kg':
+      return kgToUnit(n, settings.weightUnit) >= 10000 ? fmtBigKg(n, settings.weightUnit) : fmtWeight(n, settings.weightUnit, 1);
+    case 'm':
+      return fmtDistance(n, settings.distanceUnit, n >= 100000 ? 0 : 1);
+    case 'elev':
+      return fmtElevation(n, settings.distanceUnit);
+    case 'level':
+      return `Lv ${Math.floor(n)}`;
+    case 'grade':
+      return n < -1 ? '—' : n < 0 ? 'VB' : `V${Math.floor(n)}`;
+    case 'weeks':
+      return `${Math.floor(n)} wk`;
+    case 'xp':
+      return `${fmtNum(n)} XP`;
+    case 'min':
+      return fmtDurationShort(n * 60);
+    case 'ratio':
+      return `${n.toFixed(2)}×`;
+    default:
+      return fmtNum(Math.floor(n));
+  }
+}
+
+export function fmtProgress(p: Progress, settings: Pick<Settings, 'weightUnit' | 'distanceUnit'>): string {
+  const cur = p.unit === 'grade' ? p.cur : Math.min(p.cur, p.target);
+  return `${fmtGoalValue(cur, p.unit, settings)} / ${fmtGoalValue(p.target, p.unit, settings)}`;
 }
 
 export function pct(n: number): string {

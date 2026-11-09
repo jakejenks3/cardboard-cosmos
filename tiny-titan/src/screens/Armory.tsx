@@ -5,8 +5,9 @@ import { useDerived, usePerks } from '../store/derived';
 import { HeroScene } from '../avatar/HeroScene';
 import { Pix, OUTLINE } from '../avatar/pixel';
 import { PET_SPRITES } from '../avatar/petSprites';
-import { Button, Chip, RarityBadge, Sheet, SectionTitle } from '../components/ui';
-import { ITEMS, perkSummary, type ItemDef } from '../game/items';
+import { Button, Chip, RarityBadge, Sheet } from '../components/ui';
+import { ProgressLine } from '../components/GoalRow';
+import { ITEMS, perkSummary, unlockHint, unlockProgress, type ItemDef } from '../game/items';
 import { PETS, PET_BY_ID, type PetDef } from '../game/pets';
 import { SLOTS, SLOT_NAMES, RARITY_COLOR, RARITY_ORDER, DISCIPLINES, DISCIPLINE_META, type Slot } from '../game/types';
 import { formatDate } from '../game/dates';
@@ -39,17 +40,6 @@ export function PetPortrait({ id, size = 48, locked = false }: { id: string; siz
 
 type Tab = Slot | 'pets' | 'look';
 
-function unlockHint(it: ItemDef): string {
-  switch (it.unlock.kind) {
-    case 'drop':
-      return 'Random drop';
-    case 'unlock':
-      return it.unlock.hint;
-    default:
-      return 'Starter kit';
-  }
-}
-
 export function Armory() {
   const derived = useDerived();
   const profile = useStore((s) => s.profile)!;
@@ -80,6 +70,15 @@ export function Armory() {
           }),
     [tab, derived],
   );
+  const slotCounts = useMemo(() => {
+    const c: Record<string, [number, number]> = {};
+    for (const i of ITEMS) {
+      c[i.slot] ??= [0, 0];
+      c[i.slot][1]++;
+      if (derived.items[i.id]) c[i.slot][0]++;
+    }
+    return c;
+  }, [derived]);
 
   const doEquip = (it: ItemDef) => {
     const already = loadout[it.slot] === it.id;
@@ -88,6 +87,10 @@ export function Armory() {
     toast(already ? `Unequipped ${it.name}` : `Equipped ${it.name}`, '🎒', 'good');
     setSel(null);
   };
+
+  const selOwned = sel ? derived.items[sel.id] : undefined;
+  const selProgress = sel && !selOwned ? unlockProgress(sel, derived) : null;
+  const petOwned = selPet ? derived.pets[selPet.id] : undefined;
 
   return (
     <div className="screen">
@@ -102,7 +105,15 @@ export function Armory() {
         <HeroScene state={derived} profile={profile} loadout={loadout} activePet={activePet} scene={false} className="armory-canvas" />
         <div className="armory-perks">
           <div className="muted tiny">ACTIVE BONUSES</div>
-          {perkBits.length ? perkBits.map((b) => <div key={b} className="perk">{b}</div>) : <div className="muted small">None yet — gear with perks shows up as you progress.</div>}
+          {perkBits.length ? (
+            perkBits.map((b) => (
+              <div key={b} className="perk">
+                {b}
+              </div>
+            ))
+          ) : (
+            <div className="muted small">None yet — gear with perks shows up as you progress.</div>
+          )}
           {activePet && PET_BY_ID[activePet] && (
             <div className="muted small">
               🐾 {PET_BY_ID[activePet].name} the {PET_BY_ID[activePet].species}
@@ -114,11 +125,11 @@ export function Armory() {
       <div className="chips scroll-x">
         {SLOTS.map((s) => (
           <Chip key={s} active={tab === s} onClick={() => setTab(s)}>
-            {SLOT_NAMES[s]}
+            {SLOT_NAMES[s]} <span className="chip-count">{slotCounts[s]?.[0] ?? 0}/{slotCounts[s]?.[1] ?? 0}</span>
           </Chip>
         ))}
         <Chip active={tab === 'pets'} onClick={() => setTab('pets')}>
-          🐾 Pets
+          🐾 Pets <span className="chip-count">{petCount}/{PETS.length}</span>
         </Chip>
         <Chip active={tab === 'look'} onClick={() => setTab('look')}>
           ✂️ Look
@@ -150,7 +161,13 @@ export function Armory() {
       {tab !== 'pets' && tab !== 'look' && (
         <div className="item-grid">
           {tab === 'body' && (
-            <button className={`item-tile ${!loadout.body ? 'item-equipped' : ''}`} onClick={() => { equip('body', null); sfx.tap(); }}>
+            <button
+              className={`item-tile ${!loadout.body ? 'item-equipped' : ''}`}
+              onClick={() => {
+                equip('body', null);
+                sfx.tap();
+              }}
+            >
               <div className="item-preview">
                 <HeroScene state={derived} profile={profile} loadout={{ ...loadout, body: null }} activePet={null} scene={false} animate={false} />
               </div>
@@ -176,11 +193,13 @@ export function Armory() {
         </div>
       )}
 
+      <p className="muted small">Tip: perks stack. A full set of discipline gear plus its pet is a serious XP boost.</p>
+
       <Sheet open={!!sel} onClose={() => setSel(null)}>
         {sel && (
           <div className="item-detail">
             <div className="item-detail-preview">
-              <HeroScene state={derived} profile={profile} loadout={{ ...loadout, [sel.slot]: derived.items[sel.id] ? sel.id : loadout[sel.slot] }} activePet={null} scene={false} />
+              <HeroScene state={derived} profile={profile} loadout={{ ...loadout, [sel.slot]: selOwned ? sel.id : loadout[sel.slot] }} activePet={null} scene={false} />
             </div>
             <div className="grow">
               <div className="row gap-s wrap">
@@ -188,15 +207,16 @@ export function Armory() {
                 <span className="muted small">{SLOT_NAMES[sel.slot]}</span>
                 {sel.discipline && <span className="muted small">· {DISCIPLINE_META[sel.discipline].name}</span>}
               </div>
-              <h2>{derived.items[sel.id] ? sel.name : 'Locked item'}</h2>
-              <p className="muted">{derived.items[sel.id] ? sel.flavor : sel.unlock.kind === 'drop' ? 'Drops randomly after sessions. Loot luck helps.' : `Unlock: ${unlockHint(sel)}`}</p>
+              <h2>{selOwned ? sel.name : 'Locked item'}</h2>
+              <p className="muted">{selOwned ? sel.flavor : sel.unlock.kind === 'drop' ? `${unlockHint(sel)}. Drops after sessions; loot luck helps.` : `Unlock: ${unlockHint(sel)}`}</p>
+              {selProgress && <ProgressLine progress={selProgress} color={RARITY_COLOR[sel.rarity]} />}
               {perkSummary(sel.perk).map((p) => (
                 <div key={p} className="perk">
                   {p}
                 </div>
               ))}
-              {derived.items[sel.id] && derived.items[sel.id].at && <div className="muted tiny">Obtained {formatDate(derived.items[sel.id].at)}</div>}
-              {derived.items[sel.id] && (
+              {selOwned && selOwned.at && <div className="muted tiny">Obtained {formatDate(selOwned.at)}</div>}
+              {selOwned && (
                 <Button size="lg" className="mt" onClick={() => doEquip(sel)}>
                   {loadout[sel.slot] === sel.id ? 'Unequip' : 'Equip'}
                 </Button>
@@ -209,17 +229,18 @@ export function Armory() {
       <Sheet open={!!selPet} onClose={() => setSelPet(null)}>
         {selPet && (
           <div className="item-detail">
-            <PetPortrait id={selPet.id} size={96} locked={!derived.pets[selPet.id]} />
+            <PetPortrait id={selPet.id} size={96} locked={!petOwned} />
             <div className="grow">
               <RarityBadge rarity={selPet.rarity} />
-              <h2>{derived.pets[selPet.id] ? `${selPet.name} the ${selPet.species}` : 'Unknown companion'}</h2>
-              <p className="muted">{derived.pets[selPet.id] ? selPet.flavor : `Unlock: ${selPet.hint}`}</p>
+              <h2>{petOwned ? `${selPet.name} the ${selPet.species}` : 'Unknown companion'}</h2>
+              <p className="muted">{petOwned ? selPet.flavor : `Unlock: ${selPet.hint}`}</p>
+              {!petOwned && selPet.progress && <ProgressLine progress={selPet.progress(derived)} color={RARITY_COLOR[selPet.rarity]} />}
               {perkSummary(selPet.perk).map((p) => (
                 <div key={p} className="perk">
                   {p}
                 </div>
               ))}
-              {derived.pets[selPet.id] && (
+              {petOwned && (
                 <Button
                   size="lg"
                   className="mt"
@@ -238,9 +259,6 @@ export function Armory() {
           </div>
         )}
       </Sheet>
-      <SectionTitle>
-        <span className="muted small">Tip: perks stack. A full set of discipline gear plus its pet is a serious XP boost.</span>
-      </SectionTitle>
     </div>
   );
 }

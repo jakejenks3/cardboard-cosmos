@@ -5,7 +5,8 @@ import { buildSession, commitSessions, syncStrava, useDerived, usePerks } from '
 import { Button, Card, Chip, Field, Input, Segmented } from '../components/ui';
 import type { CardioSession, ClimbEntry, ClimbResult, ClimbSession, Discipline, LiftSession, Session } from '../game/types';
 import { DISCIPLINES, DISCIPLINE_META } from '../game/types';
-import { baseSessionXp, gradeLabel, MAX_V_GRADE, sessionStats } from '../game/xp';
+import { baseSessionXp, gradeLabel, isDiscipline, MAX_V_GRADE, sessionStats } from '../game/xp';
+import { BodyForm } from './Body';
 import { kgToUnit, mToUnit, unitToKg, unitToM, fmtPace, fmtSpeed, fmtBigKg, parseDurationInput } from '../game/format';
 import { todayKey } from '../game/dates';
 import { DEFAULT_EXERCISES } from '../game/summary';
@@ -14,16 +15,21 @@ import { sfx } from '../sfx/sounds';
 // ---------------------------------------------------------------------------
 
 export function LogScreen() {
-  const d = useUi((s) => s.logDiscipline) as Discipline | null;
+  const d = useUi((s) => s.logDiscipline);
   const setLogDiscipline = useUi((s) => s.setLogDiscipline);
   const editingId = useUi((s) => s.editingSessionId);
+  const editingBodyId = useUi((s) => s.editingBodyId);
   const sessions = useStore((s) => s.sessions);
+  const body = useStore((s) => s.body);
   const editing = editingId ? sessions.find((s) => s.id === editingId) ?? null : null;
+  const editingBody = editingBodyId ? body.find((b) => b.id === editingBodyId) ?? null : null;
   const stravaConnected = useUi((s) => s.stravaConnected);
   const syncing = useUi((s) => s.syncing);
 
+  if (editingBody) return <BodyForm key={editingBody.id} editing={editingBody} />;
   if (editing) return <SessionForm key={editing.id} discipline={editing.discipline} editing={editing} />;
-  if (d) return <SessionForm key={d} discipline={d} editing={null} />;
+  if (d === 'body') return <BodyForm key="new-body" editing={null} />;
+  if (d && isDiscipline(d)) return <SessionForm key={d} discipline={d} editing={null} />;
 
   return (
     <div className="screen">
@@ -41,6 +47,20 @@ export function LogScreen() {
           </button>
         ))}
       </div>
+      <button
+        className="picker picker-wide"
+        style={{ '--c': 'var(--accent)' } as React.CSSProperties}
+        onClick={() => {
+          sfx.tap();
+          setLogDiscipline('body');
+        }}
+      >
+        <span className="picker-icon">📸</span>
+        <span className="picker-text">
+          <span className="picker-name">Body check-in</span>
+          <span className="picker-sub">Weight · body fat · front / side / back photos</span>
+        </span>
+      </button>
       {stravaConnected && (
         <Card className="strava-card">
           <div>

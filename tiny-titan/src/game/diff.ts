@@ -1,50 +1,60 @@
-import type { Discipline, Session } from './types';
+import type { BodyEntry, Discipline, Session } from './types';
 import { DISCIPLINES } from './types';
 import type { LevelInfo, XpPart } from './xp';
 import { baseSessionXp, gradeLabel } from './xp';
 import type { PlayerState, Track } from './state';
+import { bossAt } from './campaign';
+
+type Pair = { before: LevelInfo; after: LevelInfo };
 
 export type ResultEvent =
-  | {
-      type: 'xp';
-      discipline: Discipline;
-      amount: number;
-      parts: XpPart[];
-      prBonus: number;
-      bonusPct: number;
-      hero: { before: LevelInfo; after: LevelInfo };
-      disc: { before: LevelInfo; after: LevelInfo };
-    }
+  | { type: 'xp'; discipline: Discipline; amount: number; parts: XpPart[]; prBonus: number; bonusPct: number; hero: Pair; disc: Pair }
+  | { type: 'import'; count: number; xp: number; byDiscipline: Record<Discipline, number>; hero: Pair }
+  | { type: 'bodyxp'; amount: number; hero: Pair }
   | { type: 'levelup'; track: Track; from: number; to: number }
+  | { type: 'rank'; discipline: Discipline; from: number; to: number }
   | { type: 'stage'; from: number; to: number }
+  | { type: 'boss'; index: number; damage: number; weak: boolean; hpBefore: number; hpAfter: number; maxHp: number; defeated: boolean }
   | { type: 'pr'; icon: string; title: string; detail: string }
   | { type: 'achievement'; id: string }
   | { type: 'item'; id: string; how: 'drop' | 'unlock' | 'start' }
   | { type: 'pet'; id: string }
-  | { type: 'streak'; current: number }
-  | { type: 'import'; count: number; xp: number; byDiscipline: Record<Discipline, number>; hero: { before: LevelInfo; after: LevelInfo } };
+  | { type: 'streak'; current: number };
 
-/** Results reel for a batch of sessions (e.g. a Strava import). */
-export function diffBulk(before: PlayerState, after: PlayerState, sessions: Session[]): ResultEvent[] {
+function levelEvents(before: PlayerState, after: PlayerState, tracks: Track[]): ResultEvent[] {
   const ev: ResultEvent[] = [];
-  const byDiscipline: Record<Discipline, number> = { lift: 0, climb: 0, run: 0, ride: 0 };
-  let xp = 0;
-  for (const s of sessions) {
-    const v = after.sessionXp[s.id] ?? 0;
-    byDiscipline[s.discipline] += v;
-    xp += v;
-  }
-  ev.push({ type: 'import', count: sessions.length, xp, byDiscipline, hero: { before: before.levels.hero, after: after.levels.hero } });
-  for (const track of ['lift', 'climb', 'run', 'ride', 'hero'] as Track[]) {
+  for (const track of tracks) {
     if (after.levels[track].level > before.levels[track].level) {
       ev.push({ type: 'levelup', track, from: before.levels[track].level, to: after.levels[track].level });
     }
   }
+  for (const d of DISCIPLINES) {
+    if (after.ranks[d] > before.ranks[d]) ev.push({ type: 'rank', discipline: d, from: before.ranks[d], to: after.ranks[d] });
+  }
   if (after.stage > before.stage) ev.push({ type: 'stage', from: before.stage, to: after.stage });
+  return ev;
+}
+
+/** One event per boss that took damage between the two states. */
+function bossEvents(before: PlayerState, after: PlayerState, discipline: Discipline | null, defeatedOnly = false): ResultEvent[] {
+  const ev: ResultEvent[] = [];
+  for (let i = before.campaign.index; i <= after.campaign.index; i++) {
+    const boss = bossAt(i);
+    const hpBefore = boss.hp - (i === before.campaign.index ? before.campaign.damage : 0);
+    const defeated = i < after.campaign.index;
+    const hpAfter = defeated ? 0 : boss.hp - after.campaign.damage;
+    if (hpBefore === hpAfter) continue;
+    if (defeatedOnly && !defeated) continue;
+    ev.push({ type: 'boss', index: i, damage: hpBefore - hpAfter, weak: discipline !== null && boss.weak === discipline, hpBefore, hpAfter, maxHp: boss.hp, defeated });
+  }
+  return ev;
+}
+
+function unlockEvents(before: PlayerState, after: PlayerState): ResultEvent[] {
+  const ev: ResultEvent[] = [];
   for (const id of Object.keys(after.achievements)) if (!before.achievements[id]) ev.push({ type: 'achievement', id });
   for (const [id, own] of Object.entries(after.items)) if (!before.items[id]) ev.push({ type: 'item', id, how: own.how });
   for (const id of Object.keys(after.pets)) if (!before.pets[id]) ev.push({ type: 'pet', id });
-  if (after.streak.current > before.streak.current && after.streak.current >= 2) ev.push({ type: 'streak', current: after.streak.current });
   return ev;
 }
 
@@ -66,13 +76,8 @@ export function diffStates(before: PlayerState, after: PlayerState, session: Ses
     hero: { before: before.levels.hero, after: after.levels.hero },
     disc: { before: before.levels[d], after: after.levels[d] },
   });
-
-  for (const track of [d, 'hero'] as Track[]) {
-    if (after.levels[track].level > before.levels[track].level) {
-      ev.push({ type: 'levelup', track, from: before.levels[track].level, to: after.levels[track].level });
-    }
-  }
-  if (after.stage > before.stage) ev.push({ type: 'stage', from: before.stage, to: after.stage });
+  ev.push(...bossEvents(before, after, d));
+  ev.push(...levelEvents(before, after, [d, 'hero']));
 
   // PRs
   const bp = before.prs;
@@ -115,18 +120,37 @@ export function diffStates(before: PlayerState, after: PlayerState, session: Ses
     ev.push({ type: 'pr', icon: '💨', title: 'Fastest ride (20 km+)!', detail: `${ap.bestRideSpeedKmh.toFixed(1)} km/h (was ${bp.bestRideSpeedKmh.toFixed(1)})` });
   }
 
-  for (const id of Object.keys(after.achievements)) {
-    if (!before.achievements[id]) ev.push({ type: 'achievement', id });
-  }
-  for (const [id, own] of Object.entries(after.items)) {
-    if (!before.items[id]) ev.push({ type: 'item', id, how: own.how });
-  }
-  for (const id of Object.keys(after.pets)) {
-    if (!before.pets[id]) ev.push({ type: 'pet', id });
-  }
+  ev.push(...unlockEvents(before, after));
   if (after.streak.current > before.streak.current && after.streak.current >= 2) {
     ev.push({ type: 'streak', current: after.streak.current });
   }
+  return ev;
+}
+
+/** Results reel for a batch of sessions (e.g. a Strava import). */
+export function diffBulk(before: PlayerState, after: PlayerState, sessions: Session[]): ResultEvent[] {
+  const ev: ResultEvent[] = [];
+  const byDiscipline: Record<Discipline, number> = { lift: 0, climb: 0, run: 0, ride: 0 };
+  let xp = 0;
+  for (const s of sessions) {
+    const v = after.sessionXp[s.id] ?? 0;
+    byDiscipline[s.discipline] += v;
+    xp += v;
+  }
+  ev.push({ type: 'import', count: sessions.length, xp, byDiscipline, hero: { before: before.levels.hero, after: after.levels.hero } });
+  ev.push(...bossEvents(before, after, null, true));
+  ev.push(...levelEvents(before, after, ['lift', 'climb', 'run', 'ride', 'hero']));
+  ev.push(...unlockEvents(before, after));
+  if (after.streak.current > before.streak.current && after.streak.current >= 2) ev.push({ type: 'streak', current: after.streak.current });
+  return ev;
+}
+
+/** Results reel for a body check-in. */
+export function diffBody(before: PlayerState, after: PlayerState, entry: BodyEntry): ResultEvent[] {
+  const ev: ResultEvent[] = [];
+  ev.push({ type: 'bodyxp', amount: after.bodyXp[entry.id] ?? 0, hero: { before: before.levels.hero, after: after.levels.hero } });
+  ev.push(...levelEvents(before, after, ['hero']));
+  ev.push(...unlockEvents(before, after));
   return ev;
 }
 

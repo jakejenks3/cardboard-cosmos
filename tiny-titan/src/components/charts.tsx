@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import type { Discipline } from '../game/types';
 import { DISCIPLINES, DISCIPLINE_META } from '../game/types';
-import { addDays, formatDate, todayKey, weekKey, weekdayIndex, addWeeks } from '../game/dates';
+import { addDays, daysBetween, formatDate, todayKey, weekKey, weekdayIndex, addWeeks } from '../game/dates';
 
 export interface WeekPoint {
   week: string;
@@ -177,6 +177,117 @@ export function GradePyramid({ counts, maxGrade }: { counts: Record<number, { se
       })}
     </div>
   );
+}
+
+export interface LinePoint {
+  x: string;
+  y: number;
+}
+
+/** Single-series time line: 2px line, ringed dots, end label, crosshair tooltip. */
+export function LineChart({ points, trend, color = 'var(--accent)', height = 150, fmt, label }: { points: LinePoint[]; trend?: LinePoint[]; color?: string; height?: number; fmt: (y: number) => string; label: string }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (points.length === 0) return null;
+  const W = 320;
+  const padL = 44;
+  const padR = 14;
+  const padT = 14;
+  const padB = 22;
+  const innerW = W - padL - padR;
+  const innerH = height - padT - padB;
+  const x0 = points[0].x;
+  const span = Math.max(1, daysBetween(x0, points[points.length - 1].x));
+  const ys = points.map((p) => p.y).concat(trend?.map((p) => p.y) ?? []);
+  let min = Math.min(...ys);
+  let max = Math.max(...ys);
+  if (max - min < 1e-9) {
+    min -= 1;
+    max += 1;
+  }
+  const lo = min - (max - min) * 0.12;
+  const hi = max + (max - min) * 0.12;
+  const px = (d: string) => (points.length === 1 ? padL + innerW / 2 : padL + (daysBetween(x0, d) / span) * innerW);
+  const py = (v: number) => padT + innerH - ((v - lo) / (hi - lo)) * innerH;
+  const path = (pts: LinePoint[]) => pts.map((p, i) => `${i ? 'L' : 'M'}${px(p.x).toFixed(1)},${py(p.y).toFixed(1)}`).join(' ');
+  const ticks = [min, (min + max) / 2, max];
+  const last = points[points.length - 1];
+  const mid = points[Math.floor(points.length / 2)];
+
+  const onMove = (clientX: number, el: SVGSVGElement) => {
+    const r = el.getBoundingClientRect();
+    const vx = ((clientX - r.left) / r.width) * W;
+    let best = 0;
+    let bestD = Infinity;
+    points.forEach((p, i) => {
+      const d = Math.abs(px(p.x) - vx);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    setHover(best);
+  };
+
+  return (
+    <div className="chart">
+      <svg
+        viewBox={`0 0 ${W} ${height}`}
+        className="chart-svg"
+        role="img"
+        aria-label={label}
+        onMouseMove={(e) => onMove(e.clientX, e.currentTarget)}
+        onMouseLeave={() => setHover(null)}
+        onTouchStart={(e) => onMove(e.touches[0].clientX, e.currentTarget)}
+        onTouchMove={(e) => onMove(e.touches[0].clientX, e.currentTarget)}
+      >
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} x2={W - padR} y1={py(t)} y2={py(t)} className="chart-grid" />
+            <text x={padL - 6} y={py(t) + 3} className="chart-tick" textAnchor="end">
+              {fmt(t)}
+            </text>
+          </g>
+        ))}
+        {trend && trend.length > 1 && <path d={path(trend)} className="chart-trend" fill="none" />}
+        {points.length > 1 && <path d={path(points)} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+        {points.length <= 40 && points.map((p, i) => <circle key={i} cx={px(p.x)} cy={py(p.y)} r={hover === i ? 4.5 : 3} fill={color} className="chart-dot" />)}
+        {hover === null && (
+          <text x={Math.min(W - padR, px(last.x))} y={py(last.y) - 8} className="chart-label" textAnchor="end">
+            {fmt(last.y)}
+          </text>
+        )}
+        {hover !== null && <line x1={px(points[hover].x)} x2={px(points[hover].x)} y1={padT} y2={padT + innerH} className="chart-cross" />}
+        <text x={padL} y={height - 6} className="chart-tick" textAnchor="start">
+          {formatDate(x0)}
+        </text>
+        {span >= 21 && points.length > 2 && (
+          <text x={px(mid.x)} y={height - 6} className="chart-tick" textAnchor="middle">
+            {formatDate(mid.x)}
+          </text>
+        )}
+        {points.length > 1 && (
+          <text x={W - padR} y={height - 6} className="chart-tick" textAnchor="end">
+            {formatDate(last.x)}
+          </text>
+        )}
+      </svg>
+      {hover !== null && (
+        <div className="chart-tip">
+          <b>{formatDate(points[hover].x, { weekday: 'short', month: 'short', day: 'numeric' })}</b>
+          <div>{fmt(points[hover].y)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Centred moving average over `n` points (window shrinks at the ends). */
+export function movingAverage(points: LinePoint[], n = 5): LinePoint[] {
+  const half = Math.floor(n / 2);
+  return points.map((p, i) => {
+    const slice = points.slice(Math.max(0, i - half), Math.min(points.length, i + half + 1));
+    return { x: p.x, y: slice.reduce((a, q) => a + q.y, 0) / slice.length };
+  });
 }
 
 function niceCeil(v: number): number {

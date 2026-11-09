@@ -1,13 +1,20 @@
+import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useUi } from '../store/ui';
-import { useDerived, usePerks, useQuests } from '../store/derived';
+import { useDerived, useNextGoals, usePerks, useQuests, useToday } from '../store/derived';
 import { HeroScene } from '../avatar/HeroScene';
+import { BossPortrait } from '../avatar/BossPortrait';
 import { Bar, Button, Card, SectionTitle } from '../components/ui';
 import { QuestList } from '../components/QuestList';
+import { GoalRow } from '../components/GoalRow';
 import { DISCIPLINES, DISCIPLINE_META } from '../game/types';
-import { STAGES } from '../game/xp';
+import { RANKS, STAGES } from '../game/xp';
+import { bossAt, isEcho, ZONES } from '../game/campaign';
+import { petLine } from '../game/chatter';
+import { PET_BY_ID } from '../game/pets';
+import { daysBetween } from '../game/dates';
 import { SessionRow } from './Journey';
-import { useState } from 'react';
+import { PetPortrait } from './Armory';
 
 export function Home() {
   const derived = useDerived();
@@ -16,11 +23,15 @@ export function Home() {
   const activePet = useStore((s) => s.activePet);
   const sessions = useStore((s) => s.sessions);
   const setTab = useUi((s) => s.setTab);
+  const setAdventureTab = useUi((s) => s.setAdventureTab);
+  const setJourneyTab = useUi((s) => s.setJourneyTab);
   const setSettingsOpen = useUi((s) => s.setSettingsOpen);
   const setLogDiscipline = useUi((s) => s.setLogDiscipline);
   const setEditingSession = useUi((s) => s.setEditingSession);
   const perks = usePerks(derived);
-  const { daily } = useQuests(derived);
+  const { daily, weekly } = useQuests(derived);
+  const goals = useNextGoals(derived, 3);
+  const today = useToday();
   const [tapped, setTapped] = useState(0);
 
   const lv = derived.levels.hero;
@@ -31,10 +42,36 @@ export function Home() {
   const perkBits = DISCIPLINES.filter((d) => perks.xp[d] > 0).map((d) => `+${Math.round(perks.xp[d] * 100)}% ${DISCIPLINE_META[d].name.toLowerCase()}`);
   if (perks.luck > 0) perkBits.push(`+${Math.round(perks.luck * 100)}% luck`);
 
+  const boss = bossAt(derived.campaign.index);
+  const hpLeft = boss.hp - derived.campaign.damage;
+  const pet = activePet && derived.pets[activePet] ? PET_BY_ID[activePet] : null;
+  const claimable = [...daily, ...weekly].filter((q) => q.done && !q.claimed).length;
+
+  const line = useMemo(
+    () =>
+      petLine({
+        s: derived,
+        today,
+        daysSinceLast: derived.lastSessionDate ? daysBetween(derived.lastSessionDate, today) : null,
+        trainedToday: (derived.dateCounts[today] ?? 0) > 0,
+        claimable,
+        boss,
+        bossHpLeft: hpLeft,
+        nearest: goals[0],
+      }),
+    [derived, today, claimable, boss, hpLeft, goals],
+  );
+
+  const openLog = (d: string | null) => {
+    setLogDiscipline(d);
+    setEditingSession(null);
+    setTab('log');
+  };
+
   return (
     <div className="screen">
       <header className="topbar">
-        <div>
+        <div className="grow">
           <div className="hero-name">{profile.name}</div>
           <div className="hero-title">{derived.title}</div>
         </div>
@@ -46,6 +83,12 @@ export function Home() {
       <div className="hero-stage">
         <HeroScene state={derived} profile={profile} loadout={loadout} activePet={activePet} onTap={() => setTapped((t) => t + 1)} />
         <div className="hero-hint muted small">{tapped === 0 ? 'Tap your hero to flex' : tapped < 3 ? 'Looking strong.' : 'Okay, okay, we get it.'}</div>
+      </div>
+      <div className="speech-strip" role="status">
+        {pet ? <PetPortrait id={pet.id} size={30} /> : <span className="speech-avatar">💬</span>}
+        <span>
+          <b>{pet ? pet.name : 'Coach'}</b> {line}
+        </span>
       </div>
 
       <Card className="level-card">
@@ -63,19 +106,52 @@ export function Home() {
         </div>
       </Card>
 
+      <Card
+        className="boss-mini"
+        onClick={() => {
+          setAdventureTab('campaign');
+          setTab('adventure');
+        }}
+      >
+        <BossPortrait id={boss.id} size={58} animate />
+        <div className="grow boss-mini-main">
+          <div className="boss-mini-top">
+            <span className="boss-name">{boss.name}</span>
+            {boss.weak && (
+              <span className="weak-tag" style={{ background: `var(--${boss.weak})` }}>
+                weak: {DISCIPLINE_META[boss.weak].icon}
+              </span>
+            )}
+          </div>
+          <div className="hpbar" role="progressbar" aria-label="Boss health" aria-valuemin={0} aria-valuemax={boss.hp} aria-valuenow={hpLeft}>
+            <div className="hpbar-fill" style={{ width: `${(hpLeft / boss.hp) * 100}%` }} />
+          </div>
+          <div className="muted tiny">
+            ❤️ {hpLeft.toLocaleString('en-US')} / {boss.hp.toLocaleString('en-US')} HP · {isEcho(derived.campaign.index) ? 'Endless Trials' : ZONES[boss.zone].name}
+          </div>
+        </div>
+        <span className="chev">›</span>
+      </Card>
+
       <div className="stats-grid">
         {DISCIPLINES.map((d) => {
           const l = derived.levels[d];
           const m = DISCIPLINE_META[d];
+          const rank = RANKS[derived.ranks[d]];
           return (
-            <Card key={d} className="stat-card" onClick={() => { setLogDiscipline(d); setEditingSession(null); setTab('log'); }}>
+            <Card key={d} className="stat-card" onClick={() => openLog(d)}>
               <div className="stat-head">
                 <span className="stat-icon">{m.icon}</span>
                 <span className="stat-name">{m.stat}</span>
                 <span className="stat-level pixel-font">{l.level}</span>
               </div>
               <Bar value={l.progress} color={`var(--${d})`} height={7} label={`${m.name} XP`} />
-              <div className="muted tiny">{m.name} · {l.toNext - l.into} XP to next</div>
+              <div className="muted tiny">
+                <span className="rank-name" style={{ color: rank.color }}>
+                  {rank.name}
+                </span>{' '}
+                · {(l.toNext - l.into).toLocaleString('en-US')} XP to next
+              </div>
             </Card>
           );
         })}
@@ -88,7 +164,9 @@ export function Home() {
             <div className="streak-num">
               {streak.current} week{streak.current === 1 ? '' : 's'} streak
             </div>
-            <div className="muted small">Best {streak.best} · {streak.thisWeek}/{streak.goal} sessions this week</div>
+            <div className="muted small">
+              Best {streak.best} · {streak.thisWeek}/{streak.goal} sessions this week
+            </div>
           </div>
         </div>
         <div className="streak-dots" aria-label="This week's progress">
@@ -100,9 +178,40 @@ export function Home() {
 
       {perkBits.length > 0 && <div className="perk-line">✨ Gear bonus: {perkBits.join(', ')}</div>}
 
+      {goals.length > 0 && (
+        <>
+          <SectionTitle
+            right={
+              <button
+                className="link"
+                onClick={() => {
+                  setAdventureTab('trophies');
+                  setTab('adventure');
+                }}
+              >
+                All trophies →
+              </button>
+            }
+          >
+            Almost there
+          </SectionTitle>
+          <div className="goal-list">
+            {goals.map((g) => (
+              <GoalRow key={g.key} goal={g} />
+            ))}
+          </div>
+        </>
+      )}
+
       <SectionTitle
         right={
-          <button className="link" onClick={() => setTab('quests')}>
+          <button
+            className="link"
+            onClick={() => {
+              setAdventureTab('quests');
+              setTab('adventure');
+            }}
+          >
             All quests →
           </button>
         }
@@ -114,7 +223,13 @@ export function Home() {
       <SectionTitle
         right={
           sessions.length > 0 ? (
-            <button className="link" onClick={() => setTab('journey')}>
+            <button
+              className="link"
+              onClick={() => {
+                setJourneyTab('history');
+                setTab('journey');
+              }}
+            >
               History →
             </button>
           ) : undefined
@@ -123,7 +238,7 @@ export function Home() {
         Recent
       </SectionTitle>
       {recent.length === 0 ? (
-        <Card className="muted center">No sessions yet. Your first one levels you up instantly.</Card>
+        <Card className="muted center">No sessions yet. Your first one levels you up instantly — and knocks out the first boss.</Card>
       ) : (
         <div className="session-list">
           {recent.map((s) => (
@@ -132,7 +247,7 @@ export function Home() {
         </div>
       )}
 
-      <Button size="lg" className="fab-wide" onClick={() => { setLogDiscipline(null); setEditingSession(null); setTab('log'); }}>
+      <Button size="lg" className="fab-wide" onClick={() => openLog(null)}>
         + Log a workout
       </Button>
     </div>

@@ -99,6 +99,19 @@ export function Segmented<T extends string>({ value, options, onChange, color }:
   );
 }
 
+/** Secondary navigation inside a screen. */
+export function SubTabs<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="subtabs" role="tablist">
+      {options.map((o) => (
+        <button key={o.value} type="button" role="tab" aria-selected={o.value === value} className={`subtab ${o.value === value ? 'subtab-active' : ''}`} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Sheet({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; wide?: boolean }) {
   if (!open) return null;
   return (

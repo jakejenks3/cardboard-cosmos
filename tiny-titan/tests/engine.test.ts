@@ -10,6 +10,7 @@ import { PETS } from '../src/game/pets';
 import { ACHIEVEMENTS } from '../src/game/achievements';
 import { DEFAULT_SETTINGS } from '../src/game/types';
 import { makeRng } from '../src/game/rng';
+import { BOSS_BY_ID } from '../src/game/campaign';
 
 const lift = (over: Partial<LiftSession> = {}): LiftSession => ({
   id: 'l1',
@@ -66,6 +67,11 @@ const ride = (over: Partial<CardioSession> = {}): CardioSession => ({
 
 const D = (sessions: Session[], claims = [], today = '2026-03-08') =>
   derive({ sessions, claims, weeklyGoal: 3, today });
+
+/** Hero XP that came from achievements and boss kills rather than sessions. */
+const bonusXp = (s: ReturnType<typeof D>) =>
+  ACHIEVEMENTS.reduce((a, x) => a + (s.achievements[x.id] ? x.xp : 0), 0) +
+  Object.keys(s.campaign.defeated).reduce((a, id) => a + (BOSS_BY_ID[id]?.xp ?? 0), 0);
 
 describe('xp formulas', () => {
   it('scores a lifting session from volume, reps and sets', () => {
@@ -125,7 +131,10 @@ describe('derive', () => {
     expect(s.pets.bulldog).toBeTruthy();
     expect(s.sessionXp.l1).toBe(425);
     expect(s.xp.lift).toBe(425);
-    expect(s.xp.hero).toBe(425 + 100 + 100 + 100 + 200); // first_session, first_lift, One Plate, Two Plates
+    // One Plate + Two Plates come from the 80 kg bench and 100 kg squat.
+    expect(s.achievements.lift_60).toBeTruthy();
+    expect(s.achievements.lift_100).toBeTruthy();
+    expect(s.xp.hero).toBe(425 + bonusXp(s));
     expect(s.levels.hero.level).toBeGreaterThanOrEqual(2);
     expect(s.title).toMatch(/Lifter$/);
   });
@@ -199,7 +208,7 @@ describe('derive', () => {
       weeklyGoal: 3,
       today: '2026-03-08',
     });
-    expect(s.xp.hero).toBe(425 + 500 + 150);
+    expect(s.xp.hero).toBe(425 + bonusXp(s) + 150);
     expect(s.xp.lift).toBe(425);
   });
 

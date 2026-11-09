@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from './useStore';
 import { useUi } from './ui';
 import { derive } from '../game/derive';
-import { diffBulk, diffStates } from '../game/diff';
+import { diffBody, diffBulk, diffStates } from '../game/diff';
 import { computePerks } from '../game/perks';
 import { dailyQuests, weeklyQuests } from '../game/quests';
+import { nextGoals } from '../game/nextup';
 import { todayKey, weekKey } from '../game/dates';
 import { uid } from '../game/rng';
 import { api } from '../api/client';
 import type { PlayerState } from '../game/state';
-import type { Discipline, Session } from '../game/types';
+import type { BodyEntry, Discipline, Session } from '../game/types';
 
 /** Today's date key; re-evaluated every minute so midnight rolls over. */
 export function useToday(): string {
@@ -29,9 +30,10 @@ export function useToday(): string {
 export function useDerived(): PlayerState {
   const sessions = useStore((s) => s.sessions);
   const claims = useStore((s) => s.claims);
+  const body = useStore((s) => s.body);
   const goal = useStore((s) => s.settings.weeklyGoal);
   const today = useToday();
-  return useMemo(() => derive({ sessions, claims, weeklyGoal: goal, today }), [sessions, claims, goal, today]);
+  return useMemo(() => derive({ sessions, claims, body, weeklyGoal: goal, today }), [sessions, claims, body, goal, today]);
 }
 
 export function usePerks(derived: PlayerState) {
@@ -55,9 +57,17 @@ export function useQuests(derived: PlayerState) {
   );
 }
 
-function currentDerived(): PlayerState {
+export function useNextGoals(derived: PlayerState, limit = 4) {
+  return useMemo(() => nextGoals(derived, limit), [derived, limit]);
+}
+
+function snapshotInput() {
   const st = useStore.getState();
-  return derive({ sessions: st.sessions, claims: st.claims, weeklyGoal: st.settings.weeklyGoal, today: todayKey() });
+  return { sessions: st.sessions, claims: st.claims, body: st.body, weeklyGoal: st.settings.weeklyGoal, today: todayKey() };
+}
+
+function currentDerived(): PlayerState {
+  return derive(snapshotInput());
 }
 
 /** Stamp a new session with an id, creation time and the perk snapshot. */
@@ -78,13 +88,19 @@ export function buildSession<T extends Session>(partial: Omit<T, 'id' | 'created
 /** Add sessions to the log and queue the results reel. */
 export function commitSessions(sessions: Session[], title: string) {
   if (!sessions.length) return;
-  const st = useStore.getState();
-  const input = { claims: st.claims, weeklyGoal: st.settings.weeklyGoal, today: todayKey() };
-  const before = derive({ ...input, sessions: st.sessions });
-  st.addSessions(sessions);
-  const after = derive({ ...input, sessions: useStore.getState().sessions });
+  const before = currentDerived();
+  useStore.getState().addSessions(sessions);
+  const after = currentDerived();
   const events = sessions.length === 1 ? diffStates(before, after, sessions[0]) : diffBulk(before, after, sessions);
-  useUi.getState().setResult({ sessions, events, title });
+  useUi.getState().setResult({ key: sessions.map((s) => s.id).join(','), events, title });
+}
+
+/** Add a body check-in and queue its results reel. */
+export function commitBody(entry: BodyEntry) {
+  const before = currentDerived();
+  useStore.getState().addBody(entry);
+  const after = currentDerived();
+  useUi.getState().setResult({ key: entry.id, events: diffBody(before, after, entry), title: 'Checked in!' });
 }
 
 export async function syncStrava(opts: { silent?: boolean } = {}): Promise<{ added: number; truncated: boolean }> {

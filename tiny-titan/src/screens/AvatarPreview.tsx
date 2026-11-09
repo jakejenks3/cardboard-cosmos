@@ -7,6 +7,8 @@ import { derive } from '../game/derive';
 import { ITEMS } from '../game/items';
 import { PETS } from '../game/pets';
 import type { Loadout, Profile, Slot } from '../game/types';
+import { BOSSES } from '../game/campaign';
+import { BossPortrait } from '../avatar/BossPortrait';
 
 const profile: Profile = { name: 'Preview', skin: 1, hairStyle: 0, hairColor: 1, createdAt: 0 };
 
@@ -61,6 +63,23 @@ export function AvatarPreview() {
             <HeroScene state={stateFor(st.lv)} profile={profile} loadout={{ legs: 'shorts_navy' }} activePet={null} levelsOverride={st.lv} pose="flex" scene={false} animate={false} />
           </div>
         ))}
+      </div>
+      <h2>Bosses</h2>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {BOSSES.map((b) => (
+          <div key={b.id} style={{ width: 110, textAlign: 'center', background: '#231d45', borderRadius: 8, padding: 6 }}>
+            <BossPortrait id={b.id} size={88} />
+            <div style={{ fontSize: 10 }}>{b.name}</div>
+          </div>
+        ))}
+        <div style={{ width: 110, textAlign: 'center', background: '#231d45', borderRadius: 8, padding: 6 }}>
+          <BossPortrait id="echo_1" size={88} />
+          <div style={{ fontSize: 10 }}>Echo</div>
+        </div>
+        <div style={{ width: 110, textAlign: 'center', background: '#231d45', borderRadius: 8, padding: 6 }}>
+          <BossPortrait id="iron_golem" size={88} silhouette />
+          <div style={{ fontSize: 10 }}>silhouette</div>
+        </div>
       </div>
       <h2>Items by slot (on Lv25 body)</h2>
       {slots.map((slot) => (

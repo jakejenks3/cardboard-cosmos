@@ -78,6 +78,22 @@ export interface QuestClaim {
   date: string;
 }
 
+export type PhotoAngle = 'front' | 'side' | 'back';
+export const PHOTO_ANGLES: PhotoAngle[] = ['front', 'side', 'back'];
+export const PHOTO_ANGLE_NAMES: Record<PhotoAngle, string> = { front: 'Front', side: 'Side', back: 'Back' };
+
+/** A body check-in: any combination of weight, body fat and progress photos. */
+export interface BodyEntry {
+  id: string;
+  date: string;
+  createdAt: number;
+  weightKg?: number;
+  bodyFatPct?: number;
+  /** Photo ids (blobs live in IndexedDB / the server, never in this JSON). */
+  photos?: Partial<Record<PhotoAngle, string>>;
+  note?: string;
+}
+
 export type Slot = 'head' | 'face' | 'body' | 'hands' | 'legs' | 'feet' | 'back' | 'accessory' | 'aura';
 export const SLOTS: Slot[] = ['head', 'face', 'body', 'hands', 'legs', 'feet', 'back', 'accessory', 'aura'];
 export const SLOT_NAMES: Record<Slot, string> = {

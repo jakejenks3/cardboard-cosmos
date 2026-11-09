@@ -83,6 +83,21 @@ export const sfx = {
   stage() {
     [392, 523, 659, 784, 1047, 1319].forEach((f, i) => note(f, i * 0.1, 0.3, 'triangle', 0.07));
   },
+  hit() {
+    note(180, 0, 0.08, 'sawtooth', 0.07);
+    note(120, 0.05, 0.12, 'square', 0.06);
+  },
+  bossDown() {
+    [196, 147, 98].forEach((f, i) => note(f, i * 0.09, 0.2, 'sawtooth', 0.06));
+    [523, 659, 784, 1047, 1319].forEach((f, i) => note(f, 0.35 + i * 0.08, 0.25, 'square', 0.06));
+  },
+  rank() {
+    [440, 554, 659, 880].forEach((f, i) => note(f, i * 0.1, 0.22, 'triangle', 0.07));
+  },
+  shutter() {
+    note(1200, 0, 0.03, 'square', 0.04);
+    note(600, 0.04, 0.05, 'square', 0.04);
+  },
   error() {
     note(220, 0, 0.15, 'sawtooth', 0.04);
     note(180, 0.12, 0.2, 'sawtooth', 0.04);

@@ -246,6 +246,34 @@ export function stageForLevel(level: number): number {
   return st;
 }
 
+/** Total XP required to *reach* a discipline level. */
+export function discXpToReach(level: number): number {
+  let t = 0;
+  for (let l = 1; l < level; l++) t += discXpForLevel(l);
+  return t;
+}
+
+// ---------------------------------------------------------------------------
+// Mastery ranks: named tiers for each discipline level track.
+// ---------------------------------------------------------------------------
+export const RANKS = [
+  { minLevel: 1, name: 'Novice', color: '#9aa3ad' },
+  { minLevel: 5, name: 'Apprentice', color: '#b98a5a' },
+  { minLevel: 10, name: 'Journeyman', color: '#c9d1d9' },
+  { minLevel: 15, name: 'Adept', color: '#ffd54f' },
+  { minLevel: 20, name: 'Expert', color: '#4dd0e1' },
+  { minLevel: 30, name: 'Master', color: '#c77dff' },
+  { minLevel: 40, name: 'Grandmaster', color: '#ff7043' },
+  { minLevel: 50, name: 'Legend', color: '#ffeb3b' },
+];
+export function rankForLevel(level: number): number {
+  let r = 0;
+  RANKS.forEach((x, i) => {
+    if (level >= x.minLevel) r = i;
+  });
+  return r;
+}
+
 export function fmtInt(n: number): string {
   return Math.round(n).toLocaleString('en-US');
 }

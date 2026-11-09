@@ -1,7 +1,8 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { type Request } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { JsonFile } from './store';
 import { createStrava } from './strava';
@@ -9,12 +10,56 @@ import { createStrava } from './strava';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const PHOTO_DIR = path.join(DATA_DIR, 'photos');
 const PORT = Number(process.env.PORT) || 8787;
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
+
+fs.mkdirSync(PHOTO_DIR, { recursive: true });
 
 const app = express();
 app.set('trust proxy', true);
 app.use(express.json({ limit: '10mb' }));
+
+// ---------------------------------------------------------------------------
+// Optional password gate. This server holds training data, body measurements
+// and progress photos — set APP_PASSWORD whenever it is reachable by anyone
+// other than you.
+// ---------------------------------------------------------------------------
+const COOKIE = 'tt_auth';
+const authToken = APP_PASSWORD ? crypto.createHmac('sha256', APP_PASSWORD).update('tiny-titan-session').digest('hex') : '';
+
+function safeEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+
+function cookie(req: Request, name: string): string | undefined {
+  for (const part of (req.headers.cookie ?? '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return undefined;
+}
+
+function isAuthed(req: Request): boolean {
+  if (!APP_PASSWORD) return true;
+  const c = cookie(req, COOKIE);
+  return !!c && safeEqual(c, authToken);
+}
+
+const loginAttempts = new Map<string, { n: number; since: number }>();
+function tooManyAttempts(ip: string): boolean {
+  const now = Date.now();
+  const rec = loginAttempts.get(ip);
+  if (!rec || now - rec.since > 10 * 60_000) {
+    loginAttempts.set(ip, { n: 1, since: now });
+    return false;
+  }
+  rec.n++;
+  return rec.n > 10;
+}
 
 const stateFile = new JsonFile<{ updatedAt?: number } & Record<string, unknown>>(path.join(DATA_DIR, 'state.json'));
 const strava = createStrava({
@@ -25,10 +70,30 @@ const strava = createStrava({
   tokenFile: path.join(DATA_DIR, 'strava.json'),
 });
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, strava: strava.status() });
+app.get('/api/health', (req, res) => {
+  const ok = isAuthed(req);
+  res.json({
+    ok: true,
+    auth: { required: !!APP_PASSWORD, ok },
+    strava: ok ? strava.status() : { configured: false, connected: false, athlete: null },
+  });
 });
 
+app.post('/api/login', (req, res) => {
+  if (!APP_PASSWORD) return res.json({ ok: true });
+  if (tooManyAttempts(req.ip ?? 'unknown')) return res.status(429).json({ error: 'Too many attempts. Try again in a few minutes.' });
+  if (!safeEqual(String(req.body?.password ?? ''), APP_PASSWORD)) return res.status(401).json({ error: 'Wrong password' });
+  const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', `${COOKIE}=${authToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${180 * 86400}${secure ? '; Secure' : ''}`);
+  res.json({ ok: true });
+});
+
+app.use('/api', (req, res, next) => {
+  if (isAuthed(req)) return next();
+  res.status(401).json({ error: 'Password required' });
+});
+
+// --- saved state -------------------------------------------------------------
 app.get('/api/state', (_req, res) => {
   res.json({ state: stateFile.read() });
 });
@@ -43,6 +108,48 @@ app.put('/api/state', (req, res) => {
     return res.status(409).json({ error: 'Server has a newer copy', state: current });
   }
   stateFile.write(body);
+  res.json({ ok: true });
+});
+
+// --- progress photos ---------------------------------------------------------
+const validPhotoId = (id: string) => /^[a-z0-9]{6,40}$/i.test(id);
+const photoPath = (id: string) => path.join(PHOTO_DIR, `${id}.jpg`);
+
+app.get('/api/photos', (_req, res) => {
+  const ids = fs
+    .readdirSync(PHOTO_DIR)
+    .filter((f) => f.endsWith('.jpg'))
+    .map((f) => f.slice(0, -4));
+  res.json({ ids });
+});
+
+app.get('/api/photos/:id', (req, res) => {
+  const id = String(req.params.id);
+  if (!validPhotoId(id) || !fs.existsSync(photoPath(id))) return res.status(404).json({ error: 'No such photo' });
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  fs.createReadStream(photoPath(id)).pipe(res);
+});
+
+app.put('/api/photos/:id', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '12mb' }), (req, res) => {
+  const id = String(req.params.id);
+  if (!validPhotoId(id)) return res.status(400).json({ error: 'Invalid photo id' });
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: 'Expected image data' });
+  const tmp = `${photoPath(id)}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, req.body);
+  fs.renameSync(tmp, photoPath(id));
+  res.json({ ok: true });
+});
+
+app.delete('/api/photos/:id', (req, res) => {
+  const id = String(req.params.id);
+  if (validPhotoId(id)) {
+    try {
+      fs.unlinkSync(photoPath(id));
+    } catch {
+      /* already gone */
+    }
+  }
   res.json({ ok: true });
 });
 
@@ -61,5 +168,8 @@ if (fs.existsSync(path.join(dist, 'index.html'))) {
 
 app.listen(PORT, () => {
   const s = strava.status();
-  console.log(`Tiny Titan server on http://localhost:${PORT}  (strava: ${s.configured ? (s.connected ? 'connected' : 'configured, not connected') : 'not configured'})`);
+  console.log(`Tiny Titan server on http://localhost:${PORT}  (strava: ${s.configured ? (s.connected ? 'connected' : 'configured, not connected') : 'not configured'}, password: ${APP_PASSWORD ? 'on' : 'off'})`);
+  if (!APP_PASSWORD && !/localhost|127\.0\.0\.1/.test(APP_URL)) {
+    console.warn('WARNING: APP_URL is not localhost and APP_PASSWORD is not set — anyone who can reach this server can read your data and photos.');
+  }
 });

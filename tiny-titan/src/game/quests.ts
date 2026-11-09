@@ -84,7 +84,7 @@ export function dailyQuests(dateKey: string, s: PlayerState, allSessions: Sessio
         periodKey: dateKey,
         title: 'Show up',
         desc: 'Log any session today.',
-        icon: '✅',
+        icon: '🙌',
         target: 1,
         progress: sessions.length,
         unit: 'sessions',
@@ -274,6 +274,27 @@ export function weeklyQuests(wk: string, s: PlayerState, allSessions: Session[],
           progress: Math.round(sessions.reduce((a, x) => a + (x.durationSec ?? 0), 0) / 60),
           unit: 'min',
           xp: 400,
+        },
+        claims,
+      ),
+    );
+  }
+
+  // Only offered once the player has opted into body tracking.
+  if (s.body.entries > 0) {
+    out.push(
+      finish(
+        {
+          id: `w:${wk}:3`,
+          kind: 'weekly',
+          periodKey: wk,
+          title: 'Check in',
+          desc: 'Log your weight or progress photos this week.',
+          icon: '📸',
+          target: 1,
+          progress: (s.body.weekFlags[wk] ?? 0) > 0 ? 1 : 0,
+          unit: 'sessions',
+          xp: 150,
         },
         claims,
       ),

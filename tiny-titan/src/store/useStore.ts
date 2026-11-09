@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Loadout, Profile, QuestClaim, Session, Settings, Slot } from '../game/types';
+import type { BodyEntry, Loadout, Profile, QuestClaim, Session, Settings, Slot } from '../game/types';
 import { DEFAULT_SETTINGS } from '../game/types';
 
 export interface StravaInfo {
@@ -14,6 +14,7 @@ export interface SavedState {
   settings: Settings;
   sessions: Session[];
   claims: QuestClaim[];
+  body: BodyEntry[];
   loadout: Loadout;
   activePet: string | null;
   strava: StravaInfo;
@@ -27,6 +28,9 @@ export interface AppStore extends SavedState {
   addSessions: (s: Session[]) => void;
   updateSession: (s: Session) => void;
   deleteSession: (id: string) => void;
+  addBody: (e: BodyEntry) => void;
+  updateBody: (e: BodyEntry) => void;
+  deleteBody: (id: string) => void;
   claimQuest: (c: QuestClaim) => void;
   equip: (slot: Slot, id: string | null) => void;
   setLoadout: (l: Loadout) => void;
@@ -46,6 +50,7 @@ const emptyState = (): SavedState => ({
   settings: { ...DEFAULT_SETTINGS },
   sessions: [],
   claims: [],
+  body: [],
   loadout: { ...DEFAULT_LOADOUT },
   activePet: null,
   strava: { lastSyncAt: null, athleteName: null },
@@ -58,6 +63,7 @@ export function pickSaved(s: SavedState): SavedState {
     settings: s.settings,
     sessions: s.sessions,
     claims: s.claims,
+    body: s.body,
     loadout: s.loadout,
     activePet: s.activePet,
     strava: s.strava,
@@ -83,6 +89,9 @@ export const useStore = create<AppStore>()(
       updateSession: (session) =>
         set((s) => ({ sessions: s.sessions.map((x) => (x.id === session.id ? session : x)), updatedAt: Date.now() })),
       deleteSession: (id) => set((s) => ({ sessions: s.sessions.filter((x) => x.id !== id), updatedAt: Date.now() })),
+      addBody: (entry) => set((s) => (s.body.some((x) => x.id === entry.id) ? {} : { body: [...s.body, entry], updatedAt: Date.now() })),
+      updateBody: (entry) => set((s) => ({ body: s.body.map((x) => (x.id === entry.id ? entry : x)), updatedAt: Date.now() })),
+      deleteBody: (id) => set((s) => ({ body: s.body.filter((x) => x.id !== id), updatedAt: Date.now() })),
       claimQuest: (claim) =>
         set((s) => (s.claims.some((c) => c.questId === claim.questId) ? {} : { claims: [...s.claims, claim], updatedAt: Date.now() })),
       equip: (slot, id) => set((s) => ({ loadout: { ...s.loadout, [slot]: id }, updatedAt: Date.now() })),
@@ -111,9 +120,17 @@ export function parseSavedState(raw: unknown): SavedState {
     settings: { ...base.settings, ...(o.settings ?? {}) },
     sessions: o.sessions.filter((s) => s && typeof s === 'object' && typeof s.id === 'string'),
     claims: Array.isArray(o.claims) ? o.claims : [],
+    body: Array.isArray(o.body) ? o.body.filter((b) => b && typeof b === 'object' && typeof b.id === 'string') : [],
     loadout: o.loadout && typeof o.loadout === 'object' ? o.loadout : { ...DEFAULT_LOADOUT },
     activePet: typeof o.activePet === 'string' ? o.activePet : null,
     strava: { ...base.strava, ...(o.strava ?? {}) },
     updatedAt: typeof o.updatedAt === 'number' ? o.updatedAt : Date.now(),
   };
+}
+
+/** Every photo id referenced by the body log. */
+export function referencedPhotoIds(body: BodyEntry[]): string[] {
+  const ids: string[] = [];
+  for (const e of body) for (const id of Object.values(e.photos ?? {})) if (id) ids.push(id);
+  return ids;
 }

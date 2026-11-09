@@ -1,8 +1,9 @@
-import { useRef } from 'react';
-import { useStore, parseSavedState, pickSaved } from '../store/useStore';
+import { useRef, useState } from 'react';
+import { useStore, parseSavedState, pickSaved, referencedPhotoIds } from '../store/useStore';
 import { useUi } from '../store/ui';
-import { refreshHealth } from '../store/sync';
+import { refreshHealth, unlockServer } from '../store/sync';
 import { syncStrava } from '../store/derived';
+import { exportPhotos, importPhotos } from '../store/photos';
 import { api } from '../api/client';
 import { Button, Field, Input, Segmented, Sheet } from '../components/ui';
 import { setSfxEnabled } from '../sfx/sounds';
@@ -13,6 +14,7 @@ export function SettingsSheet() {
   const profile = useStore((s) => s.profile);
   const settings = useStore((s) => s.settings);
   const strava = useStore((s) => s.strava);
+  const photoCount = useStore((s) => referencedPhotoIds(s.body).length);
   const updateProfile = useStore((s) => s.updateProfile);
   const updateSettings = useStore((s) => s.updateSettings);
   const replaceAll = useStore((s) => s.replaceAll);
@@ -20,28 +22,43 @@ export function SettingsSheet() {
   const setStrava = useStore((s) => s.setStrava);
   const toast = useUi((s) => s.toast);
   const serverOnline = useUi((s) => s.serverOnline);
+  const serverLocked = useUi((s) => s.serverLocked);
   const stravaConfigured = useUi((s) => s.stravaConfigured);
   const stravaConnected = useUi((s) => s.stravaConnected);
   const syncing = useUi((s) => s.syncing);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ready = serverOnline && !serverLocked;
 
-  const exportJson = () => {
-    const data = JSON.stringify(pickSaved(useStore.getState()), null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tiny-titan-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exportJson = async () => {
+    setBusy(true);
+    try {
+      const saved = pickSaved(useStore.getState());
+      const photos = await exportPhotos(referencedPhotoIds(saved.body));
+      const data = JSON.stringify({ ...saved, photos }, null, 2);
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tiny-titan-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast(`Export failed: ${(e as Error).message}`, '⚠️', 'bad');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const importJson = async (file: File) => {
     try {
-      const parsed = parseSavedState(JSON.parse(await file.text()));
-      if (!window.confirm(`Import ${parsed.sessions.length} sessions? This replaces your current data.`)) return;
+      const raw = JSON.parse(await file.text());
+      const parsed = parseSavedState(raw);
+      if (!window.confirm(`Import ${parsed.sessions.length} sessions and ${parsed.body.length} check-ins? This replaces your current data.`)) return;
+      const n = await importPhotos(raw?.photos);
       replaceAll({ ...parsed, updatedAt: Date.now() });
-      toast('Backup imported', '📦', 'good');
+      toast(`Backup imported${n ? ` with ${n} photos` : ''}`, '📦', 'good');
       setOpen(false);
     } catch (e) {
       toast(`Import failed: ${(e as Error).message}`, '⚠️', 'bad');
@@ -57,6 +74,20 @@ export function SettingsSheet() {
       toast('Strava disconnected', '🔌');
     } catch (e) {
       toast(`Could not disconnect: ${(e as Error).message}`, '⚠️', 'bad');
+    }
+  };
+
+  const unlock = async () => {
+    if (!password) return;
+    setBusy(true);
+    try {
+      await unlockServer(password);
+      setPassword('');
+      toast('Server unlocked — syncing', '🔓', 'good');
+    } catch (e) {
+      toast((e as Error).message || 'Could not unlock', '⚠️', 'bad');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -89,18 +120,33 @@ export function SettingsSheet() {
           />
         </Field>
 
-        <h3>Strava</h3>
+        <h3>Server</h3>
         {serverOnline === false && (
           <p className="muted small">
-            The Tiny Titan server isn't running, so Strava can't connect. Run <code>npm run dev</code> (or deploy the server) with your Strava API keys in <code>.env</code> — see the README.
+            Offline mode: everything is saved in this browser. Run the Tiny Titan server (<code>npm run dev</code>) to add Strava import and sync between devices — see the README.
           </p>
         )}
-        {serverOnline && !stravaConfigured && (
+        {serverOnline && serverLocked && (
+          <div>
+            <p className="muted small">This server is password-protected. Enter the password to sync your data and photos.</p>
+            <div className="row gap-s">
+              <Input type="password" placeholder="Server password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void unlock()} autoComplete="current-password" className="grow" />
+              <Button variant="secondary" disabled={busy || !password} onClick={() => void unlock()}>
+                Unlock
+              </Button>
+            </div>
+          </div>
+        )}
+        {ready && <p className="muted small">Connected. Your log, check-ins and photos are mirrored to your server.</p>}
+
+        <h3>Strava</h3>
+        {!ready && <p className="muted small">Needs the server{serverLocked ? ' to be unlocked' : ''}.</p>}
+        {ready && !stravaConfigured && (
           <p className="muted small">
             Server is running but has no Strava keys. Add <code>STRAVA_CLIENT_ID</code> and <code>STRAVA_CLIENT_SECRET</code> to <code>.env</code> and restart.
           </p>
         )}
-        {serverOnline && stravaConfigured && !stravaConnected && (
+        {ready && stravaConfigured && !stravaConnected && (
           <div>
             <p className="muted small">Connect to import runs, rides, weight training and climbing sessions automatically.</p>
             <Button variant="secondary" onClick={() => (window.location.href = api.stravaConnectUrl())}>
@@ -108,7 +154,7 @@ export function SettingsSheet() {
             </Button>
           </div>
         )}
-        {serverOnline && stravaConnected && (
+        {ready && stravaConnected && (
           <div className="strava-box">
             <div>
               <div>
@@ -118,10 +164,18 @@ export function SettingsSheet() {
               <div className="muted small">{strava.lastSyncAt ? `Last sync ${new Date(strava.lastSyncAt).toLocaleString()}` : 'Never synced'}</div>
             </div>
             <div className="row gap-s">
-              <Button variant="secondary" size="sm" disabled={syncing} onClick={() => { setOpen(false); void syncStrava(); }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={syncing}
+                onClick={() => {
+                  setOpen(false);
+                  void syncStrava();
+                }}
+              >
                 {syncing ? 'Syncing…' : 'Sync now'}
               </Button>
-              <Button variant="ghost" size="sm" onClick={disconnect}>
+              <Button variant="ghost" size="sm" onClick={() => void disconnect()}>
                 Disconnect
               </Button>
             </div>
@@ -130,10 +184,10 @@ export function SettingsSheet() {
 
         <h3>Data</h3>
         <p className="muted small">
-          Everything lives in this browser{serverOnline ? ' and is mirrored to your server' : ''}. Keep a backup.
+          Backups include your sessions, check-ins{photoCount ? ` and all ${photoCount} progress photos` : ''}. Photos never leave this device{ready ? ' and your own server' : ''}.
         </p>
         <div className="row gap wrap">
-          <Button variant="secondary" onClick={exportJson}>
+          <Button variant="secondary" disabled={busy} onClick={() => void exportJson()}>
             Export backup
           </Button>
           <Button variant="secondary" onClick={() => fileRef.current?.click()}>
@@ -153,7 +207,7 @@ export function SettingsSheet() {
           <Button
             variant="danger"
             onClick={() => {
-              if (window.confirm('Reset everything? This deletes all sessions, gear and pets.') && window.confirm('Really? There is no undo.')) {
+              if (window.confirm('Reset everything? This deletes all sessions, check-ins, gear and pets.') && window.confirm('Really? There is no undo.')) {
                 reset();
                 setOpen(false);
               }
@@ -162,9 +216,7 @@ export function SettingsSheet() {
             Reset
           </Button>
         </div>
-        <p className="muted tiny">
-          Server: {serverOnline === null ? 'checking…' : serverOnline ? 'connected' : 'not running (offline mode)'}
-        </p>
+        <p className="muted tiny">Server: {serverOnline === null ? 'checking…' : serverOnline ? (serverLocked ? 'locked' : 'connected') : 'not running (offline mode)'}</p>
       </div>
     </Sheet>
   );

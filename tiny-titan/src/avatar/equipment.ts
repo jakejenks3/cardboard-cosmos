@@ -70,6 +70,20 @@ export function drawBackItem(p: Pix, v: ItemVisual, m: Metrics, frame: number) {
       p.set(tr + 1, m.torsoBottom - 2, shade(v.color, 1.4));
       break;
     }
+    case 'shield': {
+      // A chainring slung across the back: toothed disc peeking out behind the torso.
+      const cy = m.torsoTop + Math.floor(m.torsoH / 2);
+      const r = Math.floor(m.shoulderW / 2) + 3;
+      p.ellipse(m.cx, cy, r, r, v.color);
+      p.ellipse(m.cx, cy, r - 2, r - 2, shade(v.color, 0.75));
+      for (let a = 0; a < 12; a++) {
+        const ang = (a / 12) * Math.PI * 2;
+        p.set(Math.floor(m.cx + Math.cos(ang) * (r + 1.2)), Math.floor(cy + Math.sin(ang) * (r + 1.2)), v.accent);
+      }
+      p.rect(m.cx - 3, m.torsoTop, 2, 3, shade(v.accent, 0.7));
+      p.rect(m.cx + 1, m.torsoTop, 2, 3, shade(v.accent, 0.7));
+      break;
+    }
   }
 }
 
@@ -388,6 +402,25 @@ export function drawHeadItem(p: Pix, v: ItemVisual, m: Metrics) {
       p.set(m.cx - 1, y - 2, v.gem);
       p.set(m.cx, y - 2, v.gem);
       p.set(x + 2, y - 1, shade(v.color, 1.3));
+      break;
+    }
+    case 'laurel': {
+      // Wreath of leaves around the brow with a golden clasp.
+      for (let k = 0; k < w; k += 2) {
+        p.set(x + k, y, v.accent);
+        p.set(x + k + 1, y - 1, shade(v.accent, k % 4 === 0 ? 1.25 : 0.85));
+      }
+      for (const sx of [x - 1, x + w]) {
+        p.set(sx, y + 1, v.accent);
+        p.set(sx, y + 2, shade(v.accent, 0.85));
+        p.set(sx, y + 3, v.accent);
+      }
+      p.set(x - 2, y, v.accent);
+      p.set(x + w + 1, y, v.accent);
+      p.set(x - 2, y - 2, shade(v.accent, 1.25));
+      p.set(x + w + 1, y - 2, shade(v.accent, 1.25));
+      p.rect(m.cx - 1, y - 2, 2, 2, v.color);
+      p.set(m.cx - 1, y - 2, shade(v.color, 1.4));
       break;
     }
     case 'bandana': {
