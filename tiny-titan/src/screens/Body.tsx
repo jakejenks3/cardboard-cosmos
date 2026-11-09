@@ -9,6 +9,7 @@ import { commitBody, useDerived } from '../store/derived';
 import { processImage, removePhoto, savePhoto, usePhotoUrl } from '../store/photos';
 import { Button, Card, Empty, Field, Input, SectionTitle, Segmented, Stat } from '../components/ui';
 import { LineChart, movingAverage } from '../components/charts';
+import { Stepper } from '../components/Stepper';
 import type { BodyEntry, PhotoAngle } from '../game/types';
 import { PHOTO_ANGLES, PHOTO_ANGLE_NAMES } from '../game/types';
 import { bodyEntryReward } from '../game/derive';
@@ -108,6 +109,8 @@ export function BodyForm({ editing }: { editing: BodyEntry | null }) {
   const derived = useDerived();
   const wu = settings.weightUnit;
 
+  // Your most recent weigh-in: the + / − buttons start from it.
+  const lastWeight = derived.body.latestWeightKg !== null ? Math.round(kgToUnit(derived.body.latestWeightKg, wu) * 10) / 10 : undefined;
   const [date, setDate] = useState(editing?.date ?? todayKey());
   const [weight, setWeight] = useState(editing?.weightKg ? trimNum(kgToUnit(editing.weightKg, wu)) : '');
   const [bf, setBf] = useState(editing?.bodyFatPct ? String(editing.bodyFatPct) : '');
@@ -246,8 +249,8 @@ export function BodyForm({ editing }: { editing: BodyEntry | null }) {
         <Input type="date" value={date} max={todayKey()} onChange={(e) => setDate(e.target.value)} />
       </Field>
       <div className="row gap">
-        <Field label={`Weight (${wu})`} className="grow" hint={weightBad ? 'That does not look right.' : undefined}>
-          <Input inputMode="decimal" placeholder="0.0" value={weight} onChange={(e) => setWeight(e.target.value)} />
+        <Field label={`Weight (${wu})`} className="grow" hint={weightBad ? 'That does not look right.' : lastWeight !== undefined && !weight ? `Last: ${lastWeight} ${wu} — tap + to start there` : undefined}>
+          <Stepper value={weight} onChange={setWeight} step={wu === 'kg' ? 0.1 : 0.2} base={lastWeight} inputMode="decimal" placeholder={lastWeight !== undefined ? String(lastWeight) : '0.0'} ariaLabel="body weight" />
         </Field>
         <Field label="Body fat (%)" className="grow" hint={fatBad ? 'Between 2 and 75.' : 'Optional'}>
           <Input inputMode="decimal" placeholder="—" value={bf} onChange={(e) => setBf(e.target.value)} />

@@ -134,6 +134,15 @@ export interface Settings {
   sound: boolean;
   /** Sessions per week needed to keep the streak alive. */
   weeklyGoal: number;
+  /** Size of one + / − tap on a weight, in the chosen weight unit. */
+  weightStep?: number;
+}
+
+export const WEIGHT_STEPS: Record<Settings['weightUnit'], number[]> = { kg: [1, 2.5, 5, 10], lb: [2.5, 5, 10] };
+
+export function weightStepOf(settings: Pick<Settings, 'weightUnit' | 'weightStep'>): number {
+  const opts = WEIGHT_STEPS[settings.weightUnit];
+  return settings.weightStep && opts.includes(settings.weightStep) ? settings.weightStep : settings.weightUnit === 'kg' ? 2.5 : 5;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useUi } from '../store/ui';
 import { buildSession, commitSessions, syncStrava, useDerived, usePerks } from '../store/derived';
-import { Button, Card, Chip, Field, Input, Segmented } from '../components/ui';
+import { Button, Card, Field, Input, Segmented } from '../components/ui';
 import type { CardioSession, ClimbEntry, ClimbResult, ClimbSession, Discipline, LiftSession, Session } from '../game/types';
 import { DISCIPLINES, DISCIPLINE_META } from '../game/types';
 import { baseSessionXp, gradeLabel, isDiscipline, MAX_V_GRADE, sessionStats } from '../game/xp';
 import { BodyForm } from './Body';
-import { kgToUnit, mToUnit, unitToKg, unitToM, fmtPace, fmtSpeed, fmtBigKg, parseDurationInput } from '../game/format';
-import { todayKey } from '../game/dates';
-import { DEFAULT_EXERCISES } from '../game/summary';
+import { LiftEditor, draftFromSets, setsFromDraft, trimNum, type ExerciseDraft } from './LiftEditor';
+import { mToUnit, unitToM, fmtPace, fmtSpeed, fmtBigKg, fmtDistance, fmtDuration, fmtDurationShort, parseDurationInput } from '../game/format';
+import { relativeDay, todayKey } from '../game/dates';
 import { sfx } from '../sfx/sounds';
 
 // ---------------------------------------------------------------------------
@@ -38,12 +38,18 @@ export function LogScreen() {
       </header>
       <div className="picker-grid">
         {DISCIPLINES.map((x) => (
-          <button key={x} className="picker" style={{ '--c': `var(--${x})` } as React.CSSProperties} onClick={() => { sfx.tap(); setLogDiscipline(x); }}>
+          <button
+            key={x}
+            className="picker"
+            style={{ '--c': `var(--${x})` } as React.CSSProperties}
+            onClick={() => {
+              sfx.tap();
+              setLogDiscipline(x);
+            }}
+          >
             <span className="picker-icon">{DISCIPLINE_META[x].icon}</span>
             <span className="picker-name">{DISCIPLINE_META[x].name}</span>
-            <span className="picker-sub">
-              {x === 'lift' ? 'Reps × weight' : x === 'climb' ? 'V-grades' : 'Distance & time'}
-            </span>
+            <span className="picker-sub">{x === 'lift' ? 'Reps × weight' : x === 'climb' ? 'V-grades' : 'Distance & time'}</span>
           </button>
         ))}
       </div>
@@ -78,16 +84,9 @@ export function LogScreen() {
 
 // ---------------------------------------------------------------------------
 
-interface SetDraft {
-  reps: string;
-  weight: string;
-}
-interface ExerciseDraft {
-  name: string;
-  bodyweight: boolean;
-  sets: SetDraft[];
-}
 interface ClimbDraft extends ClimbEntry {}
+
+const DURATION_CHIPS = [30, 45, 60, 90];
 
 function SessionForm({ discipline, editing }: { discipline: Discipline; editing: Session | null }) {
   const settings = useStore((s) => s.settings);
@@ -112,18 +111,14 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
   const [ds, setDs] = useState(dur ? String(dur % 60) : '');
   const [title, setTitle] = useState(editing?.title ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
+  const setDuration = (sec: number) => {
+    setDh(sec >= 3600 ? String(Math.floor(sec / 3600)) : '');
+    setDm(String(Math.floor((sec % 3600) / 60)));
+    setDs(sec % 60 ? String(sec % 60) : '');
+  };
 
   // --- lifting ---
-  const [exercises, setExercises] = useState<ExerciseDraft[]>(() => {
-    if (editing?.discipline === 'lift') {
-      return editing.exercises.map((e) => ({
-        name: e.name,
-        bodyweight: e.sets.every((s) => s.weightKg === 0),
-        sets: e.sets.map((s) => ({ reps: String(s.reps), weight: s.weightKg ? trimNum(kgToUnit(s.weightKg, wu)) : '' })),
-      }));
-    }
-    return [{ name: '', bodyweight: false, sets: [{ reps: '', weight: '' }] }];
-  });
+  const [exercises, setExercises] = useState<ExerciseDraft[]>(() => (editing?.discipline === 'lift' ? editing.exercises.map((e) => draftFromSets(e.name, e.sets, wu)) : []));
   // --- climbing ---
   const [climbs, setClimbs] = useState<ClimbDraft[]>(() => (editing?.discipline === 'climb' ? editing.climbs.map((c) => ({ ...c })) : []));
   const [result, setResult] = useState<ClimbResult>('send');
@@ -134,28 +129,29 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
     editing && editing.discipline !== 'lift' && editing.discipline !== 'climb' && editing.elevationM ? trimNum(du === 'km' ? editing.elevationM : editing.elevationM * 3.28084) : '',
   );
 
-  const exerciseNames = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const s of sessions) if (s.discipline === 'lift') for (const e of s.exercises) seen.set(e.name.trim().toLowerCase(), e.name.trim());
-    for (const n of DEFAULT_EXERCISES) if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
-    return [...seen.values()].sort();
-  }, [sessions]);
-
-  const lastLift = useMemo(() => [...sessions].filter((s): s is LiftSession => s.discipline === 'lift' && s.id !== editing?.id).sort((a, b) => b.createdAt - a.createdAt)[0], [sessions, editing]);
+  /** The most recent session of this discipline, for one-tap "same as last time". */
+  const lastSame = useMemo(
+    () => [...sessions].filter((s) => s.discipline === discipline && s.id !== editing?.id).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)[0] ?? null,
+    [sessions, discipline, editing],
+  );
 
   // --- build the draft session ---
   const durationSec = parseDurationInput(dh, dm, ds);
   const draft: Session | null = useMemo(() => {
-    const base = { id: editing?.id ?? 'draft', createdAt: editing?.createdAt ?? 0, date, source: editing?.source ?? ('manual' as const), stravaId: editing?.stravaId, title: title.trim() || undefined, notes: notes.trim() || undefined, durationSec: durationSec || undefined, bonusPct: editing?.bonusPct, luckPct: editing?.luckPct };
+    const base = {
+      id: editing?.id ?? 'draft',
+      createdAt: editing?.createdAt ?? 0,
+      date,
+      source: editing?.source ?? ('manual' as const),
+      stravaId: editing?.stravaId,
+      title: title.trim() || undefined,
+      notes: notes.trim() || undefined,
+      durationSec: durationSec || undefined,
+      bonusPct: editing?.bonusPct,
+      luckPct: editing?.luckPct,
+    };
     if (discipline === 'lift') {
-      const ex = exercises
-        .map((e) => ({
-          name: e.name.trim(),
-          sets: e.sets
-            .map((s) => ({ reps: Math.max(0, Math.round(Number(s.reps) || 0)), weightKg: e.bodyweight ? 0 : Math.max(0, unitToKg(Number(s.weight) || 0, wu)) }))
-            .filter((s) => s.reps > 0),
-        }))
-        .filter((e) => e.name && e.sets.length);
+      const ex = exercises.map((e) => ({ name: e.name.trim(), sets: setsFromDraft(e, wu) })).filter((e) => e.name && e.sets.length);
       return { ...base, discipline: 'lift', exercises: ex } as LiftSession;
     }
     if (discipline === 'climb') {
@@ -203,32 +199,6 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
     close();
   };
 
-  // --- lifting helpers ---
-  const setEx = (i: number, patch: Partial<ExerciseDraft>) => setExercises((xs) => xs.map((e, k) => (k === i ? { ...e, ...patch } : e)));
-  const setSet = (i: number, j: number, patch: Partial<SetDraft>) =>
-    setExercises((xs) => xs.map((e, k) => (k === i ? { ...e, sets: e.sets.map((s, m) => (m === j ? { ...s, ...patch } : s)) } : e)));
-  const addSet = (i: number) => {
-    sfx.tick();
-    setExercises((xs) => xs.map((e, k) => (k === i ? { ...e, sets: [...e.sets, { ...(e.sets[e.sets.length - 1] ?? { reps: '', weight: '' }) }] } : e)));
-  };
-  const removeSet = (i: number, j: number) => setExercises((xs) => xs.map((e, k) => (k === i ? { ...e, sets: e.sets.filter((_, m) => m !== j) } : e)));
-  const addExercise = () => {
-    sfx.tick();
-    setExercises((xs) => [...xs, { name: '', bodyweight: false, sets: [{ reps: '', weight: '' }] }]);
-  };
-  const removeExercise = (i: number) => setExercises((xs) => xs.filter((_, k) => k !== i));
-  const repeatLast = () => {
-    if (!lastLift) return;
-    sfx.tap();
-    setExercises(
-      lastLift.exercises.map((e) => ({
-        name: e.name,
-        bodyweight: e.sets.every((s) => s.weightKg === 0),
-        sets: e.sets.map((s) => ({ reps: String(s.reps), weight: s.weightKg ? trimNum(kgToUnit(s.weightKg, wu)) : '' })),
-      })),
-    );
-  };
-
   // --- climbing helpers ---
   const addClimb = (grade: number) => {
     sfx.tick();
@@ -242,6 +212,23 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
     setClimbs((cs) => cs.map((c, k) => (k === idx ? { ...c, count: Math.max(0, c.count + delta) } : c)).filter((c) => c.count > 0));
   const gradeList = Array.from({ length: (moreGrades ? MAX_V_GRADE : 10) + 2 }, (_, i) => i - 1);
   const sortedClimbs = climbs.map((c, idx) => ({ ...c, idx })).sort((a, b) => b.grade - a.grade || a.result.localeCompare(b.result));
+  const lastClimb = lastSame?.discipline === 'climb' && lastSame.climbs.some((c) => c.count > 0) ? lastSame : null;
+  const lastClimbStats = lastClimb ? sessionStats(lastClimb) : null;
+
+  // --- cardio helpers ---
+  const lastCardio = lastSame && (lastSame.discipline === 'run' || lastSame.discipline === 'ride') && lastSame.distanceM > 0 ? lastSame : null;
+  const useLastCardio = () => {
+    if (!lastCardio) return;
+    sfx.tap();
+    setDistance(trimNum(mToUnit(lastCardio.distanceM, du)));
+    setElev(lastCardio.elevationM ? trimNum(du === 'km' ? lastCardio.elevationM : lastCardio.elevationM * 3.28084) : '');
+    if (lastCardio.durationSec) setDuration(lastCardio.durationSec);
+  };
+
+  // Quick duration picks for gym-style sessions (cardio durations are exact, so typed).
+  const lastMin = lastSame?.durationSec ? Math.round(lastSame.durationSec / 60) : null;
+  const durationChips = discipline === 'lift' || discipline === 'climb' ? [...new Set([...(lastMin ? [lastMin] : []), ...DURATION_CHIPS])] : [];
+  const curMin = durationSec ? Math.round(durationSec / 60) : null;
 
   return (
     <div className="screen form-screen">
@@ -259,9 +246,7 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
         )}
       </header>
       {editing?.source === 'strava' && (discipline === 'lift' || discipline === 'climb') && (
-        <Card className="hint-card">
-          Imported from Strava with duration only. Add your {discipline === 'lift' ? 'sets' : 'climbs'} below to earn full XP for it.
-        </Card>
+        <Card className="hint-card">Imported from Strava with duration only. Add your {discipline === 'lift' ? 'sets' : 'climbs'} below to earn full XP for it.</Card>
       )}
 
       <div className="row gap">
@@ -270,69 +255,45 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
         </Field>
         <Field label="Duration (h : m : s)" className="grow">
           <div className="row gap-s">
-            <Input inputMode="numeric" placeholder="0" value={dh} onChange={(e) => setDh(e.target.value)} className="num" />
-            <Input inputMode="numeric" placeholder="45" value={dm} onChange={(e) => setDm(e.target.value)} className="num" />
-            <Input inputMode="numeric" placeholder="00" value={ds} onChange={(e) => setDs(e.target.value)} className="num" />
+            <Input inputMode="numeric" placeholder="0" value={dh} onChange={(e) => setDh(e.target.value)} className="num" aria-label="Hours" />
+            <Input inputMode="numeric" placeholder="45" value={dm} onChange={(e) => setDm(e.target.value)} className="num" aria-label="Minutes" />
+            <Input inputMode="numeric" placeholder="00" value={ds} onChange={(e) => setDs(e.target.value)} className="num" aria-label="Seconds" />
           </div>
         </Field>
       </div>
-
-      {discipline === 'lift' && (
-        <div className="exercises">
-          <datalist id="exercise-names">
-            {exerciseNames.map((n) => (
-              <option key={n} value={n} />
-            ))}
-          </datalist>
-          {exercises.map((e, i) => (
-            <Card key={i} className="exercise">
-              <div className="row gap-s">
-                <Input list="exercise-names" placeholder="Exercise (e.g. Squat)" value={e.name} onChange={(ev) => setEx(i, { name: ev.target.value })} className="grow" />
-                <Chip active={e.bodyweight} onClick={() => setEx(i, { bodyweight: !e.bodyweight })}>
-                  BW
-                </Chip>
-                <button className="icon-btn" onClick={() => removeExercise(i)} aria-label="Remove exercise">
-                  ✕
-                </button>
-              </div>
-              <div className="sets">
-                <div className="set-head">
-                  <span>Set</span>
-                  <span>Reps</span>
-                  <span>{e.bodyweight ? '' : wu}</span>
-                  <span />
-                </div>
-                {e.sets.map((s, j) => (
-                  <div key={j} className="set-row">
-                    <span className="set-n">{j + 1}</span>
-                    <Input inputMode="numeric" placeholder="reps" value={s.reps} onChange={(ev) => setSet(i, j, { reps: ev.target.value })} />
-                    {e.bodyweight ? <span className="muted small">bodyweight</span> : <Input inputMode="decimal" placeholder={wu} value={s.weight} onChange={(ev) => setSet(i, j, { weight: ev.target.value })} />}
-                    <button className="icon-btn small" onClick={() => removeSet(i, j)} aria-label="Remove set">
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => addSet(i)}>
-                + Set
-              </Button>
-            </Card>
+      {durationChips.length > 0 && (
+        <div className="quick-row" aria-label="Quick duration">
+          <span className="muted tiny">Quick:</span>
+          {durationChips.map((m) => (
+            <button key={m} type="button" className={`quick-chip ${curMin === m ? 'quick-chip-on' : ''}`} onClick={() => setDuration(m * 60)}>
+              {fmtDurationShort(m * 60)}
+              {m === lastMin && <span className="quick-chip-tag">last</span>}
+            </button>
           ))}
-          <div className="row gap">
-            <Button variant="secondary" onClick={addExercise} className="grow">
-              + Exercise
-            </Button>
-            {lastLift && !editing && (
-              <Button variant="ghost" onClick={repeatLast}>
-                Repeat last
-              </Button>
-            )}
-          </div>
         </div>
       )}
 
+      {discipline === 'lift' && <LiftEditor exercises={exercises} setExercises={setExercises} editingId={editing?.id} bests={derived.prs.lifts} />}
+
       {discipline === 'climb' && (
         <div className="climbs">
+          {climbs.length === 0 && lastClimb && lastClimbStats && (
+            <button
+              type="button"
+              className="template"
+              onClick={() => {
+                sfx.tap();
+                setClimbs(lastClimb.climbs.filter((c) => c.count > 0).map((c) => ({ ...c })));
+              }}
+            >
+              <span className="template-date">{relativeDay(lastClimb.date)}</span>
+              <span className="template-names">
+                Same as last session: {lastClimbStats.sends} sends{lastClimbStats.maxGradeSent !== null ? `, max ${gradeLabel(lastClimbStats.maxGradeSent)}` : ''}
+                {lastClimbStats.attempts ? `, ${lastClimbStats.attempts} attempts` : ''}
+              </span>
+              <span className="template-go">Use →</span>
+            </button>
+          )}
           <Segmented
             value={result}
             onChange={setResult}
@@ -379,14 +340,26 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
       )}
 
       {(discipline === 'run' || discipline === 'ride') && (
-        <div className="row gap">
-          <Field label={`Distance (${du})`} className="grow">
-            <Input inputMode="decimal" placeholder="0.0" value={distance} onChange={(e) => setDistance(e.target.value)} autoFocus={!editing} />
-          </Field>
-          <Field label={`Elevation gain (${du === 'km' ? 'm' : 'ft'})`} className="grow">
-            <Input inputMode="numeric" placeholder="0" value={elev} onChange={(e) => setElev(e.target.value)} />
-          </Field>
-        </div>
+        <>
+          {!editing && lastCardio && !distance && (
+            <button type="button" className="template" onClick={useLastCardio}>
+              <span className="template-date">{relativeDay(lastCardio.date)}</span>
+              <span className="template-names">
+                Same as last {discipline}: {fmtDistance(lastCardio.distanceM, du)}
+                {lastCardio.durationSec ? ` · ${fmtDuration(lastCardio.durationSec)}` : ''}
+              </span>
+              <span className="template-go">Use →</span>
+            </button>
+          )}
+          <div className="row gap">
+            <Field label={`Distance (${du})`} className="grow">
+              <Input inputMode="decimal" placeholder={lastCardio ? trimNum(mToUnit(lastCardio.distanceM, du)) : '0.0'} value={distance} onChange={(e) => setDistance(e.target.value)} onFocus={(e) => e.target.select()} autoFocus={!editing} />
+            </Field>
+            <Field label={`Elevation gain (${du === 'km' ? 'm' : 'ft'})`} className="grow">
+              <Input inputMode="numeric" placeholder="0" value={elev} onChange={(e) => setElev(e.target.value)} onFocus={(e) => e.target.select()} />
+            </Field>
+          </div>
+        </>
       )}
 
       <details className="extra">
@@ -424,11 +397,6 @@ function SessionForm({ discipline, editing }: { discipline: Discipline; editing:
       </div>
     </div>
   );
-}
-
-function trimNum(n: number): string {
-  const r = Math.round(n * 100) / 100;
-  return String(r);
 }
 
 export function gradeHue(g: number): string {

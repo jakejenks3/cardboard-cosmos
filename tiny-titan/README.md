@@ -20,6 +20,13 @@ Everything in the game — levels, body shape, items, pets, trophies, the campai
 - **A results reel** after every session: XP ticking up, bars wrapping on level-up, the boss taking the hit, loot by rarity, new companions, rank-ups, body evolutions — with tiny synthesized sound effects.
 - **Your companion talks.** One contextual nudge per visit ("Iron Golem is nearly down — only 13 HP left!").
 
+**Fast logging**
+- **Your last numbers come up for you.** Pick an exercise and last time's sets, reps and weights are already filled in, with "Last" and "Best" shown above them.
+- **Tap, don't type.** − / + on every reps and weight field (hold to repeat; weights snap to a plate step you choose: 1 / 2.5 / 5 / 10 kg or 2.5 / 5 / 10 lb), plus one-tap "+1 rep" and "+2.5 kg" for all sets.
+- **One-tap exercise picker**: your exercises first, most recent first, each with your last top set. **Start from a previous workout** offers your recent line-ups, so A/B splits are one tap each.
+- **Live feedback** as you beat last time: `PR!`, `+2.5 kg`, `+1 rep`, `+set` per set, and volume versus last time per exercise.
+- The other forms do the same: repeat your last climbing session, reuse your last run or ride, quick duration chips, and a body-weight stepper that starts from your last weigh-in.
+
 **Looking back**
 - **Then vs now**: Day-1 you next to today's you, with your first and best lifts, grades and distances.
 - **Story**: a dated timeline of every level, boss, trophy, record, drop and check-in.
