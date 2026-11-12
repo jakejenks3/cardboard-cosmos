@@ -65,7 +65,7 @@ export function Onboarding() {
         <div className="onboarding-card">
           <h1>Every titan starts tiny.</h1>
           <p className="muted">
-            Log your lifts, climbs, runs and rides (or sync Strava) and watch this scrawny little hero turn into an absolute unit. Gear, pets and quests along the way.
+            Log your lifts, climbs, runs and rides and watch this scrawny little hero turn into an absolute unit. Gear, pets, bosses and quests along the way.
           </p>
           <Field label="What should we call your hero?">
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Jake" maxLength={20} autoFocus />

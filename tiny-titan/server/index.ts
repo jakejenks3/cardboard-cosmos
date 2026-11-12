@@ -14,6 +14,11 @@ const PHOTO_DIR = path.join(DATA_DIR, 'photos');
 const PORT = Number(process.env.PORT) || 8787;
 const APP_URL = process.env.APP_URL || `http://localhost:${PORT}`;
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
+// Running for yourself on your own machine: listen on this computer only, so nobody else on the
+// network can open your log or photos. A deployment (a public APP_URL, or HOST set) listens on all
+// interfaces, because the hosting platform has to be able to reach it.
+const IS_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(APP_URL);
+const HOST = process.env.HOST || (IS_LOCAL ? '127.0.0.1' : '0.0.0.0');
 
 fs.mkdirSync(PHOTO_DIR, { recursive: true });
 
@@ -166,10 +171,21 @@ if (fs.existsSync(path.join(dist, 'index.html'))) {
   app.get('/', (_req, res) => res.type('text').send('Tiny Titan API is running. Run `npm run build` to serve the app from here, or use the Vite dev server.'));
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, (err?: Error) => {
+  // Express 5 hands listen errors (such as the port being taken) to this callback instead of throwing.
+  if (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+      console.error(`\n  Port ${PORT} is already being used by another program, so Tiny Titan could not start.`);
+      console.error('  Close that program and try again.\n');
+    } else {
+      console.error(err);
+    }
+    process.exit(1);
+  }
   const s = strava.status();
-  console.log(`Tiny Titan server on http://localhost:${PORT}  (strava: ${s.configured ? (s.connected ? 'connected' : 'configured, not connected') : 'not configured'}, password: ${APP_PASSWORD ? 'on' : 'off'})`);
-  if (!APP_PASSWORD && !/localhost|127\.0\.0\.1/.test(APP_URL)) {
-    console.warn('WARNING: APP_URL is not localhost and APP_PASSWORD is not set — anyone who can reach this server can read your data and photos.');
+  const reach = HOST === '127.0.0.1' ? 'this computer only' : `all network interfaces (${HOST})`;
+  console.log(`Tiny Titan server on http://localhost:${PORT}  (reachable from: ${reach}, strava: ${s.configured ? (s.connected ? 'connected' : 'configured, not connected') : 'not configured'}, password: ${APP_PASSWORD ? 'on' : 'off'})`);
+  if (!APP_PASSWORD && HOST !== '127.0.0.1') {
+    console.warn('WARNING: this server is reachable from other machines and APP_PASSWORD is not set — anyone who can reach it can read your data and photos.');
   }
 });

@@ -238,7 +238,7 @@ export function Home() {
         Recent
       </SectionTitle>
       {recent.length === 0 ? (
-        <Card className="muted center">No sessions yet. Your first one levels you up instantly — and knocks out the first boss.</Card>
+        <Card className="muted center">No sessions yet. Your first one earns XP, your first trophies and a companion.</Card>
       ) : (
         <div className="session-list">
           {recent.map((s) => (

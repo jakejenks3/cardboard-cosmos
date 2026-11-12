@@ -43,7 +43,25 @@ Everything in the game — levels, body shape, items, pets, trophies, the campai
 - The included Node server adds **Strava import**, cross-device sync and photo mirroring, with an optional password.
 - Installable PWA, mobile-first.
 
-## Quick start
+## Just run it on your computer
+
+No Strava, no accounts, no terminal commands — you log what you did by hand.
+
+1. Install **Node.js** (the LTS version) from <https://nodejs.org>. Once.
+2. In the `tiny-titan` folder, double-click the launcher:
+   - **Windows:** `Start Tiny Titan.bat`
+   - **Mac:** `Start Tiny Titan.command`
+3. The first run sets itself up (about a minute), then your browser opens at <http://localhost:8787>.
+
+Each day after that: double-click the launcher again. Keep its window open while you use the app and close it when you are done.
+
+Your data is saved in the browser, with a copy on disk in `tiny-titan/server/data` (that folder is your backup — it also means clearing the browser does not lose anything). If you ever replace the `tiny-titan` folder with a newer download, copy `server/data` across.
+
+Run this way, the app listens on **this computer only**: nobody else on your network can open it.
+
+If the launcher is blocked (Windows SmartScreen: *More info → Run anyway*; macOS: right-click the file → *Open*), or you prefer a terminal, the equivalent is `npm install` once, then `npm run app`.
+
+## Quick start (development)
 
 ```bash
 cd tiny-titan
@@ -83,7 +101,7 @@ npm run build   # builds the client into dist/
 npm start       # serves dist/ + the API on $PORT (default 8787)
 ```
 
-Set `APP_URL` to your public URL and the Strava callback domain to match. Deploys to Render, Railway, Fly.io or any Node 20+ host; persist the data directory (`server/data`, or point `DATA_DIR` at a volume) so tokens, the synced state and photos survive restarts.
+Set `APP_URL` to your public URL and the Strava callback domain to match. With a non-localhost `APP_URL` (or `HOST=0.0.0.0`) the server listens on all network interfaces, as a host requires; otherwise it listens on this computer only. Deploys to Render, Railway, Fly.io or any Node 20+ host; persist the data directory (`server/data`, or point `DATA_DIR` at a volume) so tokens, the synced state and photos survive restarts.
 
 > **Set `APP_PASSWORD` on anything public.** The server holds your training log, body measurements and progress photos. With `APP_PASSWORD` set, every API route needs a login cookie; the app asks for the password once under **Settings → Server**. Without it the server is open, which is only appropriate on localhost or a private network.
 
@@ -93,6 +111,7 @@ Set `APP_URL` to your public URL and the Strava callback domain to match. Deploy
 
 | Command | What |
 |---|---|
+| `npm run app` | Build, start and open the app (what the launchers run) |
 | `npm run dev` | Vite + API server with reload |
 | `npm run build` | Production client build |
 | `npm start` | Run the API server (serves `dist/` if present) |

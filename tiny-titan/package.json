@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "tsx server/index.ts",
+    "app": "tsx scripts/launch.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit"
   },

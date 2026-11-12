@@ -120,12 +120,8 @@ export function SettingsSheet() {
           />
         </Field>
 
-        <h3>Server</h3>
-        {serverOnline === false && (
-          <p className="muted small">
-            Offline mode: everything is saved in this browser. Run the Tiny Titan server (<code>npm run dev</code>) to add Strava import and sync between devices — see the README.
-          </p>
-        )}
+        <h3>Saving</h3>
+        {serverOnline === false && <p className="muted small">Saved in this browser only. Start Tiny Titan with its launcher to also keep a copy on disk.</p>}
         {serverOnline && serverLocked && (
           <div>
             <p className="muted small">This server is password-protected. Enter the password to sync your data and photos.</p>
@@ -137,15 +133,14 @@ export function SettingsSheet() {
             </div>
           </div>
         )}
-        {ready && <p className="muted small">Connected. Your log, check-ins and photos are mirrored to your server.</p>}
-
-        <h3>Strava</h3>
-        {!ready && <p className="muted small">Needs the server{serverLocked ? ' to be unlocked' : ''}.</p>}
-        {ready && !stravaConfigured && (
+        {ready && (
           <p className="muted small">
-            Server is running but has no Strava keys. Add <code>STRAVA_CLIENT_ID</code> and <code>STRAVA_CLIENT_SECRET</code> to <code>.env</code> and restart.
+            Saved in this browser, with a copy kept on disk by Tiny Titan (its <code>server/data</code> folder) — so your log survives even if the browser's data is cleared.
           </p>
         )}
+
+        {/* Strava is optional: it only appears once the server has been given API keys. */}
+        {ready && stravaConfigured && <h3>Strava</h3>}
         {ready && stravaConfigured && !stravaConnected && (
           <div>
             <p className="muted small">Connect to import runs, rides, weight training and climbing sessions automatically.</p>
@@ -216,7 +211,7 @@ export function SettingsSheet() {
             Reset
           </Button>
         </div>
-        <p className="muted tiny">Server: {serverOnline === null ? 'checking…' : serverOnline ? (serverLocked ? 'locked' : 'connected') : 'not running (offline mode)'}</p>
+        <p className="muted tiny">Disk copy: {serverOnline === null ? 'checking…' : serverOnline ? (serverLocked ? 'locked' : 'on') : 'off (browser only)'}</p>
       </div>
     </Sheet>
   );
