@@ -1,5 +1,9 @@
 # Tiny Titan
 
+> **Looking for the Godot project?** The same game as a Godot 4.7 project you can open in the editor
+> and play with no server or browser lives in [`../tiny-titan-godot`](../tiny-titan-godot). This folder
+> is the original web version.
+
 A pixel-RPG fitness tracker. Log your **lifting** (reps × weight), **bouldering** (V-grades), **running** and **cycling** (distance, time, elevation) — or sync them from **Strava** — and watch a scrawny little hero grow into an absolute unit. Every session earns XP, damages the boss you are fighting, moves a dozen progress bars, and can drop loot. Check in with your **weight, body fat and front / side / back photos** to see the real you change alongside the pixel one.
 
 Everything in the game — levels, body shape, items, pets, trophies, the campaign — is **derived by replaying your log**, so editing or deleting an entry simply recomputes your hero. Nothing is ever lost or double counted.

@@ -38,6 +38,7 @@ var _result_queue = []
 
 func _ready() -> void:
 	theme = Kit.theme()
+	_fit_window()
 
 	var bg = TextureRect.new()
 	var grad = Gradient.new()
@@ -123,6 +124,41 @@ func _ready() -> void:
 	App.result_ready.connect(_on_result)
 	App.toast_requested.connect(_on_toast)
 	_refresh()
+
+
+## Open at a comfortable size on any screen: bigger on high-DPI displays, and
+## never taller than the screen (the layout scrolls, so a short window is fine).
+func _fit_window() -> void:
+	if OS.has_feature("web") or OS.has_feature("mobile") or DisplayServer.get_name() == "headless":
+		return
+	if Engine.has_method("is_embedded_in_editor") and Engine.call("is_embedded_in_editor"):
+		return
+	var win = get_window()
+	if win == null or win.mode != Window.MODE_WINDOWED:
+		return
+	var screen = win.current_screen
+	var usable = DisplayServer.screen_get_usable_rect(screen)
+	if usable.size.x < 200 or usable.size.y < 200:
+		return
+	var k = 1.0
+	if OS.get_name() == "macOS":
+		k = DisplayServer.screen_get_scale(screen)
+	else:
+		k = float(DisplayServer.screen_get_dpi(screen)) / 96.0
+	# Whole and quarter steps only, and nothing extreme.
+	k = clampf(snappedf(k, 0.25), 1.0, 3.0)
+	var want = Vector2(440.0, 900.0) * k
+	var max_h = float(usable.size.y) - 70.0
+	var max_w = float(usable.size.x) - 20.0
+	if want.y > max_h:
+		want.y = max_h
+	if want.x > max_w:
+		want.x = max_w
+	var new_size = Vector2i(int(want.x), int(want.y))
+	if new_size == win.size:
+		return
+	win.size = new_size
+	win.position = usable.position + (usable.size - new_size) / 2
 
 
 func _layout() -> void:

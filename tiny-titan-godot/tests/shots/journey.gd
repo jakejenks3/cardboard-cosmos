@@ -28,7 +28,7 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.snap(tree, "j_stats_%d" % i)
 
 	# Weekly chart: print the last week's stack and hover it.
-	var wk = _find(func(n): return n is Charts.WeeklyXp)
+	var wk = _find(func(n): return n is WeeklyXpChart)
 	var last = wk.data[wk.data.size() - 1]
 	var sum = 0
 	for d in TT.DISCIPLINES:
@@ -46,14 +46,14 @@ func run(m: Node, t: SceneTree) -> void:
 	_hover(wk, Vector2(wk.PAD_L + wk._slot() * 9.5, 60))
 	await ShotHelper.snap(tree, "j_stats_weekly_hover")
 
-	var hm = _find(func(n): return n is Charts.Heatmap)
+	var hm = _find(func(n): return n is HeatmapChart)
 	print("HEATMAP last day of grid ", hm.days[hm.days.size() - 1], " today ", App.today, " today in grid ", hm.days.has(App.today), " xp today ", hm.xp.get(App.today, 0))
 	var ti = hm.days.find(App.today)
 	_hover(hm, hm._cell_rect(ti - 1).get_center())
 	print("HEATMAP hovered ", hm.days[ti - 1], " xp ", hm.xp.get(hm.days[ti - 1], 0))
 	await ShotHelper.snap(tree, "j_stats_heat_hover")
 
-	var ln = _find(func(n): return n is Charts.Line)
+	var ln = _find(func(n): return n is LineChart)
 	ShotHelper.reveal(ln)
 	await ShotHelper.frames(tree, 2)
 	print("LINE e1rm first ", ln.points[0], " last ", ln.points[ln.points.size() - 1], " ticks ", ln.ticks)
@@ -64,7 +64,7 @@ func run(m: Node, t: SceneTree) -> void:
 	print("chip Bench ", chip != null)
 	ShotHelper.press(chip)
 	await ShotHelper.frames(tree, 3)
-	var ln2 = _find(func(n): return n is Charts.Line)
+	var ln2 = _find(func(n): return n is LineChart)
 	ShotHelper.reveal(ln2)
 	await ShotHelper.snap(tree, "j_stats_bench")
 
@@ -73,7 +73,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.frames(tree, 4)
 	ShotHelper.scroll_main(main, 0)
 	await ShotHelper.snap(tree, "j_stats_lb_0")
-	var ln3 = _find(func(n): return n is Charts.Line)
+	var ln3 = _find(func(n): return n is LineChart)
 	ShotHelper.reveal(ln3)
 	print("LINE lb last ", ln3.points[ln3.points.size() - 1], " label ", ln3.fmt.call(ln3.points[ln3.points.size() - 1].y))
 	await ShotHelper.snap(tree, "j_stats_lb_lift")
@@ -114,7 +114,7 @@ func run(m: Node, t: SceneTree) -> void:
 	for i in range(5):
 		ShotHelper.scroll_main(main, i * 760)
 		await ShotHelper.snap(tree, "j_body_%d" % i)
-	var wl = _find(func(n): return n is Charts.Line)
+	var wl = _find(func(n): return n is LineChart)
 	print("BODY weight chart first ", wl.points[0], " last ", wl.points[wl.points.size() - 1], " ticks ", wl.ticks, " trend pts ", wl.trend.size())
 	ShotHelper.scroll_main(main, 0)
 	await ShotHelper.frames(tree, 2)

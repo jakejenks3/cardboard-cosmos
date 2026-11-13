@@ -107,7 +107,14 @@ func build(parent: Control) -> void:
 	if last_weight != null:
 		w_opts["base"] = last_weight
 	var ws = Kit.stepper(weight, 0.1 if wu == "kg" else 0.2, Callable(), w_opts)
-	LogWidgets.slim_stepper(ws, "weight", 40).tooltip_text = "Body weight"
+	var w_edit = LogWidgets.slim_stepper(ws, "weight", 40)
+	w_edit.tooltip_text = "Body weight"
+	# A new check-in starts with the cursor in the weight box, so you can just type.
+	if editing == null and weight == "":
+		var focus_weight = func():
+			if is_instance_valid(w_edit) and w_edit.is_inside_tree() and w_edit.get_viewport().gui_get_focus_owner() == null:
+				w_edit.grab_focus()
+		focus_weight.call_deferred()
 	ws.changed.connect(func(t):
 		weight = t
 		refresh())
@@ -222,6 +229,15 @@ func refresh() -> void:
 		if body_fat() != null:
 			probe["bodyFatPct"] = body_fat()
 		var xp = int(Derive.body_entry_reward(flags, probe).xp)
+		if weight_kg() == null and body_fat() == null and photos.is_empty():
+			# Nothing entered yet: show what this week's check-in can still pay.
+			var full = {"weightKg": 80.0, "bodyFatPct": 20.0, "photos": {"front": "x", "side": "x", "back": "x"}}
+			var avail = int(Derive.body_entry_reward(flags, full).xp)
+			var hint = "Enter your weight, body fat or a photo to check in."
+			if avail == 0:
+				hint = "This week’s bonus is already earned. Still worth logging for the trend."
+			LogWidgets.fill_xp_preview(_xp_box, avail, Pal.ACCENT, "available this week", hint)
+			return
 		var sub = "Weight 60 · body fat 20 · 15 per photo — each paid once per week." if xp > 0 else "This week’s bonus is already earned. Still worth logging for the trend."
 		LogWidgets.fill_xp_preview(_xp_box, xp, Pal.ACCENT, "weekly check-in bonus", sub)
 

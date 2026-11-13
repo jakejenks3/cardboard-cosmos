@@ -81,6 +81,11 @@ tests/          parity tests against the original TypeScript engine, and scripte
 Every screen is built in code (there is one tiny scene, `main.tscn`), so to change a screen you edit
 its script in `ui/screens/`.
 
+### Window size
+
+The game is a phone-shaped column. It opens at 440 × 900, grows on high-DPI screens and shrinks to
+fit short ones; resize or maximise the window freely (the column stays centred and the screens scroll).
+
 ### Tests
 
 The rules and the pixel art were ported from a TypeScript version and are checked against it:
@@ -92,3 +97,14 @@ godot --headless --path . --script res://tests/parity_derive.gd
 godot --headless --path . --script res://tests/parity_misc.gd
 godot --headless --path . --script res://tests/parity_art.gd
 ```
+
+`tests/shots/*.gd` are scripted walkthroughs that drive the real screens and save screenshots, for
+example a whole first day (onboarding, logging a session through the form, the results reel, every
+tab, a body check-in):
+
+```
+TINY_TITAN_DATA=/tmp/tt-data TINY_TITAN_SHOTS=/tmp/tt-shots \
+  godot --path . res://tests/shots.tscn -- res://tests/shots/e2e.gd fresh
+```
+
+`TINY_TITAN_DATA` points the game at a throwaway save folder, so tests never touch your real data.

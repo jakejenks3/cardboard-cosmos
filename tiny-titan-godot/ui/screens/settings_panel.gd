@@ -6,6 +6,8 @@ extends VBoxContainer
 var sheet: Sheet = null
 
 
+var _pending_name = null
+
 func _init() -> void:
 	add_theme_constant_override("separation", 12)
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -71,7 +73,25 @@ func _refill() -> void:
 
 
 func _on_name(t: String) -> void:
-	App.update_profile({"name": t})
+	# Save once typing pauses, not on every key: each save re-derives the whole log.
+	_pending_name = t
+	get_tree().create_timer(0.6).timeout.connect(_commit_name.bind(t))
+
+
+func _commit_name(t: String) -> void:
+	if _pending_name == null or _pending_name != t:
+		return
+	_pending_name = null
+	var clean = t.strip_edges()
+	if clean == "" or App.profile() == null or clean == App.profile().name:
+		return
+	App.update_profile({"name": clean})
+
+
+func _exit_tree() -> void:
+	# The sheet was closed mid-typing: keep what was typed.
+	if _pending_name != null:
+		_commit_name(_pending_name)
 
 
 func _on_look(patch: Dictionary) -> void:
