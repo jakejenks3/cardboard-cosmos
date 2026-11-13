@@ -7,7 +7,8 @@ extends RefCounted
 ## Holds the draft (`exercises`) across rebuilds; `form` (LogSessionForm) owns it
 ## and is told about every change so the XP preview / save button stay live.
 
-var form = null  # LogSessionForm
+## The owning LogSessionForm, held weakly (it holds this editor: no reference cycle).
+var _form_ref: WeakRef = null
 var editing_id = null
 ## [{name: String, bodyweight: bool, sets: [{reps: String, weight: String}]}]
 var exercises: Array = []
@@ -28,7 +29,7 @@ var _building: bool = false
 
 
 func _init(owner_form, edit_id = null) -> void:
-	form = owner_form
+	_form_ref = weakref(owner_form) if owner_form != null else null
 	editing_id = edit_id
 	wu = App.weight_unit()
 
@@ -411,9 +412,20 @@ func _ex_chip(s: Dictionary) -> Card:
 # Actions
 # ---------------------------------------------------------------------------
 
+func _form():
+	return _form_ref.get_ref() if _form_ref != null else null
+
+
+func _set_focus_after(fkey: String) -> void:
+	var f = _form()
+	if f != null and is_instance_valid(f.screen):
+		f.screen.focus_key = fkey
+
+
 func _changed(rebuild_all: bool) -> void:
-	if form != null:
-		form.on_draft_changed(rebuild_all)
+	var f = _form()
+	if f != null:
+		f.on_draft_changed(rebuild_all)
 
 
 func add_exercise(ex_name: String, from_search: bool = false) -> void:
@@ -429,9 +441,9 @@ func add_exercise(ex_name: String, from_search: bool = false) -> void:
 	query = ""
 	var i = exercises.size() - 1
 	if lp == null:
-		form.screen.focus_key = "ex%d.s0.reps" % i
+		_set_focus_after("ex%d.s0.reps" % i)
 	elif from_search:
-		form.screen.focus_key = "search"
+		_set_focus_after("search")
 	_changed(true)
 
 

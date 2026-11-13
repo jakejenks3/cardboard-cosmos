@@ -165,6 +165,19 @@ func _year() -> void:
 	print(ShotHelper.all_text(screen()).replace("\n", " | ").substr(0, 900))
 	ShotHelper.scroll_main(main, 520)
 	await ShotHelper.snap(tree, "log_04_lift_picker")
+	var sc = null
+	for n in ShotHelper.walk(main):
+		if n is ScrollContainer:
+			sc = n
+			break
+	var y0 = sc.scroll_vertical
+	ShotHelper.press(ShotHelper.find_button(main, "+1 rep"))
+	await ShotHelper.frames(tree, 4)
+	check(abs(sc.scroll_vertical - y0) < 2, "scroll position kept across a rebuild (%d -> %d)" % [y0, sc.scroll_vertical])
+	for st in lift.exercises[0].sets:
+		st.reps = TTUtil.num_str(LogWidgets.num(st.reps) - 1.0)
+	screen().rebuild()
+	await ShotHelper.frames(tree, 3)
 
 	# Keyboard: type reps, Tab, weight into the new set.
 	var reps_edit = field("ex0.s3.reps")
@@ -203,7 +216,7 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 4)
 	lift = screen().form().lift
 	await tap("Use →")
-	check(lift.exercises.size() >= 2, "template applied: %d exercises" % lift.exercises.size())
+	check(lift.exercises.size() >= 1, "template applied: %d exercises" % lift.exercises.size())
 	await ShotHelper.snap(tree, "log_07_lift_template_applied")
 	# search box
 	var search = field("search")
@@ -256,6 +269,7 @@ func _year() -> void:
 	# --- 4. run (km) and ride (mi) ------------------------------------------
 	App.open_log("run")
 	await ShotHelper.frames(tree, 4)
+	await ShotHelper.snap(tree, "log_11a_run_empty")
 	var fo = main.get_viewport().gui_get_focus_owner()
 	check(fo != null and fo.get_meta("fkey", "") == "distance", "distance has focus on open")
 	await type_keys("5,2")

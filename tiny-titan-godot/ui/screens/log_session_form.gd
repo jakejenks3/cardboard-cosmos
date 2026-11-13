@@ -361,7 +361,7 @@ func _build_climb(parent: Control) -> void:
 		if int(st.attempts) > 0:
 			text += ", %d attempts" % int(st.attempts)
 		parent.add_child(LogWidgets.template(lc.date, text, _repeat_climb.bind(lc)))
-	var col = FLASH_COLOR if climb_result == "flash" else (Pal.CLIMB if climb_result == "send" else Pal.LINE)
+	var col = FLASH_COLOR if climb_result == "flash" else (Pal.CLIMB if climb_result == "send" else Pal.MUTED)
 	parent.add_child(Kit.segmented([
 		{"value": "flash", "label": "Flash"},
 		{"value": "send", "label": "Send"},
