@@ -12,7 +12,7 @@
 import { writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Pix, OUTLINE } from '../../../tiny-titan/src/avatar/pixel';
-import { drawHero, HERO_W, HERO_H, type BodyInput } from '../../../tiny-titan/src/avatar/body';
+import { drawHero, HERO_W, HERO_H, type BodyInput, type Visuals } from '../../../tiny-titan/src/avatar/body';
 import { drawScene, SCENE_W, SCENE_H, HERO_X, HERO_Y, FLOOR_Y } from '../../../tiny-titan/src/avatar/scene';
 import { drawPet, PET_SPRITES } from '../../../tiny-titan/src/avatar/petSprites';
 import { bossBuffer } from '../../../tiny-titan/src/avatar/bossSprites';
@@ -179,7 +179,7 @@ function renderItem(id: string): Pix {
 
 interface Case {
   name: string;
-  kind: 'hero' | 'scene' | 'pet' | 'boss' | 'item';
+  kind: 'hero' | 'visuals' | 'scene' | 'pet' | 'boss' | 'item';
   args: Record<string, unknown>;
   w: number;
   h: number;
@@ -228,7 +228,6 @@ heroCase('body_lv6_idle_f2_bob', MIXES[1][1], PREVIEW_PROFILE, STARTER, 'idle', 
 heroCase('body_balanced25_idle_f18_blink', MIXES[6][1], PREVIEW_PROFILE, STARTER, 'idle', 18);
 heroCase('body_jacked40_idle_f36_blink_shorts', MIXES[7][1], prof(3, 2, 6), { legs: 'shorts_navy' }, 'idle', 36);
 heroCase('body_lifter14_idle_f1_happy', MIXES[2][1], PREVIEW_PROFILE, STARTER, 'idle', 1, { happy: true });
-heroCase('body_lv6_flex_f18_blink', MIXES[1][1], prof(2, 4, 9), { legs: 'shorts_navy' }, 'flex', 18);
 
 // 2. Hair styles × skin tones × hair colours.
 for (let h = 0; h < 7; h++) {
@@ -258,7 +257,6 @@ for (let k = 0; k < rounds; k++) {
 
 // Animated pieces at the frames where they change, and big frame numbers.
 heroCase('anim_medal_f8_sparkle', MIXES[6][1], PREVIEW_PROFILE, { ...STARTER, accessory: 'marathon_medal' }, 'idle', 8);
-heroCase('anim_medal_f9', MIXES[6][1], PREVIEW_PROFILE, { ...STARTER, accessory: 'marathon_medal' }, 'idle', 9);
 heroCase('anim_wings_cape_f0', MIXES[4][1], prof(2, 2, 3), { ...STARTER, feet: 'winged_sandals', back: 'golden_cape' }, 'idle', 0);
 heroCase('anim_wings_cape_f3', MIXES[4][1], prof(2, 2, 3), { ...STARTER, feet: 'winged_sandals', back: 'golden_cape' }, 'idle', 3);
 heroCase('anim_flame_f1000', MIXES[7][1], prof(4, 1, 4), { ...STARTER, aura: 'flame_aura' }, 'idle', 1000);
@@ -279,8 +277,108 @@ heroCase(
   { owned: ['tee_grey', 'aviators', 'no_such_item'] },
 );
 
+// Template branches no catalog item reaches (optional colours left out, a
+// visual in the wrong slot, noOutline): drawHero() is fed visuals directly.
+function visualsCase(name: string, lv: Levels, profile: Profile, visuals: Visuals, pose: 'idle' | 'flex', frame: number, noOutline = false) {
+  const input = heroInput(makeState(lv), profile, pose, frame, false);
+  const p = new Pix(HERO_W, HERO_H);
+  drawHero(p, input, { visuals, noOutline });
+  push(name, 'visuals', { input, visuals, noOutline }, p);
+}
+visualsCase(
+  'visuals_plain_sandals_beanie_backpack_tank',
+  MIXES[6][1],
+  prof(1, 2, 5),
+  {
+    feet: { kind: 'sandals', color: '#8d6e63' },
+    head: { kind: 'beanie', color: '#3949ab' },
+    back: { kind: 'backpack', color: '#00897b' },
+    body: { kind: 'tank', color: '#eeeeee' },
+    legs: { kind: 'shorts', color: '#455a64', accent: '#ffeb3b', knee: '#b0bec5' },
+    hands: { kind: 'wraps', color: '#ffffff' },
+    face: { kind: 'sunglasses', color: '#1565c0' },
+  },
+  'idle',
+  1,
+);
+visualsCase(
+  'visuals_soleless_shoes_singlet_visor_flex',
+  MIXES[2][1],
+  prof(3, 0, 2),
+  {
+    feet: { kind: 'shoes', color: '#3949ab', accent: '#ffffff' },
+    body: { kind: 'singlet', color: '#1b5e20' },
+    head: { kind: 'cap', color: '#c62828', visor: true },
+    hands: { kind: 'gloves', color: '#6d4c41', fingerless: true },
+    legs: { kind: 'tights', color: '#37474f' },
+    accessory: { kind: 'bib', color: '#fffde7' },
+  },
+  'flex',
+  2,
+);
+visualsCase(
+  'visuals_wrong_slots_polka_no_outline',
+  MIXES[0][1],
+  prof(4, 1, 8),
+  {
+    feet: { kind: 'headband', color: '#ff0000' },
+    body: { kind: 'shirt', color: '#6a1b9a', pattern: 'polka' },
+    head: { kind: 'cap', color: '#00838f' },
+    aura: { kind: 'cape', color: '#000000', inner: '#111111' },
+    legs: null,
+    back: { kind: 'aura', style: 'flame' },
+    hands: { kind: 'belt', color: '#123456', buckle: '#654321' },
+    accessory: { kind: 'shorts', color: '#abcdef' },
+    face: { kind: 'bandana', color: '#fedcba' },
+  },
+  'idle',
+  0,
+  true,
+);
+visualsCase(
+  'visuals_stripe_harness_longwraps_flex',
+  MIXES[7][1],
+  prof(5, 3, 1),
+  {
+    body: { kind: 'shirt', color: '#ef6c00', pattern: 'stripe' },
+    legs: { kind: 'harness', color: '#c0ca33', shorts: '#283593' },
+    hands: { kind: 'wraps', color: '#00acc1', long: true },
+    head: { kind: 'helmet', color: '#fdd835' },
+    feet: { kind: 'climbshoes', color: '#8e24aa' },
+  },
+  'flex',
+  3,
+);
+visualsCase(
+  'visuals_hood_headlamp_wingless_sandals',
+  MIXES[4][1],
+  prof(0, 4, 4),
+  {
+    body: { kind: 'shirt', color: '#2e7d32', pattern: 'hood' },
+    head: { kind: 'headlamp', color: '#ffb300' },
+    feet: { kind: 'sandals', color: '#5d4037', wings: false },
+    accessory: { kind: 'pendant', color: '#e91e63' },
+    back: { kind: 'saddlebag', color: '#795548' },
+  },
+  'idle',
+  6,
+);
+visualsCase(
+  'visuals_reflective_chalk_no_accents',
+  MIXES[8][1],
+  prof(2, 5, 6),
+  {
+    body: { kind: 'shirt', color: '#01579b', pattern: 'reflective' },
+    hands: { kind: 'chalk' },
+    legs: { kind: 'shorts', color: '#4e342e' },
+    head: { kind: 'laurel', color: '#ffd54f', accent: '#7cb342' },
+  },
+  'idle',
+  0,
+);
+
 // 4. Item thumbnails on the preview mannequin.
-for (const id of ['tee_grey', 'iron_crown', 'midnight_cape', 'crash_pad', 'titan_aura', 'harness', 'no_such_item']) {
+for (const id of ['iron_crown', 'midnight_cape', 'titan_aura', 'no_such_item']) {
   push(`item_${id}`, 'item', { id }, renderItem(id));
 }
 

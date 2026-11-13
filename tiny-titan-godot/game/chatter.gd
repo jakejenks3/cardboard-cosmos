@@ -13,7 +13,7 @@ extends RefCounted
 ##   bossHpLeft: number,
 ##   nearest: NextGoal or null (optional) }
 
-const IDLE = [
+const _IDLE = [
 	"Ready when you are.",
 	"Today is a good day to deal some damage.",
 	"Small sessions count. All of them.",
@@ -50,4 +50,4 @@ static func pet_line(c: Dictionary) -> String:
 	var weak = c.boss.get("weak")
 	if TTUtil.truthy(weak):
 		return "%s hates %s. Just saying." % [c.boss.name, _WEAK_WORDS.get(weak, "undefined")]
-	return IDLE[Rng.hash_string(c.today) % IDLE.size()]
+	return _IDLE[Rng.hash_string(c.today) % _IDLE.size()]

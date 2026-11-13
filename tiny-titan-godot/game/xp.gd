@@ -151,7 +151,7 @@ static func session_stats(s: Dictionary) -> Dictionary:
 ## Trim, lower-case and collapse runs of whitespace to one space
 ## (JS: `name.trim().toLowerCase().replace(/\s+/g, ' ')`).
 static func normalize_exercise(raw) -> String:
-	var text: String = str(raw).to_lower()
+	var text: String = _js_lower(str(raw))
 	var out: String = ""
 	var pending_space: bool = false
 	for i in range(text.length()):
@@ -172,6 +172,76 @@ static func _is_js_space(c: int) -> bool:
 	if c < 0xA0:
 		return false
 	return c == 0xA0 or c == 0x1680 or (c >= 0x2000 and c <= 0x200A) or c == 0x2028 or c == 0x2029 or c == 0x202F or c == 0x205F or c == 0x3000 or c == 0xFEFF
+
+
+# JS `toLowerCase()`. Godot's `to_lower()` maps every single character the
+# same way except for the two special cases of the Unicode standard: capital
+# I with dot (U+0130) becomes "i" + combining dot, and a capital sigma at the
+# end of a word becomes the final sigma. Without them the same exercise could
+# get a different key here than in the web app.
+static func _js_lower(text: String) -> String:
+	if text.find("İ") == -1 and text.find("Σ") == -1:
+		return text.to_lower()
+	var out: String = ""
+	for i in range(text.length()):
+		var c: int = text.unicode_at(i)
+		if c == 0x130:
+			out += "i̇"
+		elif c == 0x3A3:
+			out += "ς" if _is_final_sigma(text, i) else "σ"
+		else:
+			out += text[i].to_lower()
+	return out
+
+
+# Unicode "Final_Sigma": the sigma follows a cased letter and is not followed
+# by one, in both directions skipping characters that do not affect casing
+# (apostrophes, full stops, accents ...). A character that is both cased and
+# ignorable counts as ignorable, as in the JS engines.
+static func _is_final_sigma(text: String, at: int) -> bool:
+	var before: bool = false
+	var i: int = at - 1
+	while i >= 0:
+		var c: int = text.unicode_at(i)
+		if not _in_ranges(c, _CASE_IGNORABLE):
+			before = _is_cased(c)
+			break
+		i -= 1
+	if not before:
+		return false
+	i = at + 1
+	while i < text.length():
+		var c: int = text.unicode_at(i)
+		if not _in_ranges(c, _CASE_IGNORABLE):
+			return not _is_cased(c)
+		i += 1
+	return true
+
+
+# [first, last] pairs of the Unicode "Cased" property for Latin, Greek and
+# Cyrillic (up to U+052F and U+1D00..U+1FFF), and of "Case_Ignorable" for the
+# same scripts plus general punctuation and emoji modifiers. Only used to
+# place the final sigma; other scripts fall back to Godot's own case tables.
+const _CASED = [0x41, 0x5A, 0x61, 0x7A, 0xAA, 0xAA, 0xB5, 0xB5, 0xBA, 0xBA, 0xC0, 0xD6, 0xD8, 0xF6, 0xF8, 0x1BA, 0x1BC, 0x1BF, 0x1C4, 0x293, 0x296, 0x2B8, 0x2C0, 0x2C1, 0x2E0, 0x2E4, 0x345, 0x345, 0x370, 0x373, 0x376, 0x377, 0x37A, 0x37D, 0x37F, 0x37F, 0x386, 0x386, 0x388, 0x38A, 0x38C, 0x38C, 0x38E, 0x3A1, 0x3A3, 0x3F5, 0x3F7, 0x481, 0x48A, 0x52F, 0x1D00, 0x1DBF, 0x1E00, 0x1F15, 0x1F18, 0x1F1D, 0x1F20, 0x1F45, 0x1F48, 0x1F4D, 0x1F50, 0x1F57, 0x1F59, 0x1F59, 0x1F5B, 0x1F5B, 0x1F5D, 0x1F5D, 0x1F5F, 0x1F7D, 0x1F80, 0x1FB4, 0x1FB6, 0x1FBC, 0x1FBE, 0x1FBE, 0x1FC2, 0x1FC4, 0x1FC6, 0x1FCC, 0x1FD0, 0x1FD3, 0x1FD6, 0x1FDB, 0x1FE0, 0x1FEC, 0x1FF2, 0x1FF4, 0x1FF6, 0x1FFC]
+const _CASE_IGNORABLE = [0x27, 0x27, 0x2E, 0x2E, 0x3A, 0x3A, 0x5E, 0x5E, 0x60, 0x60, 0xA8, 0xA8, 0xAD, 0xAD, 0xAF, 0xAF, 0xB4, 0xB4, 0xB7, 0xB8, 0x2B0, 0x36F, 0x374, 0x375, 0x37A, 0x37A, 0x384, 0x385, 0x387, 0x387, 0x483, 0x489, 0x1D2C, 0x1D6A, 0x1D78, 0x1D78, 0x1D9B, 0x1DFF, 0x1FBD, 0x1FBD, 0x1FBF, 0x1FC1, 0x1FCD, 0x1FCF, 0x1FDD, 0x1FDF, 0x1FED, 0x1FEF, 0x1FFD, 0x1FFE, 0x200B, 0x200F, 0x2018, 0x2019, 0x2024, 0x2024, 0x2027, 0x2027, 0x202A, 0x202E, 0x2060, 0x2064, 0x2066, 0x206F, 0x2071, 0x2071, 0x207F, 0x207F, 0x2090, 0x209C, 0x20D0, 0x20F0, 0xFE00, 0xFE0F, 0xFE13, 0xFE13, 0xFE20, 0xFE2F, 0xFEFF, 0xFEFF, 0x1F3FB, 0x1F3FF, 0xE0100, 0xE01EF]
+
+
+static func _in_ranges(c: int, ranges: Array) -> bool:
+	for i in range(0, ranges.size(), 2):
+		if c < ranges[i]:
+			return false
+		if c <= ranges[i + 1]:
+			return true
+	return false
+
+
+static func _is_cased(c: int) -> bool:
+	if c <= 0x52F or (c >= 0x1D00 and c <= 0x1FFF):
+		return _in_ranges(c, _CASED)
+	if c >= 0x1D400 and c <= 0x1D7CB:
+		return true  # mathematical letters: cased, but without case mappings
+	var ch: String = String.chr(c)
+	return ch.to_upper() != ch or ch.to_lower() != ch
 
 
 ## Base XP for a session (no PR bonuses, no perk multiplier).
@@ -323,6 +393,9 @@ static func rank_for_level(level) -> int:
 ## Rounded integer with thousands separators: 12345.6 -> "12,346".
 static func fmt_int(n) -> String:
 	var v: int = TTUtil.jsround(n)
+	if v == 0 and n < 0:
+		# JS rounds -0.5..0 to negative zero, which prints as "-0".
+		return "-0"
 	var digits: String = str(absi(v))
 	var count: int = digits.length()
 	var out: String = ""

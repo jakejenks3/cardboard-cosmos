@@ -133,7 +133,7 @@ static func label(text, size: int = 15, color = null, bold: bool = false) -> Lab
 
 
 ## A label that wraps onto several lines and fills the available width.
-static func wrap(text, size: int = 15, color = null, bold: bool = false) -> Label:
+static func para(text, size: int = 15, color = null, bold: bool = false) -> Label:
 	var l = label(text, size, color, bold)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -168,8 +168,8 @@ static func muted(text, size: int = 13) -> Label:
 	return label(text, size, Pal.MUTED)
 
 
-static func muted_wrap(text, size: int = 13) -> Label:
-	return wrap(text, size, Pal.MUTED)
+static func muted_para(text, size: int = 13) -> Label:
+	return para(text, size, Pal.MUTED)
 
 
 ## Rich text for lines that mix bold / colours: "[b]Rex[/b] says hi [color=#ffc83d]+20 XP[/color]".
@@ -380,11 +380,32 @@ static func button(text, variant: String = "primary", on_press: Callable = Calla
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	style_button(b, variant, size)
 	if icon != "":
-		b.icon = Icons.tex(icon)
-		b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_button_icon(b, icon, variant, size)
 	if on_press.is_valid():
 		b.pressed.connect(on_press)
 	return b
+
+
+## Godot pins a Button's icon to the button's edge, away from centred text.
+## To keep icon and text together, the Button's own text is made invisible
+## (it still gives the button its size) and an icon + label row is laid on top.
+static func _button_icon(b: Button, icon: String, variant: String, size: String) -> void:
+	var sz = _BTN_SIZES.get(size, _BTN_SIZES["md"])
+	var fg = b.get_theme_color("font_color")
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
+		b.add_theme_color_override(k, Color(0, 0, 0, 0))
+	var row = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if variant == "primary" or variant == "good":
+		row.offset_bottom = -4
+	row.add_child(Icons.rect(icon, 16))
+	row.add_child(label(b.text, sz.font, fg, true))
+	b.add_child(row)
+	b.custom_minimum_size.x = row.get_combined_minimum_size().x + sz.pad_h * 2
+	b.draw.connect(func(): row.modulate.a = 0.5 if b.disabled else 1.0)
 
 
 ## A square icon-only button (settings cog, close, edit, delete …).
@@ -515,7 +536,7 @@ static func field(label_text: String, control: Control, hint: String = "") -> VB
 	v.add_child(label(label_text, 12, Pal.MUTED, true))
 	v.add_child(control)
 	if hint != "":
-		v.add_child(muted_wrap(hint, 11))
+		v.add_child(muted_para(hint, 11))
 	return v
 
 
@@ -554,11 +575,11 @@ static func empty(icon: String, title: String, body: String = "", action: Contro
 	var ic = Icons.rect(icon, 40)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	c.add(ic)
-	var t = wrap(title, 16, null, true)
+	var t = para(title, 16, null, true)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	c.add(t)
 	if body != "":
-		var b = muted_wrap(body, 13)
+		var b = muted_para(body, 13)
 		b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		c.add(b)
 	if action != null:
@@ -606,7 +627,7 @@ static func sheet(title: String = "") -> Sheet:
 static func confirm(title: String, body: String, confirm_label: String, on_confirm: Callable, danger: bool = true) -> void:
 	var s = sheet(title)
 	if body != "":
-		s.box.add_child(muted_wrap(body, 14))
+		s.box.add_child(muted_para(body, 14))
 	var row = hbox(10)
 	var cancel = button("Cancel", "ghost", s.close)
 	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL

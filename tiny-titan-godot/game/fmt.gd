@@ -203,9 +203,65 @@ static func _to_number(v) -> float:
 	if v is String or v is StringName:
 		var t: String = String(v).strip_edges()
 		# Number("") is 0, Number("abc") is NaN, and both end up as 0.
-		if t.is_valid_float():
+		if _is_decimal_literal(t):
 			return t.to_float()
+		return maxf(0.0, _radix_literal(t))
 	return 0.0
+
+
+## Value of an unsigned "0x1F" / "0o17" / "0b101" literal, which JS
+## `Number(text)` also reads as a number; -1 when `t` is not one.
+static func _radix_literal(t: String) -> float:
+	if t.length() < 3 or t[0] != "0":
+		return -1.0
+	var radix: int = 0
+	match t[1]:
+		"x", "X":
+			radix = 16
+		"o", "O":
+			radix = 8
+		"b", "B":
+			radix = 2
+		_:
+			return -1.0
+	var total: float = 0.0
+	for i in range(2, t.length()):
+		var digit: int = "0123456789abcdef".find(t[i].to_lower())
+		if digit < 0 or digit >= radix:
+			return -1.0
+		total = total * radix + digit
+	return total
+
+
+## True for the decimal spellings JS `Number(text)` accepts: "12", "-1.5",
+## ".5", "5.", "1e3", "+2E-1". (`String.is_valid_float` also lets "1e" through.)
+static func _is_decimal_literal(t: String) -> bool:
+	var n: int = t.length()
+	var i: int = 0
+	if i < n and (t[i] == "+" or t[i] == "-"):
+		i += 1
+	var mantissa_digits: int = 0
+	while i < n and t[i] >= "0" and t[i] <= "9":
+		i += 1
+		mantissa_digits += 1
+	if i < n and t[i] == ".":
+		i += 1
+		while i < n and t[i] >= "0" and t[i] <= "9":
+			i += 1
+			mantissa_digits += 1
+	if mantissa_digits == 0:
+		return false
+	if i < n and (t[i] == "e" or t[i] == "E"):
+		i += 1
+		if i < n and (t[i] == "+" or t[i] == "-"):
+			i += 1
+		var exponent_digits: int = 0
+		while i < n and t[i] >= "0" and t[i] <= "9":
+			i += 1
+			exponent_digits += 1
+		if exponent_digits == 0:
+			return false
+	return i == n
 
 
 static func _pow10(digits: int) -> float:

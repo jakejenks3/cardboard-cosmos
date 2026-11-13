@@ -180,7 +180,7 @@ func _make(path: String, what: String) -> Control:
 			return script.new()
 	var v = VBoxContainer.new()
 	v.add_child(Kit.h1(what.capitalize()))
-	v.add_child(Kit.muted_wrap("This screen is missing (%s)." % path))
+	v.add_child(Kit.muted_para("This screen is missing (%s)." % path))
 	return v
 
 
@@ -317,7 +317,7 @@ func _on_toast(text: String, kind: String, icon: String) -> void:
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var h = Kit.hbox(8)
 	h.add_child(Icons.rect(ic, 20))
-	h.add_child(Kit.wrap(text, 14, null, true))
+	h.add_child(Kit.para(text, 14, null, true))
 	p.add_child(h)
 	_toasts.add_child(p)
 	p.modulate.a = 0.0
