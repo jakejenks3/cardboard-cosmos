@@ -150,9 +150,9 @@ func build(parent: Control) -> void:
 	df.size_flags_stretch_ratio = 1.15
 	top.add_child(df)
 	var dur_row = Kit.hbox(4)
-	var eh = LogWidgets.num_input(dh, "0", "dur.h")
-	var em = LogWidgets.num_input(dm, "45", "dur.m")
-	var es = LogWidgets.num_input(ds, "00", "dur.s")
+	var eh = LogWidgets.num_input(dh, "0", "dur.h", 40)
+	var em = LogWidgets.num_input(dm, "45", "dur.m", 40)
+	var es = LogWidgets.num_input(ds, "00", "dur.s", 40)
 	eh.tooltip_text = "Hours"
 	em.tooltip_text = "Minutes"
 	es.tooltip_text = "Seconds"
@@ -507,7 +507,7 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 		first_dur.focus_previous = first_dur.get_path_to(de)
 		last_dur.focus_next = last_dur.get_path_to(ee)
 		ee.focus_previous = ee.get_path_to(last_dur)
-		if editing == null and distance == "" and screen.focus_key == "":
+		if editing == null and distance == "" and de.get_viewport().gui_get_focus_owner() == null:
 			de.grab_focus()
 	link_focus.call_deferred()
 

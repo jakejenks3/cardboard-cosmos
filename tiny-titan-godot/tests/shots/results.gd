@@ -51,7 +51,7 @@ func _wait_done(ov, tree: SceneTree, limit: float = 40.0) -> void:
 func _close_and_check(main: Node, tree: SceneTree, ov, expect: int, tag: String) -> void:
 	ShotHelper.press(ShotHelper.find_button(ov, "Continue"))
 	await ShotHelper.frames(tree, 4)
-	var nav_ok = ShotHelper.find_button(main, "Adventure") != null
+	var nav_ok = main.get("_nav") != null and main.get("_nav").visible
 	print("CHECK %s: finished=%d (expect %d) overlay_gone=%s nav_visible=%s" % [tag, _done.n, expect, _overlay(main) == null, nav_ok])
 
 
@@ -139,7 +139,7 @@ func _new(main: Node, tree: SceneTree) -> void:
 
 
 func _year(main: Node, tree: SceneTree) -> void:
-	var s = _lift(10, 220.0, ["Deadlift", "Squat", "Bench Press", "Barbell Row", "Overhead Press", "Front Squat", "Romanian Deadlift", "Hip Thrust"])
+	var s = _lift(40, 250.0, ["Deadlift", "Squat", "Bench Press", "Barbell Row", "Overhead Press", "Front Squat", "Romanian Deadlift", "Hip Thrust"])
 	App.commit_sessions([s], "Workout logged!")
 	var ov = await _attach(main, tree)
 	await ShotHelper.wait(tree, 6.0)
@@ -153,3 +153,26 @@ func _year(main: Node, tree: SceneTree) -> void:
 	await ShotHelper.snap(tree, "res_year_4_top")
 	print("overlay size ", ov.size, " content width ", ov._scroll.get_child(0).size.x)
 	await _close_and_check(main, tree, ov, 1, "year")
+
+	# A bulk import (several sessions at once): the "import" header.
+	var batch = []
+	for i in range(6):
+		var d = ["run", "ride", "climb", "run", "ride", "lift"][i]
+		var part = {"discipline": d, "date": Dates.add_days(App.today, -i), "durationSec": 3600}
+		if d == "run":
+			part["distanceM"] = 15000
+		elif d == "ride":
+			part["distanceM"] = 90000
+			part["elevationM"] = 900
+		elif d == "climb":
+			part["climbs"] = [{"grade": 5, "result": "send", "count": 4}, {"grade": 6, "result": "flash", "count": 2}]
+		else:
+			part["exercises"] = [{"name": "Squat", "sets": [{"reps": 5, "weightKg": 160}, {"reps": 5, "weightKg": 160}]}]
+		batch.append(App.build_session(part))
+	App.commit_sessions(batch, "Imported!")
+	ov = await _attach(main, tree)
+	await ShotHelper.wait(tree, 2.5)
+	await ShotHelper.snap(tree, "res_year_5_import")
+	await _wait_done(ov, tree, 60.0)
+	await ShotHelper.snap(tree, "res_year_6_import_end")
+	await _close_and_check(main, tree, ov, 2, "import")

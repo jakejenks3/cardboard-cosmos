@@ -324,8 +324,15 @@ class Heatmap extends ChartBase:
 			_boxes.append(sb)
 		custom_minimum_size = Vector2(0, 7 * 15 * 1.3)
 
+	func _on_resized() -> void:
+		var h = roundf(7 * 15.0 * _k())
+		if absf(custom_minimum_size.y - h) > 0.5:
+			custom_minimum_size = Vector2(0, h)
+		queue_redraw()
+
+	## Scale of the 12 px cell / 3 px gap grid so the 16 weeks fill the width.
 	func _k() -> float:
-		return minf(1.3, size.x / (weeks * 15.0 + 22.0))
+		return clampf(size.x / (weeks * 15.0 + 22.0), 0.8, 1.8)
 
 	func _level(v: float) -> int:
 		if v <= 0.0:

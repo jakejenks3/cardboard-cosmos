@@ -240,7 +240,10 @@ static func _viewer(id) -> void:
 	if id == null:
 		return
 	var sh = Kit.sheet("Progress photo")
-	sh.box.add_child(PhotoThumb.make(id, Callable()))
+	var big = PhotoThumb.make(id, Callable())
+	big.contain = true
+	big.custom_minimum_size = Vector2(40, 560)
+	sh.box.add_child(big)
 	sh.open()
 
 
@@ -249,6 +252,8 @@ class PhotoThumb extends Control:
 	var photo_id = null
 	var on_click = Callable()
 	var tex = null
+	## true = show the whole picture (viewer) instead of cropping it to fill.
+	var contain = false
 
 	static func make(id, cb: Callable) -> Control:
 		var t = PhotoThumb.new()
@@ -265,6 +270,9 @@ class PhotoThumb extends Control:
 		return t
 
 	func _on_resized() -> void:
+		if contain:
+			queue_redraw()
+			return
 		var h = roundf(size.x * 4.0 / 3.0)
 		if absf(custom_minimum_size.y - h) > 0.5:
 			custom_minimum_size = Vector2(40, h)
@@ -301,6 +309,12 @@ class PhotoThumb extends Control:
 			return
 		var tw = float(tex.get_width())
 		var th = float(tex.get_height())
+		if contain:
+			var kc = minf(w / tw, h / th)
+			var dw = tw * kc
+			var dh = th * kc
+			draw_texture_rect(tex, Rect2((w - dw) / 2.0, (h - dh) / 2.0, dw, dh), false)
+			return
 		var k = maxf(w / tw, h / th)
 		var sw = w / k
 		var sh = h / k

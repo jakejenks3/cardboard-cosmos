@@ -31,7 +31,7 @@ static func is_date_key(t: String) -> bool:
 		return false
 	if Dates.to_date_key(Dates.parse_date_key(t)) != t:
 		return false
-	return t <= Dates.today_key()
+	return t <= App.today
 
 
 ## "← [icon] Title  [trash]".
@@ -73,7 +73,7 @@ static func date_field(value: String, on_change: Callable) -> VBoxContainer:
 	var row = Kit.hbox(4)
 	var e = Kit.input(value, "YYYY-MM-DD", true)
 	e.set_meta(FKEY, "date")
-	e.custom_minimum_size = Vector2(0, 42)
+	e.custom_minimum_size = Vector2(98, 42)
 	e.max_length = 10
 	_slim_edit(e)
 	var hint = Kit.label(_date_hint(value), 11, Pal.MUTED)
@@ -144,6 +144,8 @@ static func round_btn(text: String, on_press: Callable, tip: String = "") -> But
 
 ## Narrow inner padding so short numbers fit small boxes.
 static func _slim_edit(e: LineEdit, pad_h: int = 4) -> void:
+	# LineEdit reserves room for 4 "M"s by default: far too wide for a 3-digit box.
+	e.add_theme_constant_override("minimum_character_width", 0)
 	e.add_theme_stylebox_override("normal", Kit.sbox(Pal.WELL, 10, Pal.LINE, 1, pad_h, 9))
 	e.add_theme_stylebox_override("focus", Kit.sbox(Pal.WELL, 10, Pal.ACCENT, 2, pad_h, 9))
 

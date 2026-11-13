@@ -1,5 +1,5 @@
 extends RefCounted
-## Walkthrough of the Journey tab: python-free checks of the charts, the body
+## Walkthrough of the Journey tab: checks of the charts (hover tooltips), the body
 ## journey with photos, units, the story and the history list.
 
 var main: Node
@@ -77,9 +77,7 @@ func run(m: Node, t: SceneTree) -> void:
 	ShotHelper.reveal(ln3)
 	print("LINE lb last ", ln3.points[ln3.points.size() - 1], " label ", ln3.fmt.call(ln3.points[ln3.points.size() - 1].y))
 	await ShotHelper.snap(tree, "j_stats_lb_lift")
-	var run_t = ShotHelper.find_text(main, "RUNNING")
-	if run_t != null:
-		ShotHelper.reveal(run_t)
+	ShotHelper.scroll_main(main, 2400)
 	await ShotHelper.frames(tree, 2)
 	await ShotHelper.snap(tree, "j_stats_lb_run")
 	App.update_settings({"weightUnit": "kg", "distanceUnit": "km"})
