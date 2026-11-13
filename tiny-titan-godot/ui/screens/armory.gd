@@ -51,7 +51,7 @@ func _hero_card() -> Control:
 	var row = Kit.hbox(14)
 	var hero = HeroView.new()
 	hero.setup(App.state, App.profile(), App.loadout(), null, false)
-	hero.custom_minimum_size = Vector2(120, 150)
+	hero.custom_minimum_size = Vector2(120, 124)
 	hero.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(hero)
 
@@ -273,11 +273,13 @@ func _pet_grid() -> Control:
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add(s)
 		if not owned and p.has("progress"):
+			# Locked: the rarity stripe doubles as the unlock progress.
 			card.add(Kit.bar(Goals.progress_ratio(p.progress.call(App.state)), rc, 4))
-		var stripe = ColorRect.new()
-		stripe.color = rc
-		stripe.custom_minimum_size = Vector2(0, 3)
-		card.add(stripe)
+		else:
+			var stripe = ColorRect.new()
+			stripe.color = rc
+			stripe.custom_minimum_size = Vector2(0, 3)
+			card.add(stripe)
 		ArmoryScreen.passthrough(card.box)
 		g.add_child(card)
 	return g

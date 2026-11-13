@@ -54,7 +54,8 @@ func fill() -> void:
 	# --- data ---------------------------------------------------------------------
 	add_child(Kit.h3("Data"))
 	var photos = App.referenced_photo_ids().size()
-	add_child(Kit.muted_para("Backups include your sessions, check-ins%s. Photos never leave this computer." % (" and all %d progress photos" % photos if photos > 0 else ""), 13))
+	var what = "your sessions, check-ins and all %d progress photos" % photos if photos > 0 else "your sessions and check-ins"
+	add_child(Kit.muted_para("Backups include %s. Photos never leave this computer." % what, 13))
 	var btns = Kit.flow(8)
 	btns.add_child(Kit.button("Export backup", "secondary", SettingsPanel.pick_export))
 	btns.add_child(Kit.button("Import backup", "secondary", SettingsPanel.pick_import.bind(sheet)))
