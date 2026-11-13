@@ -21,6 +21,14 @@ func _ready() -> void:
 		_players.append(p)
 
 
+func _exit_tree() -> void:
+	# Let go of any sound still playing so nothing is left alive when the game quits.
+	for p in _players:
+		p.stop()
+		p.stream = null
+	_cache.clear()
+
+
 func tick() -> void:
 	_play("tick", [[880, 0.0, 0.04, "square", 0.03]])
 

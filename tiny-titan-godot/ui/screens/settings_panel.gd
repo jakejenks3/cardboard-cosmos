@@ -14,6 +14,9 @@ func _init() -> void:
 
 
 func fill() -> void:
+	# A name still being typed is saved first, so the rebuilt field shows it.
+	if _pending_name != null:
+		_commit_name(_pending_name)
 	Kit.clear(self)
 	var p = App.profile()
 	var st = App.settings()
