@@ -116,6 +116,36 @@ func dismiss_results() -> void:
 	await ShotHelper.frames(tree, 3)
 
 
+## Height of the card holding field `fkey` (an exercise card), or -1.
+func card_height(fkey: String) -> float:
+	var p = field(fkey)
+	while p != null and not (p is Card):
+		p = p.get_parent()
+	return p.size.y if p != null else -1.0
+
+
+## Report the size of the lift form: each exercise card, and the whole form.
+func measure(what: String) -> void:
+	var f = screen().form()
+	var parts = []
+	var top = -1.0
+	var bottom = -1.0
+	for i in range(f.lift.exercises.size()):
+		parts.append("%d sets: %d px" % [f.lift.exercises[i].sets.size(), int(card_height("ex%d.name" % i))])
+		var e = field("ex%d.name" % i)
+		var p = e
+		while p != null and not (p is Card):
+			p = p.get_parent()
+		if p != null:
+			if top < 0.0:
+				top = p.global_position.y
+			bottom = p.global_position.y + p.size.y
+	var save = ShotHelper.find_button(main, "Save changes")
+	if save == null:
+		save = ShotHelper.find_button(main, "Finish session")
+	print("MEASURE %s: cards [%s]; exercises block %d px; whole form %d px; first card to save button bottom %d px" % [what, ", ".join(PackedStringArray(parts)), int(bottom - top), int(screen().size.y), int(save.get_global_rect().end.y - top) if save != null else -1])
+
+
 func last_session(d: String):
 	var best = null
 	for s in App.sessions():
@@ -162,6 +192,7 @@ func _year() -> void:
 	ShotHelper.scroll_main(main, 0)
 	await ShotHelper.snap(tree, "log_03_lift_trends")
 	print("after bump + set: ", draft_text(lift.exercises[0]))
+	measure("bench 4 sets")
 	print(ShotHelper.all_text(screen()).replace("\n", " | ").substr(0, 900))
 	ShotHelper.scroll_main(main, 520)
 	await ShotHelper.snap(tree, "log_04_lift_picker")
@@ -344,6 +375,7 @@ func _year() -> void:
 	App.open_log("lift", old.id)
 	await ShotHelper.frames(tree, 4)
 	await ShotHelper.snap(tree, "log_15_edit")
+	measure("edit 3 exercises")
 	var ed = screen().form()
 	check(ed.lift.exercises.size() == old.exercises.size() and ed.date == old.date, "edit loads %d exercises, date %s" % [ed.lift.exercises.size(), ed.date])
 	ShotHelper.type_into(field("ex0.s0.reps"), "9")

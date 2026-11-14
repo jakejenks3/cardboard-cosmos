@@ -97,7 +97,7 @@ func _build() -> void:
 	# radial-gradient(circle at 50% 20%, #2d2460 0, #14102a 60%)
 	var bg = TextureRect.new()
 	var grad = Gradient.new()
-	grad.set_color(0, Color("2d2460"))
+	grad.set_color(0, Pal.PANEL2)
 	grad.set_color(1, Pal.BG)
 	var gt = GradientTexture2D.new()
 	gt.gradient = grad
@@ -523,7 +523,7 @@ func _build_card(ev: Dictionary, animate: bool):
 
 func _boss_card(ev: Dictionary, animate: bool) -> Control:
 	var boss = Campaign.boss_at(int(ev.index))
-	var c = _rcard(BOSS_RED, Color("2a1c42"))
+	var c = _rcard(BOSS_RED, Pal.PANEL.lerp(BOSS_RED, 0.14))
 	var bv = BossView.new()
 	bv.setup(boss.id, 64.0, false)
 	var kick_row = Kit.hbox(6)
@@ -594,7 +594,7 @@ func _stage_card(ev: Dictionary) -> Control:
 	var to = Xp.STAGES[int(ev.to)]
 	var p = PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
-	var st = Kit.sbox(Color("33275f"), 14, Pal.ACCENT, 2, 20, 20)
+	var st = Kit.sbox(Pal.PANEL2, 14, Pal.ACCENT, 2, 20, 20)
 	st.shadow_color = Pal.with_alpha(Pal.ACCENT, 0.3)
 	st.shadow_size = 12
 	p.add_theme_stylebox_override("panel", st)

@@ -14,8 +14,8 @@ extends RefCounted
 ## {"week": monday key, "byDiscipline": {lift, climb, run, ride}, "total"}.
 
 const TICK = 11
-const HEAT = [Color("110d22"), Color("5a4a1a"), Color("9a7a22"), Color("d9ab2c"), Color("ffd766")]
-const TIP_BG = Color("0f0b1f")
+const HEAT = [Color("0a0e14"), Color("5a4a1a"), Color("9a7a22"), Color("d9ab2c"), Color("ffd766")]
+const TIP_BG = Color("0a0e14")
 const FLASH = Color("8ad46a")
 
 

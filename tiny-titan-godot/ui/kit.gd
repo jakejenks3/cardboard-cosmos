@@ -159,9 +159,9 @@ static func h2(text) -> Label:
 	return label(text, 17, null, true)
 
 
-## Small gold caps heading used above groups of cards.
+## Small caps heading (in the current tab's accent colour) used above groups of cards.
 static func h3(text) -> Label:
-	return label(str(text).to_upper(), 13, Pal.ACCENT, true)
+	return label(str(text).to_upper(), 13, Pal.tab_accent(), true)
 
 
 static func muted(text, size: int = 13) -> Label:

@@ -57,7 +57,18 @@ func _hover_off() -> void:
 
 func _restyle(hot: bool) -> void:
 	var bg = _bg.lightened(0.05) if hot else _bg
-	add_theme_stylebox_override("panel", Kit.sbox(bg, 14, _border, 1, _pad, _pad))
+	var sb = Kit.sbox(bg, 14, _border, 1, _pad, _pad)
+	sb.shadow_color = Color(0, 0, 0, 0.28)
+	sb.shadow_size = 3
+	sb.shadow_offset = Vector2(0, 2)
+	add_theme_stylebox_override("panel", sb)
+	queue_redraw()
+
+
+func _draw() -> void:
+	# A one-pixel highlight along the top edge: the card catches the light.
+	if size.x > 40.0:
+		draw_line(Vector2(13.0, 1.5), Vector2(size.x - 13.0, 1.5), Color(1, 1, 1, 0.07), 1.0)
 
 
 func _gui_input(event: InputEvent) -> void:

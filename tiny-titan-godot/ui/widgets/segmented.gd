@@ -58,7 +58,9 @@ func _pick(v) -> void:
 
 
 func _restyle() -> void:
-	var col = Pal.ACCENT if _color == null else _color
+	var col = _color
+	if col == null:
+		col = Pal.tab_accent() if _pills else Pal.ACCENT
 	for i in range(_buttons.size()):
 		var b = _buttons[i]
 		var on = _options[i].value == value

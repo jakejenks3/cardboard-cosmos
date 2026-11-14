@@ -4,6 +4,8 @@ extends Control
 
 const NAV_H = 64.0
 const MAX_W = 520.0
+## How far down the sky shows through the top of the column.
+const SKY_H = 260.0
 const TABS = [
 	{"id": "home", "label": "Hero", "icon": "home"},
 	{"id": "adventure", "label": "Adventure", "icon": "adventure"},
@@ -40,31 +42,42 @@ func _ready() -> void:
 	theme = Kit.theme()
 	_fit_window()
 
-	var bg = TextureRect.new()
-	var grad = Gradient.new()
-	grad.set_color(0, Color("2a2056"))
-	grad.set_color(1, Pal.BG)
-	var gt = GradientTexture2D.new()
-	gt.gradient = grad
-	gt.fill = GradientTexture2D.FILL_RADIAL
-	gt.fill_from = Vector2(0.2, 0.0)
-	gt.fill_to = Vector2(0.95, 0.75)
-	gt.width = 128
-	gt.height = 128
-	bg.texture = gt
-	bg.stretch_mode = TextureRect.STRETCH_SCALE
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
+	# The pixel-art sky and mountains behind everything.
+	add_child(Backdrop.new())
 
 	_column = Control.new()
 	add_child(_column)
 
-	# On a wide window the column gets a faint frame so it reads as "the device".
+	# The app column sits on the scene like a pane of dark glass: the sky shows
+	# through at the top and fades to the solid background further down.
+	var fade = Gradient.new()
+	fade.set_color(0, Pal.with_alpha(Pal.BG, 0.0))
+	fade.set_color(1, Pal.BG)
+	var fade_tex = GradientTexture2D.new()
+	fade_tex.gradient = fade
+	fade_tex.fill_from = Vector2(0, 0)
+	fade_tex.fill_to = Vector2(0, 1)
+	fade_tex.width = 4
+	fade_tex.height = 64
+	var shade_top = TextureRect.new()
+	shade_top.texture = fade_tex
+	shade_top.stretch_mode = TextureRect.STRETCH_SCALE
+	shade_top.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shade_top.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	shade_top.offset_bottom = SKY_H
+	shade_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_column.add_child(shade_top)
+	var shade_rest = ColorRect.new()
+	shade_rest.color = Pal.BG
+	shade_rest.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade_rest.offset_top = SKY_H
+	shade_rest.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_column.add_child(shade_rest)
+
+	# On a wide window the column gets thin side lines so it reads as "the device".
 	_frame = Panel.new()
 	var fs = StyleBoxFlat.new()
-	fs.bg_color = Pal.with_alpha(Pal.BG, 0.55)
+	fs.bg_color = Color(0, 0, 0, 0)
 	fs.border_color = Pal.LINE
 	fs.border_width_left = 1
 	fs.border_width_right = 1
@@ -89,7 +102,7 @@ func _ready() -> void:
 
 	_nav = PanelContainer.new()
 	var ns = StyleBoxFlat.new()
-	ns.bg_color = Color(0.078, 0.063, 0.165, 0.97)
+	ns.bg_color = Pal.with_alpha(Pal.BG2, 0.98)
 	ns.border_color = Pal.LINE
 	ns.border_width_top = 1
 	_nav.add_theme_stylebox_override("panel", ns)
@@ -135,6 +148,9 @@ func _fit_window() -> void:
 		return
 	var win = get_window()
 	if win == null or win.mode != Window.MODE_WINDOWED:
+		return
+	# Only adjust the default window; a size chosen on the command line is left alone.
+	if win.size != Vector2i(440, 900):
 		return
 	var screen = win.current_screen
 	var usable = DisplayServer.screen_get_usable_rect(screen)
@@ -187,6 +203,7 @@ func _refresh() -> void:
 	_nav.visible = _results == null
 	if App.tab != _shown_tab or _screen == null:
 		_shown_tab = App.tab
+		Pal.current_tab = App.tab
 		Kit.clear(_holder)
 		_screen = _make(SCREENS.get(App.tab, ""), App.tab)
 		_holder.add_child(_screen)
@@ -242,7 +259,7 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 		b.add_theme_stylebox_override(s, empty)
 	b.pressed.connect(_nav_pressed.bind(t.id))
 
-	var col = Pal.ACCENT if active else Pal.MUTED
+	var col = Pal.tab(t.id) if active else Pal.MUTED
 	var v = VBoxContainer.new()
 	v.set_anchors_preset(Control.PRESET_FULL_RECT)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER

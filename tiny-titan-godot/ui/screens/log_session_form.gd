@@ -8,7 +8,10 @@ extends RefCounted
 ## without losing what was typed.
 
 const DURATION_CHIPS = [30, 45, 60, 90]
-const FLASH_COLOR = Color("c98500")
+## Flash is the gold result (a palette colour, so it follows a restyle).
+static func flash_color() -> Color:
+	return Pal.ACCENT
+
 const FT_PER_M = 3.28084
 
 var screen = null  # LogScreen
@@ -38,7 +41,7 @@ var last_same = null
 var _xp_box: VBoxContainer = null
 var _save_btn: Button = null
 var _cardio_template: Control = null
-var _chip_row: HFlowContainer = null
+var _chip_row: HBoxContainer = null
 
 
 func _init(owner_screen, d: String, edit_session = null) -> void:
@@ -144,29 +147,34 @@ func build(parent: Control) -> void:
 		hc.add(Kit.muted_para("Imported with duration only. Add your %s below to earn full XP for it." % ("sets" if discipline == "lift" else "climbs"), 13))
 		parent.add_child(hc)
 
-	# Date + duration
-	var top = Kit.hbox(12)
-	var df = LogWidgets.date_field(date, _set_date)
-	df.size_flags_stretch_ratio = 1.15
-	top.add_child(df)
-	var dur_row = Kit.hbox(4)
-	var eh = LogWidgets.num_input(dh, "0", "dur.h", 40)
-	var em = LogWidgets.num_input(dm, "45", "dur.m", 40)
-	var es = LogWidgets.num_input(ds, "00", "dur.s", 40)
+	# Date + duration on one compact row (small captions underneath).
+	var top = Kit.hbox(10)
+	top.add_child(LogWidgets.date_field(date, _set_date))
+	top.add_child(Kit.spacer())
+	var dur_col = Kit.vbox(2)
+	var dur_row = Kit.hbox(2)
+	var eh = LogWidgets.num_input(dh, "0", "dur.h", 34)
+	var em = LogWidgets.num_input(dm, "45", "dur.m", 38)
+	var es = LogWidgets.num_input(ds, "00", "dur.s", 38)
 	eh.tooltip_text = "Hours"
 	em.tooltip_text = "Minutes"
 	es.tooltip_text = "Seconds"
 	eh.text_changed.connect(func(t): _set_dur("h", t))
 	em.text_changed.connect(func(t): _set_dur("m", t))
 	es.text_changed.connect(func(t): _set_dur("s", t))
-	Kit.add(dur_row, [eh, em, es])
-	top.add_child(Kit.field("Duration (h : m : s)", dur_row))
+	Kit.add(dur_row, [eh, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), em, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), es])
+	dur_col.add_child(dur_row)
+	var cap = Kit.label("Duration  h : m : s", 10, Pal.MUTED)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	dur_col.add_child(cap)
+	top.add_child(dur_col)
 	parent.add_child(top)
 
 	# Quick duration picks for gym-style sessions (cardio durations are exact, so typed).
+	# One line only: picks that do not fit the width are left out.
 	_chip_row = null
 	if discipline == "lift" or discipline == "climb":
-		_chip_row = Kit.flow(6)
+		_chip_row = Kit.hbox(4)
 		parent.add_child(_chip_row)
 		_fill_duration_chips()
 
@@ -179,26 +187,25 @@ func build(parent: Control) -> void:
 			_build_cardio(parent, eh, es)
 
 	# Title & notes (folded away like the web's <details>)
-	var fold = Kit.link(("▾ " if show_extra else "▸ ") + "Title & notes", _toggle_extra, 14)
+	var fold = Kit.link(("▾ " if show_extra else "▸ ") + "Title & notes", _toggle_extra, 13)
 	fold.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	parent.add_child(fold)
 	if show_extra:
-		var te = Kit.input(title, "Optional")
+		var te = Kit.input(title, "Title (optional)")
 		te.set_meta(LogWidgets.FKEY, "title")
+		te.tooltip_text = "Title"
+		te.custom_minimum_size = Vector2(48, LogWidgets.ROW_H)
+		LogWidgets._slim_edit(te, 10)
 		te.text_changed.connect(func(t): title = t)
-		parent.add_child(Kit.field("Title", te))
-		parent.add_child(Kit.field("Notes", LogWidgets.text_area(notes, "How did it go?", "notes", func(t): notes = t)))
+		parent.add_child(te)
+		parent.add_child(LogWidgets.text_area(notes, "Notes: how did it go?", "notes", func(t): notes = t, 2))
 
-	# XP preview
-	var xc = Kit.card(6, Callable(), 12)
-	_xp_box = Kit.vbox(4)
-	xc.add(_xp_box)
-	parent.add_child(xc)
-
-	var acts = LogWidgets.actions("Save changes" if editing != null else "Finish session ✓", close, save)
-	_save_btn = acts[1]
-	parent.add_child(acts[0])
-	parent.add_child(Kit.gap(8))
+	# XP preview + save, one block
+	var fb = LogWidgets.finish_block("Save changes" if editing != null else "Finish session ✓", close, save)
+	_xp_box = fb.xp
+	_save_btn = fb.save
+	parent.add_child(fb.card)
+	parent.add_child(Kit.gap(4))
 	refresh()
 
 
@@ -260,12 +267,23 @@ func _fill_duration_chips() -> void:
 			mins.append(m)
 	var cur = duration_sec()
 	var cur_min = TTUtil.jsround(cur / 60.0) if cur > 0 else -1
-	_chip_row.add_child(Kit.vcenter(Kit.muted("Quick:", 12)))
+	var avail = 400.0
+	if is_instance_valid(screen) and screen.size.x > 100.0:
+		avail = screen.size.x
+	var quick = Kit.muted("Quick", 11)
+	_chip_row.add_child(Kit.vcenter(quick))
+	var used = Kit.font_bold().get_string_size("Quick", HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 4
 	for m in mins:
 		var label = Fmt.fmt_duration_short(m * 60)
 		if m == last_min:
 			label += " · last"
-		_chip_row.add_child(Kit.chip(label, m == cur_min, _quick_duration.bind(m), Pal.disc(discipline), 12))
+		var w = LogWidgets.mini_chip_width(label, 8) + 4
+		if used + w > avail:
+			continue
+		used += w
+		var chip = LogWidgets.mini_chip(label, m == cur_min, _quick_duration.bind(m), Pal.disc(discipline), 8)
+		chip.tooltip_text = "Set the duration to %s" % Fmt.fmt_duration_short(m * 60)
+		_chip_row.add_child(chip)
 
 
 func _quick_duration(m: int) -> void:
@@ -361,14 +379,14 @@ func _build_climb(parent: Control) -> void:
 		if int(st.attempts) > 0:
 			text += ", %d attempts" % int(st.attempts)
 		parent.add_child(LogWidgets.template(lc.date, text, _repeat_climb.bind(lc)))
-	var col = FLASH_COLOR if climb_result == "flash" else (Pal.CLIMB if climb_result == "send" else Pal.MUTED)
+	var col = flash_color() if climb_result == "flash" else (Pal.CLIMB if climb_result == "send" else Pal.MUTED)
 	parent.add_child(Kit.segmented([
 		{"value": "flash", "label": "Flash"},
 		{"value": "send", "label": "Send"},
 		{"value": "attempt", "label": "Attempt"},
 	], climb_result, _set_result, col))
-	parent.add_child(Kit.muted("Tap a grade to add one %s." % climb_result, 13))
-	var grid = Kit.grid(6, 6)
+	parent.add_child(Kit.muted("Tap a grade to add one %s." % climb_result, 12))
+	var grid = Kit.grid(6, 5)
 	var top = Xp.MAX_V_GRADE if more_grades else 10
 	for g in range(-1, top + 1):
 		var b = Button.new()
@@ -376,15 +394,15 @@ func _build_climb(parent: Control) -> void:
 		b.focus_mode = Control.FOCUS_NONE
 		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(0, 44)
+		b.custom_minimum_size = Vector2(0, 36)
 		var hue = grade_hue(g)
-		b.add_theme_stylebox_override("normal", Kit.sbox(hue, 10, hue.lightened(0.25), 1, 4, 6))
-		b.add_theme_stylebox_override("hover", Kit.sbox(hue.lightened(0.1), 10, hue.lightened(0.35), 1, 4, 6))
-		b.add_theme_stylebox_override("pressed", Kit.sbox(hue.darkened(0.15), 10, Pal.ACCENT, 2, 4, 6))
-		b.add_theme_color_override("font_color", Color.WHITE)
-		b.add_theme_color_override("font_hover_color", Color.WHITE)
-		b.add_theme_color_override("font_pressed_color", Color.WHITE)
-		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_stylebox_override("normal", Kit.sbox(hue, 9, hue.lightened(0.25), 1, 4, 4))
+		b.add_theme_stylebox_override("hover", Kit.sbox(hue.lightened(0.1), 9, hue.lightened(0.35), 1, 4, 4))
+		b.add_theme_stylebox_override("pressed", Kit.sbox(hue.darkened(0.15), 9, Pal.ACCENT, 2, 4, 4))
+		b.add_theme_color_override("font_color", Pal.TEXT)
+		b.add_theme_color_override("font_hover_color", Pal.TEXT)
+		b.add_theme_color_override("font_pressed_color", Pal.TEXT)
+		b.add_theme_font_size_override("font_size", 14)
 		b.pressed.connect(add_climb.bind(g))
 		grid.add_child(b)
 	var more = Kit.button("Less" if more_grades else "More…", "ghost", _toggle_more, "sm")
@@ -397,18 +415,18 @@ func _build_climb(parent: Control) -> void:
 		for k in range(climbs.size()):
 			idx.append(k)
 		TTUtil.stable_sort(idx, func(a, b): return _climb_before(climbs[a], climbs[b]))
-		var c = Kit.card(6, Callable(), 12)
+		var c = Kit.card(4, Callable(), 10)
 		for k in idx:
 			var cl = climbs[k]
-			var row = Kit.hbox(10)
-			var gt = Kit.tag(Xp.grade_label(cl.grade), grade_hue(int(cl.grade)), false, 14)
-			gt.custom_minimum_size = Vector2(48, 0)
+			var row = Kit.hbox(8)
+			var gt = Kit.tag(Xp.grade_label(cl.grade), grade_hue(int(cl.grade)), false, 13)
+			gt.custom_minimum_size = Vector2(44, 0)
 			row.add_child(gt)
-			var rcol = FLASH_COLOR if cl.result == "flash" else (Pal.CLIMB if cl.result == "send" else Pal.MUTED)
-			row.add_child(Kit.vcenter(Icons.rect(result_icon(cl.result), 18, rcol)))
-			row.add_child(Kit.vcenter(Kit.expand(Kit.label(result_label(cl.result), 15))))
+			var rcol = flash_color() if cl.result == "flash" else (Pal.CLIMB if cl.result == "send" else Pal.MUTED)
+			row.add_child(Kit.vcenter(Icons.rect(result_icon(cl.result), 16, rcol)))
+			row.add_child(Kit.vcenter(Kit.expand(Kit.label(result_label(cl.result), 14))))
 			row.add_child(LogWidgets.round_btn("−", bump_climb.bind(k, -1), "Minus one"))
-			var n = Kit.label(str(int(cl.count)), 17, null, true)
+			var n = Kit.label(str(int(cl.count)), 15, null, true)
 			n.custom_minimum_size = Vector2(26, 0)
 			n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			row.add_child(Kit.vcenter(n))
@@ -483,10 +501,10 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 		var text = "Same as last %s: %s" % [discipline, Fmt.fmt_distance(float(lc.distanceM), du)]
 		if lc.get("durationSec") != null and int(lc.durationSec) > 0:
 			text += " · " + Fmt.fmt_duration(float(lc.durationSec))
-		_cardio_template = LogWidgets.template(lc.date, text, _use_last_cardio.bind(lc))
+		_cardio_template = LogWidgets.template(lc.date, text, _use_last_cardio.bind(lc), false)
 		_cardio_template.visible = distance.strip_edges() == ""
 		parent.add_child(_cardio_template)
-	var row = Kit.hbox(12)
+	var row = Kit.hbox(10)
 	var ph = LogWidgets.trim_num(Fmt.m_to_unit(float(lc.distanceM), du)) if lc != null else "0.0"
 	var de = LogWidgets.num_input(distance, ph, "distance")
 	de.text_changed.connect(func(t):

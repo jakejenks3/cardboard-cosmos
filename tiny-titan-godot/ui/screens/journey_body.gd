@@ -289,7 +289,7 @@ class PhotoThumb extends Control:
 		var w = size.x
 		var h = size.y
 		if tex == null:
-			draw_rect(Rect2(0, 0, w, h), Color("110d22"))
+			draw_rect(Rect2(0, 0, w, h), Pal.WELL)
 			var o = -h
 			while o < w:
 				var x0 = o
@@ -303,7 +303,7 @@ class PhotoThumb extends Control:
 					y1 = h - (x1 - w)
 					x1 = w
 				if y1 > y0:
-					draw_line(Vector2(x0, y0), Vector2(x1, y1), Color("17122d"), 6.0)
+					draw_line(Vector2(x0, y0), Vector2(x1, y1), Pal.BG2, 6.0)
 				o += 12.0
 			draw_rect(Rect2(0, 0, w, h), Pal.LINE, false, 1.0)
 			return

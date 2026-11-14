@@ -171,7 +171,7 @@ func _then_now() -> void:
 	var days = Dates.days_between(start, App.today)
 	var profile = App.profile()
 	var card = Kit.card(10)
-	card.tint(Color("2a2350"), Pal.ACCENT)
+	card.tint(Pal.PANEL2, Pal.tab_accent())
 	var heroes = Kit.hbox(6)
 	var then_tex = Art.hero_texture(Art.state_with_levels(s, LEVEL_ONE), profile, THEN_LOADOUT)
 	heroes.add_child(_hero_fig(then_tex, "Day 1", Dates.format_date(start, {"month": "short", "day": "numeric", "year": "numeric"})))
@@ -464,7 +464,7 @@ func _build_chronicle() -> void:
 
 	var start = chron[0].date
 	var head = Kit.card(4)
-	head.tint(Color("2a2350"))
+	head.tint(Pal.PANEL2)
 	head.add(PixelFont.rect("DAY %d" % (Dates.days_between(start, App.today) + 1), 2, Pal.ACCENT))
 	head.add(Kit.muted_para("Started %s · %d moments so far" % [Dates.format_date(start, {"month": "long", "day": "numeric", "year": "numeric"}), chron.size()], 13))
 	add_child(head)

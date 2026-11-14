@@ -18,7 +18,7 @@ func setup(title: String = "") -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_backdrop = ColorRect.new()
-	_backdrop.color = Color(0.03, 0.02, 0.08, 0.72)
+	_backdrop.color = Color(0.02, 0.03, 0.05, 0.74)
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_backdrop.gui_input.connect(_backdrop_input)
 	add_child(_backdrop)

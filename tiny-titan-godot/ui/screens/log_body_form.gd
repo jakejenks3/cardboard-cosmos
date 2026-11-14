@@ -103,11 +103,12 @@ func build(parent: Control) -> void:
 	parent.add_child(LogWidgets.date_field(date, _set_date))
 
 	var row = Kit.hbox(12)
-	var w_opts = {"placeholder": TTUtil.num_str(last_weight) if last_weight != null else "0.0", "width": 76, "min": 0}
+	var w_opts = {"placeholder": TTUtil.num_str(last_weight) if last_weight != null else "0.0", "width": 64, "min": 0, "compact": true, "height": LogWidgets.ROW_H}
 	if last_weight != null:
 		w_opts["base"] = last_weight
 	var ws = Kit.stepper(weight, 0.1 if wu == "kg" else 0.2, Callable(), w_opts)
-	var w_edit = LogWidgets.slim_stepper(ws, "weight", 40)
+	ws.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var w_edit = LogWidgets.slim_stepper(ws, "weight")
 	w_edit.tooltip_text = "Body weight"
 	# A new check-in starts with the cursor in the weight box, so you can just type.
 	if editing == null and weight == "":
@@ -123,7 +124,8 @@ func build(parent: Control) -> void:
 	wf.add_child(_weight_hint)
 	wf.size_flags_stretch_ratio = 1.4
 	row.add_child(wf)
-	var be = LogWidgets.num_input(bf, "—", "bodyfat")
+	var be = LogWidgets.num_input(bf, "—", "bodyfat", 64)
+	be.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	be.text_changed.connect(func(t):
 		bf = t
 		refresh())
@@ -133,37 +135,31 @@ func build(parent: Control) -> void:
 	row.add_child(bfield)
 	parent.add_child(row)
 
-	parent.add_child(Kit.section_title("Progress photos", Kit.muted("%d/3" % photos.size(), 13)))
+	parent.add_child(Kit.section_title("Progress photos", Kit.muted("%d/3" % photos.size(), 12)))
 	var slots = Kit.hbox(8)
 	for a in TT.PHOTO_ANGLES:
 		slots.add_child(_photo_slot(a))
 	parent.add_child(slots)
 	parent.add_child(Kit.muted_para("Tip: same spot, same light, same time of day. Photos are stored on this computer — nowhere else.", 11))
 
-	parent.add_child(Kit.field("Note", LogWidgets.text_area(note, "How are you feeling?", "note", func(t): note = t, 2)))
+	parent.add_child(LogWidgets.text_area(note, "Note: how are you feeling?", "note", func(t): note = t, 2))
 
-	_xp_card = null
-	_xp_box = null
-	if editing == null:
-		_xp_card = Kit.card(6, Callable(), 12)
-		_xp_box = Kit.vbox(4)
-		_xp_card.add(_xp_box)
-		parent.add_child(_xp_card)
-
-	var acts = LogWidgets.actions("Save changes" if editing != null else "Check in ✓", close, save)
-	_save_btn = acts[1]
-	parent.add_child(acts[0])
-	parent.add_child(Kit.gap(8))
+	var fb = LogWidgets.finish_block("Save changes" if editing != null else "Check in ✓", close, save, editing == null)
+	_xp_card = fb.card if editing == null else null
+	_xp_box = fb.xp
+	_save_btn = fb.save
+	parent.add_child(fb.card)
+	parent.add_child(Kit.gap(4))
 	refresh()
 
 
 func _photo_slot(angle: String) -> Control:
-	var v = Kit.vbox(4)
+	var v = Kit.vbox(3)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var id = photos.get(angle)
 	var tex = App.photo_texture(id) if id != null else null
 	var c = Kit.card(4, pick_photo.bind(angle), 0)
-	c.custom_minimum_size = Vector2(0, 150)
+	c.custom_minimum_size = Vector2(0, 120)
 	c.tooltip_text = "Add a %s photo" % TT.PHOTO_ANGLE_NAMES[angle].to_lower()
 	if tex != null:
 		c.tint(Pal.WELL, Pal.with_alpha(Pal.ACCENT, 0.6))
@@ -171,7 +167,7 @@ func _photo_slot(angle: String) -> Control:
 		img.texture = tex
 		img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		img.custom_minimum_size = Vector2(0, 148)
+		img.custom_minimum_size = Vector2(0, 118)
 		img.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		img.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		img.clip_contents = true
@@ -195,7 +191,7 @@ func _photo_slot(angle: String) -> Control:
 		c.box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(c)
 	var foot = Kit.hbox(4)
-	foot.add_child(Kit.expand(Kit.label(TT.PHOTO_ANGLE_NAMES[angle], 13, null, true)))
+	foot.add_child(Kit.expand(Kit.label(TT.PHOTO_ANGLE_NAMES[angle], 12, null, true)))
 	if tex != null:
 		foot.add_child(Kit.link("Remove", clear_photo.bind(angle), 12))
 	v.add_child(foot)
