@@ -188,7 +188,7 @@ func _exercise_card(i: int) -> Card:
 		row.add_child(rs)
 		if not e.bodyweight:
 			row.add_child(Kit.vcenter(Kit.label("×", 13, Pal.MUTED)))
-			var w_opts = {"placeholder": wu, "width": 50, "snap": true, "min": 0, "compact": true}
+			var w_opts = {"placeholder": wu, "width": 54, "snap": true, "min": 0, "compact": true}
 			if ref_set != null and float(ref_set.weightKg) > 0.0:
 				w_opts["base"] = TTUtil.jsround(Fmt.kg_to_unit(float(ref_set.weightKg), wu) * 100.0) / 100.0
 			var ws = Kit.stepper(s.weight, _step(), Callable(), w_opts)

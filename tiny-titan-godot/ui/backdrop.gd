@@ -104,8 +104,9 @@ func _render() -> void:
 
 	var orb = Vector2(pal.orb_at.x * float(w), pal.orb_at.y * float(horizon))
 	if narrow:
-		# Keep it clear of the title on the left and the button on the right.
-		orb = Vector2(float(w) * 0.66, maxf(float(horizon) * 0.2, 6.0))
+		# Mid-way across: clear of the screen title on the left and of whatever sits on
+		# the right of a header (the settings button, the Armory's counts).
+		orb = Vector2(float(w) * 0.52, maxf(float(horizon) * 0.2, 6.0))
 	var orb_r = clampf(float(w) * 0.035, 3.0, 7.0)
 	var bytes = PackedByteArray()
 	bytes.resize(w * h * 4)

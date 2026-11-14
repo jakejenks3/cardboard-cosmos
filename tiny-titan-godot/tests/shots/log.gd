@@ -393,6 +393,46 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 4)
 	check(App.session_by_id(old.id) == null, "session deleted")
 
+	# --- 7. pounds: long numbers and badges must fit a 440 px window -----------
+	App.update_settings({"weightUnit": "lb"})
+	App.open_log("lift")
+	await ShotHelper.frames(tree, 4)
+	lift = screen().form().lift
+	await tap("Bench Press")
+	var w3 = LogWidgets.num(lift.exercises[0].sets[3].weight)
+	ShotHelper.type_into(field("ex0.s3.weight"), LogWidgets.trim_num(w3 + 12.5))
+	ShotHelper.type_into(field("ex0.s1.weight"), "102.5")
+	ShotHelper.type_into(field("ex0.s2.reps"), "12")
+	await ShotHelper.frames(tree, 3)
+	ShotHelper.scroll_main(main, 0)
+	await ShotHelper.snap(tree, "log_17_lb_badges")
+	print("lb draft: ", draft_text(lift.exercises[0]))
+	check(ShotHelper.find_text(screen(), "+12.5 lb") != null, "'+12.5 lb' badge shown")
+	no_overflow("ex0.name")
+	App.update_settings({"weightUnit": "kg"})
+	App.open_log(null)
+	await ShotHelper.frames(tree, 3)
+
+
+## Every visible control in the card holding `fkey` stays inside the card (nothing cut off on the right).
+func no_overflow(fkey: String) -> void:
+	var p = field(fkey)
+	while p != null and not (p is Card):
+		p = p.get_parent()
+	if p == null:
+		check(false, "card for %s found" % fkey)
+		return
+	var right = p.get_global_rect().end.x
+	var worst = 0.0
+	var who = ""
+	for n in ShotHelper.walk(p):
+		if n is Control and n.is_visible_in_tree():
+			var over = n.get_global_rect().end.x - right
+			if over > worst:
+				worst = over
+				who = "%s '%s'" % [n.get_class(), str(n.get("text"))]
+	check(worst < 0.5 and right <= main.get_viewport().get_visible_rect().size.x - 10.0, "card fits the window (card right %d, worst overflow %.1f px %s)" % [int(right), worst, who])
+
 
 func _new_player() -> void:
 	App.open_log("lift")

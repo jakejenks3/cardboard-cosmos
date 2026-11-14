@@ -90,13 +90,13 @@ func _make_btn(icon: String, h: float = 42.0) -> Button:
 	if compact:
 		# Quiet glyphs inside the pill: no box of their own, a faint wash on hover.
 		b.custom_minimum_size = Vector2(28, h)
-		b.add_theme_font_size_override("font_size", 17)
+		b.add_theme_font_size_override("font_size", 16)
 		var empty = Kit.sbox(Pal.with_alpha(Pal.WELL, 0.0), 8, null, 0, 0, 0)
 		b.add_theme_stylebox_override("normal", empty)
 		b.add_theme_stylebox_override("hover", Kit.sbox(Pal.with_alpha(Pal.TEXT, 0.07), 8, null, 0, 0, 0))
 		b.add_theme_stylebox_override("pressed", Kit.sbox(Pal.with_alpha(Pal.ACCENT, 0.22), 8, null, 0, 0, 0))
 		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		b.add_theme_color_override("font_color", Pal.MUTED)
+		b.add_theme_color_override("font_color", Pal.with_alpha(Pal.MUTED, 0.75))
 		b.add_theme_color_override("font_hover_color", Pal.TEXT)
 		b.add_theme_color_override("font_pressed_color", Pal.ACCENT)
 		return b
@@ -112,7 +112,7 @@ func _make_btn(icon: String, h: float = 42.0) -> Button:
 ## The value box of a compact stepper: no box of its own (the pill is drawn
 ## behind it), bold 15 px number, tight padding so "102.5" fits.
 func _style_compact_edit(h: float) -> void:
-	var pv = int(maxf(0.0, (h - 20.0) / 2.0))
+	var pv = int(maxf(0.0, (h - 26.0) / 2.0))
 	var clear = Kit.sbox(Pal.with_alpha(Pal.WELL, 0.0), 6, null, 0, 1, pv)
 	_edit.add_theme_stylebox_override("normal", clear)
 	_edit.add_theme_stylebox_override("focus", clear.duplicate())

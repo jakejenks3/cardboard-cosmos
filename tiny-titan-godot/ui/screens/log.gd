@@ -127,8 +127,8 @@ func _picker_tile(d: String, title: String, sub: String, col: Color, icon: Strin
 	var c = Kit.card(6, _pick.bind(d), 14)
 	c.tint(Pal.with_alpha(col, 0.14), col)
 	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.custom_minimum_size = Vector2(0, 128)
-	var ic = Icons.rect(icon, 44)
+	c.custom_minimum_size = Vector2(0, 112)
+	var ic = Icons.rect(icon, 40)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	c.add(ic)
 	var t = Kit.label(title, 17, null, true)
