@@ -89,7 +89,7 @@ func run(m: Node, t: SceneTree) -> void:
 	var names = ["Cable Fly", "Hammer Curl", "Face Pull"]
 	var type_name = func(i):
 		for e in ShotHelper.walk(main):
-			if e is LineEdit and e.placeholder_text.to_lower().contains("exercise"):
+			if e is LineEdit and str(e.get_meta("fkey", "")) == "search":
 				ShotHelper.type_into(e, names[i])
 	await hammer("Add", 3, type_name)
 	await ShotHelper.snap(tree, "anchor_add")

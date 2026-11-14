@@ -83,6 +83,7 @@ static func date_field(value: String, on_change: Callable) -> VBoxContainer:
 	e.set_meta(FKEY, "date")
 	e.tooltip_text = "Date (YYYY-MM-DD)"
 	e.custom_minimum_size = Vector2(96, ROW_H)
+	e.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	e.max_length = 10
 	_slim_edit(e)
 	var hint = Kit.label(_date_hint(value), 10, Pal.MUTED)
@@ -115,6 +116,7 @@ static func date_field(value: String, on_change: Callable) -> VBoxContainer:
 	row.add_child(e)
 	row.add_child(nxt_btn)
 	var f = Kit.vbox(2)
+	f.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	f.add_child(row)
 	f.add_child(hint)
 	return f

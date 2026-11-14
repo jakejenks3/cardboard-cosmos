@@ -179,7 +179,7 @@ func _exercise_card(i: int) -> Card:
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(n)
-		var reps_opts = {"placeholder": "reps", "width": 32, "min": 0, "compact": true}
+		var reps_opts = {"placeholder": "–", "width": 32, "min": 0, "compact": true}
 		if ref_set != null:
 			reps_opts["base"] = int(ref_set.reps)
 		var rs = Kit.stepper(s.reps, 1.0, Callable(), reps_opts)
