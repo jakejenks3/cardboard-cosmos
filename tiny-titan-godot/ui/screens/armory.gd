@@ -3,9 +3,10 @@ extends UiScreen
 ## Armory tab: dress the hero in unlocked gear, pick a companion, change the look.
 ## Port of tiny-titan/src/screens/Armory.tsx.
 ##
-## Tapping an owned item puts it on at once (the preview hero updates); tapping
-## what the hero already wears, or a locked item, opens its detail sheet.
-## Right-click any tile for its details.
+## Tapping an owned item puts it on at once (sparks, and the preview hero
+## updates); tapping what the hero already wears, or a locked item, opens its
+## detail sheet. The small "i" on a tile (or a right-click) opens the details.
+## Companions work the same way.
 
 const TILE_COLS = 3
 
@@ -15,15 +16,14 @@ var tab: String = "head"
 
 func build() -> void:
 	var state = App.state
-	var items_total = Items.all().size()
-	var pets_total = Pets.all().size()
 
-	# --- header ---------------------------------------------------------------
+	# --- header: the title and two count chips --------------------------------
 	var head = Kit.hbox(8)
 	var title = Kit.h1("Armory")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	head.add_child(Kit.vcenter(Kit.muted("%d/%d items · %d/%d pets" % [state.items.size(), items_total, state.pets.size(), pets_total], 13)))
+	head.add_child(AdventureScreen.pill("chest", "%d/%d" % [state.items.size(), Items.all().size()], Pal.PANEL2, "Gear collected", Pal.TEXT))
+	head.add_child(AdventureScreen.pill("paw", "%d/%d" % [state.pets.size(), Pets.all().size()], Pal.PANEL2, "Companions found", Pal.TEXT))
 	add_child(head)
 
 	add_child(_hero_card())
@@ -39,42 +39,49 @@ func build() -> void:
 	else:
 		add_child(_item_grid())
 
-	add_child(Kit.muted_para("Tip: perks stack. A full set of discipline gear plus its pet is a serious XP boost.", 13))
-
 
 # ---------------------------------------------------------------------------
 # Hero + active bonuses
 # ---------------------------------------------------------------------------
 
+## The hero, big and in the middle, with the companion at its feet and the
+## active bonuses as chips underneath.
 func _hero_card() -> Control:
-	var card = Kit.card(0, Callable(), 12)
-	var row = Kit.hbox(14)
+	var card = Kit.card(10, Callable(), 12)
+	var stage = Kit.hbox(6)
+	stage.alignment = BoxContainer.ALIGNMENT_CENTER
 	var hero = HeroView.new()
+	hero.min_scale = 3
 	hero.setup(App.state, App.profile(), App.loadout(), null, false)
-	hero.custom_minimum_size = Vector2(120, 124)
-	hero.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(hero)
-
-	var info = Kit.vbox(4)
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	info.add_child(Kit.label("ACTIVE BONUSES", 11, Pal.MUTED, true))
-	var bits = ArmoryScreen.perk_bits(App.perks)
-	if bits.is_empty():
-		info.add_child(Kit.muted_para("None yet — gear with perks shows up as you progress.", 13))
-	for b in bits:
-		info.add_child(Kit.para(b, 14, Pal.GOOD, true))
+	hero.size_flags_vertical = Control.SIZE_SHRINK_END
+	hero.tooltip_text = "Tap to flex"
+	stage.add_child(hero)
 	var pet = Pets.by_id(App.active_pet()) if App.active_pet() != null else null
 	if pet != null and App.state.pets.has(pet.id):
-		var pr = Kit.hbox(6)
-		pr.add_child(Kit.vcenter(Icons.rect("paw", 16)))
-		var t = Kit.para("%s the %s" % [pet.name, pet.species], 13, Pal.MUTED)
-		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		pr.add_child(t)
-		info.add_child(Kit.gap(2))
-		info.add_child(pr)
-	row.add_child(info)
-	card.add(row)
+		var pv = PetView.new()
+		pv.setup(pet.id, 64.0, true)
+		pv.size_flags_vertical = Control.SIZE_SHRINK_END
+		pv.tooltip_text = "%s the %s" % [pet.name, pet.species]
+		pv.mouse_filter = Control.MOUSE_FILTER_STOP
+		stage.add_child(pv)
+	var well = PanelContainer.new()
+	well.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	well.add_theme_stylebox_override("panel", PixBox.well(10, 8, null))
+	well.add_child(stage)
+	card.add(well)
+
+	var chips = Kit.flow(6)
+	chips.alignment = FlowContainer.ALIGNMENT_CENTER
+	var perks = App.perks
+	for d in TT.DISCIPLINES:
+		var v = float(perks.xp.get(d, 0))
+		if v > 0.0:
+			chips.add_child(AdventureScreen.pill(d, "+%d%% XP" % TTUtil.jsround(v * 100.0), Pal.GOOD, "+%d%% %s XP" % [TTUtil.jsround(v * 100.0), str(TT.DISCIPLINE_META[d].name).to_lower()]))
+	if float(perks.get("luck", 0)) > 0.0:
+		chips.add_child(AdventureScreen.pill("dice", "+%d%% luck" % TTUtil.jsround(float(perks.luck) * 100.0), Pal.GOOD, "Better loot drops"))
+	if chips.get_child_count() == 0:
+		chips.add_child(AdventureScreen.pill("bolt", "No bonuses yet", Pal.PANEL2, "Gear and companions with perks add XP bonuses. Perks stack.", Pal.MUTED))
+	card.add(chips)
 	return card
 
 
@@ -152,18 +159,22 @@ func _item_grid() -> Control:
 		bare["body"] = null
 		var tex = Art.hero_texture(App.state, App.profile(), bare)
 		var shirtless = loadout.get("body") == null
-		g.add_child(_tile(tex, "Shirtless", "Show off the gains", Pal.LINE, shirtless, false, _equip_now.bind("body", null), Callable()))
+		g.add_child(_tile(PixelRect.make(tex, 2.0), "Shirtless", Pal.LINE, shirtless, false, Callable() if shirtless else _equip_now.bind("body", null), Callable(), "Show off the gains", null, true))
 	for it in ArmoryScreen.slot_items(tab, App.state):
 		var owned = App.state.items.has(it.id)
 		var equipped = loadout.get(it.slot) == it.id
 		var tex = Art.item_preview_texture(it.id, App.state, App.profile(), loadout, not owned)
-		var sub = it.rarity if owned else Items.unlock_hint(it)
 		var tap = Callable()
 		if owned and not equipped:
 			tap = _equip_now.bind(it.slot, it.id)
 		else:
 			tap = ArmoryDetail.open_item.bind(it)
-		g.add_child(_tile(tex, it.name if owned else "???", sub, Pal.rarity(it.rarity), equipped, not owned, tap, ArmoryDetail.open_item.bind(it)))
+		var tip = Items.unlock_hint(it)
+		if owned:
+			var perks = Items.perk_summary(it.get("perk"))
+			tip = "%s · %s" % [str(it.rarity).capitalize(), ", ".join(PackedStringArray(perks))] if not perks.is_empty() else str(it.rarity).capitalize()
+		var prog = null if owned else Items.unlock_progress(it, App.state)
+		g.add_child(_tile(PixelRect.make(tex, 2.0), it.name if owned else "???", Pal.rarity(it.rarity), equipped, not owned, tap, ArmoryDetail.open_item.bind(it), tip, prog, owned and not equipped))
 	return g
 
 
@@ -174,57 +185,55 @@ func _equip_now(slot: String, id) -> void:
 	App.equip(slot, id)
 
 
-## One grid tile: preview, name, sub-line, "Equipped"/"Active" badge.
-func _tile(tex: Texture2D, title: String, sub: String, rc: Color, active: bool, locked: bool, on_tap: Callable, on_info: Callable, progress = null, badge: String = "EQUIPPED") -> Control:
-	var card = Kit.card(3, on_tap, 8)
+## A tile tapped to put something on: sparks from the tile, then the action.
+func _tap_burst(card: Control, col: Color, cb: Callable) -> void:
+	Kit.burst(card, col, 20)
+	cb.call()
+
+
+## One grid tile: the picture on a rarity-coloured edge and the name under it.
+## Worn = gold edge and an "ON" chip; locked = dimmed with a lock; the small
+## "i" opens the details (as does a right-click).
+func _tile(pic: Control, title: String, rc: Color, active: bool, locked: bool, on_tap: Callable, on_info: Callable, tip: String = "", progress = null, burst: bool = false) -> Control:
+	var card = Kit.card(4, Callable(), 6)
+	if on_tap.is_valid():
+		card.on_tap(_tap_burst.bind(card, rc, on_tap) if burst else on_tap)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.tint(Pal.PANEL, Pal.ACCENT if active else Pal.with_alpha(rc, 0.85))
 	if active:
-		card.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL2, 14, Pal.ACCENT, 2, 8, 8))
-	if locked:
-		card.modulate.a = 0.55
+		card.accent(Pal.ACCENT, true)
+	else:
+		card.accent(rc)
 	if on_info.is_valid():
 		card.gui_input.connect(_tile_input.bind(on_info))
-	card.tooltip_text = "Right-click for details" if on_info.is_valid() and not locked else ""
+	card.tooltip_text = tip
 
 	var holder = MarginContainer.new()
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var pic = PixelRect.make(tex, 2.0) if tex.get_width() > 40 else PixelRect.make(tex, 1.0)
 	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(pic)
+	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	if locked:
+		pic.modulate = Color(1, 1, 1, 0.45)
+	holder.add_child(Kit.center(pic))
+	var top = Kit.hbox(0)
+	top.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	if on_info.is_valid():
+		var info = Kit.icon_button("info", on_info, "Details", 26)
+		info.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		top.add_child(info)
+	top.add_child(Kit.spacer())
 	if active:
-		var top = Kit.hbox(0)
-		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		top.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		top.add_child(Kit.spacer())
-		top.add_child(Kit.tag(badge, Pal.ACCENT, true, 9))
-		holder.add_child(top)
+		top.add_child(AdventureScreen.pill("", "ON", Pal.ACCENT, "", null, 11))
+	elif locked:
+		top.add_child(Icons.rect("lock", 20))
+	holder.add_child(top)
 	card.add(holder)
 
-	var n = Kit.clip(title, 12, null, true)
+	var n = Kit.clip(title, 12, Pal.MUTED if locked else (Pal.ACCENT if active else null), true)
 	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add(n)
-	var s = Kit.muted_para(sub, 11)
-	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	card.add(s)
 	if progress != null:
 		card.add(Kit.bar(Goals.progress_ratio(progress), rc, 4))
-	# Rarity stripe along the bottom (the web's inset bottom shadow).
-	var stripe = ColorRect.new()
-	stripe.color = rc
-	stripe.custom_minimum_size = Vector2(0, 3)
-	stripe.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.add(stripe)
-	ArmoryScreen.passthrough(card.box)
+	AdventureScreen.passthrough(card.box)
 	return card
-
-
-## Let clicks on a tile's contents reach the tappable card.
-static func passthrough(n: Node) -> void:
-	for c in n.get_children():
-		if c is Control:
-			c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		passthrough(c)
 
 
 func _tile_input(event: InputEvent, on_info: Callable) -> void:
@@ -241,45 +250,27 @@ func _pet_grid() -> Control:
 	var active = App.active_pet()
 	for p in Pets.all():
 		var owned = App.state.pets.has(p.id)
-		var card = Kit.card(3, ArmoryDetail.open_pet.bind(p), 8)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var rc = Pal.rarity(p.rarity)
 		var is_active = active == p.id
-		if is_active:
-			card.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL2, 14, Pal.ACCENT, 2, 8, 8))
-		else:
-			card.tint(Pal.PANEL, Pal.with_alpha(rc, 0.85))
-		if not owned:
-			card.modulate.a = 0.55
-		var holder = MarginContainer.new()
-		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var pv = PetView.new()
-		pv.setup(p.id, 56.0, false)
+		pv.setup(p.id, 64.0, is_active)
 		pv.set_locked(not owned)
-		pv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		holder.add_child(Kit.pad(Kit.center(pv), 0, 10, 0, 4))
-		if is_active:
-			var top = Kit.hbox(0)
-			top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			top.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-			top.add_child(Kit.spacer())
-			top.add_child(Kit.tag("ACTIVE", Pal.ACCENT, true, 9))
-			holder.add_child(top)
-		card.add(holder)
-		var n = Kit.clip(p.name if owned else "???", 12, null, true)
-		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		card.add(n)
-		var s = Kit.muted_para(p.species if owned else p.hint, 11)
-		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		card.add(s)
-		if not owned and p.has("progress"):
-			# Locked: the rarity stripe doubles as the unlock progress.
-			card.add(Kit.bar(Goals.progress_ratio(p.progress.call(App.state)), rc, 4))
+		var holder = Kit.pad(pv, 0, 16, 0, 6)
+		var tap = Callable()
+		if owned and not is_active:
+			tap = _follow_now.bind(p)
 		else:
-			var stripe = ColorRect.new()
-			stripe.color = rc
-			stripe.custom_minimum_size = Vector2(0, 3)
-			card.add(stripe)
-		ArmoryScreen.passthrough(card.box)
-		g.add_child(card)
+			tap = ArmoryDetail.open_pet.bind(p)
+		var tip = "%s · %s" % [p.species, ", ".join(PackedStringArray(Items.perk_summary(p.get("perk"))))] if owned else p.hint
+		var prog = null
+		if not owned and p.has("progress"):
+			prog = p.progress.call(App.state)
+		g.add_child(_tile(holder, p.name if owned else "???", Pal.rarity(p.rarity), is_active, not owned, tap, ArmoryDetail.open_pet.bind(p), tip, prog, owned and not is_active))
 	return g
+
+
+func _follow_now(p: Dictionary) -> void:
+	if not App.state.pets.has(p.id):
+		return
+	Sfx.pet()
+	App.set_active_pet(p.id)
+	App.toast("%s is now following you" % p.name, "good", "paw")

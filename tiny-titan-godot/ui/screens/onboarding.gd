@@ -20,7 +20,7 @@ func _ready() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(scroll)
-	_box = Kit.vbox(14)
+	_box = Kit.vbox(16)
 	_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var holder = Kit.pad(_box, 18, 28, 18, 28)
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -32,53 +32,103 @@ func _profile() -> Dictionary:
 	return {"name": _name if _name != "" else "Hero", "skin": _skin, "hairStyle": _hair_style, "hairColor": _hair_color, "createdAt": 0}
 
 
+const STEP_TITLES = ["NAME YOUR HERO", "MAKE IT YOURS", "SET YOUR GOAL"]
+
+
 func _build() -> void:
 	Kit.clear(_box)
 	var brand = PixelFont.rect("TINY TITAN", 4, Pal.ACCENT)
 	brand.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_box.add_child(brand)
 
+	# The hero stands on a little sunken stage.
+	var stage = PanelContainer.new()
+	stage.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	stage.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL, {"ring": Pal.ACCENT, "lip": 2, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 10, "pad_v": 10}))
+	stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_hero = HeroView.new()
 	_hero.setup(_blank, _profile(), App.DEFAULT_LOADOUT, null, false)
-	_hero.custom_minimum_size = Vector2(Art.HERO_W * 4, Art.HERO_H * 4)
+	_hero.custom_minimum_size = Vector2(Art.HERO_W * 5, Art.HERO_H * 5)
 	_hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_box.add_child(_hero)
+	stage.add_child(_hero)
+	_box.add_child(stage)
 
-	var card = Kit.card(12, Callable(), 18)
+	_box.add_child(_pips())
+
+	var card = Kit.card(14, Callable(), 18)
 	_box.add_child(card)
+	var title = PixelFont.rect(STEP_TITLES[mini(_step, 2)], 3, Pal.TEXT)
+	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	card.add(title)
 	match _step:
 		0:
-			card.add(Kit.h1("Every titan starts tiny."))
-			card.add(Kit.muted_para("Log your lifts, climbs, runs and rides and watch this scrawny little hero turn into an absolute unit. Gear, pets, bosses and quests along the way.", 14))
-			var input = Kit.input(_name, "e.g. Jake")
+			var input = Kit.input(_name, "Hero name")
 			input.max_length = 20
+			input.alignment = HORIZONTAL_ALIGNMENT_CENTER
+			input.custom_minimum_size = Vector2(48, 50)
+			input.add_theme_font_size_override("font_size", 20)
 			input.text_changed.connect(_name_typed)
 			input.text_submitted.connect(_name_submitted)
-			card.add(Kit.field("What should we call your hero?", input))
+			card.add(input)
 			_next = Kit.button("Next →", "primary", _go.bind(1), "lg")
 			_next.disabled = _name.strip_edges() == ""
+			_next.custom_minimum_size = Vector2(0, 56)
 			card.add(_next)
 			input.call_deferred("grab_focus")
 		1:
-			card.add(Kit.h1("Make it yours."))
 			card.add(Parts.appearance_editor(_skin, _hair_style, _hair_color, _look_changed))
-			var row = Kit.hbox(12)
-			row.add_child(Kit.button("← Back", "ghost", _go.bind(0)))
-			row.add_child(Kit.expand(Kit.button("Next →", "primary", _go.bind(2), "lg")))
-			card.add(row)
+			card.add(_nav(0, Kit.button("Next →", "primary", _go.bind(2), "lg")))
 		_:
 			var settings = App.settings()
-			card.add(Kit.h1("Units & goals."))
-			card.add(Kit.field("Weight", Kit.segmented([{"value": "kg", "label": "kg"}, {"value": "lb", "label": "lb"}], settings.weightUnit, _set_weight_unit)))
-			card.add(Kit.field("Distance", Kit.segmented([{"value": "km", "label": "km"}, {"value": "mi", "label": "miles"}], settings.distanceUnit, _set_distance_unit)))
+			card.add(_choice("scale", Kit.segmented([{"value": "kg", "label": "kg"}, {"value": "lb", "label": "lb"}], settings.weightUnit, _set_weight_unit)))
+			card.add(_choice("road", Kit.segmented([{"value": "km", "label": "km"}, {"value": "mi", "label": "miles"}], settings.distanceUnit, _set_distance_unit)))
 			var goals = []
 			for n in [2, 3, 4, 5, 6]:
 				goals.append({"value": n, "label": str(n)})
-			card.add(Kit.field("Weekly goal (sessions per week to keep your streak alive)", Kit.segmented(goals, int(settings.weeklyGoal), _set_goal)))
-			var row2 = Kit.hbox(12)
-			row2.add_child(Kit.button("← Back", "ghost", _go.bind(1)))
-			row2.add_child(Kit.expand(Kit.button("Start my journey", "good", _finish, "lg", "rocket")))
-			card.add(row2)
+			var goal = _choice("flame", Kit.segmented(goals, int(settings.weeklyGoal), _set_goal))
+			goal.tooltip_text = "Sessions per week that keep your streak alive"
+			card.add(goal)
+			card.add(JourneyScreen.caption("sessions a week", 12))
+			card.add(_nav(1, Kit.button("Start my journey", "good", _finish, "lg", "rocket")))
+
+
+## Three pixel pips: done and current ones lit gold, the rest sunken.
+func _pips() -> Control:
+	var row = Kit.hbox(10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	for i in range(3):
+		var pip = PanelContainer.new()
+		pip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var lit = i <= _step
+		if lit:
+			pip.add_theme_stylebox_override("panel", PixBox.make(Pal.ACCENT, {"lip": 1, "lip_color": Pal.ACCENT_DARK, "pad_h": 0, "pad_v": 0}))
+		else:
+			pip.add_theme_stylebox_override("panel", PixBox.well(0, 0))
+		pip.custom_minimum_size = Vector2(56 if i == _step else 34, 26)
+		var c = CenterContainer.new()
+		c.add_child(PixelFont.rect(str(i + 1), 2, Pal.INK if lit else Pal.MUTED, false))
+		pip.add_child(c)
+		row.add_child(pip)
+	return row
+
+
+## A Back button and the step's big forward button.
+func _nav(back_to: int, forward: Button) -> Control:
+	var row = Kit.hbox(10)
+	row.add_child(Kit.button("← Back", "ghost", _go.bind(back_to), "lg"))
+	forward.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	forward.custom_minimum_size.y = 56
+	row.add_child(forward)
+	return row
+
+
+## icon + a full-width switch.
+func _choice(icon: String, control: Control) -> Control:
+	var row = Kit.hbox(10)
+	row.add_child(Kit.vcenter(Icons.rect(icon, 26)))
+	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(control)
+	return row
 
 
 func _name_typed(t: String) -> void:

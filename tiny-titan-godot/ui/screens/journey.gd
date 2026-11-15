@@ -50,8 +50,8 @@ func build() -> void:
 
 
 func _no_sessions() -> Control:
-	return Kit.empty("map", "Your story starts with one session",
-		"Charts, records and history appear here once you log something.",
+	return Kit.empty("map", "Your story starts here",
+		"Log a session to fill this page.",
 		Kit.button("Log a workout", "primary", func(): App.open_log()))
 
 
@@ -70,17 +70,96 @@ static func _by_date_asc(a, b) -> bool:
 	return a.date < b.date or (a.date == b.date and a.createdAt < b.createdAt)
 
 
-func _section(text: String, icon: String = "") -> Control:
-	var h = Kit.hbox(6)
-	h.custom_minimum_size = Vector2(0, 26)
-	if icon != "":
-		var ic = Icons.rect(icon, 16)
-		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		h.add_child(ic)
-	var l = Kit.h3(text)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(l)
+# ---------------------------------------------------------------------------
+# Building blocks (static: JourneyBody uses them too)
+# ---------------------------------------------------------------------------
+
+## The largest pixel-font scale (at most `top`) at which every text fits `max_w` px.
+static func fit_scale(texts: Array, max_w: float, top: int = 3) -> int:
+	var sc = top
+	for t in texts:
+		while sc > 1 and PixelFont.measure(str(t)).x * sc > max_w:
+			sc -= 1
+	return sc
+
+
+## "11.9 km" -> ["11.9", "km"]; text without a unit -> [text, ""].
+static func split_unit(text: String) -> Array:
+	var i = text.rfind(" ")
+	if i <= 0:
+		return [text, ""]
+	return [text.substr(0, i), text.substr(i + 1)]
+
+
+## A pixel-font number, centred in its column.
+static func big_num(text: String, scale: int, color: Color) -> Control:
+	var r = PixelFont.rect(text, scale, color)
+	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return r
+
+
+## A centred one-line caption.
+static func caption(text: String, size: int = 11, color = null) -> Label:
+	var l = Kit.clip(text, size, Pal.MUTED if color == null else color, true)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return l
+
+
+## A tile: icon, big pixel number, one-word caption.
+static func num_tile(icon: String, value: String, cap: String, color: Color, scale: int, tip: String = "") -> Card:
+	var c = Kit.card(4, Callable(), 10)
+	if tip != "":
+		c.tooltip_text = tip
+		c.mouse_filter = Control.MOUSE_FILTER_STOP
+	var ic = Icons.rect(icon, 26)
+	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	c.add(ic)
+	c.add(big_num(value, scale, color))
+	c.add(caption(cap))
+	return c
+
+
+## A sunken mini tile inside a card: big pixel number over a short caption.
+static func well_tile(value: String, cap: String, color: Color, scale: int, tip: String = "") -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.well(6, 8))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if tip != "":
+		p.tooltip_text = tip
+	else:
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v = Kit.vbox(5)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(big_num(value, scale, color))
+	v.add_child(caption(cap))
+	p.add_child(v)
+	return p
+
+
+## A small raised chip with a caption over a value ("Deadlift" / "150 kg × 3").
+static func value_chip(cap: String, value: String, color: Color, tip: String = "") -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL2, {"ring": color, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 10, "pad_v": 6}))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if tip != "":
+		p.tooltip_text = tip
+	else:
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v = Kit.vbox(0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(Kit.clip(cap, 11, Pal.MUTED, true))
+	v.add_child(Kit.clip(value, 15, color, true))
+	p.add_child(v)
+	return p
+
+
+## The coloured heading row of a discipline card: badge + name in the pixel font.
+static func disc_head(d: String) -> Control:
+	var h = Kit.hbox(10)
+	h.add_child(Parts.disc_badge(d, 34))
+	h.add_child(Kit.vcenter(PixelFont.rect(TT.DISCIPLINE_META[d].name, 2, Pal.disc(d))))
 	return h
 
 
@@ -90,10 +169,6 @@ func _tiles(items: Array, cols: int = 3) -> GridContainer:
 	for it in items:
 		g.add_child(it)
 	return g
-
-
-func _small_head(text: String) -> Label:
-	return Kit.label(text.to_upper(), 11, Pal.MUTED, true)
 
 
 # ---------------------------------------------------------------------------
@@ -148,21 +223,23 @@ func _then_now_facts(sessions: Array, s: Dictionary, wu: String, du: String) -> 
 	return out.slice(0, 5)
 
 
-func _hero_fig(tex: Texture2D, title: String, sub: String) -> Control:
-	var v = Kit.vbox(2)
+func _hero_fig(tex: Texture2D, title: String, lv: int, now: bool, tip: String) -> Control:
+	var v = Kit.vbox(4)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var art = PixelRect.make(tex, 2.0)
+	v.tooltip_text = tip
+	var art = PixelRect.make(tex, 3.0)
 	art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(art)
-	var t = Kit.label(title, 14, null, true)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(t)
-	var sl = Kit.muted(sub, 11)
-	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(sl)
+	v.add_child(big_num(title, 2, Pal.TEXT if now else Pal.MUTED))
+	var lvt = Kit.tag("LV %d" % lv, Pal.ACCENT if now else Pal.PANEL2, now, 12)
+	lvt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	v.add_child(lvt)
 	return v
 
 
+## Then vs now: the hero on day one and today, the day count between them and
+## the biggest improvements as bright "then → now" chips.
 func _then_now() -> void:
 	var s = App.state
 	if s.chronicle.is_empty():
@@ -170,47 +247,43 @@ func _then_now() -> void:
 	var start = s.chronicle[0].date
 	var days = Dates.days_between(start, App.today)
 	var profile = App.profile()
-	var card = Kit.card(10)
-	card.tint(Pal.PANEL2, Pal.tab_accent())
-	var heroes = Kit.hbox(6)
+	var card = Kit.card(12, Callable(), 10)
+	card.accent(Pal.tab_accent())
+	var heroes = Kit.hbox(0)
 	var then_tex = Art.hero_texture(Art.state_with_levels(s, LEVEL_ONE), profile, THEN_LOADOUT)
-	heroes.add_child(_hero_fig(then_tex, "Day 1", Dates.format_date(start, {"month": "short", "day": "numeric", "year": "numeric"})))
-	var mid = Kit.vbox(2)
+	heroes.add_child(_hero_fig(then_tex, "DAY 1", 1, false, "Day 1: " + Dates.format_date(start, {"month": "short", "day": "numeric", "year": "numeric"})))
+	var mid = Kit.vbox(6)
+	mid.custom_minimum_size = Vector2(76, 0)
 	mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var num = PixelFont.rect(str(days), 3, Pal.ACCENT)
-	num.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	mid.add_child(num)
-	var dl = Kit.muted("day" if days == 1 else "days", 11)
-	dl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mid.add_child(dl)
-	var arrow = Kit.label("→", 26, Pal.ACCENT, true)
-	arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mid.add_child(arrow)
+	mid.add_child(big_num(str(days), fit_scale([str(days)], 76, 4), Pal.ACCENT))
+	mid.add_child(big_num("DAY" if days == 1 else "DAYS", 2, Pal.MUTED))
+	mid.add_child(big_num("→", 3, Pal.ACCENT))
 	heroes.add_child(mid)
 	var now_tex = Art.hero_texture(s, profile, App.loadout())
-	heroes.add_child(_hero_fig(now_tex, "Today", "Lv %d" % s.levels.hero.level))
+	heroes.add_child(_hero_fig(now_tex, "TODAY", int(s.levels.hero.level), true, "Today"))
 	card.add(heroes)
-	var facts = Kit.vbox(0)
-	facts.add_child(_then_now_row("Hero level", "Lv 1", "Lv %d" % s.levels.hero.level))
-	for f in _then_now_facts(App.sessions(), s, App.weight_unit(), App.distance_unit()):
-		facts.add_child(_then_now_row(f.label, f.then, f.now))
-	card.add(facts)
+	var facts = _then_now_facts(App.sessions(), s, App.weight_unit(), App.distance_unit())
+	var chips = Kit.grid(2, 8)
+	chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for f in facts.slice(0, 4):
+		chips.add_child(_then_now_chip(f.label, f.then, f.now))
+	if chips.get_child_count() > 0:
+		card.add(chips)
 	add_child(card)
 
 
-func _then_now_row(label_text: String, then_text: String, now_text: String) -> Control:
-	var v = Kit.vbox(0)
-	v.add_child(Kit.divider())
-	var row = Kit.hbox(8)
-	var a = Kit.clip(label_text, 13)
-	a.size_flags_stretch_ratio = 1.3
-	var b = Kit.clip(then_text, 13, Pal.MUTED)
-	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var c = Kit.clip(now_text, 13, Pal.GOOD, true)
-	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	Kit.add(row, [a, b, c])
-	v.add_child(Kit.pad(row, 0, 5, 0, 5))
-	return v
+func _then_now_chip(label_text: String, then_text: String, now_text: String) -> Control:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(Pal.GOOD), {"ring": Pal.GOOD, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 10, "pad_v": 6}))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v = Kit.vbox(1)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(Kit.clip(label_text, 11, Pal.MUTED, true))
+	v.add_child(Kit.rich("[color=%s]%s →[/color] [b]%s[/b]" % [Kit.hex_of(Pal.MUTED), Kit.esc(then_text), Kit.esc(now_text)], 15, Pal.GOOD))
+	p.add_child(v)
+	return p
 
 
 # ---------------------------------------------------------------------------
@@ -244,84 +317,141 @@ func _build_stats() -> void:
 	var s = App.state
 	var sessions = App.sessions()
 	var t = s.totals
-	var wu = App.weight_unit()
 	var du = App.distance_unit()
 
 	_then_now()
 
-	add_child(_tiles([
-		Kit.stat("Sessions", Xp.fmt_int(t.sessions)),
-		Kit.stat("Active days", Xp.fmt_int(t.activeDays)),
-		Kit.stat("Total XP", Xp.fmt_int(s.xp.hero), "", Pal.ACCENT),
-		Kit.stat("Best streak", "%dw" % int(s.streak.best)),
-		Kit.stat("Trophies", str(s.achievements.size())),
-		Kit.stat("Time trained", Fmt.fmt_duration_short(t.durationSec)),
-	]))
+	# --- totals as big-number tiles ---------------------------------------------
+	var hours = float(t.durationSec) / 3600.0
+	var time_text = ("%dH" % int(floor(hours))) if hours >= 1.0 else ("%dM" % TTUtil.jsround(float(t.durationSec) / 60.0))
+	var xp_text = Charts.fmt_k(float(s.xp.hero)) if int(s.xp.hero) >= 10000 else Xp.fmt_int(s.xp.hero)
+	var totals = [
+		["log", Xp.fmt_int(t.sessions), "Sessions", Pal.TEXT, ""],
+		["calendar", Xp.fmt_int(t.activeDays), "Days", Pal.TEXT, "Days you trained"],
+		["star", xp_text, "XP", Pal.ACCENT, Xp.fmt_int(s.xp.hero) + " XP in all"],
+		["flame", "%dW" % int(s.streak.best), "Best streak", Pal.ACCENT2, "Longest streak of weeks hitting your goal"],
+		["trophy", str(s.achievements.size()), "Trophies", Pal.TEXT, ""],
+		["clock", time_text, "Trained", Pal.TEXT, Fmt.fmt_duration_short(t.durationSec) + " of training"],
+	]
+	var sc = fit_scale(totals.map(func(x): return x[1]), 100, 3)
+	var tiles = []
+	for x in totals:
+		tiles.append(num_tile(x[0], x[1], x[2], x[3], sc, x[4]))
+	add_child(_tiles(tiles))
 
-	add_child(_section("Weekly XP"))
+	# --- charts ---------------------------------------------------------------------
+	add_child(Kit.section_title("Weekly XP"))
 	var wcard = Kit.card()
 	wcard.add(Charts.weekly_xp(_weekly_points(sessions, s)))
 	add_child(wcard)
 
-	add_child(_section("Consistency"))
+	add_child(Kit.section_title("Consistency"))
 	var hcard = Kit.card()
 	hcard.add(Charts.heatmap(s.xpByDate, App.today))
 	add_child(hcard)
 
+	# --- in perspective: one tile per fact -----------------------------------------
 	var facts = FunFacts.fun_facts(s)
 	if not facts.is_empty():
-		add_child(_section("In perspective"))
-		var fv = Kit.vbox(6)
+		add_child(Kit.section_title("In perspective"))
+		var nums = []
 		for f in facts:
-			var fc = Kit.card(0, Callable(), 10)
-			var row = Kit.hbox(12)
-			var ic = Icons.rect(Icons.for_emoji(f.icon), 26)
-			ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			row.add_child(ic)
-			var txt = Kit.rich("[b]%s[/b] [color=%s]%s[/color]" % [Kit.esc(Icons.strip_emoji(f.headline)), Kit.hex_of(Pal.MUTED), Kit.esc(Icons.strip_emoji(f.detail))], 14)
-			txt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			row.add_child(txt)
-			fc.add(row)
-			fv.add_child(fc)
-		add_child(fv)
+			nums.append(split_first(Icons.strip_emoji(f.headline))[0])
+		var fsc = fit_scale(nums, 132, 3)
+		var g = Kit.grid(2, 8)
+		g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for i in range(facts.size()):
+			g.add_child(_fact_tile(facts[i], fsc))
+		add_child(g)
 
+	# --- one card per discipline ------------------------------------------------------
 	var by = t.byDiscipline
 	if int(by.lift) > 0:
-		_lift_section(s, sessions, wu)
+		_lift_section(s, sessions, App.weight_unit())
 	if int(by.climb) > 0:
-		add_child(_section("Climbing", "climb"))
-		var cc = Kit.card()
+		var cc = Kit.card(10)
+		cc.accent(Pal.CLIMB)
+		cc.add(disc_head("climb"))
 		var max_send = s.prs.climbMaxSend
 		var max_flash = s.prs.climbMaxFlash
+		var vals = [Xp.fmt_int(t.climbSends), Xp.fmt_int(t.climbFlashes), Xp.grade_label(max_send) if max_send != null else "-"]
+		var csc = fit_scale(vals, 96, 3)
 		cc.add(_tiles([
-			Kit.stat("Sends", Xp.fmt_int(t.climbSends), "", Pal.CLIMB),
-			Kit.stat("Flashes", Xp.fmt_int(t.climbFlashes)),
-			Kit.stat("Max grade", Xp.grade_label(max_send) if max_send != null else "—", ("flash " + Xp.grade_label(max_flash)) if max_flash != null else ""),
+			well_tile(vals[0], "Sends", Pal.CLIMB, csc),
+			well_tile(vals[1], "Flashes", Charts.flash(), csc),
+			well_tile(vals[2], "Top grade", Pal.TEXT, csc, ("Hardest flash: " + Xp.grade_label(max_flash)) if max_flash != null else ""),
 		]))
-		cc.add(_small_head("Send pyramid"))
 		cc.add(Charts.pyramid(_grade_counts(sessions), int(max_send) if max_send != null else 3))
-		cc.add(Kit.muted("Lighter segment = flashes", 11))
+		cc.add(Charts.legend([{"name": "Sends", "color": Pal.CLIMB}, {"name": "Flashes", "color": Charts.flash()}]))
 		add_child(cc)
 	if int(by.run) > 0:
-		add_child(_section("Running", "run"))
-		var rc = Kit.card()
 		var pace = s.prs.bestPaceSecPerKm
-		rc.add(_tiles([
-			Kit.stat("Distance", Fmt.fmt_distance(t.runDistanceM, du, 0), "", Pal.RUN),
-			Kit.stat("Elevation", Fmt.fmt_elevation(t.runElevationM, du)),
-			Kit.stat("Longest", Fmt.fmt_distance(s.prs.longestRunM, du), ("best " + Fmt.fmt_pace(pace, du)) if pace != null and float(pace) > 0.0 else ""),
-		]))
-		add_child(rc)
+		var best = []
+		if pace != null and float(pace) > 0.0:
+			best.append(value_chip("Best pace", Fmt.fmt_pace(pace, du), Pal.RUN))
+		add_child(_distance_card("run", t.runDistanceM, t.runElevationM, s.prs.longestRunM, du, best))
 	if int(by.ride) > 0:
-		add_child(_section("Cycling", "ride"))
-		var bc = Kit.card()
 		var spd = s.prs.bestRideSpeedKmh
-		bc.add(_tiles([
-			Kit.stat("Distance", Fmt.fmt_distance(t.rideDistanceM, du, 0), "", Pal.RIDE),
-			Kit.stat("Elevation", Fmt.fmt_elevation(t.rideElevationM, du)),
-			Kit.stat("Longest", Fmt.fmt_distance(s.prs.longestRideM, du), ("best " + Fmt.fmt_speed(spd, du)) if spd != null and float(spd) > 0.0 else ""),
-		]))
-		add_child(bc)
+		var best2 = []
+		if spd != null and float(spd) > 0.0:
+			best2.append(value_chip("Top speed", Fmt.fmt_speed(spd, du), Pal.RIDE))
+		add_child(_distance_card("ride", t.rideDistanceM, t.rideElevationM, s.prs.longestRideM, du, best2))
+
+
+## "1.2 blue whales" -> ["1.2", "blue whales"].
+static func split_first(text: String) -> Array:
+	var i = text.find(" ")
+	if i <= 0:
+		return [text, ""]
+	return [text.substr(0, i), text.substr(i + 1)]
+
+
+## The colour a fun fact is about, read from its detail line.
+static func _fact_color(detail: String) -> Color:
+	if detail.contains("lifted"):
+		return Pal.LIFT
+	if detail.contains("rock"):
+		return Pal.CLIMB
+	if detail.contains("foot"):
+		return Pal.RUN
+	if detail.contains("ridden"):
+		return Pal.RIDE
+	if detail.contains("bosses"):
+		return Pal.HP
+	return Pal.ACCENT
+
+
+func _fact_tile(f: Dictionary, sc: int) -> Card:
+	var head = Icons.strip_emoji(f.headline)
+	var parts = split_first(head)
+	var c = Kit.card(4, Callable(), 10)
+	c.tooltip_text = "%s %s" % [head, Icons.strip_emoji(f.detail)]
+	c.mouse_filter = Control.MOUSE_FILTER_STOP
+	var row = Kit.hbox(8)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(Kit.vcenter(Icons.rect(Icons.for_emoji(f.icon), 28)))
+	row.add_child(Kit.vcenter(PixelFont.rect(parts[0], sc, _fact_color(str(f.detail)))))
+	c.add(row)
+	c.add(Kit.clip(parts[1], 13, null, true))
+	return c
+
+
+func _distance_card(d: String, dist: float, elev: float, longest: float, du: String, best: Array) -> Card:
+	var c = Kit.card(10)
+	c.accent(Pal.disc(d))
+	c.add(disc_head(d))
+	var a = split_unit(Fmt.fmt_distance(dist, du, 0))
+	var b = split_unit(Fmt.fmt_elevation(elev, du))
+	var l = split_unit(Fmt.fmt_distance(longest, du))
+	var sc = fit_scale([a[0], b[0], l[0]], 96, 3)
+	c.add(_tiles([
+		well_tile(a[0], a[1] + " total", Pal.disc(d), sc),
+		well_tile(b[0], b[1] + " up", Pal.TEXT, sc),
+		well_tile(l[0], l[1] + " longest", Pal.TEXT, sc),
+	]))
+	if not best.is_empty():
+		c.add(_tiles(best, 2))
+	return c
 
 
 func _grade_counts(sessions: Array) -> Dictionary:
@@ -344,12 +474,16 @@ func _grade_counts(sessions: Array) -> Dictionary:
 
 func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 	var t = s.totals
-	add_child(_section("Lifting", "lift"))
-	var card = Kit.card()
+	var card = Kit.card(10)
+	card.accent(Pal.LIFT)
+	card.add(disc_head("lift"))
+	var vol = split_unit(Fmt.fmt_big_kg(t.liftVolumeKg, wu))
+	var vals = [vol[0], Xp.fmt_int(t.liftReps), Xp.fmt_int(t.liftSets)]
+	var sc = fit_scale(vals, 96, 3)
 	card.add(_tiles([
-		Kit.stat("Lifetime volume", Fmt.fmt_big_kg(t.liftVolumeKg, wu), "", Pal.LIFT),
-		Kit.stat("Reps", Xp.fmt_int(t.liftReps)),
-		Kit.stat("Sets", Xp.fmt_int(t.liftSets)),
+		well_tile(vals[0], vol[1] + " lifted", Pal.LIFT, sc),
+		well_tile(vals[1], "Reps", Pal.TEXT, sc),
+		well_tile(vals[2], "Sets", Pal.TEXT, sc),
 	]))
 
 	var lift_sessions = sessions.filter(func(x): return x.discipline == "lift")
@@ -373,7 +507,6 @@ func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 		selected = top[0].name
 
 	if not top.is_empty():
-		card.add(_small_head("Strength progression (est. 1RM)"))
 		var chips = Kit.flow(6)
 		for e in top:
 			chips.add_child(Kit.chip(title_case(e.name), e.name == selected, _pick_exercise.bind(e.name), Pal.LIFT))
@@ -390,31 +523,23 @@ func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 			if best > 0.0:
 				series.append({"x": x.date, "y": Fmt.kg_to_unit(best, wu)})
 		if series.size() >= 2:
-			card.add(Charts.line(series, Pal.LIFT, func(v): return "%d %s" % [TTUtil.jsround(v), wu]))
+			var ln = Charts.line(series, Pal.LIFT, func(v): return "%d %s" % [TTUtil.jsround(v), wu])
+			ln.tooltip_text = "Estimated one-rep max"
+			card.add(ln)
 		else:
-			card.add(Kit.muted_para("Log this lift in another session to see a trend line.", 12))
+			card.add(caption("Log it again to see a trend", 12))
 
 	var lifts = []
 	for nm in s.prs.lifts:
 		lifts.append({"name": nm, "pr": s.prs.lifts[nm]})
 	TTUtil.stable_sort(lifts, func(a, b): return float(a.pr.e1rm) > float(b.pr.e1rm))
-	lifts = lifts.slice(0, 5)
+	lifts = lifts.slice(0, 4)
 	if not lifts.is_empty():
-		card.add(_small_head("Best lifts"))
-		var tbl = Kit.vbox(0)
-		for i in range(lifts.size()):
-			var l = lifts[i]
-			var row = Kit.hbox(8)
-			row.add_child(Kit.clip(title_case(l.name), 14, null, true))
-			row.add_child(Kit.label("%s × %d" % [Fmt.fmt_weight(l.pr.weightKg, wu), int(l.pr.reps)], 14, null, true))
-			var e = Kit.muted("≈ " + Fmt.fmt_weight(l.pr.e1rm, wu, 0), 12)
-			e.custom_minimum_size = Vector2(64, 0)
-			e.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			row.add_child(e)
-			tbl.add_child(Kit.pad(row, 0, 4, 0, 4))
-			if i < lifts.size() - 1:
-				tbl.add_child(Kit.divider())
-		card.add(tbl)
+		var g = Kit.grid(2, 8)
+		g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for l in lifts:
+			g.add_child(value_chip(title_case(l.name), "%s × %d" % [Fmt.fmt_weight(l.pr.weightKg, wu), int(l.pr.reps)], Pal.LIFT, "≈ %s one-rep max" % Fmt.fmt_weight(l.pr.e1rm, wu, 0)))
+		card.add(g)
 	add_child(card)
 
 
@@ -435,21 +560,27 @@ static func _month_label(key: String) -> String:
 static func _moment_color(kind: String) -> Color:
 	match kind:
 		"boss":
-			return Color("d7263d")
+			return Pal.HP
 		"stage", "level", "start":
 			return Pal.ACCENT
 		"rank":
-			return Color("c77dff")
+			return Pal.rarity("epic")
 		"pr":
 			return Pal.GOOD
-	return Pal.LINE
+		"achievement":
+			return Pal.ACCENT2
+		"item", "pet":
+			return Pal.SECOND
+		"body":
+			return Pal.RUN
+	return Pal.BORDER
 
 
 func _build_chronicle() -> void:
 	var s = App.state
 	var chron = s.chronicle
 	if chron.is_empty():
-		add_child(Kit.empty("book", "An empty page", "Your story writes itself as you train: every level, boss, trophy, record and piece of loot lands here with its date."))
+		add_child(Kit.empty("book", "An empty page", "Levels, bosses, trophies and records land here."))
 		return
 	var kinds = null
 	for f in CHRONICLE_FILTERS:
@@ -463,10 +594,17 @@ func _build_chronicle() -> void:
 	TTUtil.stable_sort(events, func(a, b): return a.e.date > b.e.date or (a.e.date == b.e.date and a.i > b.i))
 
 	var start = chron[0].date
-	var head = Kit.card(4)
-	head.tint(Pal.PANEL2)
-	head.add(PixelFont.rect("DAY %d" % (Dates.days_between(start, App.today) + 1), 2, Pal.ACCENT))
-	head.add(Kit.muted_para("Started %s · %d moments so far" % [Dates.format_date(start, {"month": "long", "day": "numeric", "year": "numeric"}), chron.size()], 13))
+	var head = Kit.card(6, Callable(), 12)
+	head.accent(Pal.tab_accent())
+	head.tooltip_text = "Started " + Dates.format_date(start, {"month": "long", "day": "numeric", "year": "numeric"})
+	head.mouse_filter = Control.MOUSE_FILTER_STOP
+	var hrow = Kit.hbox(12)
+	hrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hrow.add_child(Kit.vcenter(Icons.rect("book", 34)))
+	hrow.add_child(Kit.vcenter(PixelFont.rect("DAY %d" % (Dates.days_between(start, App.today) + 1), 3, Pal.ACCENT)))
+	hrow.add_child(Kit.spacer())
+	hrow.add_child(Kit.vcenter(Kit.tag("%d moments" % chron.size(), Pal.PANEL2, false, 12)))
+	head.add(hrow)
 	add_child(head)
 
 	var chips = Kit.flow(6)
@@ -476,9 +614,7 @@ func _build_chronicle() -> void:
 
 	if events.is_empty():
 		var c = Kit.card()
-		var l = Kit.muted_para("Nothing here yet.", 13)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		c.add(l)
+		c.add(caption("Nothing here yet", 13))
 		add_child(c)
 		return
 
@@ -490,41 +626,40 @@ func _build_chronicle() -> void:
 		var m = _month_label(e.date)
 		if m != month:
 			month = m
-			var ml = Kit.label(m.to_upper(), 13, Pal.MUTED, true)
-			add_child(Kit.pad(ml, 0, 6, 0, 0))
+			add_child(Kit.section_title(m))
 			line = TimelineBox.new()
 			line.add_theme_constant_override("separation", 6)
 			add_child(line)
 		line.add_child(_moment(e, settings))
 
 
+## One moment on one line: an icon tile in the moment's colour, the title (with
+## its value) and the date as a muted chip. The detail sentence is the tooltip.
 func _moment(e: Dictionary, settings: Dictionary) -> Control:
-	var row = Kit.hbox(10)
-	var ic = PanelContainer.new()
-	ic.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL2, 18, _moment_color(e.kind), 2, 0, 0))
-	ic.custom_minimum_size = Vector2(36, 36)
-	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ic.add_child(Kit.center(Icons.rect(Icons.for_emoji(e.get("icon", "")), 18)))
-	row.add_child(Kit.pad(ic, 6, 0, 0, 0))
-	var main = PanelContainer.new()
-	main.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL, 10, Pal.LINE, 1, 10, 7))
-	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var mv = Kit.vbox(2)
-	var title = "[b]%s[/b]" % Kit.esc(Icons.strip_emoji(e.title))
-	var val = e.get("val")
-	if val != null:
-		title += " [b][color=%s]%s[/color][/b]" % [Kit.hex_of(Pal.ACCENT), Kit.esc(Fmt.fmt_goal_value(val.n, val.unit, settings))]
-	mv.add_child(Kit.rich(title, 14))
+	var col = _moment_color(e.kind)
+	var row = Kit.hbox(8)
 	var detail = e.get("detail")
 	if detail != null and str(detail) != "":
-		mv.add_child(Kit.muted_para(Icons.strip_emoji(detail), 12))
-	main.add_child(mv)
-	row.add_child(main)
-	var d = Kit.muted(Dates.format_date(e.date), 11)
-	d.custom_minimum_size = Vector2(46, 0)
-	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	d.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(d)
+		row.tooltip_text = Icons.strip_emoji(detail)
+		row.mouse_filter = Control.MOUSE_FILTER_STOP
+	var ic = PanelContainer.new()
+	ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ic.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(col), {"ring": col, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 0, "pad_v": 0}))
+	ic.custom_minimum_size = Vector2(38, 40)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icc = Kit.center(Icons.rect(Icons.for_emoji(e.get("icon", "")), 22))
+	icc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ic.add_child(icc)
+	row.add_child(Kit.pad(ic, 4, 0, 0, 0))
+	var t = Kit.clip(Icons.strip_emoji(e.title), 14, null, true)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(t)
+	var val = e.get("val")
+	if val != null:
+		var vl = Kit.label(Fmt.fmt_goal_value(val.n, val.unit, settings), 14, col if e.kind == "pr" else Pal.ACCENT, true)
+		row.add_child(Kit.vcenter(vl))
+	row.add_child(Kit.vcenter(Kit.tag(Dates.format_date(e.date), Pal.PANEL2, false, 11)))
 	return row
 
 
@@ -535,7 +670,8 @@ class TimelineBox extends VBoxContainer:
 
 	func _draw() -> void:
 		if size.y > 16.0:
-			draw_rect(Rect2(23.0, 8.0, 2.0, size.y - 16.0), Pal.LINE)
+			draw_rect(Rect2(21.0, 8.0, 4.0, size.y - 16.0), Pal.OUTLINE)
+			draw_rect(Rect2(22.0, 8.0, 2.0, size.y - 16.0), Pal.LINE)
 
 
 # ---------------------------------------------------------------------------
@@ -546,14 +682,14 @@ func _build_history() -> void:
 	var sorted = App.sessions().duplicate()
 	TTUtil.stable_sort(sorted, func(a, b): return a.date > b.date or (a.date == b.date and a.createdAt > b.createdAt))
 	var xp_of = App.state.sessionXp
-	add_child(Kit.muted_para("Tap a session to edit it. Everything recalculates.", 13))
 	var day = ""
 	var list = null
 	for x in sorted:
 		if x.date != day:
 			day = x.date
 			var g = Kit.vbox(6)
-			g.add_child(Kit.label(Dates.format_date_long(day), 13, Pal.MUTED, true))
+			var dl = PixelFont.rect(Dates.format_date(day, {"weekday": "short", "month": "short", "day": "numeric"}), 2, Pal.MUTED)
+			g.add_child(Kit.pad(dl, 2, 4, 0, 0))
 			list = Kit.vbox(6)
 			g.add_child(list)
 			add_child(g)

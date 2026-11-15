@@ -22,6 +22,14 @@ func _sheet():
 	return top
 
 
+## Button whose tooltip is exactly `t` inside the settings panel (switches have no text).
+func _tip(t: String):
+	for n in ShotHelper.walk(_panel()):
+		if n is Button and n.tooltip_text == t:
+			return n
+	return null
+
+
 ## Button whose text is exactly `t` inside the settings panel.
 func _btn(t: String):
 	for n in ShotHelper.walk(_panel()):
@@ -59,7 +67,7 @@ func run(main: Node, tree: SceneTree) -> void:
 	ShotHelper.press(_btn("mi"))
 	ShotHelper.press(_btn("5"))
 	await ShotHelper.frames(tree, 3)
-	ShotHelper.press(_btn("Off"))
+	ShotHelper.press(_tip("Sound effects"))
 	await ShotHelper.frames(tree, 3)
 	st = App.settings()
 	_check("distance mi, weekly goal 5, sound off: %s" % str(st), st.distanceUnit == "mi" and int(st.weeklyGoal) == 5 and st.sound == false and Sfx.enabled == false)

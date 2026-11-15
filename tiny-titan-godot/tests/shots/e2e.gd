@@ -17,7 +17,7 @@ func check(ok: bool, what: String) -> void:
 func card_with(text: String):
 	var l = ShotHelper.find_text(main, text)
 	var n = l
-	while n != null and not (n is Card):
+	while n != null and not (n is Card or n is BaseButton):
 		n = n.get_parent()
 	return n
 

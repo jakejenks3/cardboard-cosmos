@@ -1,10 +1,11 @@
 class_name Stepper
 extends HBoxContainer
-## A number field with − / + buttons. Tap to step, hold to repeat, or click the
+## A number field with − / + keys. Tap to step, hold to repeat, or click the
 ## number and type. Emits `changed(text)` whenever the text changes.
 ##
-## opts `compact: true` draws one joined pill (− | value | +) instead of three
-## boxes: quiet muted glyphs, a prominent value, `height` (default 30) tall.
+## Pixel style: the value sits in a sunken well, flanked by two small raised
+## keys that sink when pressed. opts `compact: true` makes it slim (`height`,
+## default 30) for rows of sets; `font` sets the value's size (big weigh-in).
 ## The children stay − / text box / + in that order either way.
 
 signal changed(text)
@@ -41,14 +42,13 @@ func setup(value: String, step_size: float = 1.0, opts: Dictionary = {}) -> void
 	if _edit == null:
 		compact = bool(opts.get("compact", false))
 		var h = float(opts.get("height", 30 if compact else 42))
-		add_theme_constant_override("separation", 0 if compact else 4)
+		add_theme_constant_override("separation", 2 if compact else 4)
 		_minus = _make_btn("minus", h)
 		add_child(_minus)
 		_edit = Kit.input(text, str(opts.get("placeholder", "")), true)
 		_edit.custom_minimum_size = Vector2(float(opts.get("width", 58)), h)
 		_edit.text_changed.connect(_typed)
-		if compact:
-			_style_compact_edit(h)
+		_style_edit(h, int(opts.get("font", 15 if compact else 17)))
 		add_child(_edit)
 		_plus = _make_btn("plus", h)
 		add_child(_plus)
@@ -82,57 +82,43 @@ func set_placeholder(p: String) -> void:
 		_edit.placeholder_text = p
 
 
+## A small raised pixel key with a − or + glyph; it sinks while held.
 func _make_btn(icon: String, h: float = 42.0) -> Button:
 	var b = Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	b.text = "−" if icon == "minus" else "+"
-	if compact:
-		# Quiet glyphs inside the pill: no box of their own, a faint wash on hover.
-		b.custom_minimum_size = Vector2(28, h)
-		b.add_theme_font_size_override("font_size", 16)
-		var empty = Kit.sbox(Pal.with_alpha(Pal.WELL, 0.0), 8, null, 0, 0, 0)
-		b.add_theme_stylebox_override("normal", empty)
-		b.add_theme_stylebox_override("hover", Kit.sbox(Pal.with_alpha(Pal.TEXT, 0.07), 8, null, 0, 0, 0))
-		b.add_theme_stylebox_override("pressed", Kit.sbox(Pal.with_alpha(Pal.ACCENT, 0.22), 8, null, 0, 0, 0))
-		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		b.add_theme_color_override("font_color", Pal.with_alpha(Pal.MUTED, 0.75))
-		b.add_theme_color_override("font_hover_color", Pal.TEXT)
-		b.add_theme_color_override("font_pressed_color", Pal.ACCENT)
-		return b
-	b.custom_minimum_size = Vector2(38, h)
-	b.add_theme_font_size_override("font_size", 20)
-	b.add_theme_stylebox_override("normal", Kit.sbox(Pal.PANEL2, 10, Pal.LINE, 1, 4, 4))
-	b.add_theme_stylebox_override("hover", Kit.sbox(Pal.PANEL2.lightened(0.08), 10, Pal.LINE, 1, 4, 4))
-	b.add_theme_stylebox_override("pressed", Kit.sbox(Pal.ACCENT, 10, Pal.ACCENT, 1, 4, 4))
-	b.add_theme_color_override("font_pressed_color", Pal.INK)
+	b.tooltip_text = "Hold to repeat"
+	b.custom_minimum_size = Vector2(26 if compact else 36, h)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 0, 0, 1, Pal.BORDER)
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.add_theme_font_override("font", Kit.font_bold())
+	b.add_theme_font_size_override("font_size", 17 if compact else 20)
+	b.add_theme_color_override("font_color", Pal.TEXT)
+	b.add_theme_color_override("font_hover_color", Pal.TEXT)
+	b.add_theme_color_override("font_pressed_color", Pal.ACCENT)
+	b.add_theme_color_override("font_hover_pressed_color", Pal.ACCENT)
 	return b
 
 
-## The value box of a compact stepper: no box of its own (the pill is drawn
-## behind it), bold 15 px number, tight padding so "102.5" fits.
-func _style_compact_edit(h: float) -> void:
-	var pv = int(maxf(0.0, (h - 26.0) / 2.0))
-	var clear = Kit.sbox(Pal.with_alpha(Pal.WELL, 0.0), 6, null, 0, 1, pv)
-	_edit.add_theme_stylebox_override("normal", clear)
-	_edit.add_theme_stylebox_override("focus", clear.duplicate())
-	_edit.add_theme_stylebox_override("read_only", clear.duplicate())
+## The value: a sunken pixel well, bold number, tight padding so "102.5" fits.
+func _style_edit(h: float, font_px: int) -> void:
+	var pv = int(maxf(0.0, (h - float(font_px) - 12.0) / 2.0))
+	_edit.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_edit.add_theme_stylebox_override("normal", PixBox.well(2, pv, Pal.LINE))
+	_edit.add_theme_stylebox_override("focus", PixBox.well(2, pv, Pal.ACCENT))
+	_edit.add_theme_stylebox_override("read_only", PixBox.well(2, pv, null))
 	_edit.add_theme_constant_override("minimum_character_width", 0)
-	_edit.add_theme_font_size_override("font_size", 15)
+	_edit.add_theme_font_size_override("font_size", font_px)
 	_edit.add_theme_font_override("font", Kit.font_bold())
 	_edit.add_theme_color_override("font_color", Pal.TEXT)
-	_edit.add_theme_color_override("font_placeholder_color", Pal.with_alpha(Pal.MUTED, 0.6))
+	_edit.add_theme_color_override("font_placeholder_color", Pal.with_alpha(Pal.MUTED, 0.55))
 	_edit.size_flags_horizontal = Control.SIZE_FILL
-	_edit.focus_entered.connect(queue_redraw)
-	_edit.focus_exited.connect(queue_redraw)
-
-
-func _draw() -> void:
-	if not compact:
-		return
-	var focused = _edit != null and _edit.has_focus()
-	var box = Kit.sbox(Pal.WELL, 9, Pal.ACCENT if focused else Pal.LINE, 2 if focused else 1, 0, 0)
-	draw_style_box(box, Rect2(Vector2.ZERO, size))
 
 
 func _typed(t: String) -> void:
@@ -145,7 +131,8 @@ func _down(dir: int) -> void:
 	_held = false
 	_hold_time = 0.0
 	_repeat_time = 0.0
-	_bump(dir)
+	if _bump(dir):
+		Kit.pop(_edit, 1.08, 0.14)
 	set_process(true)
 
 
@@ -167,7 +154,7 @@ func _process(delta: float) -> void:
 		_bump(_dir)
 
 
-func _bump(dir: int) -> void:
+func _bump(dir: int) -> bool:
 	var cur = number()
 	var next: float
 	if cur == null:
@@ -184,8 +171,9 @@ func _bump(dir: int) -> void:
 		next = minf(float(max_value), next)
 	var t = TTUtil.num_str(snappedf(next, 0.01))
 	if t == text:
-		return
+		return false
 	text = t
 	_edit.text = t
 	Sfx.tick()
 	changed.emit(text)
+	return true

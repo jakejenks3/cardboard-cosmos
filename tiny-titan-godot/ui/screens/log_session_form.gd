@@ -42,6 +42,7 @@ var _xp_box: VBoxContainer = null
 var _save_btn: Button = null
 var _cardio_template: Control = null
 var _chip_row: HBoxContainer = null
+var _pace_slot: HBoxContainer = null
 
 
 func _init(owner_screen, d: String, edit_session = null) -> void:
@@ -143,16 +144,24 @@ func build(parent: Control) -> void:
 	var verb = "Edit" if editing != null else "Log"
 	parent.add_child(LogWidgets.topbar(discipline, "%s %s" % [verb, str(meta.name).to_lower()], close, remove if editing != null else Callable()))
 	if editing != null and str(TTUtil.get_or(editing, "source", "manual")) == "strava" and (discipline == "lift" or discipline == "climb"):
-		var hc = Kit.card(6, Callable(), 12)
-		hc.add(Kit.muted_para("Imported with duration only. Add your %s below to earn full XP for it." % ("sets" if discipline == "lift" else "climbs"), 13))
+		var hc = Kit.card(6, Callable(), 10)
+		hc.accent(Pal.ACCENT)
+		var hr = Kit.hbox(8)
+		hr.add_child(Icons.rect("info", 20))
+		hr.add_child(Kit.clip("Add your %s for full XP" % ("sets" if discipline == "lift" else "climbs"), 14, null, true))
+		hc.add(hr)
+		hc.tooltip_text = "Imported with duration only."
 		parent.add_child(hc)
 
-	# Date + duration on one compact row (small captions underneath).
-	var top = Kit.hbox(10)
+	# Date + duration on one compact row.
+	var top = Kit.hbox(6)
 	top.add_child(LogWidgets.date_field(date, _set_date))
 	top.add_child(Kit.spacer())
 	var dur_col = Kit.vbox(2)
 	var dur_row = Kit.hbox(2)
+	dur_row.tooltip_text = "Duration h : m : s"
+	dur_row.add_child(Kit.vcenter(Icons.rect("stopwatch", 20)))
+	dur_row.add_child(Kit.gap(0))
 	var eh = LogWidgets.num_input(dh, "0", "dur.h", 34)
 	var em = LogWidgets.num_input(dm, "45", "dur.m", 38)
 	var es = LogWidgets.num_input(ds, "00", "dur.s", 38)
@@ -164,12 +173,10 @@ func build(parent: Control) -> void:
 	es.text_changed.connect(func(t): _set_dur("s", t))
 	Kit.add(dur_row, [eh, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), em, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), es])
 	dur_col.add_child(dur_row)
-	var cap = Kit.label("Duration  h : m : s", 10, Pal.MUTED)
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	dur_col.add_child(cap)
 	top.add_child(dur_col)
 	parent.add_child(top)
 
+	_pace_slot = null
 	# Quick duration picks for gym-style sessions (cardio durations are exact, so typed).
 	# One line only: picks that do not fit the width are left out.
 	_chip_row = null
@@ -187,7 +194,7 @@ func build(parent: Control) -> void:
 			_build_cardio(parent, eh, es)
 
 	# Title & notes (folded away like the web's <details>)
-	var fold = Kit.link(("▾ " if show_extra else "▸ ") + "Title & notes", _toggle_extra, 13)
+	var fold = LogWidgets.mini_chip(("▾ " if show_extra else "+ ") + "Title & notes", show_extra, _toggle_extra)
 	fold.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	parent.add_child(fold)
 	if show_extra:
@@ -201,7 +208,7 @@ func build(parent: Control) -> void:
 		parent.add_child(LogWidgets.text_area(notes, "Notes: how did it go?", "notes", func(t): notes = t, 2))
 
 	# XP preview + save, one block
-	var fb = LogWidgets.finish_block("Save changes" if editing != null else "Finish session ✓", close, save)
+	var fb = LogWidgets.finish_block("Save changes" if editing != null else "Finish session", close, save)
 	_xp_box = fb.xp
 	_save_btn = fb.save
 	parent.add_child(fb.card)
@@ -225,7 +232,7 @@ func refresh() -> void:
 	var base = Xp.base_session_xp(d)
 	var bonus = float(TTUtil.get_or(editing, "bonusPct", 0.0)) if editing != null else float(App.perks.xp[discipline])
 	var est = TTUtil.jsround(float(base.xp) * (1.0 + bonus))
-	var side = "incl. +%d%% gear bonus" % TTUtil.jsround(bonus * 100.0) if bonus > 0.0 else ""
+	var side = "XP for this session, incl. +%d%% gear bonus" % TTUtil.jsround(bonus * 100.0) if bonus > 0.0 else "XP for this session"
 	var sub = ""
 	match discipline:
 		"lift":
@@ -234,22 +241,21 @@ func refresh() -> void:
 			sub = "%d sends · %d flashes · %d attempts" % [int(st.sends), int(st.flashes), int(st.attempts)]
 			if st.maxGradeSent != null:
 				sub += " · max " + Xp.grade_label(st.maxGradeSent)
-		"run":
-			sub = "Pace " + Fmt.fmt_pace(float(st.paceSecPerKm), du) if st.paceSecPerKm != null else "Add a duration for pace"
-		"ride":
-			sub = "Avg " + Fmt.fmt_speed(float(st.speedKmh), du) if st.speedKmh != null else "Add a duration for speed"
+		"run", "ride":
+			sub = Fmt.fmt_distance(float(d.distanceM), du)
 	if not valid:
 		sub = _invalid_hint()
+	_fill_pace(st)
 	LogWidgets.fill_xp_preview(_xp_box, est, Pal.disc(discipline), side, sub)
 
 
 func _invalid_hint() -> String:
 	match discipline:
 		"lift":
-			return "Add an exercise with at least one set with reps to save."
+			return "Add a set with reps"
 		"climb":
-			return "Tap a grade to add a climb to save."
-	return "Enter a distance to save."
+			return "Tap a grade to add a climb"
+	return "Enter a distance"
 
 
 func _fill_duration_chips() -> void:
@@ -270,9 +276,7 @@ func _fill_duration_chips() -> void:
 	var avail = 400.0
 	if is_instance_valid(screen) and screen.size.x > 100.0:
 		avail = screen.size.x
-	var quick = Kit.muted("Quick", 11)
-	_chip_row.add_child(Kit.vcenter(quick))
-	var used = Kit.font_bold().get_string_size("Quick", HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 4
+	var used = 0.0
 	for m in mins:
 		var label = Fmt.fmt_duration_short(m * 60)
 		if m == last_min:
@@ -331,9 +335,14 @@ func on_draft_changed(rebuild_all: bool) -> void:
 # Climbing
 # ---------------------------------------------------------------------------
 
+## The difficulty ramp: green (VB) through yellow and orange to red and purple.
+## Fixed art colours, the same in every theme.
 static func grade_hue(g: int) -> Color:
 	var t = clampf((g + 1) / 14.0, 0.0, 1.0)
-	return _hsl((150.0 - t * 150.0) / 360.0, 0.6, 0.38)
+	var h = 140.0 - t * 140.0
+	if t > 0.85:
+		h = 360.0 - (t - 0.85) / 0.15 * 50.0
+	return _hsl(h / 360.0, 0.62, 0.44)
 
 
 static func _hsl(h: float, s: float, l: float) -> Color:
@@ -349,6 +358,15 @@ static func result_label(r: String) -> String:
 		"send":
 			return "Send"
 	return "Attempt"
+
+
+static func result_color(r: String) -> Color:
+	match r:
+		"flash":
+			return flash_color()
+		"send":
+			return Pal.CLIMB
+	return Pal.SECOND
 
 
 static func result_icon(r: String) -> String:
@@ -373,40 +391,28 @@ func _build_climb(parent: Control) -> void:
 	var lc = _last_climb()
 	if climbs.is_empty() and lc != null:
 		var st = Xp.session_stats(lc)
-		var text = "Same as last session: %d sends" % int(st.sends)
+		var text = "%d sends" % int(st.sends)
 		if st.maxGradeSent != null:
-			text += ", max " + Xp.grade_label(st.maxGradeSent)
+			text += " · max " + Xp.grade_label(st.maxGradeSent)
 		if int(st.attempts) > 0:
-			text += ", %d attempts" % int(st.attempts)
-		parent.add_child(LogWidgets.template(lc.date, text, _repeat_climb.bind(lc)))
-	var col = flash_color() if climb_result == "flash" else (Pal.CLIMB if climb_result == "send" else Pal.MUTED)
-	parent.add_child(Kit.segmented([
-		{"value": "flash", "label": "Flash"},
-		{"value": "send", "label": "Send"},
-		{"value": "attempt", "label": "Attempt"},
-	], climb_result, _set_result, col))
-	parent.add_child(Kit.muted("Tap a grade to add one %s." % climb_result, 12))
+			text += " · %d attempts" % int(st.attempts)
+		var tile = LogWidgets.template(lc.date, text, _repeat_climb.bind(lc), "climb", "Same as last · ")
+		parent.add_child(tile)
+	# Flash / send / attempt: three bright toggles.
+	var toggles = Kit.hbox(6)
+	for r in ["flash", "send", "attempt"]:
+		var t = LogWidgets.toggle(result_label(r), result_icon(r), climb_result == r, result_color(r), _set_result.bind(r))
+		t.tooltip_text = "Grades you tap now count as a %s" % r
+		toggles.add_child(t)
+	parent.add_child(toggles)
+	# The grade keys, coloured along the difficulty ramp.
 	var grid = Kit.grid(6, 5)
 	var top = Xp.MAX_V_GRADE if more_grades else 10
 	for g in range(-1, top + 1):
-		var b = Button.new()
-		b.text = Xp.grade_label(g)
-		b.focus_mode = Control.FOCUS_NONE
-		b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(0, 36)
-		var hue = grade_hue(g)
-		b.add_theme_stylebox_override("normal", Kit.sbox(hue, 9, hue.lightened(0.25), 1, 4, 4))
-		b.add_theme_stylebox_override("hover", Kit.sbox(hue.lightened(0.1), 9, hue.lightened(0.35), 1, 4, 4))
-		b.add_theme_stylebox_override("pressed", Kit.sbox(hue.darkened(0.15), 9, Pal.ACCENT, 2, 4, 4))
-		b.add_theme_color_override("font_color", Pal.TEXT)
-		b.add_theme_color_override("font_hover_color", Pal.TEXT)
-		b.add_theme_color_override("font_pressed_color", Pal.TEXT)
-		b.add_theme_font_size_override("font_size", 14)
-		b.pressed.connect(add_climb.bind(g))
-		grid.add_child(b)
+		grid.add_child(_grade_key(g))
 	var more = Kit.button("Less" if more_grades else "More…", "ghost", _toggle_more, "sm")
 	more.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	more.custom_minimum_size.y = 40
 	grid.add_child(more)
 	parent.add_child(grid)
 
@@ -415,24 +421,58 @@ func _build_climb(parent: Control) -> void:
 		for k in range(climbs.size()):
 			idx.append(k)
 		TTUtil.stable_sort(idx, func(a, b): return _climb_before(climbs[a], climbs[b]))
-		var c = Kit.card(4, Callable(), 10)
+		var flow = Kit.flow(6)
 		for k in idx:
-			var cl = climbs[k]
-			var row = Kit.hbox(8)
-			var gt = Kit.tag(Xp.grade_label(cl.grade), grade_hue(int(cl.grade)), false, 13)
-			gt.custom_minimum_size = Vector2(44, 0)
-			row.add_child(gt)
-			var rcol = flash_color() if cl.result == "flash" else (Pal.CLIMB if cl.result == "send" else Pal.MUTED)
-			row.add_child(Kit.vcenter(Icons.rect(result_icon(cl.result), 16, rcol)))
-			row.add_child(Kit.vcenter(Kit.expand(Kit.label(result_label(cl.result), 14))))
-			row.add_child(LogWidgets.round_btn("−", bump_climb.bind(k, -1), "Minus one"))
-			var n = Kit.label(str(int(cl.count)), 15, null, true)
-			n.custom_minimum_size = Vector2(26, 0)
-			n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			row.add_child(Kit.vcenter(n))
-			row.add_child(LogWidgets.round_btn("+", bump_climb.bind(k, 1), "Plus one"))
-			c.add(row)
-		parent.add_child(c)
+			flow.add_child(_climb_chip(k))
+		parent.add_child(flow)
+
+
+## One grade as a chunky key in its ramp colour.
+func _grade_key(g: int) -> Button:
+	var hue = grade_hue(g)
+	var b = Button.new()
+	b.text = Xp.grade_label(g)
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(0, 40)
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	b.tooltip_text = "Add one %s %s" % [Xp.grade_label(g), climb_result]
+	var looks = PixBox.button_set(hue, hue.darkened(0.45), 2, 4, 2, hue.lightened(0.3))
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, Color.WHITE)
+	b.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	b.add_theme_constant_override("outline_size", 4)
+	b.add_theme_font_override("font", Kit.font_bold())
+	b.add_theme_font_size_override("font_size", 16)
+	b.pressed.connect(add_climb.bind(g))
+	Kit.juice(b)
+	return b
+
+
+## A logged climb as a chip: grade in its colour, result icon, ×count, − / +.
+func _climb_chip(k: int) -> Control:
+	var cl = climbs[k]
+	var hue = grade_hue(int(cl.grade))
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL, {"ring": hue, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 6, "pad_v": 3}))
+	p.tooltip_text = "%s %s × %d" % [Xp.grade_label(cl.grade), result_label(cl.result).to_lower(), int(cl.count)]
+	var h = Kit.hbox(5)
+	var g = LogWidgets.badge(Xp.grade_label(cl.grade), hue, 13)
+	g.get_child(0).add_theme_color_override("font_color", Color.WHITE)
+	LogWidgets.on_face(g.get_child(0))
+	h.add_child(g)
+	h.add_child(Kit.vcenter(Icons.rect(result_icon(cl.result), 16, result_color(cl.result))))
+	h.add_child(Kit.vcenter(PixelFont.rect("x%d" % int(cl.count), 2, Pal.TEXT)))
+	h.add_child(LogWidgets.round_btn("−", bump_climb.bind(k, -1), "Minus one"))
+	h.add_child(LogWidgets.round_btn("+", bump_climb.bind(k, 1), "Plus one"))
+	p.add_child(h)
+	return p
 
 
 static func _climb_before(a: Dictionary, b: Dictionary) -> bool:
@@ -498,25 +538,51 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	var lc = _last_cardio()
 	_cardio_template = null
 	if editing == null and lc != null:
-		var text = "Same as last %s: %s" % [discipline, Fmt.fmt_distance(float(lc.distanceM), du)]
+		var text = Fmt.fmt_distance(float(lc.distanceM), du)
 		if lc.get("durationSec") != null and int(lc.durationSec) > 0:
 			text += " · " + Fmt.fmt_duration(float(lc.durationSec))
-		_cardio_template = LogWidgets.template(lc.date, text, _use_last_cardio.bind(lc), false)
+		_cardio_template = LogWidgets.template(lc.date, text, _use_last_cardio.bind(lc), discipline, "Same as last · ")
 		_cardio_template.visible = distance.strip_edges() == ""
 		parent.add_child(_cardio_template)
+	var col = Pal.disc(discipline)
+	var c = Kit.card(6, Callable(), 12)
+	c.accent(col)
 	var row = Kit.hbox(10)
+	# Distance: the big number.
+	var dist = Kit.vbox(4)
+	dist.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dist.size_flags_stretch_ratio = 1.6
+	dist.add_child(Kit.label("Distance", 12, Pal.MUTED, true))
+	var drow = Kit.hbox(6)
 	var ph = LogWidgets.trim_num(Fmt.m_to_unit(float(lc.distanceM), du)) if lc != null else "0.0"
-	var de = LogWidgets.num_input(distance, ph, "distance")
+	var de = LogWidgets.big_input(distance, ph, "distance", 0, 28)
+	de.tooltip_text = "Distance (%s)" % du
 	de.text_changed.connect(func(t):
 		distance = t
 		refresh())
-	row.add_child(Kit.field("Distance (%s)" % du, de))
-	var ee = LogWidgets.num_input(elev, "0", "elev")
+	drow.add_child(de)
+	drow.add_child(LogWidgets.unit_chip(du))
+	dist.add_child(drow)
+	row.add_child(dist)
+	# Elevation: secondary.
+	var ev = Kit.vbox(4)
+	ev.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ev.add_child(Kit.label("Climb", 12, Pal.MUTED, true))
+	var erow = Kit.hbox(6)
+	var ee = LogWidgets.big_input(elev, "0", "elev", 0, 18)
+	ee.tooltip_text = "Elevation gain (%s)" % ("m" if du == "km" else "ft")
 	ee.text_changed.connect(func(t):
 		elev = t
 		refresh())
-	row.add_child(Kit.field("Elevation gain (%s)" % ("m" if du == "km" else "ft"), ee))
-	parent.add_child(row)
+	erow.add_child(ee)
+	erow.add_child(LogWidgets.unit_chip("m" if du == "km" else "ft"))
+	ev.add_child(erow)
+	row.add_child(ev)
+	c.add(row)
+	# Live pace / speed.
+	_pace_slot = Kit.hbox(6)
+	c.add(_pace_slot)
+	parent.add_child(c)
 	# Keyboard order: distance → h → m → s → elevation.
 	var link_focus = func():
 		if not (is_instance_valid(de) and de.is_inside_tree()):
@@ -528,6 +594,34 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 		if editing == null and distance == "" and de.get_viewport().gui_get_focus_owner() == null:
 			de.grab_focus()
 	link_focus.call_deferred()
+
+
+## The live pace (run) or speed (ride) chip under the distance.
+func _fill_pace(st: Dictionary) -> void:
+	if _pace_slot == null or not is_instance_valid(_pace_slot):
+		return
+	Kit.clear(_pace_slot)
+	var text = ""
+	var tip = ""
+	if discipline == "run" and st.get("paceSecPerKm") != null:
+		text = Fmt.fmt_pace(float(st.paceSecPerKm), du)
+		tip = "Average pace"
+	elif discipline == "ride" and st.get("speedKmh") != null:
+		text = Fmt.fmt_speed(float(st.speedKmh), du)
+		tip = "Average speed"
+	if text == "":
+		_pace_slot.add_child(Kit.label("Add a time for %s" % ("pace" if discipline == "run" else "speed"), 12, Pal.MUTED))
+		return
+	var chip = PanelContainer.new()
+	chip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var col = Pal.disc(discipline)
+	chip.add_theme_stylebox_override("panel", PixBox.make(col, {"lip": 1, "lip_color": col.darkened(0.45), "pad_h": 8, "pad_v": 2}))
+	chip.tooltip_text = tip
+	var h = Kit.hbox(6)
+	h.add_child(Kit.vcenter(Icons.rect("stopwatch", 16)))
+	h.add_child(LogWidgets.on_face(Kit.label(text, 14, null, true)))
+	chip.add_child(h)
+	_pace_slot.add_child(chip)
 
 
 func _use_last_cardio(lc: Dictionary) -> void:
@@ -554,6 +648,7 @@ func save() -> void:
 		Sfx.error()
 		App.toast(_invalid_hint(), "bad", "warning")
 		return
+	LogWidgets.celebrate(_save_btn, _xp_box if editing == null else null)
 	if editing != null:
 		App.update_session(d)
 		App.toast("Session updated", "good", "edit")

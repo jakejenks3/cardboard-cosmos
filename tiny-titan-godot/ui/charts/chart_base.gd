@@ -6,6 +6,8 @@ var hover = -1
 
 func _init() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The well and tooltip are pixel-art boxes: keep them crisp.
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	mouse_exited.connect(_on_exit)
 	resized.connect(_on_resized)
@@ -59,7 +61,7 @@ func draw_tip(lines: Array, anchor_x: float) -> void:
 	if anchor_x > size.x * 0.55:
 		x = 40.0
 	var r = Rect2(x, 4.0, bw, bh)
-	draw_style_box(Kit.sbox(Charts.TIP_BG, 8, Pal.LINE, 1, 0, 0), r)
+	draw_style_box(PixBox.make(Pal.INK, {"ring": Pal.BORDER, "lip": 0, "pad_h": 0, "pad_v": 0}), r.grow(2.0))
 	var y = 4.0 + 5.0 + 11.0
 	for l in lines:
 		var tx = x + 8.0
@@ -68,6 +70,20 @@ func draw_tip(lines: Array, anchor_x: float) -> void:
 			tx += 13.0
 		txt(tx, y, l.t, Pal.TEXT, 0, 11, l.get("bold", false))
 		y += 15.0
+
+## The sunken well the plot sits in (grown a little past the plot rect).
+func draw_well(r: Rect2) -> void:
+	draw_style_box(PixBox.well(0, 0), r.grow(6.0))
+
+## A chunky block: fill, a light top row and a dark bottom row, like the pixel boxes.
+func block(r: Rect2, col: Color, cap: bool = true) -> void:
+	if r.size.y <= 0.0 or r.size.x <= 0.0:
+		return
+	draw_rect(r, col)
+	if cap and r.size.y >= 4.0:
+		draw_rect(Rect2(r.position.x, r.position.y, r.size.x, 2.0), col.lightened(0.35))
+	if r.size.x >= 6.0:
+		draw_rect(Rect2(r.position.x + r.size.x - 2.0, r.position.y, 2.0, r.size.y), col.darkened(0.25))
 
 ## A dashed polyline (continuous dash pattern across segments).
 func dashed(pts: PackedVector2Array, color: Color, width: float, dash: float, gap_len: float) -> void:

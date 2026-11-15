@@ -21,7 +21,10 @@ var show_all_chips: bool = false
 var _last: Dictionary = {}
 var _bests: Dictionary = {}
 var _suggestions: Array = []
+## Sets ("i:j") that already celebrated becoming a PR: the burst plays once per set.
+var _pr_done: Dictionary = {}
 var _badges: Array = []  # [exercise][set] -> HBoxContainer slot for the trend badge
+var _wsteps: Array = []  # [exercise][set] -> the weight stepper (where a PR bursts from)
 var _deltas: Array = []  # [exercise] -> VBoxContainer slot for the volume note
 var _built_names: Array = []
 var _chips: HFlowContainer = null
@@ -94,20 +97,23 @@ func build(parent: Control) -> void:
 	_suggestions = LiftHistory.exercise_suggestions(sessions, Summary.DEFAULT_EXERCISES, editing_id)
 	_bests = App.state.prs.lifts
 	_badges = []
+	_wsteps = []
 	_deltas = []
 	_built_names = []
 
 	if exercises.is_empty():
 		var templates = LiftHistory.recent_workouts(sessions, 3, editing_id)
 		if not templates.is_empty():
-			var tv = Kit.vbox(4)
-			tv.add_child(Kit.label("Start from a previous workout", 11, Pal.MUTED, true))
+			var tv = Kit.vbox(6)
+			tv.add_child(Kit.section_title("Repeat a workout"))
 			for t in templates:
 				var names = []
 				for e in t.exercises:
 					if _has_reps(e.sets):
 						names.append(str(e.name).strip_edges())
-				tv.add_child(LogWidgets.template(t.date, " · ".join(PackedStringArray(names)), apply_template.bind(t)))
+				var tile = LogWidgets.template(t.date, " · ".join(PackedStringArray(names)), apply_template.bind(t), "lift", "%d exercises · " % names.size())
+				tile.tooltip_text = "Start from this workout, with your latest numbers"
+				tv.add_child(tile)
 			parent.add_child(tv)
 
 	for i in range(exercises.size()):
@@ -127,7 +133,7 @@ static func _has_reps(sets: Array) -> bool:
 ## Collapsed picker: about two rows of chips.
 const CHIPS_COLLAPSED = 6
 
-## One exercise: a title line (name · BW · remove), a muted "Last … · Best …"
+## One exercise: a title line (name · BW · remove), one muted "Last … · Best …"
 ## line, one tight row per set (n · reps × weight unit · trend · remove) and a
 ## footer of small chips with the volume note on the right.
 func _exercise_card(i: int) -> Card:
@@ -137,36 +143,39 @@ func _exercise_card(i: int) -> Card:
 	var best = _bests.get(key)
 	_built_names.append(str(e.name).strip_edges())
 	var c = Kit.card(4, Callable(), 10)
-	c.tint(Pal.PANEL, Pal.with_alpha(Pal.LIFT, 0.55))
+	c.accent(Pal.LIFT)
 
 	# Name · BW · remove
 	var head = Kit.hbox(4)
-	var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 16)
+	var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
 	name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
 	name_edit.text_changed.connect(_on_name_typed.bind(i))
 	name_edit.focus_exited.connect(_on_name_done.bind(i))
 	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
 	head.add_child(name_edit)
-	var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), null, 8)
+	var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), Pal.LIFT, 8)
 	bw.tooltip_text = "Bodyweight exercise (no weight)"
 	head.add_child(bw)
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
 
-	# Last time · best, one muted line
-	var ref_parts = []
-	var mc = Kit.hex_of(Pal.MUTED)
-	var tc = Kit.hex_of(Pal.TEXT)
-	if lp != null:
-		ref_parts.append("Last [color=%s]%s[/color] (%s)" % [tc, Kit.esc(LiftHistory.describe_sets(lp.sets, _fmt_w)), Kit.esc(Dates.relative_day(lp.date, App.today))])
-	if best != null and float(best.weightKg) > 0.0:
-		ref_parts.append("Best [color=%s]%s[/color]" % [tc, Kit.esc(_fmt_w(best.weightKg))])
-	if not ref_parts.is_empty():
-		var ref = Kit.rich("[color=%s]%s[/color]" % [mc, " · ".join(PackedStringArray(ref_parts))], 12)
-		c.add(Kit.pad(ref, 6, 0, 0, 2))
+	# Last time · best, one line (the date is in the tooltip)
+	var has_best = best != null and float(best.weightKg) > 0.0
+	if lp != null or has_best:
+		var ref = Kit.hbox(10)
+		ref.mouse_filter = Control.MOUSE_FILTER_PASS
+		if lp != null:
+			ref.add_child(Kit.clip("Last " + LiftHistory.describe_sets(lp.sets, _fmt_w), 12, Pal.MUTED))
+			ref.tooltip_text = "Last time: %s" % Dates.relative_day(lp.date, App.today)
+		else:
+			ref.add_child(Kit.spacer())
+		if has_best:
+			ref.add_child(Kit.label("Best " + _fmt_w(best.weightKg), 12, Pal.ACCENT, true))
+		c.add(Kit.pad(ref, 6, 0, 4, 1))
 
 	# Sets
 	var slots = []
+	var wsteps = []
 	var label_name = str(e.name).strip_edges()
 	if label_name == "":
 		label_name = "Exercise %d" % (i + 1)
@@ -174,9 +183,8 @@ func _exercise_card(i: int) -> Card:
 		var s = e.sets[j]
 		var ref_set = _ref_set(lp, j)
 		var row = Kit.hbox(4)
-		var n = Kit.label(str(j + 1), 12, Pal.MUTED, true)
-		n.custom_minimum_size = Vector2(16, 0)
-		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var n = PixelFont.rect(str(j + 1), 2, Pal.MUTED)
+		n.custom_minimum_size.x = 16
 		n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(n)
 		var reps_opts = {"placeholder": "–", "width": 32, "min": 0, "compact": true}
@@ -186,12 +194,13 @@ func _exercise_card(i: int) -> Card:
 		LogWidgets.slim_stepper(rs, "ex%d.s%d.reps" % [i, j]).tooltip_text = "%s reps for set %d" % [label_name, j + 1]
 		rs.changed.connect(_on_set_text.bind(i, j, "reps"))
 		row.add_child(rs)
+		var ws = null
 		if not e.bodyweight:
 			row.add_child(Kit.vcenter(Kit.label("×", 13, Pal.MUTED)))
 			var w_opts = {"placeholder": wu, "width": 54, "snap": true, "min": 0, "compact": true}
 			if ref_set != null and float(ref_set.weightKg) > 0.0:
 				w_opts["base"] = TTUtil.jsround(Fmt.kg_to_unit(float(ref_set.weightKg), wu) * 100.0) / 100.0
-			var ws = Kit.stepper(s.weight, _step(), Callable(), w_opts)
+			ws = Kit.stepper(s.weight, _step(), Callable(), w_opts)
 			LogWidgets.slim_stepper(ws, "ex%d.s%d.weight" % [i, j]).tooltip_text = "%s weight for set %d" % [label_name, j + 1]
 			ws.changed.connect(_on_set_text.bind(i, j, "weight"))
 			row.add_child(ws)
@@ -205,13 +214,15 @@ func _exercise_card(i: int) -> Card:
 		row.add_child(Kit.pad(slot, 2, 0, 0, 0))
 		row.get_child(row.get_child_count() - 1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slots.append(slot)
-		row.add_child(LogWidgets.quiet_icon("close", remove_set.bind(i, j), "Remove set %d" % (j + 1), 28))
+		wsteps.append(ws if ws != null else rs)
+		row.add_child(LogWidgets.quiet_icon("close", remove_set.bind(i, j), "Remove set %d" % (j + 1), 26))
 		c.add(row)
 	_badges.append(slots)
+	_wsteps.append(wsteps)
 
 	# + Set · +1 rep · +step (every set) … volume note on the right
 	var acts = Kit.hbox(5)
-	var add_btn = LogWidgets.mini_chip("+ Set", false, add_set.bind(i))
+	var add_btn = LogWidgets.mini_chip("+ Set", true, add_set.bind(i), Pal.LIFT)
 	add_btn.tooltip_text = "Add a set (copies the last one)"
 	acts.add_child(add_btn)
 	var rep_btn = LogWidgets.mini_chip("+1 rep", false, bump_all.bind(i, "reps"))
@@ -261,6 +272,8 @@ func _refresh_exercise(i: int) -> void:
 		var badge = _trend_badge(trend)
 		if badge != null:
 			slot.add_child(badge)
+		if trend != null and str(trend.kind) == "pr":
+			_celebrate_pr(i, j)
 	var dslot = _deltas[i] if i < _deltas.size() else null
 	if dslot == null or not is_instance_valid(dslot):
 		return
@@ -280,24 +293,39 @@ func _refresh_exercise(i: int) -> void:
 	var good = false
 	if e.bodyweight or last_vol == 0.0:
 		if reps > last_reps:
-			text = "▲ %d more reps than last" % (reps - last_reps)
+			text = "▲ %d reps" % (reps - last_reps)
 			good = true
 		elif reps == last_reps:
-			text = "= same reps as last"
+			text = "= last reps"
 		else:
-			text = "%d reps to match last" % (last_reps - reps)
+			text = "%d reps to match" % (last_reps - reps)
 	elif vol > last_vol + 1e-6:
-		text = "▲ %s more volume" % _fmt_w(vol - last_vol)
+		text = "▲ %s volume" % _fmt_w(vol - last_vol)
 		good = true
 	elif absf(vol - last_vol) <= 1e-6:
-		text = "= same volume as last"
+		text = "= last volume"
 	else:
-		text = "%s to match last" % _fmt_w(last_vol - vol)
-	var note = Kit.para(text, 11, Pal.GOOD if good else Pal.MUTED, good)
+		text = "%s to match" % _fmt_w(last_vol - vol)
+	var note = Kit.clip(text, 12, Pal.GOOD if good else Pal.MUTED, true)
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	note.tooltip_text = "Volume (reps × weight) compared with last time"
 	note.mouse_filter = Control.MOUSE_FILTER_PASS
 	dslot.add_child(note)
+
+
+## A set just became a PR: gold sparks and the PR sound, once per set. Sets that
+## are already a PR when the card is built (an edit, a copied set) stay quiet.
+func _celebrate_pr(i: int, j: int) -> void:
+	var k = "%d:%d" % [i, j]
+	if _pr_done.has(k):
+		return
+	_pr_done[k] = true
+	if _building or i >= _wsteps.size() or j >= _wsteps[i].size():
+		return
+	var at = _wsteps[i][j]
+	if is_instance_valid(at):
+		Kit.burst(at, Pal.ACCENT, 18)
+		Sfx.pr()
 
 
 func _trend_badge(trend):
@@ -306,14 +334,17 @@ func _trend_badge(trend):
 	var t = null
 	match str(trend.kind):
 		"pr":
-			t = Kit.tag("PR!", Pal.ACCENT, true, 11)
+			t = LogWidgets.badge("PR!", Pal.ACCENT, 12)
 			t.tooltip_text = "Heavier than you have ever lifted on this exercise"
 		"weight":
-			t = Kit.tag("+%s %s" % [LogWidgets.trim_num(Fmt.kg_to_unit(float(trend.deltaKg), wu)), wu], Pal.GOOD, true, 10)
+			t = LogWidgets.badge("+%s %s" % [LogWidgets.trim_num(Fmt.kg_to_unit(float(trend.deltaKg), wu)), wu], Pal.GOOD, 11)
+			t.tooltip_text = "Heavier than last time"
 		"reps":
-			t = Kit.tag("+%d rep%s" % [int(trend.delta), "" if int(trend.delta) == 1 else "s"], Pal.GOOD, true, 10)
+			t = LogWidgets.badge("+%d rep%s" % [int(trend.delta), "" if int(trend.delta) == 1 else "s"], Pal.GOOD, 11)
+			t.tooltip_text = "More reps than last time"
 		"extra":
-			t = Kit.tag("+set", Pal.GOOD, true, 10)
+			t = LogWidgets.badge("+set", Pal.GOOD, 11)
+			t.tooltip_text = "An extra set compared with last time"
 	return t
 
 
@@ -324,17 +355,19 @@ func _trend_badge(trend):
 func _picker_card() -> Card:
 	var c = Kit.card(6, Callable(), 10)
 	var head = Kit.hbox(6)
-	head.add_child(Kit.vcenter(Kit.clip("Add another exercise" if not exercises.is_empty() else "Add an exercise", 13, null, true)))
-	var step_chip = LogWidgets.mini_chip("Step ± %s %s" % [TTUtil.num_str(_step()), wu], false, cycle_step)
+	head.add_child(Kit.vcenter(Icons.rect("plus", 16)))
+	head.add_child(Kit.vcenter(Kit.clip("Add exercise", 14, null, true)))
+	var step_chip = LogWidgets.mini_chip("± %s %s" % [TTUtil.num_str(_step()), wu], false, cycle_step)
 	step_chip.tooltip_text = "Weight step: how much one tap of + or − changes a weight (tap to change)"
 	head.add_child(step_chip)
 	c.add(head)
 
 	var row = Kit.hbox(6)
-	var search = Kit.input(query, "Search or type a new exercise")
+	var search = Kit.input(query, "Search or new exercise")
 	search.set_meta(LogWidgets.FKEY, "search")
 	search.select_all_on_focus = false
 	search.custom_minimum_size = Vector2(48, LogWidgets.ROW_H)
+	search.tooltip_text = "Your exercises come first. Tapping one brings back everything you did last time."
 	LogWidgets._slim_edit(search, 10)
 	search.text_changed.connect(_on_query)
 	search.text_submitted.connect(func(_t): add_from_search())
@@ -347,13 +380,9 @@ func _picker_card() -> Card:
 
 	_chips = Kit.flow(5)
 	c.add(_chips)
-	_no_match = Kit.muted_para("", 11)
+	_no_match = Kit.label("", 11, Pal.MUTED)
 	c.add(_no_match)
 	_fill_chips()
-	if exercises.is_empty() and _suggestions_have_history():
-		c.add(Kit.muted_para("Your exercises come first, with your last top set. Tapping one brings up everything you did last time.", 11))
-	elif not _suggestions_have_history():
-		c.add(Kit.muted_para("Tap an exercise to add it, or type your own. Next time it comes back with your numbers filled in.", 11))
 	return c
 
 
@@ -391,32 +420,31 @@ func _fill_chips() -> void:
 		more.tooltip_text = "Show fewer exercises" if show_all_chips else "Show more exercises"
 		_chips.add_child(more)
 	if is_instance_valid(_no_match):
-		_no_match.text = "No match — tap Add to create “%s”." % query.strip_edges() if q != "" and shown.is_empty() else ""
+		_no_match.text = "New exercise: tap Add" if q != "" and shown.is_empty() else ""
 		_no_match.visible = _no_match.text != ""
 	if is_instance_valid(_add_btn):
 		_add_btn.disabled = q == ""
 
 
-## One tappable exercise pill: "Bench Press  85×5" (your own ones highlighted).
-func _ex_chip(s: Dictionary) -> Card:
+## One tappable exercise key: "Bench Press  85×5" (your own ones have a lift-coloured edge).
+func _ex_chip(s: Dictionary) -> Button:
 	var lp = s.get("last")
-	var c = Kit.card(0, add_exercise.bind(str(s.name)), 0)
-	c.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	if lp != null:
-		c.tint(Pal.with_alpha(Pal.LIFT, 0.16), Pal.with_alpha(Pal.LIFT, 0.7))
-	else:
-		c.tint(Pal.PANEL2, Pal.LINE)
 	var h = Kit.hbox(5)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Kit.label(str(s.name), 12, null, true))
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	var nm = Kit.label(str(s.name), 12, Pal.TEXT, true)
+	nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(nm)
 	if lp != null:
 		var top = LiftHistory.top_set_label(lp.sets, func(kg): return Fmt.kg_to_unit(float(kg), wu))
 		if top != "":
-			h.add_child(Kit.label(top, 10, Pal.ACCENT, true))
-	c.add(Kit.pad(h, 9, 5, 9, 5))
-	c.box.get_child(0).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.custom_minimum_size = Vector2(0, 28)
-	return c
+			var tl = Kit.label(top, 11, Pal.ACCENT, true)
+			tl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			h.add_child(tl)
+	var b = LogWidgets.key(str(s.name), Pal.PANEL2, h, add_exercise.bind(str(s.name)), 9, 4, 1, Pal.LIFT if lp != null else Pal.LINE)
+	b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	if lp != null:
+		b.tooltip_text = "Last top set: %s" % LiftHistory.top_set_label(lp.sets, func(kg): return Fmt.kg_to_unit(float(kg), wu))
+	return b
 
 
 # ---------------------------------------------------------------------------

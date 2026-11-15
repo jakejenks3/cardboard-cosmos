@@ -20,9 +20,9 @@ var _level: int = 1
 var _pct: float = 0.0
 var _tween = null
 var _bar: Bar
-var _lv_label: Label
+var _badge: PanelContainer
+var _lv_rect: TextureRect
 var _foot: Label
-var _style: StyleBoxFlat
 
 
 func setup(before: Dictionary, after: Dictionary, color: Color, label_text: String, icon: String = "") -> void:
@@ -33,23 +33,32 @@ func setup(before: Dictionary, after: Dictionary, color: Color, label_text: Stri
 	_pct = float(before.progress)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_style = Kit.sbox(Pal.PANEL, 12, Pal.LINE, 1, 12, 10)
-	add_theme_stylebox_override("panel", _style)
-	var v = Kit.vbox(6)
-	add_child(v)
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_set_flash(false)
+	var row = Kit.hbox(10)
+	add_child(row)
+	# The level in big pixel digits on a raised gold plate, like the Hero tab.
+	_badge = PanelContainer.new()
+	_badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_badge.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 8, "pad_v": 5}))
+	_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_lv_rect = PixelFont.rect("LV 1", 2, Pal.INK, false)
+	_badge.add_child(_lv_rect)
+	row.add_child(_badge)
+	var v = Kit.vbox(5)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var head = Kit.hbox(6)
 	if icon != "":
-		head.add_child(Icons.rect(icon, 18))
-	head.add_child(Kit.clip(label_text, 15, null, true))
-	_lv_label = Kit.label("", 15, null, true)
-	head.add_child(_lv_label)
+		head.add_child(Kit.vcenter(Icons.rect(icon, 18)))
+	head.add_child(Kit.vcenter(Kit.clip(label_text, 15, null, true)))
+	_foot = Kit.label("", 11, Pal.MUTED, true)
+	head.add_child(Kit.vcenter(_foot))
 	v.add_child(head)
 	_bar = Kit.bar(_pct, color, 14)
 	v.add_child(_bar)
-	_foot = Kit.label("", 11, Pal.MUTED)
-	_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_foot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(_foot)
+	row.add_child(v)
 	_refresh_text()
 
 
@@ -99,7 +108,10 @@ func _fill_to(v: float, dur: float) -> void:
 func _flash(new_level: int) -> void:
 	_set_flash(true)
 	Sfx.level_up()
-	Kit.pop(_lv_label, 1.35, 0.3)
+	_level = new_level
+	_refresh_text()
+	Kit.pop(_badge, 1.35, 0.3)
+	Kit.burst(_badge, Pal.ACCENT, 22)
 	level_up.emit(new_level)
 
 
@@ -117,18 +129,16 @@ func _final_fill() -> void:
 
 
 func _set_flash(on: bool) -> void:
+	# A level-up lights the whole panel gold for a moment.
 	if on:
-		_style.border_color = Pal.ACCENT
-		_style.set_border_width_all(2)
-		_style.shadow_color = Pal.with_alpha(Pal.ACCENT, 0.55)
-		_style.shadow_size = 14
+		add_theme_stylebox_override("panel", PixBox.panel(Pal.deep(Pal.ACCENT), Pal.ACCENT, 12))
 	else:
-		_style.border_color = Pal.LINE
-		_style.set_border_width_all(1)
-		_style.shadow_size = 0
+		add_theme_stylebox_override("panel", PixBox.panel(null, null, 12))
 
 
 func _refresh_text() -> void:
 	var to_next = int(_after.toNext) if _level == int(_after.level) else int(_before.toNext)
-	_lv_label.text = "Lv %d" % _level
-	_foot.text = "%s / %s XP" % [Xp.fmt_int(TTUtil.jsround(_pct * to_next)), Xp.fmt_int(to_next)]
+	var t = PixelFont.tex("LV %d" % _level, Pal.INK, false)
+	_lv_rect.texture = t
+	_lv_rect.custom_minimum_size = Vector2(t.get_width() * 2, t.get_height() * 2)
+	_foot.text = "%s / %s" % [Xp.fmt_int(TTUtil.jsround(_pct * to_next)), Xp.fmt_int(to_next)]

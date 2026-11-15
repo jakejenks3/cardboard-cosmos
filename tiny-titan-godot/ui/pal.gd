@@ -169,4 +169,8 @@ static func with_alpha(c: Color, a: float) -> Color:
 
 ## A deep shade of `c`, for filling a box that is colour-coded by what it shows.
 static func deep(c: Color) -> Color:
-	return c.darkened(0.6)
+	# Darkened yellows turn olive; nudging them towards orange keeps gold looking like gold.
+	var h = c.h
+	if h > 0.08 and h < 0.2:
+		h -= 0.04
+	return Color.from_hsv(h, minf(1.0, c.s * 1.05), c.v * 0.42)

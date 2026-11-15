@@ -18,8 +18,6 @@ extends Control
 signal finished
 
 const HEADER_TYPES = ["xp", "import", "bodyxp", "levelup"]
-const BOSS_RED = Color("d7263d")
-const STREAK = Color("ff8a5c")
 
 var _title: String = ""
 var _events: Array = []
@@ -42,6 +40,7 @@ var _cards_box: VBoxContainer
 var _hero: HeroView
 var _xp_rect: TextureRect
 var _xp_color: Color = Pal.ACCENT
+var _xp_scale: int = 4
 var _footer_btn: Button
 var _confetti: Confetti
 var _disc_bar = null
@@ -94,10 +93,10 @@ func _build() -> void:
 	base.set_anchors_preset(Control.PRESET_FULL_RECT)
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(base)
-	# radial-gradient(circle at 50% 20%, #2d2460 0, #14102a 60%)
+	# A soft glow behind the hero, in the theme's own world colours.
 	var bg = TextureRect.new()
 	var grad = Gradient.new()
-	grad.set_color(0, Pal.PANEL2)
+	grad.set_color(0, Pal.BG2.lightened(0.12))
 	grad.set_color(1, Pal.BG)
 	var gt = GradientTexture2D.new()
 	gt.gradient = grad
@@ -134,6 +133,7 @@ func _build() -> void:
 
 	_footer_btn = Kit.button("Tap to skip", "ghost", _on_footer, "lg")
 	_footer_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_footer_btn.custom_minimum_size = Vector2(0, 58)
 	root.add_child(Kit.pad(_footer_btn, 16, 12, 16, 16))
 
 	_confetti = Confetti.new()
@@ -160,8 +160,15 @@ func _build_head() -> Control:
 	_hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	head.add_child(_hero)
 
-	_xp_rect = PixelFont.rect("+0 XP", 3, _xp_color)
+	# The XP as big as it fits: the number the whole reel is about.
+	var widest = PixelFont.measure("+%s XP" % Xp.fmt_int(_amount)).x
+	_xp_scale = 5
+	while _xp_scale > 2 and widest * _xp_scale > 390:
+		_xp_scale -= 1
+	_xp_rect = PixelFont.rect("+0 XP", _xp_scale, _xp_color)
 	_xp_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_xp_rect.tooltip_text = _breakdown()
+	_xp_rect.mouse_filter = Control.MOUSE_FILTER_PASS
 	head.add_child(_xp_rect)
 	_set_count(0.0)
 	_count_tween = create_tween()
@@ -170,41 +177,66 @@ func _build_head() -> Control:
 	var summary = _summary()
 	if summary != null:
 		head.add_child(summary)
-	if _xp_ev != null and float(_xp_ev.get("bonusPct", 0)) > 0.0:
-		var bonus = Kit.muted("includes +%d%% gear bonus" % TTUtil.jsround(float(_xp_ev.bonusPct) * 100.0), 11)
-		bonus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		head.add_child(bonus)
 	return head
 
 
+## Where the XP came from, line by line (the XP number's tooltip).
+func _breakdown() -> String:
+	if _xp_ev == null:
+		return ""
+	var bits = PackedStringArray()
+	for p in _xp_ev.parts:
+		bits.append("%s +%s" % [Icons.strip_emoji(p.label), Xp.fmt_int(p.xp)])
+	if int(_xp_ev.prBonus) > 0:
+		bits.append("PR bonus +%s" % Xp.fmt_int(_xp_ev.prBonus))
+	if float(_xp_ev.get("bonusPct", 0)) > 0.0:
+		bits.append("includes +%d%% gear bonus" % TTUtil.jsround(float(_xp_ev.bonusPct) * 100.0))
+	return "\n".join(bits)
+
+
+## A raised coloured pill: icon + bold text.
+static func _pill(icon: String, text: String, color: Color, fg = null) -> Control:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 7, "pad_v": 3}))
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var h = Kit.hbox(4)
+	if icon != "":
+		h.add_child(Kit.vcenter(Icons.rect(icon, 16)))
+	if text != "":
+		h.add_child(Kit.vcenter(Kit.label(text, 12, Pal.INK if fg == null else fg, true)))
+	p.add_child(h)
+	return p
+
+
+## Under the XP: a few chips instead of a sentence (the full breakdown is the tooltip).
 func _summary():
+	var f = Kit.flow(6)
+	f.alignment = FlowContainer.ALIGNMENT_CENTER
 	if _import_ev != null:
-		var f = Kit.flow(6)
-		f.alignment = FlowContainer.ALIGNMENT_CENTER
-		f.add_child(Kit.muted("%d sessions ·" % int(_import_ev.count), 13))
+		f.add_child(_pill("calendar", "%d sessions" % int(_import_ev.count), Pal.PANEL2, Pal.TEXT))
 		for d in TT.DISCIPLINES:
 			var v = int(_import_ev.byDiscipline.get(d, 0))
 			if v > 0:
-				var h = Kit.hbox(3)
-				h.add_child(Icons.rect(d, 16))
-				h.add_child(Kit.muted(Xp.fmt_int(v), 13))
-				f.add_child(h)
+				f.add_child(_pill(d, "+" + Xp.fmt_int(v), Pal.disc(d), Color.WHITE))
 		return f
-	var text = ""
 	if _body_ev != null:
-		text = "Weekly check-in bonus. See you next week." if int(_body_ev.amount) > 0 else "Logged. This week’s bonus was already earned."
-	elif _xp_ev != null:
-		var bits = PackedStringArray()
-		for p in _xp_ev.parts:
-			bits.append("%s +%s" % [Icons.strip_emoji(p.label), Xp.fmt_int(p.xp)])
-		text = " · ".join(bits)
+		if int(_body_ev.amount) > 0:
+			f.add_child(_pill("scale", "Weekly check-in", Pal.GOOD))
+		else:
+			f.add_child(_pill("check", "Logged", Pal.PANEL2, Pal.TEXT))
+		return f
+	if _xp_ev != null:
 		if int(_xp_ev.prBonus) > 0:
-			text += " · PR bonus +%s" % Xp.fmt_int(_xp_ev.prBonus)
-	if text == "":
+			f.add_child(_pill("trophy", "PR +%s" % Xp.fmt_int(_xp_ev.prBonus), Pal.ACCENT))
+		if float(_xp_ev.get("bonusPct", 0)) > 0.0:
+			f.add_child(_pill("chest", "+%d%% gear" % TTUtil.jsround(float(_xp_ev.bonusPct) * 100.0), Pal.GOOD))
+	if f.get_child_count() == 0:
+		f.queue_free()
 		return null
-	var l = Kit.muted_para(text, 13)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	return Kit.pad(l, 24, 0, 24, 0)
+	return f
 
 
 func _set_count(v: float) -> void:
@@ -212,7 +244,7 @@ func _set_count(v: float) -> void:
 		return
 	var t = PixelFont.tex("+%s XP" % Xp.fmt_int(TTUtil.jsround(v)), _xp_color)
 	_xp_rect.texture = t
-	_xp_rect.custom_minimum_size = Vector2(t.get_width() * 3, t.get_height() * 3)
+	_xp_rect.custom_minimum_size = Vector2(t.get_width() * _xp_scale, t.get_height() * _xp_scale)
 
 
 # ---------------------------------------------------------------------------
@@ -322,6 +354,11 @@ func _reveal(i: int, animate: bool) -> void:
 	if animate:
 		_pop_in(card, 0.45)
 		_scroll_to_end()
+		var col = _burst_color(ev)
+		if col != null:
+			var tw = card.create_tween()
+			tw.tween_interval(0.3)
+			tw.tween_callback(func(): Kit.burst(card, col, 20))
 
 
 func _skip() -> void:
@@ -344,6 +381,8 @@ func _set_done() -> void:
 	_phase = "done"
 	_footer_btn.text = "Continue"
 	Kit.style_button(_footer_btn, "primary", "lg")
+	_footer_btn.add_theme_font_size_override("font_size", 20)
+	Kit.pop(_footer_btn, 1.06, 0.3)
 	_hero.forced_pose = "flex"
 
 
@@ -424,34 +463,62 @@ func _over_button(node: Node, pos: Vector2) -> bool:
 # Event cards
 # ---------------------------------------------------------------------------
 
-## A reel card: {panel, style, row (HBox), main (VBox)}.
-func _rcard(border: Color, bg: Color = Pal.PANEL, glow: bool = false) -> Dictionary:
-	var p = PanelContainer.new()
-	p.mouse_filter = Control.MOUSE_FILTER_PASS
-	var st = Kit.sbox(bg, 14, border, 1, 14, 12)
-	if glow:
-		st.set_border_width_all(2)
-		st.shadow_color = Pal.with_alpha(border, 0.4)
-		st.shadow_size = 12
-	p.add_theme_stylebox_override("panel", st)
+## The colour of the sparks when a card is revealed, or null for no burst.
+## Trophies, loot, companions, ranks and evolutions are rewards and get one;
+## a boss gets its burst when it goes down.
+func _burst_color(ev: Dictionary):
+	match ev.type:
+		"achievement":
+			var a = Achievements.by_id(ev.id)
+			if a != null:
+				return Pal.hex(Achievements.TIER_COLOR[Achievements.tier_of(a)])
+		"item":
+			var it = Items.by_id(ev.id)
+			if it != null:
+				return Pal.rarity(it.rarity)
+		"pet":
+			var pet = Pets.by_id(ev.id)
+			if pet != null:
+				return Pal.rarity(pet.rarity)
+		"rank":
+			return Pal.hex(Xp.RANKS[int(ev.to)].color)
+		"stage", "pr":
+			return Pal.ACCENT
+	return null
+
+
+## A reel card: a pixel panel colour-coded by what it shows.
+## {panel (Card), row (HBox), main (VBox)}.
+func _rcard(color: Color, fill: bool = false) -> Dictionary:
+	var card = Kit.card(4, Callable(), 12)
+	card.accent(color, fill)
 	var row = Kit.hbox(12)
-	p.add_child(row)
-	var main = Kit.vbox(2)
+	card.add(row)
+	var main = Kit.vbox(3)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	return {"panel": p, "style": st, "row": row, "main": main}
+	return {"panel": card, "row": row, "main": main}
 
 
-func _icon_cell(icon: String) -> Control:
-	var c = CenterContainer.new()
-	c.custom_minimum_size = Vector2(44, 44)
-	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(Icons.rect(icon, 32))
-	return c
+## The picture of a card on a raised plate in its colour.
+func _plate(content: Control, color: Color, px: int = 52) -> Control:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.custom_minimum_size = Vector2(px, px)
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(color), {"ring": color, "lip": 1, "lip_color": Pal.OUTLINE, "pad_h": 2, "pad_v": 2}))
+	p.add_child(Kit.center(content))
+	return p
 
 
-func _kicker(text: String) -> Label:
-	return Kit.label(text, 11, Pal.MUTED, true)
+func _icon_cell(icon: String, color: Color) -> Control:
+	return _plate(Icons.rect(icon, 32), color)
+
+
+## The small coloured tag above a card's title ("GOLD TROPHY", "LOOT DROP").
+func _kicker(text: String, color: Color) -> Control:
+	return Kit.tag(text, color, true, 10)
 
 
 func _title_l(text: String) -> Label:
@@ -459,7 +526,7 @@ func _title_l(text: String) -> Label:
 
 
 func _sub(text: String) -> Label:
-	return Kit.muted_para(text, 13)
+	return Kit.clip(text, 13, Pal.MUTED)
 
 
 func _perk_l(text: String) -> Label:
@@ -481,22 +548,22 @@ func _build_card(ev: Dictionary, animate: bool):
 			var rank = Xp.RANKS[int(ev.to)]
 			var rc = Pal.hex(rank.color)
 			var m = TT.DISCIPLINE_META[ev.discipline]
-			var c = _rcard(rc, Pal.PANEL, true)
-			c.main.add_child(_kicker("RANK UP · %s" % m.name.to_upper()))
-			c.main.add_child(Kit.rich("[b][color=%s]%s →[/color] [color=%s]%s[/color][/b]" % [Kit.hex_of(Pal.MUTED), Kit.esc(Xp.RANKS[int(ev.from)].name), Kit.hex_of(rc), Kit.esc(rank.name)], 16))
-			var sub = Kit.hbox(5)
-			sub.add_child(Icons.rect(ev.discipline, 14))
-			sub.add_child(_sub("%s level %d reached." % [m.statName, int(rank.minLevel)]))
-			c.main.add_child(sub)
-			return _finish(c, _icon_cell("medal"))
+			var c = _rcard(rc)
+			var kick = Kit.hbox(6)
+			kick.add_child(_kicker("RANK UP", rc))
+			kick.add_child(Icons.rect(ev.discipline, 16))
+			c.main.add_child(kick)
+			c.main.add_child(Kit.rich("[color=%s]%s →[/color] [color=%s]%s[/color]" % [Kit.hex_of(Pal.MUTED), Kit.esc(Xp.RANKS[int(ev.from)].name), Kit.hex_of(rc), Kit.esc(rank.name)], 17, null))
+			c.panel.tooltip_text = "%s level %d reached." % [m.statName, int(rank.minLevel)]
+			return _finish(c, _icon_cell("medal", rc))
 		"stage":
 			return _stage_card(ev)
 		"pr":
 			var c = _rcard(Pal.ACCENT)
-			c.main.add_child(_kicker("NEW RECORD"))
+			c.main.add_child(_kicker("NEW RECORD", Pal.ACCENT))
 			c.main.add_child(_title_l(Icons.strip_emoji(ev.title)))
 			c.main.add_child(_sub(Icons.strip_emoji(ev.detail)))
-			return _finish(c, _icon_cell(Icons.for_emoji(ev.icon)))
+			return _finish(c, _icon_cell(Icons.for_emoji(ev.icon), Pal.ACCENT))
 		"achievement":
 			var a = Achievements.by_id(ev.id)
 			if a == null:
@@ -504,41 +571,50 @@ func _build_card(ev: Dictionary, animate: bool):
 			var tier = Achievements.tier_of(a)
 			var tc = Pal.hex(Achievements.TIER_COLOR[tier])
 			var c = _rcard(tc)
-			c.main.add_child(_kicker("%s TROPHY · +%s XP" % [tier.to_upper(), Xp.fmt_int(a.xp)]))
+			var kick = Kit.hbox(6)
+			kick.add_child(_kicker("%s TROPHY" % tier.to_upper(), tc))
+			kick.add_child(Parts.xp_chip(a.xp, 10))
+			c.main.add_child(kick)
 			c.main.add_child(_title_l(Icons.strip_emoji(a.name)))
 			c.main.add_child(_sub(Icons.strip_emoji(a.desc)))
-			return _finish(c, _icon_cell(Icons.for_emoji(a.icon)))
+			c.panel.tooltip_text = Icons.strip_emoji(a.desc)
+			return _finish(c, _icon_cell(Icons.for_emoji(a.icon), tc))
 		"item":
 			return _item_card(ev)
 		"pet":
 			return _pet_card(ev)
 		"streak":
-			var c = _rcard(STREAK)
-			c.main.add_child(_kicker("STREAK"))
-			c.main.add_child(_title_l("%d weeks in a row" % int(ev.current)))
-			c.main.add_child(_sub("Consistency is the real superpower."))
-			return _finish(c, _icon_cell("flame"))
+			var c = _rcard(Pal.ACCENT2)
+			c.main.add_child(_kicker("STREAK", Pal.ACCENT2))
+			var h = Kit.hbox(8)
+			h.add_child(PixelFont.rect(str(int(ev.current)), 3, Pal.ACCENT2))
+			h.add_child(Kit.vcenter(Kit.label("weeks in a row", 15, null, true)))
+			c.main.add_child(h)
+			c.panel.tooltip_text = "Consistency is the real superpower."
+			return _finish(c, _icon_cell("flame", Pal.ACCENT2))
 	return null
 
 
 func _boss_card(ev: Dictionary, animate: bool) -> Control:
 	var boss = Campaign.boss_at(int(ev.index))
-	var c = _rcard(BOSS_RED, Pal.PANEL.lerp(BOSS_RED, 0.14))
+	var c = _rcard(Pal.HP, true)
 	var bv = BossView.new()
 	bv.setup(boss.id, 64.0, false)
+	bv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var kick_row = Kit.hbox(6)
-	var kicker = _kicker("BOSS FIGHT")
-	kick_row.add_child(kicker)
+	kick_row.add_child(_kicker("BOSS FIGHT", Pal.HP))
 	if ev.weak:
-		kick_row.add_child(Kit.tag("SUPER EFFECTIVE ×%s" % TTUtil.num_str(Campaign.WEAK_MULT), BOSS_RED, false, 10))
+		kick_row.add_child(Kit.tag("×%s" % TTUtil.num_str(Campaign.WEAK_MULT), Pal.ACCENT, true, 10))
 	c.main.add_child(kick_row)
 	c.main.add_child(_title_l(boss.name))
 	var max_hp = maxf(1.0, float(ev.maxHp))
-	var hp = Kit.bar(float(ev.hpBefore) / max_hp, Color("e8394f"), 10)
-	c.main.add_child(Kit.pad(hp, 0, 4, 0, 2))
-	var foot = Kit.rich("", 13, Pal.MUTED)
+	var hp = Kit.bar(float(ev.hpBefore) / max_hp, Pal.HP, 12)
+	c.main.add_child(Kit.pad(hp, 0, 2, 0, 2))
+	var foot = Kit.rich("", 13, Pal.with_alpha(Pal.TEXT, 0.75))
 	c.main.add_child(foot)
-	var parts = {"boss": boss, "ev": ev, "bv": bv, "kicker": kicker, "hp": hp, "foot": foot, "style": c.style, "panel": c.panel}
+	if ev.weak:
+		c.panel.tooltip_text = "Super effective: its weakness hits for ×%s." % TTUtil.num_str(Campaign.WEAK_MULT)
+	var parts = {"boss": boss, "ev": ev, "bv": bv, "kick_row": kick_row, "hp": hp, "foot": foot, "panel": c.panel}
 	var card = _finish(c, bv)
 	if animate:
 		_boss_foot(parts, float(ev.hpBefore), false)
@@ -550,11 +626,11 @@ func _boss_card(ev: Dictionary, animate: bool) -> Control:
 			_boss_foot(parts, float(ev.hpAfter), false))
 		if ev.defeated:
 			tw.tween_interval(0.7)
-			tw.tween_callback(func(): _boss_down(parts))
+			tw.tween_callback(func(): _boss_down(parts, true))
 	else:
 		hp.set_value(float(ev.hpAfter) / max_hp, false)
 		if ev.defeated:
-			_boss_down(parts)
+			_boss_down(parts, false)
 		else:
 			_boss_foot(parts, float(ev.hpAfter), false)
 	return card
@@ -563,63 +639,55 @@ func _boss_card(ev: Dictionary, animate: bool) -> Control:
 func _boss_foot(parts: Dictionary, hp: float, down: bool) -> void:
 	var ev = parts.ev
 	var boss = parts.boss
-	var text = "−%s damage · " % Xp.fmt_int(ev.damage)
+	var text = "[b]−%s[/b] · " % Xp.fmt_int(ev.damage)
 	if down:
 		var reward = ""
 		if boss.get("rewardItem") != null:
 			var it = Items.by_id(boss.rewardItem)
 			if it != null:
-				reward = " · Reward: %s" % Kit.esc(it.name)
-		text += "[b][color=%s]+%s XP%s[/color][/b]" % [Kit.hex_of(Pal.GOOD), Xp.fmt_int(boss.xp), reward]
+				reward = " + %s" % Kit.esc(it.name)
+		text = "[b][color=%s]+%s XP%s[/color][/b]" % [Kit.hex_of(Pal.ACCENT), Xp.fmt_int(boss.xp), reward]
 	else:
-		text += "%s / %s HP left" % [Xp.fmt_int(hp), Xp.fmt_int(ev.maxHp)]
+		text += "%s / %s HP" % [Xp.fmt_int(hp), Xp.fmt_int(ev.maxHp)]
 	parts.foot.text = text
 
 
-func _boss_down(parts: Dictionary) -> void:
+func _boss_down(parts: Dictionary, animate: bool) -> void:
 	if not is_instance_valid(parts.panel):
 		return
-	parts.kicker.text = "BOSS DEFEATED"
-	parts.kicker.add_theme_color_override("font_color", Pal.ACCENT)
+	Kit.clear(parts.kick_row)
+	parts.kick_row.add_child(_kicker("BOSS DEFEATED", Pal.ACCENT))
+	parts.kick_row.add_child(Icons.rect("skull", 16))
 	parts.bv.set_dim(true)
-	var st: StyleBoxFlat = parts.style
-	st.border_color = Pal.ACCENT
-	st.set_border_width_all(2)
-	st.shadow_color = Pal.with_alpha(Pal.ACCENT, 0.35)
-	st.shadow_size = 14
+	parts.panel.accent(Pal.ACCENT, true)
 	_boss_foot(parts, 0.0, true)
+	if animate:
+		Kit.pop(parts.panel, 1.04, 0.3)
+		Kit.burst(parts.panel, Pal.ACCENT, 28)
 
 
 func _stage_card(ev: Dictionary) -> Control:
 	var to = Xp.STAGES[int(ev.to)]
-	var p = PanelContainer.new()
-	p.mouse_filter = Control.MOUSE_FILTER_PASS
-	var st = Kit.sbox(Pal.PANEL2, 14, Pal.ACCENT, 2, 20, 20)
-	st.shadow_color = Pal.with_alpha(Pal.ACCENT, 0.3)
-	st.shadow_size = 12
-	p.add_theme_stylebox_override("panel", st)
-	var v = Kit.vbox(8)
-	p.add_child(v)
-	var k = _kicker("BODY EVOLVED")
-	k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(k)
+	var card = Kit.card(8, Callable(), 18)
+	card.accent(Pal.ACCENT, true)
+	card.tooltip_text = to.blurb
+	var k = _kicker("BODY EVOLVED", Pal.ACCENT)
+	k.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	card.add(k)
 	var names = Kit.hbox(8)
 	names.alignment = BoxContainer.ALIGNMENT_CENTER
 	names.add_child(PixelFont.rect(str(Xp.STAGES[int(ev.from)].name).to_upper(), 2, Pal.MUTED))
 	names.add_child(PixelFont.rect("→", 2, Pal.ACCENT))
 	names.add_child(PixelFont.rect(str(to.name).to_upper(), 2, Pal.ACCENT))
-	v.add_child(names)
+	card.add(names)
 	var hero = HeroView.new()
 	hero.happy = true
 	hero.forced_pose = "flex"
 	hero.setup(App.state, App.profile(), App.loadout(), App.active_pet(), false)
 	hero.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	v.add_child(hero)
-	var blurb = _sub(to.blurb)
-	blurb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(blurb)
-	return p
+	card.add(hero)
+	return card
 
 
 func _item_card(ev: Dictionary):
@@ -628,22 +696,22 @@ func _item_card(ev: Dictionary):
 		return null
 	var rc = Pal.rarity(it.rarity)
 	var legendary = it.rarity == "legendary"
-	var c = _rcard(rc, Color("3a2f10") if legendary else Pal.PANEL, true)
+	var c = _rcard(rc, legendary)
 	if legendary:
-		_glow_loop(c.panel, c.style)
+		_glow_loop(c.panel)
+	c.panel.tooltip_text = it.flavor
 	var kick = Kit.hbox(6)
-	kick.add_child(_kicker("LOOT DROP" if ev.how == "drop" else "UNLOCKED"))
-	kick.add_child(Kit.rarity_badge(it.rarity))
+	kick.add_child(_kicker("LOOT" if ev.how == "drop" else "UNLOCKED", rc))
+	kick.add_child(Kit.label(str(it.rarity).to_upper(), 10, rc, true))
 	c.main.add_child(kick)
 	c.main.add_child(_title_l(it.name))
-	c.main.add_child(_sub(it.flavor))
 	var perks = Items.perk_summary(it.get("perk"))
 	if not perks.is_empty():
 		c.main.add_child(_perk_l(" · ".join(PackedStringArray(perks))))
 	var art = PixelRect.make(Art.item_texture(it.id), 1.0)
-	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var card = _finish(c, art)
-	var b = Kit.button("Equip", "secondary", _on_equip.bind(it), "sm")
+	var card = _finish(c, _plate(art, rc, 56))
+	var b = Kit.button("Equip", "secondary", Callable(), "sm")
+	b.pressed.connect(_on_equip.bind(it, b))
 	b.custom_minimum_size = Vector2(0, 36)
 	c.row.add_child(Kit.vcenter(b))
 	_equip_buttons.append({"button": b, "item": it})
@@ -657,20 +725,22 @@ func _pet_card(ev: Dictionary):
 		return null
 	var rc = Pal.rarity(pet.rarity)
 	var legendary = pet.rarity == "legendary"
-	var c = _rcard(rc, Color("3a2f10") if legendary else Pal.PANEL, true)
+	var c = _rcard(rc, legendary)
 	if legendary:
-		_glow_loop(c.panel, c.style)
-	c.main.add_child(_kicker("NEW COMPANION"))
+		_glow_loop(c.panel)
+	c.panel.tooltip_text = pet.flavor
+	var kick = Kit.hbox(6)
+	kick.add_child(_kicker("NEW COMPANION", rc))
+	c.main.add_child(kick)
 	c.main.add_child(_title_l("%s the %s" % [pet.name, pet.species]))
-	c.main.add_child(_sub(pet.flavor))
 	var perks = Items.perk_summary(pet.get("perk"))
 	if not perks.is_empty():
 		c.main.add_child(_perk_l(" · ".join(PackedStringArray(perks))))
 	var pv = PetView.new()
-	pv.setup(pet.id, 56.0, true)
-	pv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var card = _finish(c, pv)
-	var b = Kit.button("Follow me", "secondary", _on_pet.bind(pet), "sm")
+	pv.setup(pet.id, 44.0, true)
+	var card = _finish(c, _plate(pv, rc, 56))
+	var b = Kit.button("Follow me", "secondary", Callable(), "sm")
+	b.pressed.connect(_on_pet.bind(pet, b))
 	b.custom_minimum_size = Vector2(0, 36)
 	c.row.add_child(Kit.vcenter(b))
 	_pet_buttons.append({"button": b, "pet": pet})
@@ -678,24 +748,26 @@ func _pet_card(ev: Dictionary):
 	return card
 
 
-## The legendary card's breathing glow (web `glow` keyframes).
-func _glow_loop(panel: Control, st: StyleBoxFlat) -> void:
+## A legendary card breathes: its panel brightens and dims.
+func _glow_loop(panel: Control) -> void:
 	var tw = panel.create_tween()
 	tw.set_loops()
-	tw.tween_property(st, "shadow_size", 26, 0.8).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(st, "shadow_size", 10, 0.8).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(panel, "self_modulate", Color(1.35, 1.3, 1.1), 0.8).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(panel, "self_modulate", Color.WHITE, 0.8).set_trans(Tween.TRANS_SINE)
 
 
-func _on_equip(it: Dictionary) -> void:
+func _on_equip(it: Dictionary, from: Control) -> void:
 	App.equip(it.slot, it.id)
 	Sfx.tap()
+	Kit.burst(from, Pal.rarity(it.rarity), 18)
 	App.toast("Equipped %s" % it.name, "good", "armory")
 	_refresh_buttons()
 
 
-func _on_pet(pet: Dictionary) -> void:
+func _on_pet(pet: Dictionary, from: Control) -> void:
 	App.set_active_pet(pet.id)
-	Sfx.tap()
+	Sfx.pet()
+	Kit.burst(from, Pal.rarity(pet.rarity), 18)
 	App.toast("%s is now following you" % pet.name, "good", "paw")
 	_refresh_buttons()
 

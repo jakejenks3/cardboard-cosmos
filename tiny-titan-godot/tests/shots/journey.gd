@@ -155,8 +155,8 @@ func run(m: Node, t: SceneTree) -> void:
 			n.close()
 	await ShotHelper.wait(tree, 0.3)
 	# Tap a check-in row.
-	var rowc = ShotHelper.find_text(main, "photos")
-	print("BODY row text ", rowc.text if rowc != null else "none")
+	var rows = ShotHelper.walk(main).filter(func(n): return n is Card and n.has_meta("checkin"))
+	print("BODY check-in rows ", rows.size())
 
 	# --- Story --------------------------------------------------------------
 	App.go("journey", "chronicle")
@@ -191,7 +191,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.7)
 	var brow = null
 	for n in ShotHelper.walk(main):
-		if n is Card and n.get("_tap") != null and n._tap.is_valid() and ShotHelper.all_text(n).contains("photo"):
+		if n is Card and n.has_meta("checkin") and n._tap.is_valid() and brow == null:
 			brow = n
 	if brow != null:
 		ShotHelper.reveal(brow)

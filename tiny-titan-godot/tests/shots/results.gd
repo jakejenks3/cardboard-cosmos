@@ -117,6 +117,22 @@ func _week(main: Node, tree: SceneTree) -> void:
 	print("CHECK body-enter: finished=%d (expect 3) overlay_gone=%s" % [_done.n, _overlay(main) == null])
 	await ShotHelper.snap(tree, "res_week_10_after_body")
 
+	# The reel in the other themes (skipped to the end): no surface may stay blue.
+	var themes = ["ember", "forest", "slate"]
+	for i in range(themes.size()):
+		App.update_settings({"theme": themes[i]})
+		await ShotHelper.frames(tree, 4)
+		App.commit_sessions([App.build_session({"discipline": "climb", "date": App.today, "climbs": [{"grade": 4 + i, "result": "send", "count": 3}, {"grade": 5 + i, "result": "flash", "count": 2}], "durationSec": 3600})], "Climb logged!")
+		ov = await _attach(main, tree)
+		await ShotHelper.wait(tree, 1.6)
+		await ShotHelper.snap(tree, "res_week_11_%s_bars" % themes[i])
+		ShotHelper.press(ShotHelper.find_button(ov, "Tap to skip"))
+		await ShotHelper.wait(tree, 0.6)
+		await ShotHelper.snap(tree, "res_week_12_%s_end" % themes[i])
+		await _close_and_check(main, tree, ov, 4 + i, "theme-" + themes[i])
+	App.update_settings({"theme": "arcade"})
+	await ShotHelper.frames(tree, 4)
+
 
 func _new(main: Node, tree: SceneTree) -> void:
 	App.commit_sessions([_lift(3, 40.0, ["Squat", "Bench Press"])], "Workout logged!")

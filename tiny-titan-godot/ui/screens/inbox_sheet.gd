@@ -3,11 +3,8 @@ extends RefCounted
 ## "From your phone": the review sheet for what the phone inbox found
 ## (app/inbox.gd). One compact card per new entry with a toggle to leave it out
 ## and, for guessed dates, a day nudge; then the lines it could not read and
-## the Import button. Also the "Paste text…" sheet and the shared
+## the Import button. Also the "Paste text" sheet and the shared
 ## check-then-review flow used by Settings and the Log picker.
-
-const DISC_ICON = {"lift": "lift", "climb": "climb", "run": "run", "ride": "ride"}
-
 
 ## `result` as emitted by PhoneInbox.checked. `before_import` runs right before importing.
 static func open(result: Dictionary) -> void:
@@ -15,58 +12,116 @@ static func open(result: Dictionary) -> void:
 	var fresh = result.get("fresh", [])
 	var ui = {"button": null, "fresh": fresh, "sheet": sheet}
 	if fresh.is_empty():
-		sheet.box.add_child(Kit.muted_para("Nothing new in your phone note.", 14))
+		var none = Kit.vbox(8)
+		var ic = Icons.rect("speech", 36)
+		ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		none.add_child(ic)
+		none.add_child(JourneyScreen.caption("Nothing new in your phone note", 15, Pal.TEXT))
+		sheet.box.add_child(none)
 	for e in fresh:
 		sheet.box.add_child(_entry_card(e, ui))
 
 	var problems = result.get("problems", [])
-	if not problems.is_empty():
-		sheet.box.add_child(Kit.h3("Could not read"))
-		var pl = Kit.vbox(4)
-		for pr in problems:
-			pl.add_child(Kit.muted_para("\"%s\": %s" % [str(pr.line), str(pr.why)], 12))
-		sheet.box.add_child(pl)
 	var already = int(result.get("already", 0))
-	if already > 0:
-		sheet.box.add_child(Kit.muted_para("%d already imported" % already, 12))
+	if not problems.is_empty() or already > 0:
+		var info = Kit.flow(6)
+		if already > 0:
+			info.add_child(_chip("check", "%d already imported" % already, Pal.PANEL2, ""))
+		for pr in problems:
+			info.add_child(_chip("warning", "\"%s\"" % str(pr.line), Pal.deep(Pal.DANGER), "Could not read: %s" % str(pr.why)))
+		sheet.box.add_child(info)
 
 	var row = Kit.hbox(8)
 	if not fresh.is_empty():
-		var imp = Kit.button("Import", "primary", InboxSheet._import.bind(ui), "lg")
+		var imp = Kit.button("Import", "good", InboxSheet._import.bind(ui), "lg")
 		imp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		imp.custom_minimum_size.y = 56
 		ui.button = imp
 		row.add_child(imp)
 		_update_button(ui)
 	var cancel = Kit.button("Cancel" if not fresh.is_empty() else "Close", "ghost", sheet.close, "lg")
 	if fresh.is_empty():
 		cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		cancel.custom_minimum_size.y = 56
 	row.add_child(cancel)
 	sheet.box.add_child(row)
 	sheet.open()
 
 
+## A small tag with an icon; the full text, if any, in the tooltip.
+static func _chip(icon: String, text: String, color: Color, tip: String) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.add_theme_stylebox_override("panel", Kit.sbox(color, 5, Pal.LINE if color == Pal.PANEL2 else null, 1 if color == Pal.PANEL2 else 0, 7, 3))
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.tooltip_text = tip
+	p.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
+	var h = Kit.hbox(4)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect(icon, 14)))
+	var shown = text if text.length() <= 40 else text.substr(0, 38) + "…"
+	h.add_child(Kit.label(shown, 12, Pal.TEXT, true))
+	p.add_child(h)
+	return p
+
+
+## One found entry: its discipline badge, the date (with a nudge for guessed
+## dates), the summary as its one line, warnings as chips, and a tick box.
 static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
-	var c = Kit.card(6, Callable(), 12)
-	var top = Kit.hbox(8)
+	var c = Kit.card(6, Callable(), 10)
 	var disc = "body" if e.kind == "body" else str(e.data.discipline)
-	top.add_child(Kit.vcenter(Icons.rect(DISC_ICON.get(disc, "scale"), 22)))
+	c.accent(Pal.disc(disc) if disc != "body" else Pal.SECOND)
+	var row = Kit.hbox(10)
+	if disc == "body":
+		var bb = PanelContainer.new()
+		bb.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		bb.add_theme_stylebox_override("panel", PixBox.make(Pal.SECOND, {"lip": 1, "lip_color": Pal.SECOND_DARK, "pad_h": 0, "pad_v": 0}))
+		bb.custom_minimum_size = Vector2(40, 42)
+		bb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		bb.add_child(Kit.center(Icons.rect("scale", 24)))
+		row.add_child(bb)
+	else:
+		row.add_child(Parts.disc_badge(disc, 40))
+	var main = Kit.vbox(4)
+	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var top = Kit.hbox(6)
 	var date_label = Kit.label(_date_text(e.date), 14, null, true)
+	if str(e.get("date_note", "")) != "":
+		date_label.tooltip_text = str(e.date_note)
+		date_label.mouse_filter = Control.MOUSE_FILTER_STOP
 	top.add_child(Kit.vcenter(date_label))
 	if str(e.get("date_note", "")) != "":
 		top.add_child(Kit.vcenter(Kit.icon_button("chevron_left", InboxSheet._nudge.bind(e, -1, date_label), "Day before", 28)))
 		top.add_child(Kit.vcenter(Kit.icon_button("chevron_right", InboxSheet._nudge.bind(e, 1, date_label), "Day after", 28)))
-	top.add_child(Kit.spacer())
-	var toggle = Kit.chip("", false, Callable(), Pal.GOOD, 12)
+	main.add_child(top)
+	main.add_child(Kit.para(str(e.summary), 13, Pal.TEXT))
+	var warns = e.get("warnings", [])
+	if not warns.is_empty():
+		var wf = Kit.flow(4)
+		for w in warns:
+			wf.add_child(_chip("warning", _short(str(w)), Pal.deep(Pal.ACCENT), str(w)))
+		main.add_child(wf)
+	row.add_child(main)
+	var toggle = Button.new()
+	toggle.focus_mode = Control.FOCUS_NONE
+	toggle.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	toggle.custom_minimum_size = Vector2(40, 42)
+	toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	toggle.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	toggle.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toggle.pressed.connect(InboxSheet._toggle.bind(e, toggle, c, ui))
-	top.add_child(Kit.vcenter(toggle))
-	c.add(top)
-	if str(e.get("date_note", "")) != "":
-		c.add(Kit.muted_para(str(e.date_note), 11))
-	c.add(Kit.para(str(e.summary), 14))
-	for w in e.get("warnings", []):
-		c.add(Kit.para(str(w), 12, Pal.ACCENT))
+	Kit.juice(toggle)
+	row.add_child(toggle)
+	c.add(row)
 	_style_toggle(e, toggle, c)
 	return c
+
+
+## The first clause of a warning, for its chip.
+static func _short(w: String) -> String:
+	var t = w.split(";")[0].split("(")[0].strip_edges()
+	return t if t != "" else w
 
 
 static func _date_text(key: String) -> String:
@@ -92,10 +147,21 @@ static func _toggle(e: Dictionary, toggle: Button, c: Card, ui: Dictionary) -> v
 	_update_button(ui)
 
 
+## The tick box: raised and green with a tick when the entry is in, sunken and
+## empty when it is left out (the card fades too).
 static func _style_toggle(e: Dictionary, toggle: Button, c: Card) -> void:
 	var on = not bool(e.get("skip", false))
-	toggle.text = "Import" if on else "Leave out"
-	Kit.style_chip(toggle, on, Pal.GOOD, 12)
+	toggle.tooltip_text = "Included: tap to leave it out" if on else "Left out: tap to include it"
+	var looks
+	if on:
+		looks = PixBox.button_set(Pal.GOOD, Pal.GOOD_DARK, 4, 4, 1, null)
+	else:
+		looks = {"normal": PixBox.well(4, 4, Pal.BORDER), "hover": PixBox.well(4, 4, Pal.ACCENT), "pressed": PixBox.well(4, 4, Pal.BORDER)}
+	for k in ["normal", "hover", "pressed"]:
+		toggle.add_theme_stylebox_override(k, looks[k])
+	toggle.add_theme_stylebox_override("hover_pressed", looks["pressed"])
+	toggle.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	toggle.icon = Icons.tex("check") if on else null
 	c.modulate.a = 1.0 if on else 0.55
 
 
@@ -155,18 +221,19 @@ static func open_pending() -> void:
 ## A sheet to paste text into (for when there is no shared note).
 static func open_paste(before_open: Callable = Callable()) -> void:
 	var sheet = Kit.sheet("Paste text")
-	sheet.box.add_child(Kit.muted_para("Paste what you jotted down, one thing per line.", 13))
 	var te = TextEdit.new()
 	te.custom_minimum_size = Vector2(0, 220)
 	te.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	te.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	te.placeholder_text = QuickLog.CHEAT_SHEET
-	te.add_theme_stylebox_override("normal", Kit.sbox(Pal.WELL, 12, Pal.LINE, 1, 12, 10))
-	te.add_theme_stylebox_override("focus", Kit.sbox(Pal.WELL, 12, Pal.ACCENT, 1, 12, 10))
+	te.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	te.tooltip_text = "One thing per line"
+	te.add_theme_stylebox_override("normal", PixBox.well(12, 10))
+	te.add_theme_stylebox_override("focus", PixBox.well(12, 10, Pal.ACCENT))
 	te.add_theme_color_override("font_color", Pal.TEXT)
 	te.add_theme_color_override("font_placeholder_color", Pal.MUTED)
 	sheet.box.add_child(te)
-	var read = Kit.button("Read it", "primary", InboxSheet._read_pasted.bind(te, sheet, before_open), "lg")
+	var read = Kit.button("Read it", "primary", InboxSheet._read_pasted.bind(te, sheet, before_open), "lg", "check")
 	read.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sheet.box.add_child(read)
 	sheet.open()

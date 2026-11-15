@@ -1,28 +1,81 @@
 class_name Charts
 extends RefCounted
-## Small hand-drawn charts (port of components/charts.tsx): one y-axis, thin
-## marks, recessive grid, direct labels, hover tooltips. Colours come from the
-## discipline colours in `Pal`.
+## Small hand-drawn charts (port of components/charts.tsx) in the pixel look:
+## the plot sits in a sunken well, bars are chunky blocks in the discipline
+## colours, lines are thick with square markers, and every colour comes from
+## `Pal` so the charts follow the theme.
 ##
-##   Charts.weekly_xp(points)                  stacked weekly XP bars + legend
+##   Charts.weekly_xp(points)                  stacked weekly XP bars + legend chips
 ##   Charts.heatmap(xp_by_date, today)          16-week training calendar
 ##   Charts.pyramid(counts, max_grade)          climbing send pyramid
 ##   Charts.line(points, color, fmt, trend)     single-series time line
+##   Charts.legend(items)                       a row of colour chips
 ##   Charts.moving_average(points, n)           centred moving average
 ##
 ## A line point is {"x": date key, "y": number}. A week point is
 ## {"week": monday key, "byDiscipline": {lift, climb, run, ride}, "total"}.
 
 const TICK = 11
-const HEAT = [Color("0a0e14"), Color("5a4a1a"), Color("9a7a22"), Color("d9ab2c"), Color("ffd766")]
-const TIP_BG = Color("0a0e14")
-const FLASH = Color("8ad46a")
+
+
+## Heat level 0..4 of the training calendar: an empty cell on the well, then
+## deeper to brighter shades of the accent.
+static func heat(level: int) -> Color:
+	match level:
+		0:
+			return Pal.WELL.lightened(0.07)
+		1:
+			return Pal.deep(Pal.ACCENT).lerp(Pal.ACCENT, 0.25)
+		2:
+			return Pal.ACCENT_DARK
+		3:
+			return Pal.ACCENT
+	return Pal.ACCENT.lightened(0.45)
+
+
+## Flashes in the send pyramid: a lighter shade of the climbing colour.
+static func flash() -> Color:
+	return Pal.CLIMB.lightened(0.45)
+
+
+## Grid lines on the well.
+static func grid() -> Color:
+	return Pal.with_alpha(Pal.MUTED, 0.16)
+
+
+## A row of small colour chips. items = [{"name": String, "color": Color}].
+static func legend(items: Array) -> Control:
+	var f = Kit.flow(6)
+	for it in items:
+		var p = PanelContainer.new()
+		p.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL2, 5, Pal.LINE, 1, 6, 2))
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var h = Kit.hbox(5)
+		var sw = ColorRect.new()
+		sw.color = it.color
+		sw.custom_minimum_size = Vector2(10, 10)
+		sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(sw)
+		h.add_child(Kit.label(it.name, 11, Pal.TEXT, true))
+		p.add_child(h)
+		f.add_child(p)
+	return f
 
 
 static func weekly_xp(points: Array) -> Control:
 	var c = WeeklyXpChart.new()
 	c.setup(points)
-	return c
+	if c.used.size() < 2:
+		return c
+	var v = Kit.vbox(8)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(c)
+	var items = []
+	for d in c.used:
+		items.append({"name": TT.DISCIPLINE_META[d].name, "color": Pal.disc(d)})
+	v.add_child(legend(items))
+	return v
 
 
 static func heatmap(xp_by_date: Dictionary, today: String, weeks: int = 16) -> Control:

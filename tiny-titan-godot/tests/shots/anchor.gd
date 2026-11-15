@@ -73,7 +73,7 @@ func run(m: Node, t: SceneTree) -> void:
 	# Bring up Bench Press (pre-filled from history), then add sets with repeated clicks.
 	var l = ShotHelper.find_text(main, "Bench Press")
 	var n = l
-	while n != null and not (n is Card):
+	while n != null and not (n is Card or n is BaseButton):
 		n = n.get_parent()
 	await ShotHelper.click(tree, n)
 	await ShotHelper.frames(tree, 6)

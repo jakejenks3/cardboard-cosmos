@@ -214,7 +214,11 @@ func run(m: Node, t: SceneTree) -> void:
 	# --- Settings section --------------------------------------------------------------
 	SettingsSheet.open()
 	await ShotHelper.wait(tree, 0.5)
-	var head = ShotHelper.find_text(_sheet(), "Phone inbox")
+	var head = null
+	for n in ShotHelper.walk(_sheet()):
+		if n is Control and n.has_meta("inbox_section"):
+			head = n
+			break
 	check(head != null, "Settings has a Phone inbox section")
 	_sheet()._scroll.scroll_vertical = int(head.get_global_rect().position.y - _sheet()._scroll.get_global_rect().position.y) - 8
 	await ShotHelper.frames(tree, 3)

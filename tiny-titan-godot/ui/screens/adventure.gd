@@ -2,8 +2,14 @@ class_name AdventureScreen
 extends UiScreen
 ## Adventure tab (port of screens/Adventure.tsx): the boss campaign, daily and
 ## weekly quests, and the trophy cabinet. Sub-tab in App.adventure_tab.
+##
+## Built to be looked at: the current boss is the star, the zones are grids of
+## boss portraits, trophies are a grid of tiles. Explanations live in tooltips
+## and details in a sheet opened by tapping a tile.
 
 const TIER_ICON = {"bronze": "medal", "silver": "medal", "gold": "medal", "platinum": "gem"}
+const TROPHY_COLS = 3
+const BOSS_COLS = 4
 
 ## Trophy group filter: "all" or an Achievements.ACH_GROUPS id.
 var _filter: String = "all"
@@ -36,6 +42,78 @@ func build() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Small pieces
+# ---------------------------------------------------------------------------
+
+## A raised coloured pill: optional icon + bold text. With `tip` it shows a tooltip.
+static func pill(icon: String, text: String, color: Color, tip: String = "", fg = null, font_px: int = 12) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 7, "pad_v": 3}))
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
+	p.tooltip_text = tip
+	var h = Kit.hbox(4)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon != "":
+		h.add_child(Kit.vcenter(Icons.rect(icon, 16)))
+	if text != "":
+		h.add_child(Kit.vcenter(Kit.label(text, font_px, Pal.INK if fg == null else fg, true)))
+	p.add_child(h)
+	return p
+
+
+## A pixel-font caption that is as big as fits in `width` (scale 4 down to 1).
+static func big_number(text: String, color: Color, width: int, max_scale: int = 4) -> TextureRect:
+	var w = PixelFont.measure(text).x
+	var sc = max_scale
+	while sc > 1 and w * sc > width:
+		sc -= 1
+	var r = PixelFont.rect(text, sc, color)
+	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return r
+
+
+## Let clicks on a tile's contents reach the tappable card around them.
+static func passthrough(n: Node) -> void:
+	for c in n.get_children():
+		if c is Control and not (c is BaseButton):
+			c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		passthrough(c)
+
+
+## A thick HP bar with the numbers written on it in the pixel font.
+static func hp_bar(hp_left: float, hp_max: float, height: int = 22, tip: String = "") -> Control:
+	var holder = MarginContainer.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
+	holder.tooltip_text = tip
+	holder.add_child(Kit.bar(hp_left / maxf(1.0, hp_max), Pal.HP, height))
+	var cap = PixelFont.rect("%s / %s" % [Xp.fmt_int(TTUtil.jsround(hp_left)), Xp.fmt_int(TTUtil.jsround(hp_max))], 2 if height >= 18 else 1, Color.WHITE)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cc = Kit.center(cap)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(cc)
+	return holder
+
+
+static func weak_pill(d: String) -> Control:
+	var tip = "Weak to %s: those sessions hit for ×%s" % [str(TT.DISCIPLINE_META[d].name).to_lower(), TTUtil.num_str(Campaign.WEAK_MULT)]
+	return pill(d, "×%s" % TTUtil.num_str(Campaign.WEAK_MULT), Pal.disc(d), tip, Color.WHITE, 13)
+
+
+## The reward chips of a boss: XP in gold, its unique gear in its rarity colour.
+static func reward_pills(boss: Dictionary) -> Array:
+	var out = [pill("star", "+%s" % Xp.fmt_int(boss.xp), Pal.ACCENT, "Hero XP for the knockout", null, 13)]
+	if boss.get("rewardItem") != null:
+		var it = Items.by_id(boss.rewardItem)
+		if it != null:
+			out.append(pill("gift", it.name, Pal.rarity(it.rarity), "Drops unique gear: %s" % it.name, null, 12))
+	return out
+
+
+# ---------------------------------------------------------------------------
 # Campaign
 # ---------------------------------------------------------------------------
 
@@ -47,88 +125,67 @@ func _campaign(state: Dictionary) -> void:
 	var defeated = c.defeated.size()
 	var echo = Campaign.is_echo(index)
 	var zones = Campaign.zones()
-	var zone = zones[int(boss.zone)]
-	var zc = Pal.hex(zone.color)
 	var all_bosses = Campaign.bosses()
 
-	# --- the current boss ------------------------------------------------------
-	var card = Kit.card(6, Callable(), 16)
-	card.tint(Pal.PANEL.lerp(zc, 0.16), zc)
-	var zl = Kit.label(("Endless Trials" if echo else "Zone %d · %s" % [int(boss.zone) + 1, zone.name]).to_upper(), 11, zc, true)
+	# --- the current boss: the star of the screen ------------------------------
+	var card = Kit.card(8, Callable(), 16)
+	card.accent(Pal.HP, true)
+	var zl = Kit.label(("Endless Trials" if echo else "Zone %d · %s" % [int(boss.zone) + 1, zones[int(boss.zone)].name]).to_upper(), 11, Pal.with_alpha(Pal.TEXT, 0.7), true)
 	zl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	zl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add(zl)
 	var bv = BossView.new()
-	bv.setup(boss.id, 132.0, true)
+	bv.setup(boss.id, 150.0, true)
 	bv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	card.add(bv)
 	var name_up = str(boss.name).to_upper()
-	if PixelFont.measure(name_up).x * 2 <= 360:
-		var t = PixelFont.rect(name_up, 2, Pal.TEXT)
-		t.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		card.add(Kit.pad(t, 0, 4, 0, 0))
+	if PixelFont.measure(name_up).x * 2 <= 370:
+		card.add(AdventureScreen.big_number(name_up, Pal.TEXT, 370, 3))
 	else:
-		var tl = Kit.para(boss.name, 17, null, true)
+		var tl = Kit.para(boss.name, 18, null, true)
 		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		card.add(tl)
-	var ep = Kit.muted_para(boss.epithet, 13)
+	var ep = Kit.para(boss.epithet, 13, Pal.with_alpha(Pal.TEXT, 0.65))
 	ep.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add(ep)
-	card.add(Kit.pad(Kit.bar(hp_left / maxf(1.0, float(boss.hp)), Pal.HP, 14), 0, 4, 0, 2))
-	var meta = Kit.hbox(8)
-	var hp_row = Kit.hbox(5)
-	hp_row.add_child(Icons.rect("heart", 14))
-	hp_row.add_child(Kit.label("%s / %s HP" % [Xp.fmt_int(hp_left), Xp.fmt_int(boss.hp)], 13))
-	meta.add_child(hp_row)
-	meta.add_child(Kit.spacer())
+	var how = "Every XP you earn from a session deals 1 damage.\nTrain its weakness for ×%s. Overkill carries over." % TTUtil.num_str(Campaign.WEAK_MULT)
+	card.add(Kit.pad(AdventureScreen.hp_bar(hp_left, float(boss.hp), 22, how), 0, 2, 0, 2))
+	var chips = Kit.hbox(8)
+	chips.alignment = BoxContainer.ALIGNMENT_CENTER
 	var weak = boss.get("weak")
 	if weak != null:
-		meta.add_child(_weak_tag(weak))
-	else:
-		meta.add_child(Kit.muted("No weakness", 13))
-	card.add(meta)
-	var reward = Kit.flow(5)
-	reward.alignment = FlowContainer.ALIGNMENT_CENTER
-	reward.add_child(Kit.muted("Reward:", 13))
-	reward.add_child(Kit.label("+%s XP" % Xp.fmt_int(boss.xp), 13, Pal.ACCENT, true))
-	if boss.get("rewardItem") != null:
-		var it = Items.by_id(boss.rewardItem)
-		if it != null:
-			reward.add_child(Kit.muted("·", 13))
-			reward.add_child(Icons.rect("gift", 14))
-			reward.add_child(Kit.label(it.name, 13, Pal.ACCENT, true))
-	card.add(reward)
+		chips.add_child(AdventureScreen.weak_pill(weak))
+	for p in AdventureScreen.reward_pills(boss):
+		chips.add_child(p)
+	card.add(chips)
 	add_child(card)
 
-	# --- tiles ------------------------------------------------------------------
-	var tiles = Kit.hbox(8)
-	tiles.add_child(Kit.stat("Bosses down", "%d/%d" % [mini(defeated, all_bosses.size()), all_bosses.size()]))
-	tiles.add_child(Kit.stat("Total damage", Xp.fmt_int(c.totalDamage), "", Pal.ACCENT))
+	# --- three numbers ----------------------------------------------------------
+	var tiles = Kit.grid(3, 8)
+	tiles.add_child(_stat_tile("%d/%d" % [mini(defeated, all_bosses.size()), all_bosses.size()], "BOSSES", Pal.TEXT, "skull"))
+	tiles.add_child(_stat_tile(Xp.fmt_int(c.totalDamage), "DAMAGE", Pal.ACCENT, "sword"))
 	if echo:
-		tiles.add_child(Kit.stat("Echoes", str(defeated - all_bosses.size())))
+		tiles.add_child(_stat_tile(str(defeated - all_bosses.size()), "ECHOES", Pal.TEXT, "repeat"))
 	else:
-		tiles.add_child(Kit.stat("Zone", "%d/%d" % [int(boss.zone) + 1, zones.size()]))
+		tiles.add_child(_stat_tile("%d/%d" % [int(boss.zone) + 1, zones.size()], "ZONE", Pal.TEXT, "map"))
 	add_child(tiles)
-	var note = Kit.muted_para("Every XP you earn from a session deals 1 damage. Train a boss's weakness for ×%s. Overkill carries over." % TTUtil.num_str(Campaign.WEAK_MULT), 12)
-	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(note)
 
 	# --- zones ------------------------------------------------------------------
+	add_child(Kit.section_title("Zones"))
 	for zi in range(zones.size()):
 		add_child(_zone_card(zi, zones[zi], c))
 
 
-func _weak_tag(d: String) -> Control:
-	var p = PanelContainer.new()
-	p.add_theme_stylebox_override("panel", Kit.sbox(Pal.disc(d), 7, null, 0, 7, 2))
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var h = Kit.hbox(4)
-	h.add_child(Kit.label("Weak to", 11, Color.WHITE, true))
-	h.add_child(Icons.rect(d, 14))
-	h.add_child(Kit.label("%s ×%s" % [TT.DISCIPLINE_META[d].name, TTUtil.num_str(Campaign.WEAK_MULT)], 11, Color.WHITE, true))
-	p.add_child(h)
-	return p
+## A tile with a small icon, one big pixel number and a tiny caption.
+func _stat_tile(value: String, caption: String, color: Color, icon: String) -> Control:
+	var t = Kit.card(4, Callable(), 10)
+	var top = Kit.hbox(4)
+	top.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.add_child(Kit.vcenter(Icons.rect(icon, 14)))
+	top.add_child(Kit.vcenter(Kit.label(caption, 11, Pal.MUTED, true)))
+	t.add(top)
+	t.add(AdventureScreen.big_number(value, color, 104, 3))
+	return t
 
 
 func _zone_card(zi: int, z: Dictionary, c: Dictionary) -> Control:
@@ -137,91 +194,125 @@ func _zone_card(zi: int, z: Dictionary, c: Dictionary) -> Control:
 	var reached = index >= int(list[0].index)
 	var zc = Pal.hex(z.color)
 
-	var panel = PanelContainer.new()
-	var st = Kit.sbox(Pal.PANEL, 14, Pal.LINE, 1, 12, 12)
-	st.border_width_left = 4
-	st.border_color = zc if reached else Pal.LINE
-	st.content_margin_left = 14
-	panel.add_theme_stylebox_override("panel", st)
+	var card = Kit.card(10, Callable(), 12)
 	if not reached:
-		panel.modulate.a = 0.6
-	var v = Kit.vbox(4)
-	panel.add_child(v)
+		card.modulate.a = 0.6
 
 	var head = Kit.hbox(10)
-	var hl = Kit.vbox(2)
-	hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hl.add_child(Kit.para("%d. %s" % [zi + 1, z.name], 16, null, true))
-	hl.add_child(Kit.muted_para(z.blurb if reached else "Uncharted. Keep going.", 11))
-	head.add_child(hl)
+	head.mouse_filter = Control.MOUSE_FILTER_STOP
+	head.tooltip_text = z.blurb if reached else "Uncharted. Keep going."
+	var badge = PanelContainer.new()
+	badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bc = zc if reached else Pal.PANEL2
+	badge.add_theme_stylebox_override("panel", PixBox.make(bc, {"lip": 1, "lip_color": bc.darkened(0.45), "pad_h": 7, "pad_v": 4}))
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.add_child(PixelFont.rect(str(zi + 1), 2, Color.WHITE))
+	head.add_child(badge)
+	head.add_child(Kit.vcenter(Kit.clip(z.name if reached else "???", 16, null, true)))
 	var pips = Kit.hbox(4)
 	pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for x in list:
-		var on = int(x.index) < index
+		var bi = int(x.index)
 		var pip = Panel.new()
-		pip.custom_minimum_size = Vector2(10, 10)
+		pip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		pip.custom_minimum_size = Vector2(14, 16)
 		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pip.add_theme_stylebox_override("panel", Kit.sbox(zc if on else Pal.WELL, 3, zc if on else Pal.LINE, 1, 0, 0))
+		if bi < index:
+			pip.add_theme_stylebox_override("panel", PixBox.make(zc, {"lip": 1, "lip_color": zc.darkened(0.45), "pad_h": 0, "pad_v": 0}))
+		elif bi == index:
+			pip.add_theme_stylebox_override("panel", PixBox.make(Pal.HP, {"lip": 1, "lip_color": Pal.HP.darkened(0.45), "pad_h": 0, "pad_v": 0}))
+		else:
+			pip.add_theme_stylebox_override("panel", PixBox.well(0, 0, null))
 		pips.add_child(pip)
 	head.add_child(pips)
-	v.add_child(Kit.pad(head, 0, 0, 0, 4))
+	card.add(head)
 
+	var grid = Kit.grid(BOSS_COLS, 6)
 	for x in list:
-		var b = x.boss
 		var bi = int(x.index)
 		var status = "defeated" if bi < index else ("current" if bi == index else "locked")
-		var known = status != "locked"
-		var row = Kit.hbox(10)
-		var bv = BossView.new()
-		bv.setup(b.id, 44.0, false, not known)
-		bv.set_dim(status == "defeated")
-		row.add_child(bv)
-		var main = Kit.vbox(2)
-		main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var nrow = Kit.hbox(4)
-		if b.zoneBoss:
-			var crown = Icons.rect("crown", 14)
-			crown.tooltip_text = "Zone boss"
-			nrow.add_child(crown)
-		nrow.add_child(Kit.clip(b.name if known else "???", 14, Pal.TEXT if known else Pal.MUTED, true))
-		main.add_child(nrow)
-		if status == "current":
-			var hp = maxf(0.0, float(b.hp) - float(c.damage))
-			main.add_child(Kit.pad(Kit.bar(hp / maxf(1.0, float(b.hp)), Pal.HP, 9), 0, 2, 0, 1))
-			main.add_child(Kit.muted("%s / %s HP" % [Xp.fmt_int(hp), Xp.fmt_int(b.hp)], 11))
-		elif status == "defeated":
+		grid.add_child(_boss_tile(x.boss, bi, status))
+	card.add(grid)
+	return card
+
+
+func _boss_tile(b: Dictionary, bi: int, status: String) -> Control:
+	var known = status != "locked"
+	var tile = Kit.card(2, AdventureScreen.open_boss.bind(bi), 6)
+	if status == "current":
+		tile.accent(Pal.HP, true)
+	elif status == "defeated":
+		tile.tint(Pal.PANEL2)
+	var stack = MarginContainer.new()
+	var bv = BossView.new()
+	bv.setup(b.id, 54.0, status == "current", not known)
+	bv.set_dim(status == "defeated")
+	stack.add_child(Kit.center(bv))
+	var marks = Kit.hbox(0)
+	if b.zoneBoss:
+		var crown = Icons.rect("crown", 16)
+		crown.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		marks.add_child(crown)
+	marks.add_child(Kit.spacer())
+	if status == "defeated":
+		var ck = Icons.rect("check", 18)
+		ck.size_flags_vertical = Control.SIZE_SHRINK_END
+		marks.add_child(ck)
+	stack.add_child(marks)
+	tile.add(stack)
+	if status == "current":
+		var hp = maxf(0.0, float(b.hp) - float(App.state.campaign.damage))
+		tile.add(Kit.bar(hp / maxf(1.0, float(b.hp)), Pal.HP, 4))
+	else:
+		var n = Kit.clip(b.name if known else "???", 11, Pal.TEXT if known else Pal.MUTED, true)
+		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tile.add(n)
+	tile.tooltip_text = b.name if known else "Unknown boss"
+	AdventureScreen.passthrough(tile.box)
+	return tile
+
+
+## The detail sheet of one boss of the campaign.
+static func open_boss(bi: int) -> void:
+	var c = App.state.campaign
+	var index = int(c.index)
+	var b = Campaign.boss_at(bi)
+	var status = "defeated" if bi < index else ("current" if bi == index else "locked")
+	var known = status != "locked"
+	var s = Kit.sheet(b.name if known else "Unknown boss")
+	var bv = BossView.new()
+	bv.setup(b.id, 120.0, status == "current", not known)
+	bv.set_dim(status == "defeated")
+	bv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	s.box.add_child(bv)
+	if known:
+		var ep = Kit.muted_para(b.epithet, 14)
+		ep.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		s.box.add_child(ep)
+	var chips = Kit.flow(8)
+	chips.alignment = FlowContainer.ALIGNMENT_CENTER
+	match status:
+		"defeated":
 			var at = ""
 			if c.defeated.has(b.id):
 				at = Dates.format_date(c.defeated[b.id].get("at", ""))
-			main.add_child(Kit.muted("Defeated %s" % at, 11))
-		else:
-			main.add_child(Kit.muted("%s HP" % Xp.fmt_int(b.hp), 11))
-		row.add_child(main)
-		var right = Kit.hbox(6)
-		right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		if known and b.get("weak") != null:
-			var wi = Icons.rect(b.weak, 16)
-			wi.tooltip_text = "Weak to %s" % TT.DISCIPLINE_META[b.weak].name
-			wi.mouse_filter = Control.MOUSE_FILTER_PASS
-			right.add_child(wi)
-		if b.get("rewardItem") != null:
-			var gi = Icons.rect("gift", 16)
-			gi.tooltip_text = "Drops unique gear"
-			gi.mouse_filter = Control.MOUSE_FILTER_PASS
-			right.add_child(gi)
-		if status == "defeated":
-			right.add_child(Kit.label("✓", 16, Pal.GOOD, true))
-		row.add_child(right)
-		if status == "current":
-			var hi = PanelContainer.new()
-			hi.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(Pal.ACCENT, 0.07), 10, Pal.with_alpha(Pal.ACCENT, 0.35), 1, 4, 6))
-			hi.add_child(row)
-			v.add_child(hi)
-		else:
-			v.add_child(Kit.divider())
-			v.add_child(Kit.pad(row, 4, 2, 4, 2))
-	return panel
+			chips.add_child(AdventureScreen.pill("check", ("Defeated " + at).strip_edges(), Pal.GOOD))
+		"current":
+			chips.add_child(AdventureScreen.pill("sword", "Fighting now", Pal.HP, "", Color.WHITE))
+		_:
+			chips.add_child(AdventureScreen.pill("lock", "%s HP" % Xp.fmt_int(b.hp), Pal.PANEL2, "", Pal.TEXT))
+	if b.get("zoneBoss", false):
+		chips.add_child(AdventureScreen.pill("crown", "Zone boss", Pal.ACCENT2))
+	if known and b.get("weak") != null:
+		chips.add_child(AdventureScreen.weak_pill(b.weak))
+	for p in AdventureScreen.reward_pills(b):
+		chips.add_child(p)
+	s.box.add_child(chips)
+	if status == "current":
+		s.box.add_child(AdventureScreen.hp_bar(maxf(0.0, float(b.hp) - float(c.damage)), float(b.hp), 22))
+	s.open()
 
 
 # ---------------------------------------------------------------------------
@@ -229,13 +320,55 @@ func _zone_card(zi: int, z: Dictionary, c: Dictionary) -> Control:
 # ---------------------------------------------------------------------------
 
 func _quests(q: Dictionary) -> void:
-	add_child(Kit.section_title("Daily", Kit.muted("Resets at midnight", 12)))
-	add_child(Parts.quest_list(q.daily))
 	var week_end = Dates.add_days(Dates.week_key(App.today), 6)
 	var days_left = Dates.days_between(App.today, week_end)
-	var hint = "Last day!" if days_left == 0 else "%d day%s left" % [days_left, "" if days_left == 1 else "s"]
-	add_child(Kit.section_title("Weekly", Kit.muted(hint, 12)))
-	add_child(Parts.quest_list(q.weekly))
+
+	var top = Kit.grid(2, 8)
+	top.add_child(_quest_ring("DAILY", q.daily, "sun"))
+	top.add_child(_quest_ring("WEEKLY", q.weekly, "calendar"))
+	add_child(top)
+
+	add_child(Kit.section_title("Daily", AdventureScreen.pill("clock", "Midnight", Pal.PANEL2, "Daily quests reset at midnight", Pal.TEXT, 11)))
+	add_child(_quest_list(q.daily))
+	var hint = "Last day!" if days_left == 0 else "%dd left" % days_left
+	add_child(Kit.section_title("Weekly", AdventureScreen.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly quests reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
+	add_child(_quest_list(q.weekly))
+
+
+## How many quests of a kind are done, as a ring with the count under it.
+func _quest_ring(caption: String, list: Array, icon: String) -> Control:
+	var done = 0
+	for x in list:
+		if x.done:
+			done += 1
+	var all_done = done == list.size() and not list.is_empty()
+	var t = Kit.card(4, Callable(), 10)
+	if all_done:
+		t.accent(Pal.GOOD)
+	var row = Kit.hbox(12)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var ring = Ring.new()
+	ring.setup(float(done) / float(maxi(1, list.size())), Pal.GOOD if all_done else Pal.ACCENT, 52.0, Icons.rect(icon, 24))
+	row.add_child(ring)
+	var v = Kit.vbox(2)
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	v.add_child(PixelFont.rect("%d/%d" % [done, list.size()], 3, Pal.GOOD if all_done else Pal.TEXT))
+	v.add_child(Kit.label(caption, 11, Pal.MUTED, true))
+	row.add_child(v)
+	t.add(row)
+	return t
+
+
+## The shared compact quest rows, with the description and exact progress as a tooltip.
+func _quest_list(list: Array) -> Control:
+	var box = Parts.quest_list(list, true)
+	var settings = App.settings()
+	var rows = box.get_children()
+	for i in range(mini(rows.size(), list.size())):
+		var r = rows[i]
+		if r is Control:
+			r.tooltip_text = "%s\n%s" % [Icons.strip_emoji(list[i].desc), Parts.quest_progress_text(list[i], settings)]
+	return box
 
 
 # ---------------------------------------------------------------------------
@@ -255,28 +388,37 @@ func _trophies(state: Dictionary) -> void:
 		if state.achievements.has(a.id):
 			tiers[t][0] += 1
 
-	# --- summary --------------------------------------------------------------
-	var sum = Kit.card(8)
-	sum.tint(Color("2e2616"), Color("7a5a10"))
-	var score = Kit.hbox(10)
-	score.add_child(PixelFont.rect(Xp.fmt_int(points), 3, Pal.ACCENT))
-	var of = Kit.muted("trophy points of %s" % Xp.fmt_int(max_points), 13)
-	of.size_flags_vertical = Control.SIZE_SHRINK_END
-	score.add_child(of)
-	sum.add(score)
-	var tf = Kit.flow(6)
+	# --- the score ----------------------------------------------------------------
+	var sum = Kit.card(10, Callable(), 14)
+	sum.accent(Pal.ACCENT, true)
+	var row = Kit.hbox(12)
+	row.add_child(Kit.vcenter(Icons.rect("trophy", 40)))
+	var score = Kit.vbox(4)
+	score.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	score.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var pts = PixelFont.rect(Xp.fmt_int(points), 4, Pal.ACCENT)
+	pts.tooltip_text = "Trophy points: %s of %s" % [Xp.fmt_int(points), Xp.fmt_int(max_points)]
+	pts.mouse_filter = Control.MOUSE_FILTER_STOP
+	score.add_child(pts)
+	score.add_child(Kit.label("TROPHY POINTS", 11, Pal.with_alpha(Pal.TEXT, 0.7), true))
+	row.add_child(score)
+	var count = Kit.label("%d/%d" % [unlocked, all.size()], 12, null, true)
+	count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	count.custom_minimum_size = Vector2(50, 18)
+	var ring = Ring.new()
+	ring.setup(float(unlocked) / float(maxi(1, all.size())), Pal.ACCENT, 66.0, count)
+	ring.tooltip_text = "%d of %d trophies earned" % [unlocked, all.size()]
+	ring.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.add_child(Kit.vcenter(ring))
+	sum.add(row)
+	var tf = Kit.hbox(6)
 	for t in tiers:
 		var tc = Pal.hex(Achievements.TIER_COLOR[t])
-		var p = PanelContainer.new()
-		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_theme_stylebox_override("panel", Kit.sbox(Color(0, 0, 0, 0), 8, tc, 1, 8, 3))
-		var h = Kit.hbox(4)
-		h.add_child(Icons.rect(TIER_ICON[t], 16, tc))
-		h.add_child(Kit.label("%d/%d" % [tiers[t][0], tiers[t][1]], 12, null, true))
-		p.add_child(h)
-		tf.add_child(p)
+		var tp = AdventureScreen.pill(TIER_ICON[t], "%d/%d" % [tiers[t][0], tiers[t][1]], tc, "%s: %d of %d" % [t.capitalize(), tiers[t][0], tiers[t][1]], null, 13)
+		tp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tf.add_child(tp)
 	sum.add(tf)
-	sum.add(Kit.muted("%d of %d trophies earned" % [unlocked, all.size()], 13))
 	add_child(sum)
 
 	# --- filter chips -----------------------------------------------------------
@@ -289,7 +431,7 @@ func _trophies(state: Dictionary) -> void:
 		chips.add_child(ch)
 	add_child(chips)
 
-	# --- list -------------------------------------------------------------------
+	# --- the cabinet ------------------------------------------------------------
 	var rows = []
 	for a in all:
 		if _filter != "all" and a.group != _filter:
@@ -303,14 +445,24 @@ func _trophies(state: Dictionary) -> void:
 	# In progress first (closest to done on top), then earned (newest first).
 	TTUtil.stable_sort(rows, func(x, y): return AdventureScreen._trophy_less(x, y))
 
-	var list = Kit.card(0, Callable(), 10)
 	if rows.is_empty():
-		list.add(Kit.muted_para("Nothing here yet.", 13))
-	for i in range(rows.size()):
-		if i > 0:
-			list.add(Kit.divider())
-		list.add(_trophy_row(rows[i]))
-	add_child(list)
+		add_child(Kit.empty("trophy", "Nothing here yet."))
+		return
+	var todo = rows.filter(func(x): return x.u == null)
+	var got = rows.filter(func(x): return x.u != null)
+	if not todo.is_empty():
+		add_child(Kit.section_title("Next up"))
+		add_child(_trophy_grid(todo))
+	if not got.is_empty():
+		add_child(Kit.section_title("Earned", AdventureScreen.pill("check", str(got.size()), Pal.GOOD)))
+		add_child(_trophy_grid(got))
+
+
+func _trophy_grid(rows: Array) -> Control:
+	var grid = Kit.grid(TROPHY_COLS, 8)
+	for r in rows:
+		grid.add_child(_trophy_tile(r))
+	return grid
 
 
 static func _trophy_less(x: Dictionary, y: Dictionary) -> bool:
@@ -323,46 +475,92 @@ static func _trophy_less(x: Dictionary, y: Dictionary) -> bool:
 	return str(x.u.get("at", "")) > str(y.u.get("at", ""))
 
 
-func _trophy_row(r: Dictionary) -> Control:
+## The trophy's icon on a plate: tier-coloured and raised when earned, a dark
+## sunken well when not.
+static func trophy_plate(r: Dictionary, px: int) -> Control:
+	var a = r.a
+	var earned = r.u != null
+	var tc = Pal.hex(Achievements.TIER_COLOR[Achievements.tier_of(a)])
+	var hidden = not earned and a.get("secret", false)
+	var plate = PanelContainer.new()
+	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.custom_minimum_size = Vector2(px, px)
+	plate.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	if earned:
+		plate.add_theme_stylebox_override("panel", PixBox.make(tc, {"lip": 1, "lip_color": tc.darkened(0.5), "pad_h": 0, "pad_v": 0}))
+	else:
+		plate.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": Pal.with_alpha(tc, 0.55), "lip": 0, "inset": true, "pad_h": 0, "pad_v": 0}))
+	var icon_name = "question" if hidden else Icons.for_emoji(a.icon)
+	var ic = Icons.rect(icon_name, int(px * 0.6), null if earned else Pal.MUTED)
+	plate.add_child(Kit.center(ic))
+	var stack = MarginContainer.new()
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	stack.add_child(plate)
+	if earned:
+		var marks = Kit.hbox(0)
+		marks.add_child(Kit.spacer())
+		var ck = Icons.rect("check", 16 if px < 70 else 22)
+		ck.size_flags_vertical = Control.SIZE_SHRINK_END
+		marks.add_child(ck)
+		stack.add_child(Kit.pad(marks, 0, 0, -6, -4))
+	return stack
+
+
+func _trophy_tile(r: Dictionary) -> Control:
 	var a = r.a
 	var u = r.u
 	var p = r.p
+	var tc = Pal.hex(Achievements.TIER_COLOR[Achievements.tier_of(a)])
+	var hidden = u == null and a.get("secret", false)
+	var tile = Kit.card(5, AdventureScreen.open_trophy.bind(r), 8)
+	if u != null:
+		tile.accent(tc)
+	tile.add(Kit.pad(AdventureScreen.trophy_plate(r, 52), 0, 2, 0, 0))
+	var n = Kit.clip("Secret trophy" if hidden else Icons.strip_emoji(a.name), 12, tc if u != null else Pal.TEXT, true)
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tile.add(n)
+	if u == null:
+		if p != null and not hidden:
+			var col = Pal.disc(a.group) if TT.DISCIPLINE_META.has(a.group) else Pal.ACCENT
+			tile.add(Kit.bar(r.ratio, col, 5))
+		else:
+			tile.add(Kit.bar(0.0, Pal.ACCENT, 5))
+	var tip = "Keep playing to discover it." if hidden else Icons.strip_emoji(a.desc)
+	if p != null and not hidden:
+		tip += "\n" + Fmt.fmt_progress(p, App.settings())
+	tile.tooltip_text = tip
+	AdventureScreen.passthrough(tile.box)
+	return tile
+
+
+## The detail sheet of one trophy.
+static func open_trophy(r: Dictionary) -> void:
+	var a = r.a
+	var u = r.u
 	var tier = Achievements.tier_of(a)
 	var tc = Pal.hex(Achievements.TIER_COLOR[tier])
 	var hidden = u == null and a.get("secret", false)
-	var row = Kit.hbox(10)
-	if u == null:
-		row.modulate.a = 0.72
-
-	var ic = PanelContainer.new()
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ic.custom_minimum_size = Vector2(38, 38)
-	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ic.add_theme_stylebox_override("panel", Kit.sbox(Pal.WELL, 10, tc, 2, 0, 0))
-	var icon_name = "question" if hidden else Icons.for_emoji(a.icon)
-	ic.add_child(Icons.rect(icon_name, 22))
-	row.add_child(ic)
-
-	var main = Kit.vbox(2)
-	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	main.add_child(Kit.para("Secret trophy" if hidden else Icons.strip_emoji(a.name), 14, null, true))
-	main.add_child(Kit.muted_para("Keep playing to discover it." if hidden else Icons.strip_emoji(a.desc), 12))
-	if p != null and not hidden:
-		var col = Pal.disc(a.group) if TT.DISCIPLINE_META.has(a.group) else null
-		main.add_child(Parts.progress_line(p, col))
-	row.add_child(main)
-
-	var right = Kit.vbox(2)
-	right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var xp = Kit.label("+%s" % Xp.fmt_int(a.xp), 14, Pal.ACCENT, true)
-	xp.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	right.add_child(xp)
-	var sub = Kit.label(Dates.format_date(u.get("at", "")) if u != null else tier, 11, tc, u != null)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	right.add_child(sub)
-	row.add_child(right)
-	return Kit.pad(row, 2, 8, 2, 8)
+	var s = Kit.sheet("Secret trophy" if hidden else Icons.strip_emoji(a.name))
+	s.box.add_child(AdventureScreen.trophy_plate(r, 88))
+	var d = Kit.muted_para("Keep playing to discover it." if hidden else Icons.strip_emoji(a.desc), 15)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	s.box.add_child(d)
+	var chips = Kit.flow(8)
+	chips.alignment = FlowContainer.ALIGNMENT_CENTER
+	chips.add_child(AdventureScreen.pill(TIER_ICON[tier], tier.capitalize(), tc))
+	chips.add_child(AdventureScreen.pill("star", "+%s" % Xp.fmt_int(a.xp), Pal.ACCENT))
+	if u != null:
+		chips.add_child(AdventureScreen.pill("check", Dates.format_date(u.get("at", "")), Pal.GOOD))
+	s.box.add_child(chips)
+	if r.p != null and not hidden:
+		var col = Pal.disc(a.group) if TT.DISCIPLINE_META.has(a.group) else Pal.ACCENT
+		s.box.add_child(Kit.bar(r.ratio, col, 12))
+		var pl = Kit.label(Fmt.fmt_progress(r.p, App.settings()), 13, Pal.MUTED, true)
+		pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		s.box.add_child(pl)
+	s.open()
 
 
 func _set_filter(f: String) -> void:

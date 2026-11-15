@@ -45,10 +45,17 @@ func card_of(text: String):
 			break
 	if l == null:
 		l = ShotHelper.find_text(main, text)
+	# A tappable Card, or a raised key (Button) with the text on it.
 	var p = l
-	while p != null and not (p is Card):
+	while p != null and not (p is Card or p is BaseButton):
 		p = p.get_parent()
 	return p
+
+
+## Screenshot after the cards have finished rising in.
+func shot(shot_name: String) -> void:
+	await ShotHelper.wait(tree, 0.7)
+	await shot(shot_name)
 
 
 func tap(text: String) -> void:
@@ -173,11 +180,11 @@ func draft_text(ex: Dictionary) -> String:
 func _year() -> void:
 	App.open_log(null)
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_01_picker")
+	await shot("log_01_picker")
 
 	# --- 1. lifting: pick Bench Press, prefilled from last time -------------
 	await tap("Lifting")
-	await ShotHelper.snap(tree, "log_02_lift_templates")
+	await shot("log_02_lift_templates")
 	var last_bench = LiftHistory.last_performances(App.sessions())["bench press"]
 	print("last bench: ", sets_text(last_bench.sets))
 	var lift = screen().form().lift
@@ -190,12 +197,12 @@ func _year() -> void:
 	ShotHelper.press(ShotHelper.find_button(main, "+ Set"))
 	await ShotHelper.frames(tree, 4)
 	ShotHelper.scroll_main(main, 0)
-	await ShotHelper.snap(tree, "log_03_lift_trends")
+	await shot("log_03_lift_trends")
 	print("after bump + set: ", draft_text(lift.exercises[0]))
 	measure("bench 4 sets")
 	print(ShotHelper.all_text(screen()).replace("\n", " | ").substr(0, 900))
 	ShotHelper.scroll_main(main, 520)
-	await ShotHelper.snap(tree, "log_04_lift_picker")
+	await shot("log_04_lift_picker")
 	var sc = null
 	for n in ShotHelper.walk(main):
 		if n is ScrollContainer:
@@ -225,7 +232,7 @@ func _year() -> void:
 	results_seen = 0
 	ShotHelper.press(ShotHelper.find_button(main, "Finish session"))
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_05_lift_saved_reel")
+	await shot("log_05_lift_saved_reel")
 	var s = last_session("lift")
 	check(App.sessions().size() == n_before + 1, "one lift session added")
 	check(s != null and s.exercises.size() == 1 and sets_text(s.exercises[0].sets) == sets_text(want), "stored sets: " + (sets_text(s.exercises[0].sets) if s != null else "none"))
@@ -238,7 +245,7 @@ func _year() -> void:
 	lift = screen().form().lift
 	await tap("Bench Press")
 	check(draft_text(lift.exercises[0]) == draft_text(LogLiftEditor.draft_from_sets("Bench Press", want, "kg")), "logging again pre-fills the new numbers: " + draft_text(lift.exercises[0]))
-	await ShotHelper.snap(tree, "log_06_lift_prefill_again")
+	await shot("log_06_lift_prefill_again")
 
 	# --- 2. templates ---------------------------------------------------------
 	App.open_log(null)
@@ -248,13 +255,13 @@ func _year() -> void:
 	lift = screen().form().lift
 	await tap("Use →")
 	check(lift.exercises.size() >= 1, "template applied: %d exercises" % lift.exercises.size())
-	await ShotHelper.snap(tree, "log_07_lift_template_applied")
+	await shot("log_07_lift_template_applied")
 	# search box
 	var search = field("search")
 	ShotHelper.type_into(search, "dead")
 	await ShotHelper.frames(tree, 2)
 	ShotHelper.reveal(search)
-	await ShotHelper.snap(tree, "log_08_lift_search")
+	await shot("log_08_lift_search")
 	App.open_log(null)
 	await ShotHelper.frames(tree, 3)
 
@@ -279,9 +286,9 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 2)
 	ShotHelper.press(exact_button("1h · last") if exact_button("1h · last") != null else exact_button("1h"))
 	await ShotHelper.frames(tree, 3)
-	await ShotHelper.snap(tree, "log_09_climb")
+	await shot("log_09_climb")
 	ShotHelper.scroll_main(main, 500)
-	await ShotHelper.snap(tree, "log_10_climb_2")
+	await shot("log_10_climb_2")
 	ShotHelper.press(ShotHelper.find_button(main, "Finish session"))
 	await ShotHelper.frames(tree, 3)
 	var c = last_session("climb")
@@ -300,7 +307,7 @@ func _year() -> void:
 	# --- 4. run (km) and ride (mi) ------------------------------------------
 	App.open_log("run")
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_11a_run_empty")
+	await shot("log_11a_run_empty")
 	var fo = main.get_viewport().gui_get_focus_owner()
 	check(fo != null and fo.get_meta("fkey", "") == "distance", "distance has focus on open")
 	await type_keys("5,2")
@@ -312,7 +319,7 @@ func _year() -> void:
 	await key(KEY_TAB)
 	await type_keys("45")
 	await ShotHelper.frames(tree, 2)
-	await ShotHelper.snap(tree, "log_11_run")
+	await shot("log_11_run")
 	ShotHelper.press(ShotHelper.find_button(main, "Finish session"))
 	await ShotHelper.frames(tree, 3)
 	var r = last_session("run")
@@ -327,7 +334,7 @@ func _year() -> void:
 	ShotHelper.type_into(field("dur.m"), "40")
 	ShotHelper.type_into(field("elev"), "300")
 	await ShotHelper.frames(tree, 2)
-	await ShotHelper.snap(tree, "log_12_ride_miles")
+	await shot("log_12_ride_miles")
 	ShotHelper.press(ShotHelper.find_button(main, "Finish session"))
 	await ShotHelper.frames(tree, 3)
 	var rd = last_session("ride")
@@ -347,7 +354,7 @@ func _year() -> void:
 
 	App.open_log("body")
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_13_body_empty")
+	await shot("log_13_body_empty")
 	var bf = screen().form()
 	click_step("weight", true)
 	await ShotHelper.frames(tree, 1)
@@ -356,7 +363,7 @@ func _year() -> void:
 	ShotHelper.type_into(field("bodyfat"), "18.5")
 	bf.photo_from_file("front", img_path)
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_14_body_filled")
+	await shot("log_14_body_filled")
 	var nb = App.body().size()
 	results_seen = 0
 	ShotHelper.press(ShotHelper.find_button(main, "Check in"))
@@ -374,7 +381,7 @@ func _year() -> void:
 			old = x
 	App.open_log("lift", old.id)
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_15_edit")
+	await shot("log_15_edit")
 	measure("edit 3 exercises")
 	var ed = screen().form()
 	check(ed.lift.exercises.size() == old.exercises.size() and ed.date == old.date, "edit loads %d exercises, date %s" % [ed.lift.exercises.size(), ed.date])
@@ -388,7 +395,7 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 4)
 	ShotHelper.press(tip_button("Delete"))
 	await ShotHelper.frames(tree, 12)
-	await ShotHelper.snap(tree, "log_16_delete_confirm")
+	await shot("log_16_delete_confirm")
 	ShotHelper.press(exact_button("Delete"))
 	await ShotHelper.frames(tree, 4)
 	check(App.session_by_id(old.id) == null, "session deleted")
@@ -405,7 +412,7 @@ func _year() -> void:
 	ShotHelper.type_into(field("ex0.s2.reps"), "12")
 	await ShotHelper.frames(tree, 3)
 	ShotHelper.scroll_main(main, 0)
-	await ShotHelper.snap(tree, "log_17_lb_badges")
+	await shot("log_17_lb_badges")
 	print("lb draft: ", draft_text(lift.exercises[0]))
 	check(ShotHelper.find_text(screen(), "+12.5 lb") != null, "'+12.5 lb' badge shown")
 	no_overflow("ex0.name")
@@ -437,7 +444,7 @@ func no_overflow(fkey: String) -> void:
 func _new_player() -> void:
 	App.open_log("lift")
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_n1_lift_empty")
+	await shot("log_n1_lift_empty")
 	var lift = screen().form().lift
 	# Type a new exercise, Enter, then reps Tab weight with the keyboard.
 	var search = field("search")
@@ -460,7 +467,7 @@ func _new_player() -> void:
 	click_step("ex1.s0.weight", true)
 	await ShotHelper.frames(tree, 3)
 	ShotHelper.scroll_main(main, 0)
-	await ShotHelper.snap(tree, "log_n2_lift_filled")
+	await shot("log_n2_lift_filled")
 	print("drafts: ", draft_text(lift.exercises[0]), " / ", draft_text(lift.exercises[1]))
 	ShotHelper.press(ShotHelper.find_button(main, "Finish session"))
 	await ShotHelper.frames(tree, 3)
@@ -470,10 +477,10 @@ func _new_player() -> void:
 	await dismiss_results()
 	App.open_log("lift")
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_n3_lift_second_time")
+	await shot("log_n3_lift_second_time")
 	App.open_log("body")
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_n4_body")
+	await shot("log_n4_body")
 	App.open_log("run")
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "log_n5_run")
+	await shot("log_n5_run")

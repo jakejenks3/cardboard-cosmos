@@ -8,7 +8,7 @@ extends UiScreen
 ## in the controls, so a rebuild never loses what was typed; the screen only
 ## swaps forms when the navigation target really changes.
 
-const PICKER_SUB = {"lift": "Reps × weight", "climb": "V-grades", "run": "Distance & time", "ride": "Distance & time"}
+const PICKER_TIP = {"lift": "Sets of reps × weight", "climb": "Boulders by V-grade", "run": "Distance & time", "ride": "Distance & time"}
 
 ## Field to give keyboard focus after the next rebuild (a LogWidgets.FKEY value).
 var focus_key: String = ""
@@ -102,45 +102,54 @@ func build() -> void:
 
 
 func _build_picker() -> void:
-	add_child(Kit.h1("Log a workout"))
+	add_child(Kit.section_title("Log a workout"))
 	var grid = Kit.grid(2, 10)
 	for d in TT.DISCIPLINES:
-		grid.add_child(_picker_tile(d, TT.DISCIPLINE_META[d].name, PICKER_SUB[d], Pal.disc(d), d))
+		grid.add_child(_picker_tile(d))
 	add_child(grid)
-
-	var wide = Kit.card(0, _pick.bind("body"), 14)
-	wide.tint(Pal.with_alpha(Pal.ACCENT, 0.10), Pal.ACCENT)
-	var h = Kit.hbox(14)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Kit.vcenter(Icons.rect("camera", 40)))
-	var tv = Kit.vbox(2)
-	tv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tv.add_child(Kit.label("Body check-in", 17, null, true))
-	tv.add_child(Kit.muted_para("Weight · body fat · front / side / back photos", 12))
-	h.add_child(tv)
-	wide.add(h)
-	add_child(wide)
-
+	add_child(_body_tile())
 	# Workouts jotted on the phone (app/inbox.gd).
-	add_child(Kit.center(Kit.link("Import from phone", InboxSheet.check_and_review.bind(Callable()))))
+	var imp = Kit.button("Import from phone", "ghost", InboxSheet.check_and_review.bind(Callable()), "sm", "speech")
+	imp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	add_child(imp)
 
 
-func _picker_tile(d: String, title: String, sub: String, col: Color, icon: String) -> Card:
-	var c = Kit.card(6, _pick.bind(d), 14)
-	c.tint(Pal.with_alpha(col, 0.14), col)
-	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.custom_minimum_size = Vector2(0, 112)
-	var ic = Icons.rect(icon, 40)
+## A big bright key in the discipline's colour: its icon and name.
+func _picker_tile(d: String) -> Button:
+	var col = Pal.disc(d)
+	var v = Kit.vbox(6)
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	var ic = Icons.rect(d, 44)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	c.add(ic)
-	var t = Kit.label(title, 17, null, true)
+	v.add_child(ic)
+	var t = LogWidgets.on_face(Kit.label(TT.DISCIPLINE_META[d].name, 18, null, true))
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	c.add(t)
-	var s = Kit.label(sub, 12, Pal.MUTED)
-	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	c.add(s)
-	return c
+	v.add_child(t)
+	var b = LogWidgets.key(TT.DISCIPLINE_META[d].name, col, v, _pick.bind(d), 10, 10, 3, col.lightened(0.3))
+	b.custom_minimum_size.y = 116
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = PICKER_TIP[d]
+	return b
+
+
+## The body check-in key: camera, name, and the XP this week's check-in still pays.
+func _body_tile() -> Button:
+	var h = Kit.hbox(12)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_child(Icons.rect("camera", 34))
+	var t = Kit.label("Body check-in", 18, Pal.TEXT, true)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(t)
+	var flags = int(TTUtil.get_or(App.state.body.weekFlags, Dates.week_key(App.today), 0))
+	var full = {"weightKg": 80.0, "bodyFatPct": 20.0, "photos": {"front": "x", "side": "x", "back": "x"}}
+	var avail = int(Derive.body_entry_reward(flags, full).xp)
+	if avail > 0:
+		h.add_child(Kit.vcenter(Parts.xp_chip(avail, 12)))
+	var b = LogWidgets.key("Body check-in", Pal.PANEL2, h, _pick.bind("body"), 12, 10, 2, Pal.ACCENT)
+	b.custom_minimum_size.y = 64
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = "Weight, body fat and progress photos"
+	return b
 
 
 func _pick(d: String) -> void:

@@ -53,9 +53,12 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	# Chunky pixels, like the rest of the art: each piece is snapped to a 2 px grid
+	# and its spin shows as it flipping between a square and a flat strip.
 	for p in _parts:
 		var c: Color = p.color
 		c.a = minf(1.0, p.life / 20.0)
-		draw_set_transform(p.pos, p.rot, Vector2.ONE)
-		draw_rect(Rect2(-p.size / 2.0, -p.size / 2.0, p.size, p.size * 0.6), c)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		var w = maxf(2.0, floor(p.size / 2.0) * 2.0)
+		var h = maxf(2.0, floor(absf(cos(p.rot)) * w / 2.0) * 2.0)
+		var at = (p.pos / 2.0).floor() * 2.0
+		draw_rect(Rect2(at.x - w / 2.0, at.y - h / 2.0, w, h), c)

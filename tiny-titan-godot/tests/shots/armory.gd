@@ -33,7 +33,7 @@ func _check(label: String, ok: bool) -> void:
 func run(main: Node, tree: SceneTree) -> void:
 	pre = "new_" if App.sessions().is_empty() else "year_"
 	App.go("armory")
-	await ShotHelper.frames(tree, 6)
+	await ShotHelper.wait(tree, 0.7)
 	var scr = _screen(main)
 	await ShotHelper.snap(tree, pre + "armory_head")
 	ShotHelper.scroll_main(main, 500)
@@ -125,6 +125,19 @@ func run(main: Node, tree: SceneTree) -> void:
 			pet = p
 		if not App.state.pets.has(p.id) and lpet == null:
 			lpet = p
+	# Tapping an owned companion's tile makes it follow at once.
+	var pet2 = null
+	for p in Pets.all():
+		if App.state.pets.has(p.id) and App.active_pet() != p.id and p != pet:
+			pet2 = p
+	if pet2 != null:
+		var pt = _tile_of(scr, pet2.name)
+		if pt != null:
+			ShotHelper.reveal(pt)
+			await ShotHelper.frames(tree, 2)
+			await ShotHelper.click(tree, pt)
+			await ShotHelper.frames(tree, 4)
+			_check("pet tile click follows %s" % pet2.id, App.active_pet() == pet2.id)
 	if pet != null:
 		ArmoryDetail.open_pet(pet)
 		await ShotHelper.wait(tree, 0.4)
@@ -148,3 +161,17 @@ func run(main: Node, tree: SceneTree) -> void:
 	ShotHelper.press(ShotHelper.find_button(scr, "Look"))
 	await ShotHelper.frames(tree, 4)
 	await ShotHelper.snap(tree, pre + "armory_look")
+
+	# Another theme: nothing may stay blue.
+	App.update_settings({"theme": "forest"})
+	await ShotHelper.frames(tree, 4)
+	App.go("armory")
+	await ShotHelper.wait(tree, 0.7)
+	scr = _screen(main)
+	if scr != null:
+		ShotHelper.press(ShotHelper.find_button(scr, "Head "))
+		await ShotHelper.wait(tree, 0.3)
+	ShotHelper.scroll_main(main, 0)
+	await ShotHelper.snap(tree, pre + "armory_forest")
+	App.update_settings({"theme": "arcade"})
+	await ShotHelper.frames(tree, 4)

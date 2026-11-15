@@ -24,63 +24,134 @@ func fill() -> void:
 	var p = App.profile()
 	var st = App.settings()
 
-	# --- hero -------------------------------------------------------------------
 	# --- look ---------------------------------------------------------------------
-	add_child(Kit.h3("Theme"))
+	add_child(Kit.section_title("Theme"))
 	var themes = Kit.grid(Pal.THEME_ORDER.size(), 8)
 	for id in Pal.THEME_ORDER:
 		themes.add_child(_theme_tile(id))
 	add_child(themes)
 
-	add_child(Kit.h3("Hero"))
+	# --- hero -------------------------------------------------------------------
 	if p != null:
+		var hero = _card("HERO")
 		var row = Kit.hbox(14)
-		var pic = PixelRect.make(Art.hero_texture(App.state, p, App.loadout()), 1.0)
+		var pic = PixelRect.make(Art.hero_texture(App.state, p, App.loadout()), 2.0)
 		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(pic)
+		var right = Kit.vbox(10)
+		right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var name_edit = Kit.input(p.get("name", ""), "Hero name")
 		name_edit.max_length = 20
+		name_edit.tooltip_text = "Hero name"
 		name_edit.text_changed.connect(_on_name)
-		row.add_child(Kit.field("Name", name_edit))
-		add_child(row)
-		add_child(Parts.appearance_editor(int(p.get("skin", 0)), int(p.get("hairStyle", 0)), int(p.get("hairColor", 0)), _on_look))
+		right.add_child(name_edit)
+		right.add_child(Parts.appearance_editor(int(p.get("skin", 0)), int(p.get("hairStyle", 0)), int(p.get("hairColor", 0)), _on_look))
+		row.add_child(right)
+		hero.add(row)
+		add_child(hero)
 
-	# --- units --------------------------------------------------------------------
-	add_child(Kit.h3("Units & training"))
-	var units = Kit.hbox(12)
-	units.add_child(Kit.field("Weight", Kit.segmented([{"value": "kg", "label": "kg"}, {"value": "lb", "label": "lb"}], st.get("weightUnit", "kg"), _on_weight_unit)))
-	units.add_child(Kit.field("Distance", Kit.segmented([{"value": "km", "label": "km"}, {"value": "mi", "label": "mi"}], st.get("distanceUnit", "km"), _on_setting.bind("distanceUnit"))))
-	add_child(units)
-
+	# --- units & training ------------------------------------------------------------
+	var train = _card("TRAINING")
+	train.add(_row("scale", "Weight", Kit.segmented([{"value": "kg", "label": "kg"}, {"value": "lb", "label": "lb"}], st.get("weightUnit", "kg"), _on_weight_unit)))
+	train.add(_row("road", "Distance", Kit.segmented([{"value": "km", "label": "km"}, {"value": "mi", "label": "mi"}], st.get("distanceUnit", "km"), _on_setting.bind("distanceUnit"))))
 	var unit = str(st.get("weightUnit", "kg"))
 	var step_opts = []
 	for s in TT.WEIGHT_STEPS[unit]:
 		step_opts.append({"value": float(s), "label": "%s %s" % [TTUtil.num_str(s), unit]})
-	add_child(Kit.field("Weight step (one − / + tap)", Kit.segmented(step_opts, float(TT.weight_step_of(st)), _on_setting.bind("weightStep"))))
-
+	var step_row = _row("plus", "Step", Kit.segmented(step_opts, float(TT.weight_step_of(st)), _on_setting.bind("weightStep")))
+	step_row.tooltip_text = "How much one − / + tap changes a weight"
+	train.add(step_row)
 	var goal_opts = []
 	for n in range(2, 7):
 		goal_opts.append({"value": n, "label": str(n)})
-	add_child(Kit.field("Weekly goal (sessions per week for streaks)", Kit.segmented(goal_opts, int(st.get("weeklyGoal", 3)), _on_setting.bind("weeklyGoal"))))
-
-	var sound_opts = [{"value": true, "label": "On"}, {"value": false, "label": "Off"}]
-	add_child(Kit.field("Sound effects", Kit.segmented(sound_opts, bool(st.get("sound", true)), _on_sound)))
+	var goal_row = _row("flame", "Weekly goal", Kit.segmented(goal_opts, int(st.get("weeklyGoal", 3)), _on_setting.bind("weeklyGoal")))
+	goal_row.tooltip_text = "Sessions per week that keep your streak alive"
+	train.add(goal_row)
+	var snd = bool(st.get("sound", true))
+	train.add(_row("sound_on" if snd else "sound_off", "Sound", _switch(snd, _on_sound, "Sound effects")))
+	add_child(train)
 
 	# --- phone inbox ----------------------------------------------------------------
 	_build_inbox()
 
 	# --- data ---------------------------------------------------------------------
-	add_child(Kit.h3("Data"))
 	var photos = App.referenced_photo_ids().size()
 	var what = "your sessions, check-ins and all %d progress photos" % photos if photos > 0 else "your sessions and check-ins"
-	add_child(Kit.muted_para("Backups include %s. Photos never leave this computer." % what, 13))
-	var btns = Kit.flow(8)
-	btns.add_child(Kit.button("Export backup", "secondary", SettingsPanel.pick_export))
-	btns.add_child(Kit.button("Import backup", "secondary", SettingsPanel.pick_import.bind(sheet)))
-	btns.add_child(Kit.button("Reset", "danger", SettingsPanel.ask_reset.bind(sheet)))
-	add_child(btns)
-	add_child(Kit.expand(Kit.button("Open data folder", "ghost", _open_folder, "md", "book")))
-	add_child(Kit.muted_para("Your save lives in %s. A dated copy is kept there automatically each day." % ProjectSettings.globalize_path(App.DATA_DIR), 11))
+	var data = _card("DATA", _info_button("About your data", [
+		"Backups include %s." % what,
+		"Photos never leave this computer.",
+		"Your save lives in %s. A dated copy is kept there automatically each day." % ProjectSettings.globalize_path(App.DATA_DIR),
+	]))
+	var btns = Kit.hbox(8)
+	btns.add_child(Kit.expand(Kit.button("Export backup", "secondary", SettingsPanel.pick_export, "md", "chest")))
+	btns.add_child(Kit.expand(Kit.button("Import backup", "secondary", SettingsPanel.pick_import.bind(sheet), "md", "arrow_down")))
+	data.add(btns)
+	var btns2 = Kit.hbox(8)
+	btns2.add_child(Kit.expand(Kit.button("Open data folder", "ghost", _open_folder, "md", "book")))
+	btns2.add_child(Kit.button("Reset", "danger", SettingsPanel.ask_reset.bind(sheet), "md", "trash"))
+	data.add(btns2)
+	add_child(data)
+
+
+## A settings card with a pixel-font heading and an optional control on the right.
+func _card(title: String, right: Control = null) -> Card:
+	var c = Kit.card(12, Callable(), 12)
+	var h = Kit.hbox(8)
+	h.custom_minimum_size = Vector2(0, 26)
+	var t = PixelFont.rect(title, 2, Pal.ACCENT)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(t)
+	h.add_child(Kit.spacer())
+	if right != null:
+		h.add_child(Kit.vcenter(right))
+	c.add(h)
+	return c
+
+
+## icon · label · control, on one line.
+func _row(icon: String, label_text: String, control: Control) -> HBoxContainer:
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(Kit.vcenter(Icons.rect(icon, 20)))
+	var l = Kit.label(label_text, 14, null, true)
+	l.custom_minimum_size = Vector2(92, 0)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(l)
+	if control.size_flags_horizontal != Control.SIZE_SHRINK_END:
+		control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		h.add_child(Kit.spacer())
+	h.add_child(control)
+	return h
+
+
+## An on / off switch: a sunken track with a raised knob, green with a tick when on.
+## `on_change.call(new_value)`.
+func _switch(on: bool, on_change: Callable, tip: String) -> Button:
+	var sw = PixSwitch.new()
+	sw.setup(on, tip)
+	sw.pressed.connect(func(): on_change.call(not on))
+	Kit.juice(sw)
+	return sw
+
+
+## A small "i" button that opens a sheet with the explanation.
+func _info_button(title: String, lines: Array) -> Button:
+	return Kit.icon_button("info", SettingsPanel.show_info.bind(title, lines), title, 32)
+
+
+## A sheet with a few short paragraphs (help text kept out of the way).
+static func show_info(title: String, lines: Array, extra: Control = null) -> void:
+	var sh = Kit.sheet(title)
+	for l in lines:
+		sh.box.add_child(Kit.para(str(l), 14, Pal.TEXT))
+	if extra != null:
+		sh.box.add_child(extra)
+	var ok = Kit.button("Got it", "primary", sh.close, "lg")
+	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sh.box.add_child(ok)
+	sh.open()
 
 
 func _refill() -> void:
@@ -118,33 +189,51 @@ func _exit_tree() -> void:
 
 func _build_inbox() -> void:
 	var ib = App.inbox.settings()
-	add_child(Kit.h3("Phone inbox"))
-	add_child(Kit.muted_para("Jot workouts in a note on your phone; the game reads it and imports them.", 13))
+	var card = _card("PHONE INBOX", Kit.button("How it works", "ghost", SettingsPanel.show_how, "sm", "info"))
+	card.set_meta("inbox_section", true)
 	var src = Kit.input(str(ib.get("source", "")), "Google Doc link or a file path")
 	src.select_all_on_focus = false
+	src.tooltip_text = "Link or file"
 	src.text_changed.connect(_on_source)
-	add_child(Kit.field("Link or file", src))
-	var btns = Kit.flow(8)
-	btns.add_child(Kit.button("Check now", "primary", _check_now, "sm"))
-	btns.add_child(Kit.button("Paste text…", "secondary", InboxSheet.open_paste.bind(_close_sheet), "sm"))
-	add_child(btns)
-	var on_off = [{"value": true, "label": "On"}, {"value": false, "label": "Off"}]
-	add_child(Kit.field("Check when the game starts", Kit.segmented(on_off, bool(ib.get("auto", true)), _on_inbox_auto)))
+	card.add(src)
+	var check = Kit.button("Check now", "primary", _check_now, "lg", "repeat")
+	check.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.add(check)
+	var row = Kit.hbox(8)
+	row.add_child(Kit.vcenter(Kit.button("Paste text", "secondary", InboxSheet.open_paste.bind(_close_sheet), "md", "edit")))
+	row.add_child(Kit.spacer())
+	var auto_label = Kit.label("Auto-check", 14, null, true)
+	auto_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(auto_label)
+	row.add_child(_switch(bool(ib.get("auto", true)), _on_inbox_auto, "Check when the game starts"))
+	card.add(row)
 	var line = App.inbox.status
 	if line == "":
 		line = App.inbox.last_checked_text()
 	if line == "":
-		line = "Not checked yet."
-	add_child(Kit.para(line, 12, Pal.MUTED))
+		line = "Not checked yet"
+	var status = Kit.hbox(6)
+	status.add_child(Kit.vcenter(Icons.rect("clock", 16)))
+	status.add_child(Kit.clip(line, 12, Pal.MUTED))
+	card.add(status)
+	add_child(card)
 
-	var how = Kit.card(6, Callable(), 12)
-	how.tint(Pal.WELL, Pal.LINE)
-	how.add(Kit.label("How it works", 14, null, true))
-	how.add(Kit.muted_para("1. Make a Google Doc on your phone.\n2. Share → General access → Anyone with the link (Viewer).\n3. Copy the link and paste it above.\n4. Write what you did, one thing per line, a date line to start a day:", 12))
-	how.add(Kit.para(QuickLog.CHEAT_SHEET, 13, Pal.TEXT))
-	how.add(Kit.muted_para("5. Back at the computer, press Check now (or just start the game). Nothing is imported until you say so, and lines it cannot read are shown, never dropped. A Google Form's responses sheet or a file in a synced folder works too.", 12))
-	add_child(how)
-	add_child(Kit.muted_para("The link only has to be readable. Anyone who has the link can read that note, so keep it to workout notes.", 11))
+
+## "How it works" for the phone inbox, in its own sheet.
+static func show_how() -> void:
+	var cheat = PanelContainer.new()
+	cheat.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	cheat.add_theme_stylebox_override("panel", PixBox.well(12, 10))
+	cheat.add_child(Kit.para(QuickLog.CHEAT_SHEET, 13, Pal.TEXT))
+	var v = Kit.vbox(10)
+	v.add_child(cheat)
+	v.add_child(Kit.para("4. Press Check now, or just start the game. Nothing is imported until you say so; lines it cannot read are shown, never dropped.", 14, Pal.TEXT))
+	v.add_child(Kit.muted_para("A Google Form's responses sheet or a file in a synced folder works too. Anyone with the link can read the note, so keep it to workouts.", 12))
+	SettingsPanel.show_info("How it works", [
+		"1. Make a Google Doc on your phone.",
+		"2. Share → General access → Anyone with the link (Viewer), and paste the link here.",
+		"3. Write what you did, one thing per line, a date line to start a day:",
+	], v)
 
 
 func _on_source(t: String) -> void:
@@ -351,3 +440,31 @@ static func _do_reset(sh = null) -> void:
 	App.reset_all()
 	if sh != null and is_instance_valid(sh):
 		sh.close()
+
+
+class PixSwitch extends Button:
+	var on = false
+
+	func setup(value: bool, tip: String) -> void:
+		on = value
+		tooltip_text = tip
+		focus_mode = Control.FOCUS_NONE
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		custom_minimum_size = Vector2(72, 38)
+		size_flags_horizontal = Control.SIZE_SHRINK_END
+		size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		var none = StyleBoxEmpty.new()
+		for k in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+			add_theme_stylebox_override(k, none)
+
+	func _draw() -> void:
+		var track = Pal.deep(Pal.GOOD) if on else Pal.WELL
+		draw_style_box(PixBox.make(track, {"lip": 0, "inset": true, "pad_h": 0, "pad_v": 0}), Rect2(Vector2.ZERO, size))
+		var kw = 34.0
+		var kr = Rect2(size.x - kw - 4.0 if on else 4.0, 4.0, kw, size.y - 8.0)
+		var face = Pal.GOOD if on else Pal.PANEL2
+		draw_style_box(PixBox.make(face, {"lip": 1, "lip_color": face.darkened(0.45), "pad_h": 0, "pad_v": 0}), kr)
+		if on:
+			var ic = Icons.tex("check")
+			draw_texture_rect(ic, Rect2(kr.position + Vector2((kw - 16.0) / 2.0, (kr.size.y - 22.0) / 2.0), Vector2(16, 16)), false)
