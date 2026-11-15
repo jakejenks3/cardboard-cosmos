@@ -66,6 +66,9 @@ const ROPE_WORDS = ["tr", "toprope", "rope", "roped", "route", "routes", "lead",
 const HANG_WORDS = ["hang", "hangs", "hangboard", "hangboarding", "deadhang", "deadhangs", "fingerboard", "fingerboarding"]
 const LIFT_WORDS = ["lift", "lifting", "gym", "weights"]
 const BODY_WORDS = ["weight", "bw", "weighed", "weigh", "wt", "bf", "bodyfat", "bodyweight", "body", "fat"]
+## "progress pics 11/15" dates a block like "11/15" does; a bare "pics" line is a label and is skipped.
+const PHOTO_LABEL = "^(?:progress (?:pics?|photos?|pictures?)|progress|pics?|pix|photos?|pictures?)"
+const TOO_MANY_PHOTOS = "more than three pictures on this day: the first three are kept (front, side, back)"
 const FILLER = ["in", "for", "at", "of", "and", "with", "-", ":", "total", "="]
 const ELEV_WORDS = ["elev", "elevation", "gain", "up", "vert", "ascent", "climbing"]
 const UNIT_WORDS = ["km", "k", "mi", "mile", "miles", "m", "min", "mins", "minute", "minutes", "h", "hr", "hrs",
@@ -246,8 +249,27 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 			return _line(nb, orig, rest, ctx, out)
 		return nb
 
+	# "progress pics" on its own line is a label for the pictures under it.
+	if _rx(PHOTO_LABEL + "$").search(t) != null:
+		return block
+
 	var toks = t.split(" ", false)
 	var first = toks[0].trim_suffix(":")
+
+	# A picture in the note: the inbox turns each image of a Google Doc into
+	# "photo images/image1.jpg". Up to three join the day's check-in, in order.
+	if first == "photo" and toks.size() == 2 and (toks[1].contains("/") or toks[1].contains(".")):
+		var e = _body_entry(block)
+		var refs = e.data.get("photoRefs", [])
+		if refs.size() >= TT.PHOTO_ANGLES.size():
+			if not e.warnings.has(TOO_MANY_PHOTOS):
+				e.warnings.append(TOO_MANY_PHOTOS)
+			return block
+		refs.append(toks[1])
+		e.data["photoRefs"] = refs
+		e.raw.append(orig)
+		e.norm.append(t)
+		return block
 
 	# Extras for the session being built: title / note / duration.
 	if (first == "title" or first == "note" or first == "notes") and (toks.size() > 1 or toks[0].ends_with(":")):
@@ -276,10 +298,7 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 		if not b.ok:
 			out.problems.append({"line": orig, "why": b.why})
 			return block
-		if block.body == null:
-			block.body = {"kind": "body", "disc": "body", "data": {"date": block.date}, "raw": [], "norm": [], "warnings": []}
-			block.entries.append(block.body)
-		var e = block.body
+		var e = _body_entry(block)
 		for k in ["weightKg", "bodyFatPct"]:
 			if b.has(k):
 				if e.data.has(k):
@@ -374,6 +393,14 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 	return block
 
 
+## The day's one body check-in (weight, body fat and pictures share it).
+static func _body_entry(block: Dictionary) -> Dictionary:
+	if block.body == null:
+		block.body = {"kind": "body", "disc": "body", "data": {"date": block.date}, "raw": [], "norm": [], "warnings": []}
+		block.entries.append(block.body)
+	return block.body
+
+
 static func _session(block: Dictionary, disc: String) -> Dictionary:
 	var e = {"kind": "session", "disc": disc, "data": {"discipline": disc, "date": block.date}, "raw": [], "norm": [], "warnings": []}
 	if disc == "lift":
@@ -453,6 +480,9 @@ static func key_prefix(key: String) -> String:
 static func date_line(t: String, today: String) -> Dictionary:
 	var s = t.strip_edges().trim_suffix(":").replace(",", " ").strip_edges()
 	s = _rx("\\s+").sub(s, " ", true)
+	var lead = _rx(PHOTO_LABEL + "(?= )").search(s)
+	if lead != null:
+		s = s.substr(lead.get_end()).strip_edges()
 	var words = s.split(" ", false)
 	if words.is_empty():
 		return {}
@@ -1104,6 +1134,9 @@ static func summary(kind: String, data: Dictionary, wu: String, du: String) -> S
 			parts.append("Weight " + Fmt.fmt_weight(float(data.weightKg), wu))
 		if data.has("bodyFatPct"):
 			parts.append("body fat %s%%" % TTUtil.num_str(snappedf(float(data.bodyFatPct), 0.1)))
+		var n = data.get("photoRefs", []).size()
+		if n > 0:
+			parts.append("%d progress photo%s" % [n, "" if n == 1 else "s"])
 		return " · ".join(PackedStringArray(parts))
 	match str(data.discipline):
 		"lift":

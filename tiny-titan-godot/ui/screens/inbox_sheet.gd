@@ -96,6 +96,8 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 		top.add_child(Kit.vcenter(Kit.icon_button("chevron_right", InboxSheet._nudge.bind(e, 1, date_label), "Day after", 28)))
 	main.add_child(top)
 	main.add_child(Kit.para(str(e.summary), 13, Pal.TEXT))
+	if e.kind == "body" and not e.data.get("photoRefs", []).is_empty():
+		main.add_child(_thumbs(e.data.photoRefs))
 	var warns = e.get("warnings", [])
 	if not warns.is_empty():
 		var wf = Kit.flow(4)
@@ -116,6 +118,32 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	c.add(row)
 	_style_toggle(e, toggle, c)
 	return c
+
+
+## The pictures found under this day, small, in the order they are kept (front, side, back).
+static func _thumbs(refs: Array) -> Control:
+	var row = Kit.hbox(8)
+	for i in range(refs.size()):
+		var tex = App.inbox.image_texture(str(refs[i]))
+		if tex == null or i >= TT.PHOTO_ANGLES.size():
+			continue
+		var col = Kit.vbox(2)
+		var tile = PanelContainer.new()
+		tile.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tile.add_theme_stylebox_override("panel", PixBox.well(2, 2, Pal.BORDER))
+		var img = TextureRect.new()
+		img.texture = tex
+		img.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		img.custom_minimum_size = Vector2(56, 72)
+		tile.add_child(img)
+		col.add_child(tile)
+		var name = Kit.label(TT.PHOTO_ANGLE_NAMES[TT.PHOTO_ANGLES[i]], 11, Pal.MUTED, true)
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(name)
+		row.add_child(col)
+	return row
 
 
 ## The first clause of a warning, for its chip.

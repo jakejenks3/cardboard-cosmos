@@ -79,6 +79,11 @@ are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; a
 `+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
 
+**Progress pictures** go in the same doc: write a line like `progress pics 11/15` (any date line
+works) and put up to three pictures under it, front, side and back in that order. The game shows
+them on the review sheet and imports them as that day's photo check-in, downscaled and stored in
+its own data folder, so once they are in the game you can delete them from the doc and your phone.
+
 - **Google Form instead:** make a form with one paragraph question and share its responses sheet by
   link (Anyone with the link); paste the sheet's link. Every response is a row, dated automatically.
 - **Synced file instead:** put a plain-text file in a folder synced by Drive / Dropbox / iCloud /

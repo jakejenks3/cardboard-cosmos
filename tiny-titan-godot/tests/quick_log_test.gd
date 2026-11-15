@@ -217,7 +217,7 @@ heel raise x10 195")))
 	ok(QuickLog.timestamp_date("14.11.2026 18:32:10") == "2026-11-14" and QuickLog.timestamp_date("hello") == "", "dotted day-first timestamps")
 
 	# --- share links -> raw text (app/inbox.gd, static) ---------------------------------------------
-	ok(PhoneInbox.fetch_url("https://docs.google.com/document/d/AbC_123-x/edit?usp=sharing") == "https://docs.google.com/document/d/AbC_123-x/export?format=txt", "Google Doc link")
+	ok(PhoneInbox.fetch_url("https://docs.google.com/document/d/AbC_123-x/edit?usp=sharing") == "https://docs.google.com/document/d/AbC_123-x/export?format=zip", "Google Doc link (zip: text and pictures)")
 	ok(PhoneInbox.fetch_url("https://docs.google.com/spreadsheets/d/XyZ9/edit#gid=12345") == "https://docs.google.com/spreadsheets/d/XyZ9/export?format=csv&gid=12345", "Google Sheet link keeps gid")
 	ok(PhoneInbox.fetch_url("https://docs.google.com/spreadsheets/d/XyZ9/edit?usp=sharing") == "https://docs.google.com/spreadsheets/d/XyZ9/export?format=csv", "Google Sheet link")
 	ok(PhoneInbox.fetch_url("https://www.dropbox.com/s/abc/log.txt?dl=0") == "https://www.dropbox.com/s/abc/log.txt?dl=1", "Dropbox dl=0 -> dl=1")
@@ -253,5 +253,19 @@ heel raise x10 195")))
 	ok(int(hx.xp) == 60, "6 × 10 s on 20 mm = 60 XP", hx)
 	ok(absf(Xp.hang_xp({"edgeMm": 10, "sec": 10, "arms": 1, "addKg": 0.0}) - 50.0) < 0.01, "10 mm one arm 10 s = 50 XP", Xp.hang_xp({"edgeMm": 10, "sec": 10, "arms": 1, "addKg": 0.0}))
 	ok(absf(Xp.route_xp(Xp.yds_index("5.10a")) - 45.0) < 0.01, "5.10a = V1 × 1.5 = 45 XP", Xp.route_xp(Xp.yds_index("5.10a")))
+	# Pictures in the note (a Google Doc's images arrive as "photo images/imageN.jpg" lines).
+	var pics = p("progress pics 11/15\nphoto images/image1.jpg\nphoto images/image2.jpg\nphoto images/image3.jpg")
+	ok(pics.entries.size() == 1 and pics.problems.is_empty() and pics.entries[0].kind == "body" and pics.entries[0].date == "2026-11-15" and pics.entries[0].data.get("photoRefs", []).size() == 3, "progress pics 11/15 + three pictures = one check-in with three photos", pics)
+	ok(not pics.entries.is_empty() and str(pics.entries[0].summary) == "3 progress photos", "summary says 3 progress photos", pics)
+	var four = p("nov 14\nweight 82\nphoto images/a.jpg\nphoto images/b.jpg\nphoto images/c.jpg\nphoto images/d.jpg")
+	ok(four.entries.size() == 1 and four.entries[0].data.photoRefs.size() == 3 and not four.entries[0].warnings.is_empty() and four.entries[0].data.has("weightKg"), "a fourth picture is left out with a warning; the weight joins the same check-in", four)
+	ok(p("pics\nphotos\nprogress pics").entries.is_empty() and p("pics\nphotos\nprogress pics").problems.is_empty(), "bare picture labels are skipped")
+	ok(p("photos nov 14\nbench 3x5 @ 80").entries.size() == 1 and p("photos nov 14\nbench 3x5 @ 80").entries[0].date == "2026-11-14", "'photos nov 14' dates the block", p("photos nov 14\nbench 3x5 @ 80"))
+	var html = "<html><head><style>p{x}</style><title>W</title></head><body><p class=\"c1\"><span>11/14</span></p><p><span>Backsquat x5&nbsp;135</span></p><p><span></span></p><p><span>Progress pics 11/15</span></p><p><span><img alt=\"\" src=\"images/image1.jpg\" style=\"w\"></span><span><img src=\"images/image2.jpg\"></span></p></body></html>"
+	var lines = []
+	for ln in PhoneInbox.html_to_text(html).split("\n"):
+		if ln.strip_edges() != "":
+			lines.append(ln.strip_edges())
+	ok("|".join(PackedStringArray(lines)) == "11/14|Backsquat x5 135|Progress pics 11/15|photo images/image1.jpg|photo images/image2.jpg", "Google Doc HTML -> lines with photo markers", lines)
 	print("QUICKLOG: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

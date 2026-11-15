@@ -36,7 +36,12 @@ is the Windows handoff.
 - `main.gd`  The shell: column, tab bar, overlays, theme switching.
 - Phone inbox: the user jots workouts in shorthand in a Google Doc on their phone; the
   game reads the doc (Settings -> Phone inbox), shows what it understood, imports what
-  they confirm. Parser: `game/quick_log.gd`.
+  they confirm. Parser: `game/quick_log.gd`. A Google Doc is fetched as its zip export
+  (HTML + `images/`), not plain text: `PhoneInbox.html_to_text` turns each picture into a
+  `photo images/imageN.jpg` line, the parser puts up to three under a date into that day's
+  body check-in (`data.photoRefs`), the review sheet shows them as thumbnails, and
+  `import_entries` stores them as front/side/back photos via `App.import_photo_bytes`.
+  Pictures stay in memory until import; the zip is a temp file in the data folder.
 - Every screen is built in code (no .tscn per screen).
 - Climb sessions (added 2026-11-15, after the handoff) can also hold roped routes and
   hangboard hangs, both inside the climb discipline so no new discipline was added:
@@ -99,7 +104,7 @@ Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, settings
 themes, climb_more (routes and hangboard), realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
-to the doc link and run the `realdoc` scenario with `fresh` data: it prints the text the
+to the doc link and run the `realdoc` scenario with `new` data: it prints the text the
 game received, every entry it understood, and saves a screenshot of the review sheet.
 Verified 2026-11-15: the link, fetch and export all work; the doc was still empty then.
 

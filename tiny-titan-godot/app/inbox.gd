@@ -15,7 +15,7 @@ extends Node
 ## result = {"ok", "error", "fresh": [entry...], "already": int, "problems": [...]}
 signal checked(result)
 
-const TIMEOUT_SEC = 15.0
+const TIMEOUT_SEC = 30.0
 const NOT_SHARED = "That link is not shared. In Google Docs: Share → General access → Anyone with the link."
 const CHANGED_DAY = "this day changed after you imported it; importing adds it again (left out unless you tick it)"
 
@@ -27,6 +27,12 @@ var _last = {"ok": true, "error": "", "fresh": [], "already": 0, "problems": []}
 var _source_keys = null
 ## One line for Settings about the last check this session ("" before the first).
 var status = ""
+## The note's text as last read (a Google Doc's pictures appear as "photo images/imageN.jpg" lines).
+var last_text = ""
+## Pictures found in the note on the last check: {"images/image1.jpg": bytes}. They
+## are only written to disk (as progress photos) when their check-in is imported.
+var _images = {}
+var _image_tex = {}
 
 
 func _app():
@@ -70,12 +76,13 @@ func set_auto(on: bool) -> void:
 	_app().update_inbox({"auto": on})
 
 
-## A share link -> the address of its plain text.
+## A share link -> the address of its contents. A Google Doc comes as a zip
+## (its text as HTML plus the pictures in it); everything else as plain text.
 static func fetch_url(source: String) -> String:
 	var s = source.strip_edges()
 	var m = RegEx.create_from_string("^https?://docs\\.google\\.com/document/(?:u/\\d+/)?d/([A-Za-z0-9_-]+)").search(s)
 	if m != null:
-		return "https://docs.google.com/document/d/%s/export?format=txt" % m.get_string(1)
+		return "https://docs.google.com/document/d/%s/export?format=zip" % m.get_string(1)
 	m = RegEx.create_from_string("^https?://docs\\.google\\.com/spreadsheets/(?:u/\\d+/)?d/([A-Za-z0-9_-]+)").search(s)
 	if m != null:
 		var out = "https://docs.google.com/spreadsheets/d/%s/export?format=csv" % m.get_string(1)
@@ -132,7 +139,7 @@ func check(silent: bool = false) -> void:
 		_http.request_completed.connect(_on_http)
 	_busy = true
 	_silent = silent
-	var err = _http.request(fetch_url(src), PackedStringArray(["Accept: text/plain, text/csv, */*"]))
+	var err = _http.request(fetch_url(src), PackedStringArray(["Accept: application/zip, text/plain, text/csv, */*"]))
 	if err != OK:
 		_busy = false
 		_finish({"ok": false, "error": "Could not reach that link."}, silent)
@@ -150,7 +157,74 @@ func _on_http(result: int, code: int, _headers: PackedStringArray, body: PackedB
 			msg += " " + NOT_SHARED
 		_finish({"ok": false, "error": msg}, _silent)
 		return
+	if body.size() > 4 and body[0] == 0x50 and body[1] == 0x4B:
+		_got_zip(body, _silent)
+		return
 	_got_text(body.get_string_from_utf8(), _silent, true)
+
+
+## A Google Doc exported as a zip: its HTML becomes the note's text and the
+## pictures wait in memory until their check-in is imported.
+func _got_zip(bytes: PackedByteArray, silent: bool) -> void:
+	var path = _app().DATA_DIR + "inbox_note.zip"
+	var f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		_finish({"ok": false, "error": "Could not save the note's pictures to read them."}, silent)
+		return
+	f.store_buffer(bytes)
+	f.close()
+	var z = ZIPReader.new()
+	if z.open(path) != OK:
+		DirAccess.remove_absolute(path)
+		_finish({"ok": false, "error": "Could not read the note (the download was not what Google normally sends)."}, silent)
+		return
+	var html = ""
+	var images = {}
+	for name in z.get_files():
+		if str(name).to_lower().ends_with(".html") and html == "":
+			html = z.read_file(name).get_string_from_utf8()
+		elif str(name).begins_with("images/"):
+			images[str(name)] = z.read_file(name)
+	z.close()
+	DirAccess.remove_absolute(path)
+	_images = images
+	_image_tex = {}
+	_got_text(html_to_text(html), silent, true)
+
+
+## Google's HTML export -> plain lines. Each picture becomes its own line,
+## "photo images/image1.jpg", which the parser turns into a progress photo.
+static func html_to_text(html: String) -> String:
+	var h = html
+	for tag in ["head", "style", "script"]:
+		h = RegEx.create_from_string("(?is)<%s\\b.*?</%s>" % [tag, tag]).sub(h, "", true)
+	h = RegEx.create_from_string("(?is)<img\\b[^>]*\\bsrc=\"([^\"]+)\"[^>]*>").sub(h, "\nphoto $1\n", true)
+	h = RegEx.create_from_string("(?is)<br\\s*/?>|</(?:p|div|li|tr|h[1-6]|table)>").sub(h, "\n", true)
+	h = RegEx.create_from_string("(?is)</t[dh]>").sub(h, " ", true)
+	h = RegEx.create_from_string("(?s)<[^>]+>").sub(h, "", true)
+	h = h.replace("&nbsp;", " ").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+	var m = RegEx.create_from_string("&#(\\d+);")
+	for hit in m.search_all(h):
+		h = h.replace(hit.get_string(0), char(int(hit.get_string(1))))
+	return h
+
+
+## A picture found in the note, small, for the review sheet (null when unknown).
+func image_texture(ref: String):
+	if _image_tex.has(ref):
+		return _image_tex[ref]
+	if not _images.has(ref):
+		return null
+	var img = _app().decode_image(_images[ref], ref)
+	if img == null:
+		return null
+	var longest = max(img.get_width(), img.get_height())
+	if longest > 320:
+		var k = 320.0 / float(longest)
+		img.resize(maxi(1, int(round(img.get_width() * k))), maxi(1, int(round(img.get_height() * k))), Image.INTERPOLATE_BILINEAR)
+	var tex = ImageTexture.create_from_image(img)
+	_image_tex[ref] = tex
+	return tex
 
 
 ## Read pasted text the same way (nothing is fetched). Returns the result.
@@ -164,6 +238,7 @@ func _got_text(text: String, silent: bool, from_source: bool) -> void:
 	if head.begins_with("<!doctype") or head.begins_with("<html") or head.contains("<html"):
 		_finish({"ok": false, "error": NOT_SHARED}, silent)
 		return
+	last_text = text
 	var parsed = QuickLog.parse_any(text, parse_opts())
 	var imported = settings().get("imported", {})
 	var split = PhoneInbox.split_entries(parsed.entries, imported)
@@ -246,6 +321,18 @@ func import_entries(entries: Array) -> void:
 			sessions.append(app.build_session(d))
 		else:
 			d["id"] = Rng.uid("b")
+			# Pictures from the note become this check-in's photos: front, side, back in order.
+			var refs = d.get("photoRefs", [])
+			d.erase("photoRefs")
+			var photos = {}
+			for j in range(mini(refs.size(), TT.PHOTO_ANGLES.size())):
+				var ref = str(refs[j])
+				if _images.has(ref):
+					var pid = app.import_photo_bytes(_images[ref], ref)
+					if pid != "":
+						photos[TT.PHOTO_ANGLES[j]] = pid
+			if not photos.is_empty():
+				d["photos"] = photos
 			bodies.append(d)
 		imported[e.key] = int(imported.get(e.key, 0)) + 1
 	app.update_inbox({"imported": imported})

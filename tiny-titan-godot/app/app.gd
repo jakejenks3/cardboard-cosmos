@@ -384,6 +384,38 @@ func import_photo(source_path: String) -> String:
 	return _store_image(img)
 
 
+## Picture bytes (jpg, png or webp, judged by `name`'s extension) -> Image, or null.
+func decode_image(bytes: PackedByteArray, name: String):
+	var order = ["jpg", "png", "webp"]
+	var ext = name.get_extension().to_lower()
+	if ext == "jpeg":
+		ext = "jpg"
+	if order.has(ext):
+		order.erase(ext)
+		order.push_front(ext)
+	for kind in order:
+		var img = Image.new()
+		var err = ERR_FILE_UNRECOGNIZED
+		match kind:
+			"jpg":
+				err = img.load_jpg_from_buffer(bytes)
+			"png":
+				err = img.load_png_from_buffer(bytes)
+			"webp":
+				err = img.load_webp_from_buffer(bytes)
+		if err == OK and not img.is_empty():
+			return img
+	return null
+
+
+## Store picture bytes (from the phone note) as a photo. Returns the new id, or "" on failure.
+func import_photo_bytes(bytes: PackedByteArray, name: String) -> String:
+	var img = decode_image(bytes, name)
+	if img == null:
+		return ""
+	return _store_image(img)
+
+
 func _store_image(img: Image) -> String:
 	var w = img.get_width()
 	var h = img.get_height()
