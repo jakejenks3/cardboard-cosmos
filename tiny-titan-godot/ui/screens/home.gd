@@ -27,6 +27,21 @@ func build() -> void:
 	top.add_child(Kit.vcenter(Kit.icon_button("settings", _open_settings, "Settings")))
 	add_child(top)
 
+	# --- new entries from the phone inbox (never opened by itself) -----------
+	var pend = App.inbox.pending() if App.inbox != null else []
+	if not pend.is_empty():
+		var ic = Kit.card(4, InboxSheet.open_pending, 12)
+		ic.tint(Pal.with_alpha(Pal.ACCENT, 0.12), Pal.ACCENT)
+		var irow = Kit.hbox(10)
+		irow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		irow.add_child(Kit.vcenter(Icons.rect("speech", 24)))
+		var n = pend.size()
+		irow.add_child(Kit.para("%d new entr%s from your phone" % [n, "y" if n == 1 else "ies"], 14, null, true))
+		irow.add_child(Kit.vcenter(Kit.label("Review", 14, Pal.ACCENT, true)))
+		irow.add_child(Kit.vcenter(Icons.rect("chevron_right", 16, Pal.ACCENT)))
+		ic.add(irow)
+		add_child(ic)
+
 	# --- the hero in the gym --------------------------------------------------
 	var stage_card = Kit.card(4, Callable(), 6)
 	var hero = HeroView.new()

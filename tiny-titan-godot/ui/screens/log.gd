@@ -122,6 +122,9 @@ func _build_picker() -> void:
 	wide.add(h)
 	add_child(wide)
 
+	# Workouts jotted on the phone (app/inbox.gd).
+	add_child(Kit.center(Kit.link("Import from phone", InboxSheet.check_and_review.bind(Callable()))))
+
 
 func _picker_tile(d: String, title: String, sub: String, col: Color, icon: String) -> Card:
 	var c = Kit.card(6, _pick.bind(d), 14)

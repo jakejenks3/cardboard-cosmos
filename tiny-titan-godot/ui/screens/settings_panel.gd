@@ -7,6 +7,7 @@ var sheet: Sheet = null
 
 
 var _pending_name = null
+var _pending_source = null
 
 func _init() -> void:
 	add_theme_constant_override("separation", 12)
@@ -17,6 +18,8 @@ func fill() -> void:
 	# A name still being typed is saved first, so the rebuilt field shows it.
 	if _pending_name != null:
 		_commit_name(_pending_name)
+	if _pending_source != null:
+		_commit_source(_pending_source)
 	Kit.clear(self)
 	var p = App.profile()
 	var st = App.settings()
@@ -55,6 +58,9 @@ func fill() -> void:
 
 	var sound_opts = [{"value": true, "label": "On"}, {"value": false, "label": "Off"}]
 	add_child(Kit.field("Sound effects", Kit.segmented(sound_opts, bool(st.get("sound", true)), _on_sound)))
+
+	# --- phone inbox ----------------------------------------------------------------
+	_build_inbox()
 
 	# --- data ---------------------------------------------------------------------
 	add_child(Kit.h3("Data"))
@@ -95,6 +101,82 @@ func _exit_tree() -> void:
 	# The sheet was closed mid-typing: keep what was typed.
 	if _pending_name != null:
 		_commit_name(_pending_name)
+	if _pending_source != null:
+		_commit_source(_pending_source)
+
+
+# ---------------------------------------------------------------------------
+# Phone inbox (app/inbox.gd): workouts jotted in a note on the phone
+# ---------------------------------------------------------------------------
+
+func _build_inbox() -> void:
+	var ib = App.inbox.settings()
+	add_child(Kit.h3("Phone inbox"))
+	add_child(Kit.muted_para("Jot workouts in a note on your phone; the game reads it and imports them.", 13))
+	var src = Kit.input(str(ib.get("source", "")), "Google Doc link or a file path")
+	src.select_all_on_focus = false
+	src.text_changed.connect(_on_source)
+	add_child(Kit.field("Link or file", src))
+	var btns = Kit.flow(8)
+	btns.add_child(Kit.button("Check now", "primary", _check_now, "sm"))
+	btns.add_child(Kit.button("Paste text…", "secondary", InboxSheet.open_paste.bind(_close_sheet), "sm"))
+	add_child(btns)
+	var on_off = [{"value": true, "label": "On"}, {"value": false, "label": "Off"}]
+	add_child(Kit.field("Check when the game starts", Kit.segmented(on_off, bool(ib.get("auto", true)), _on_inbox_auto)))
+	var line = App.inbox.status
+	if line == "":
+		line = App.inbox.last_checked_text()
+	if line == "":
+		line = "Not checked yet."
+	add_child(Kit.para(line, 12, Pal.MUTED))
+
+	var how = Kit.card(6, Callable(), 12)
+	how.tint(Pal.WELL, Pal.LINE)
+	how.add(Kit.label("How it works", 14, null, true))
+	how.add(Kit.muted_para("1. Make a Google Doc on your phone.\n2. Share → General access → Anyone with the link (Viewer).\n3. Copy the link and paste it above.\n4. Write what you did, one thing per line, a date line to start a day:", 12))
+	how.add(Kit.para(QuickLog.CHEAT_SHEET, 13, Pal.TEXT))
+	how.add(Kit.muted_para("5. Back at the computer, press Check now (or just start the game). Nothing is imported until you say so, and lines it cannot read are shown, never dropped. A Google Form's responses sheet or a file in a synced folder works too.", 12))
+	add_child(how)
+	add_child(Kit.muted_para("The link only has to be readable. Anyone who has the link can read that note, so keep it to workout notes.", 11))
+
+
+func _on_source(t: String) -> void:
+	_pending_source = t
+	get_tree().create_timer(0.6).timeout.connect(_commit_source.bind(t))
+
+
+func _commit_source(t: String) -> void:
+	if _pending_source == null or _pending_source != t:
+		return
+	_pending_source = null
+	App.inbox.set_source(t)
+
+
+func _on_inbox_auto(on) -> void:
+	Sfx.tick()
+	App.inbox.set_auto(bool(on))
+	call_deferred("_refill")
+
+
+func _check_now() -> void:
+	Sfx.tap()
+	if _pending_source != null:
+		_commit_source(_pending_source)
+	if str(App.inbox.settings().get("source", "")).strip_edges() == "":
+		App.toast("Paste the link to your phone note first", "info")
+		return
+	App.inbox.checked.connect(_on_checked_here, CONNECT_ONE_SHOT)
+	InboxSheet.check_and_review(_close_sheet)
+
+
+func _on_checked_here(_result) -> void:
+	call_deferred("_refill")
+
+
+## The review sheet and the results reel need the room: close Settings first.
+func _close_sheet() -> void:
+	if sheet != null and is_instance_valid(sheet):
+		sheet.close()
 
 
 func _on_look(patch: Dictionary) -> void:

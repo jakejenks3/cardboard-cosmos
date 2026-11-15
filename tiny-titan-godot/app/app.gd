@@ -44,6 +44,9 @@ var log_discipline = null
 var editing_session_id = null
 var editing_body_id = null
 
+## The phone inbox (app/inbox.gd): reads workouts jotted in a note on the phone.
+var inbox = null
+
 var _quests = null
 var _photo_cache = {}
 ## Set when the save file could not be written (shown once to the player).
@@ -69,6 +72,9 @@ func _ready() -> void:
 	t.timeout.connect(_tick)
 	add_child(t)
 	t.start()
+	inbox = PhoneInbox.new()
+	inbox.name = "PhoneInbox"
+	add_child(inbox)
 
 
 func _tick() -> void:
@@ -282,6 +288,13 @@ func claim_quest(q: Dictionary) -> void:
 func equip(slot: String, id) -> void:
 	saved.loadout[slot] = id
 	_commit()
+
+
+## Phone inbox settings ({source, imported, lastChecked, auto}). Saved without
+## re-deriving the hero: none of it changes the log.
+func update_inbox(patch: Dictionary) -> void:
+	saved.inbox.merge(patch, true)
+	_write()
 
 
 func set_active_pet(id) -> void:
@@ -508,6 +521,7 @@ static func empty_saved() -> Dictionary:
 		"activePet": null,
 		"strava": {"lastSyncAt": null, "athleteName": null},
 		"updatedAt": 0,
+		"inbox": {"source": "", "imported": {}, "lastChecked": 0, "auto": true},
 	}
 
 
@@ -538,6 +552,18 @@ static func parse_saved(raw):
 		out.activePet = o.activePet
 	if o.get("updatedAt") is int or o.get("updatedAt") is float:
 		out.updatedAt = int(o.updatedAt)
+	var ib = o.get("inbox")
+	if ib is Dictionary:
+		if ib.get("source") is String:
+			out.inbox.source = ib.source
+		if ib.get("imported") is Dictionary:
+			for k in ib.imported:
+				if ib.imported[k] is int or ib.imported[k] is float:
+					out.inbox.imported[str(k)] = int(ib.imported[k])
+		if ib.get("lastChecked") is int or ib.get("lastChecked") is float:
+			out.inbox.lastChecked = int(ib.lastChecked)
+		if ib.get("auto") is bool:
+			out.inbox.auto = ib.auto
 	return out
 
 
