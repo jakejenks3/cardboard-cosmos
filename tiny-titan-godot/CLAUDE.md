@@ -65,6 +65,14 @@ is the Windows handoff.
   (`s.body.photoSpanDays` / `photoMonths`, 5 `body_*` trophies, a "One month on" reel moment
   from `Diff.PHOTO_MILESTONES`). Parity strips `body.*` photo keys via dotted
   `POST_PORT_STATE_KEYS`. Catalog: 160 trophies. Unit test: `tests/extras_test.gd`.
+- Lift library (added 2026-11-15, evening): Journey → Lifts. `game/lift_library.gd` holds the
+  catalog (about 170 lifts as rows of name, part, equipment, family, also-works, tip, other
+  names) and the pure logic: `rows(sessions)` joins the catalog with the log (other names
+  such as "heel raise" merge into one lift; unknown logged lifts appear as "Your own"),
+  `query` filters/sorts, `rep_bests`, `variations`. `ui/screens/journey_lifts.gd` is the
+  screen and detail sheet; typing in the search box refills only the list. "Add to today's
+  workout" sets `App.pending_exercise`, which `LogLiftEditor.build` consumes. Tests:
+  `tests/lift_library_test.gd`, walkthrough `tests/shots/lifts.gd` (year data).
 - 19 more chase trophies (ids `quirk_*`: Five by Five, Ladder, Pyramid, Streak Week,
   On the Nose, Commuter, Friday the 13th…) read `s.quirks`, filled by
   `Derive._deal_quirks`; also dropped by parity. Unit test: `tests/quirks_test.gd`.

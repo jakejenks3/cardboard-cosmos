@@ -79,6 +79,12 @@ are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; a
 `+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
 
+**Lift library** (Journey → Lifts): about 170 lifts grouped by body part, with equipment
+chips (barbell, dumbbell, cable, machine…), a search box and sorting by name, most done,
+heaviest or most recent. Tap a lift for form notes, your best set, estimated 1RM, rep
+records, a trend line, every session you did it in, variations to try and a button that
+adds it to today's workout. "New to me" shows what you have never done.
+
 Edited a day after importing it? The game notices, shows "Updates the one already imported"
 on the review sheet, and replaces that session instead of adding a copy. Once everything in
 the note is in the game, the Hero tab says so and it is safe to clear the note.

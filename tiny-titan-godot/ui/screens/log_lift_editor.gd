@@ -101,6 +101,22 @@ func build(parent: Control) -> void:
 	_deltas = []
 	_built_names = []
 
+	# An exercise sent over from the lift library: add it with last time's sets.
+	if App.pending_exercise != "":
+		var pend = App.pending_exercise
+		App.pending_exercise = ""
+		var pk = Xp.normalize_exercise(pend)
+		var have = false
+		for e in exercises:
+			if Xp.normalize_exercise(e.name) == pk:
+				have = true
+		if not have and pk != "":
+			var plp = _last.get(pk)
+			if plp != null:
+				exercises.append(draft_from_sets(str(plp.name), plp.sets, wu))
+			else:
+				exercises.append({"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]})
+
 	if exercises.is_empty():
 		var templates = LiftHistory.recent_workouts(sessions, 3, editing_id)
 		if not templates.is_empty():

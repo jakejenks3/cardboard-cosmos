@@ -1,8 +1,9 @@
 class_name JourneyScreen
 extends UiScreen
-## Journey: "how far you've come" (port of screens/Journey.tsx). Four sub-tabs:
-## Stats (then vs now, charts, records, fun facts), Body (JourneyBody), Story
-## (the dated chronicle) and Log (every session, tap to edit).
+## Journey: "how far you've come" (port of screens/Journey.tsx). Five sub-tabs:
+## Stats (then vs now, charts, records, fun facts), Body (JourneyBody), Lifts
+## (JourneyLifts, the lift library), Story (the dated chronicle) and Log (every
+## session, tap to edit).
 
 const LEVEL_ONE = {"hero": 1, "lift": 1, "climb": 1, "run": 1, "ride": 1}
 const THEN_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
@@ -21,6 +22,8 @@ var _exercise = null
 var _chron_filter = "all"
 ## Body sub-tab state (shared with JourneyBody): photo angle, chosen then / now check-ins.
 var _body_state = {"angle": "front", "then": null, "now": null}
+## Lifts sub-tab state (JourneyLifts): search text, body part, equipment, All / Done / New, sort.
+var _lifts_state = {"q": "", "part": "", "equip": "", "show": "all", "sort": "part"}
 
 
 func build() -> void:
@@ -28,6 +31,7 @@ func build() -> void:
 	add_child(Kit.sub_tabs([
 		{"value": "stats", "label": "Stats"},
 		{"value": "body", "label": "Body"},
+		{"value": "lifts", "label": "Lifts"},
 		{"value": "chronicle", "label": "Story"},
 		{"value": "history", "label": "Log"},
 	], App.journey_tab, App.set_journey_tab))
@@ -35,6 +39,8 @@ func build() -> void:
 	match App.journey_tab:
 		"body":
 			JourneyBody.build(self, _body_state, rebuild)
+		"lifts":
+			JourneyLifts.build(self, _lifts_state, rebuild)
 		"chronicle":
 			_build_chronicle()
 		"history":

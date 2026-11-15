@@ -27,6 +27,8 @@ func on_nav() -> void:
 	if _target_key() != _key:
 		_sync_form()
 		rebuild()
+	elif App.pending_exercise != "":
+		rebuild()
 
 
 func _target_key() -> String:

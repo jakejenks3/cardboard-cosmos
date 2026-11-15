@@ -41,6 +41,9 @@ var adventure_tab: String = "campaign"  # campaign | quests | trophies
 var journey_tab: String = "stats"  # stats | body | chronicle | history
 ## What the Log tab shows: null = picker, a discipline id, or "body".
 var log_discipline = null
+## An exercise the lift form should add the next time it builds (set by the
+## lift library's "Add to today's workout"; the form clears it).
+var pending_exercise: String = ""
 var editing_session_id = null
 var editing_body_id = null
 
