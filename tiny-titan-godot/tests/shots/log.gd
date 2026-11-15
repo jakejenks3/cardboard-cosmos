@@ -55,7 +55,7 @@ func card_of(text: String):
 ## Screenshot after the cards have finished rising in.
 func shot(shot_name: String) -> void:
 	await ShotHelper.wait(tree, 0.7)
-	await shot(shot_name)
+	await ShotHelper.snap(tree, shot_name)
 
 
 func tap(text: String) -> void:

@@ -53,10 +53,10 @@ static func topbar(icon: String, title: String, on_back: Callable, on_delete: Ca
 # ---------------------------------------------------------------------------
 
 ## Make a label read on a bright face: white with a dark pixel outline.
-static func on_face(l: Label) -> Label:
+static func on_face(l: Label, outline: int = 4) -> Label:
 	l.add_theme_color_override("font_color", Color.WHITE)
 	l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
-	l.add_theme_constant_override("outline_size", 4)
+	l.add_theme_constant_override("outline_size", outline)
 	return l
 
 

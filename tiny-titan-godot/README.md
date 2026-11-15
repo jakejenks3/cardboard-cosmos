@@ -125,6 +125,13 @@ tests/          parity tests against the original TypeScript engine, and scripte
 Every screen is built in code (there is one tiny scene, `main.tscn`), so to change a screen you edit
 its script in `ui/screens/`.
 
+### Look and themes
+
+The interface is pixel art drawn in code, like the rest of the game: panels, raised buttons that sink
+when pressed, bars and inputs come from `ui/pix_box.gd`, and every colour comes from `ui/pal.gd`.
+**Settings → Theme** switches between Arcade, Ember, Forest and Slate; to add your own, add an entry
+to `Pal.THEMES`.
+
 ### Window size
 
 The game is a phone-shaped column. It opens at 440 × 900, grows on high-DPI screens and shrinks to

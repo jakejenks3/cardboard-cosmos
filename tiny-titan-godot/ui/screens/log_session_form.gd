@@ -238,9 +238,10 @@ func refresh() -> void:
 		"lift":
 			sub = "%s · %d reps · %d sets" % [Fmt.fmt_big_kg(float(st.volumeKg), wu), int(st.reps) + int(st.bwReps), int(st.sets)]
 		"climb":
-			sub = "%d sends · %d flashes · %d attempts" % [int(st.sends), int(st.flashes), int(st.attempts)]
+			sub = "%d sends" % int(st.sends)
 			if st.maxGradeSent != null:
 				sub += " · max " + Xp.grade_label(st.maxGradeSent)
+			side += "\n%d sends · %d flashes · %d attempts" % [int(st.sends), int(st.flashes), int(st.attempts)]
 		"run", "ride":
 			sub = Fmt.fmt_distance(float(d.distanceM), du)
 	if not valid:
@@ -338,11 +339,11 @@ func on_draft_changed(rebuild_all: bool) -> void:
 ## The difficulty ramp: green (VB) through yellow and orange to red and purple.
 ## Fixed art colours, the same in every theme.
 static func grade_hue(g: int) -> Color:
-	var t = clampf((g + 1) / 14.0, 0.0, 1.0)
-	var h = 140.0 - t * 140.0
-	if t > 0.85:
-		h = 360.0 - (t - 0.85) / 0.15 * 50.0
-	return _hsl(h / 360.0, 0.62, 0.44)
+	if g > 10:
+		# Beyond V10: deepening purples.
+		return _hsl((300.0 - (g - 11) * 8.0) / 360.0, 0.5, 0.46 - (g - 11) * 0.025)
+	var t = clampf((g + 1) / 11.0, 0.0, 1.0)
+	return _hsl((135.0 - t * 135.0) / 360.0, 0.64, 0.44)
 
 
 static func _hsl(h: float, s: float, l: float) -> Color:
@@ -464,8 +465,7 @@ func _climb_chip(k: int) -> Control:
 	p.tooltip_text = "%s %s × %d" % [Xp.grade_label(cl.grade), result_label(cl.result).to_lower(), int(cl.count)]
 	var h = Kit.hbox(5)
 	var g = LogWidgets.badge(Xp.grade_label(cl.grade), hue, 13)
-	g.get_child(0).add_theme_color_override("font_color", Color.WHITE)
-	LogWidgets.on_face(g.get_child(0))
+	LogWidgets.on_face(g.get_child(0), 3)
 	h.add_child(g)
 	h.add_child(Kit.vcenter(Icons.rect(result_icon(cl.result), 16, result_color(cl.result))))
 	h.add_child(Kit.vcenter(PixelFont.rect("x%d" % int(cl.count), 2, Pal.TEXT)))
@@ -567,7 +567,7 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	# Elevation: secondary.
 	var ev = Kit.vbox(4)
 	ev.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ev.add_child(Kit.label("Climb", 12, Pal.MUTED, true))
+	ev.add_child(Kit.label("Elevation", 12, Pal.MUTED, true))
 	var erow = Kit.hbox(6)
 	var ee = LogWidgets.big_input(elev, "0", "elev", 0, 18)
 	ee.tooltip_text = "Elevation gain (%s)" % ("m" if du == "km" else "ft")
