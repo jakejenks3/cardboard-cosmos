@@ -33,7 +33,7 @@ func build() -> void:
 		irow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		irow.add_child(Kit.vcenter(Icons.rect("speech", 26)))
 		var n = pend.size()
-		irow.add_child(Kit.para("%d new from your phone" % n, 15, null, true))
+		irow.add_child(Kit.para("%d new entr%s from your phone" % [n, "y" if n == 1 else "ies"], 15, null, true))
 		irow.add_child(Kit.vcenter(Kit.tag("Review", Pal.GOOD, true, 12)))
 		ic.add(irow)
 		add_child(ic)

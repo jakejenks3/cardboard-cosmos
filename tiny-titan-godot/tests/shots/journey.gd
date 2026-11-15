@@ -14,7 +14,7 @@ func run(m: Node, t: SceneTree) -> void:
 	if kind != "year":
 		for tab in ["stats", "body", "chronicle", "history"]:
 			App.go("journey", tab)
-			await ShotHelper.frames(tree, 4)
+			await ShotHelper.wait(tree, 0.7)
 			await ShotHelper.snap(tree, "j_%s_%s" % [kind, tab])
 			ShotHelper.scroll_main(main, 700)
 			await ShotHelper.snap(tree, "j_%s_%s_2" % [kind, tab])
@@ -22,7 +22,7 @@ func run(m: Node, t: SceneTree) -> void:
 
 	# --- Stats -------------------------------------------------------------
 	App.go("journey", "stats")
-	await ShotHelper.frames(tree, 4)
+	await ShotHelper.wait(tree, 0.7)
 	for i in range(5):
 		ShotHelper.scroll_main(main, i * 760)
 		await ShotHelper.snap(tree, "j_stats_%d" % i)
@@ -70,7 +70,7 @@ func run(m: Node, t: SceneTree) -> void:
 
 	# --- Units --------------------------------------------------------------
 	App.update_settings({"weightUnit": "lb", "distanceUnit": "mi"})
-	await ShotHelper.frames(tree, 4)
+	await ShotHelper.wait(tree, 0.7)
 	ShotHelper.scroll_main(main, 0)
 	await ShotHelper.snap(tree, "j_stats_lb_0")
 	var ln3 = _find(func(n): return n is LineChart)
@@ -110,7 +110,7 @@ func run(m: Node, t: SceneTree) -> void:
 		_dismiss_results()
 	print("BODY entries ", App.body().size(), " with photos ", App.body().filter(func(e): return e.has("photos")).size())
 	App.go("journey", "body")
-	await ShotHelper.frames(tree, 4)
+	await ShotHelper.wait(tree, 0.7)
 	for i in range(5):
 		ShotHelper.scroll_main(main, i * 760)
 		await ShotHelper.snap(tree, "j_body_%d" % i)
@@ -160,7 +160,7 @@ func run(m: Node, t: SceneTree) -> void:
 
 	# --- Story --------------------------------------------------------------
 	App.go("journey", "chronicle")
-	await ShotHelper.frames(tree, 4)
+	await ShotHelper.wait(tree, 0.7)
 	for i in range(3):
 		ShotHelper.scroll_main(main, i * 760)
 		await ShotHelper.snap(tree, "j_story_%d" % i)
@@ -172,7 +172,7 @@ func run(m: Node, t: SceneTree) -> void:
 
 	# --- History ------------------------------------------------------------
 	App.go("journey", "history")
-	await ShotHelper.frames(tree, 4)
+	await ShotHelper.wait(tree, 0.7)
 	ShotHelper.scroll_main(main, 0)
 	await ShotHelper.snap(tree, "j_history_0")
 	ShotHelper.scroll_main(main, 760)
@@ -188,7 +188,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.snap(tree, "j_history_tap")
 	# Body check-in row tap.
 	App.go("journey", "body")
-	await ShotHelper.frames(tree, 4)
+	await ShotHelper.wait(tree, 0.7)
 	var brow = null
 	for n in ShotHelper.walk(main):
 		if n is Card and n.get("_tap") != null and n._tap.is_valid() and ShotHelper.all_text(n).contains("photo"):

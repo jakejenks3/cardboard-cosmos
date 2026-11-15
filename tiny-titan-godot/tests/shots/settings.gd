@@ -33,7 +33,7 @@ func _btn(t: String):
 func run(main: Node, tree: SceneTree) -> void:
 	App.update_settings({"weightUnit": "kg", "weightStep": 2.5})
 	SettingsSheet.open()
-	await ShotHelper.wait(tree, 0.4)
+	await ShotHelper.wait(tree, 0.7)
 	var settings_sheet = _sheet()
 	await ShotHelper.snap(tree, "settings_1")
 	_sheet()._scroll.scroll_vertical = 2000
