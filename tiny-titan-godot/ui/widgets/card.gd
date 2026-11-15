@@ -1,18 +1,22 @@
 class_name Card
 extends PanelContainer
-## A rounded panel with a vertical stack inside. Optionally tappable.
+## A pixel-art panel with a vertical stack inside. Optionally tappable, and
+## optionally colour-coded with `accent()` to show what it is about.
 
 var box: VBoxContainer
 var _tap = Callable()
 var _press_at = null
 var _pad = 14
-var _bg = Pal.PANEL
-var _border = Pal.LINE
+## null = the theme's panel colour / bright edge.
+var _bg = null
+var _border = null
+var _hot = false
 
 
 func _init(sep: int = 8, pad_px: int = 14) -> void:
 	_pad = pad_px
-	_restyle(false)
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_restyle()
 	box = VBoxContainer.new()
 	box.add_theme_constant_override("separation", sep)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -21,18 +25,50 @@ func _init(sep: int = 8, pad_px: int = 14) -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 
+func _ready() -> void:
+	# When a screen first appears its cards rise in one after another.
+	if not Kit.intro():
+		return
+	var p = get_parent()
+	while p != null:
+		if p is Card:
+			return
+		p = p.get_parent()
+	modulate.a = 0.0
+	scale = Vector2(0.96, 0.96)
+	var tw = create_tween()
+	tw.tween_interval(Kit.intro_delay())
+	tw.tween_callback(_center_pivot)
+	tw.set_parallel(true)
+	tw.tween_property(self, "modulate:a", 1.0, 0.18)
+	tw.tween_property(self, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _center_pivot() -> void:
+	pivot_offset = size / 2.0
+
+
 ## Add a child to the card's stack. Returns the child.
 func add(node: Node) -> Node:
 	box.add_child(node)
 	return node
 
 
-## Recolour the card (e.g. a highlighted or "done" state).
+## Recolour the card with explicit colours.
 func tint(bg: Color, border = null) -> Card:
 	_bg = bg
 	if border != null:
 		_border = border
-	_restyle(false)
+	_restyle()
+	return self
+
+
+## Colour-code the card: its bright edge takes `color`. With `fill`, the whole
+## card is a deep shade of that colour (the boss card is dark red).
+func accent(color: Color, fill: bool = false) -> Card:
+	_bg = Pal.deep(color) if fill else null
+	_border = color
+	_restyle()
 	return self
 
 
@@ -47,28 +83,33 @@ func on_tap(cb: Callable) -> Card:
 
 
 func _hover_on() -> void:
-	_restyle(true)
+	_hot = true
+	_restyle()
 
 
 func _hover_off() -> void:
-	_restyle(false)
-	_press_at = null
+	_hot = false
+	_restyle()
+	if _press_at != null:
+		_press_at = null
+		_squash(false)
 
 
-func _restyle(hot: bool) -> void:
-	var bg = _bg.lightened(0.05) if hot else _bg
-	var sb = Kit.sbox(bg, 14, _border, 1, _pad, _pad)
-	sb.shadow_color = Color(0, 0, 0, 0.28)
-	sb.shadow_size = 3
-	sb.shadow_offset = Vector2(0, 2)
-	add_theme_stylebox_override("panel", sb)
-	queue_redraw()
+func _restyle() -> void:
+	var bg = Pal.PANEL if _bg == null else _bg
+	if _hot:
+		bg = bg.lightened(0.07)
+	add_theme_stylebox_override("panel", PixBox.panel(bg, _border, _pad))
 
 
-func _draw() -> void:
-	# A one-pixel highlight along the top edge: the card catches the light.
-	if size.x > 40.0:
-		draw_line(Vector2(13.0, 1.5), Vector2(size.x - 13.0, 1.5), Color(1, 1, 1, 0.07), 1.0)
+## Pressed in a little while the mouse is down, popping back on release.
+func _squash(down: bool) -> void:
+	pivot_offset = size / 2.0
+	var tw = create_tween()
+	if down:
+		tw.tween_property(self, "scale", Vector2(0.975, 0.975), 0.06)
+	else:
+		tw.tween_property(self, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -77,9 +118,12 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_press_at = event.global_position
+			_squash(true)
+			Sfx.tick()
 		elif _press_at != null:
 			var moved = event.global_position.distance_to(_press_at)
 			_press_at = null
+			_squash(false)
 			# A drag (scrolling) is not a tap.
 			if moved < 12.0:
 				accept_event()

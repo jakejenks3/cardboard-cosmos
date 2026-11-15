@@ -165,6 +165,7 @@ func _photo_slot(angle: String) -> Control:
 		c.tint(Pal.WELL, Pal.with_alpha(Pal.ACCENT, 0.6))
 		var img = TextureRect.new()
 		img.texture = tex
+		img.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 		img.custom_minimum_size = Vector2(0, 118)

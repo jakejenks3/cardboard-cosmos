@@ -24,11 +24,8 @@ func setup(title: String = "") -> void:
 	add_child(_backdrop)
 
 	_panel = PanelContainer.new()
-	var sb = Kit.sbox(Pal.BG2, 20, Pal.LINE, 1, 16, 14)
-	sb.corner_radius_bottom_left = 0
-	sb.corner_radius_bottom_right = 0
-	sb.border_width_bottom = 0
-	_panel.add_theme_stylebox_override("panel", sb)
+	_panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_panel.add_theme_stylebox_override("panel", PixBox.make(Pal.BG2, {"ring": Pal.BORDER, "lip": 0, "pad_h": 16, "pad_v": 14}))
 	add_child(_panel)
 
 	var outer = Kit.vbox(10)

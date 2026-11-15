@@ -23,11 +23,13 @@ static func font_bold() -> Font:
 	return _bold
 
 
-## A flat rounded box: the building block of every surface.
+## A flat box with slightly rounded corners: tags, badges and small custom surfaces.
+## (Cards, buttons and inputs use the pixel-art boxes from PixBox instead.)
 static func sbox(bg: Color, radius: int = 12, border = null, bw: int = 1, pad_h: int = 16, pad_v: int = 10) -> StyleBoxFlat:
 	var s = StyleBoxFlat.new()
 	s.bg_color = bg
-	s.set_corner_radius_all(radius)
+	# Kept blocky so flat boxes sit comfortably next to the pixel-art ones.
+	s.set_corner_radius_all(mini(radius, 5))
 	if border != null:
 		s.border_color = border
 		s.set_border_width_all(bw)
@@ -35,7 +37,7 @@ static func sbox(bg: Color, radius: int = 12, border = null, bw: int = 1, pad_h:
 	s.content_margin_right = pad_h
 	s.content_margin_top = pad_v
 	s.content_margin_bottom = pad_v
-	s.anti_aliasing = true
+	s.anti_aliasing = false
 	return s
 
 
@@ -53,13 +55,12 @@ static func theme() -> Theme:
 	t.set_stylebox("normal", "RichTextLabel", StyleBoxEmpty.new())
 	t.set_stylebox("focus", "RichTextLabel", StyleBoxEmpty.new())
 
-	t.set_stylebox("panel", "PanelContainer", sbox(Pal.PANEL, 14, Pal.LINE, 1, 14, 14))
+	t.set_stylebox("panel", "PanelContainer", PixBox.panel())
 
-	# Plain buttons default to the "secondary" look; Kit.button restyles them.
-	t.set_stylebox("normal", "Button", sbox(Pal.PANEL2, 12, Pal.LINE))
-	t.set_stylebox("hover", "Button", sbox(Pal.PANEL2.lightened(0.06), 12, Pal.LINE))
-	t.set_stylebox("pressed", "Button", sbox(Pal.PANEL2.darkened(0.12), 12, Pal.LINE))
-	t.set_stylebox("disabled", "Button", sbox(Pal.with_alpha(Pal.PANEL2, 0.5), 12, Pal.with_alpha(Pal.LINE, 0.5)))
+	# Plain buttons get the quiet raised look; Kit.button restyles them.
+	var plain = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 14, 7, 1, Pal.BORDER)
+	for k in plain:
+		t.set_stylebox(k, "Button", plain[k])
 	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	t.set_color("font_color", "Button", Pal.TEXT)
 	t.set_color("font_hover_color", "Button", Pal.TEXT)
@@ -69,11 +70,11 @@ static func theme() -> Theme:
 	t.set_font("font", "Button", font_bold())
 	t.set_constant("h_separation", "Button", 6)
 
-	var le = sbox(Pal.WELL, 10, Pal.LINE, 1, 12, 9)
-	var le_focus = sbox(Pal.WELL, 10, Pal.ACCENT, 2, 12, 9)
+	var le = PixBox.well(12, 8, Pal.LINE)
+	var le_focus = PixBox.well(12, 8, Pal.ACCENT)
 	t.set_stylebox("normal", "LineEdit", le)
 	t.set_stylebox("focus", "LineEdit", le_focus)
-	t.set_stylebox("read_only", "LineEdit", sbox(Pal.WELL, 10, Pal.with_alpha(Pal.LINE, 0.5), 1, 12, 9))
+	t.set_stylebox("read_only", "LineEdit", PixBox.well(12, 8, null))
 	t.set_color("font_color", "LineEdit", Pal.TEXT)
 	t.set_color("font_placeholder_color", "LineEdit", Pal.with_alpha(Pal.MUTED, 0.6))
 	t.set_color("caret_color", "LineEdit", Pal.ACCENT)
@@ -89,7 +90,7 @@ static func theme() -> Theme:
 	# Slim, quiet scrollbar.
 	var grab = StyleBoxFlat.new()
 	grab.bg_color = Pal.with_alpha(Pal.MUTED, 0.35)
-	grab.set_corner_radius_all(3)
+	grab.set_corner_radius_all(2)
 	var grab_hi = grab.duplicate()
 	grab_hi.bg_color = Pal.with_alpha(Pal.MUTED, 0.6)
 	var track = StyleBoxEmpty.new()
@@ -102,7 +103,7 @@ static func theme() -> Theme:
 		t.set_stylebox("grabber_highlight", sb, grab_hi)
 		t.set_stylebox("grabber_pressed", sb, grab_hi)
 
-	t.set_stylebox("panel", "TooltipPanel", sbox(Pal.INK, 8, Pal.LINE, 1, 8, 5))
+	t.set_stylebox("panel", "TooltipPanel", PixBox.make(Pal.OUTLINE.lightened(0.05), {"ring": Pal.BORDER, "lip": 0, "pad_h": 8, "pad_v": 5}))
 	t.set_color("font_color", "TooltipLabel", Pal.TEXT)
 
 	t.set_constant("separation", "VBoxContainer", 8)
@@ -113,6 +114,50 @@ static func theme() -> Theme:
 	t.set_constant("v_separation", "GridContainer", 8)
 	_theme = t
 	return t
+
+
+## Forget cached styles (after a theme change); the caller rebuilds the UI.
+static func reset_style() -> void:
+	_theme = null
+	PixBox.clear_cache()
+
+
+# --- motion ------------------------------------------------------------------
+
+static var _intro_until: int = 0
+static var _intro_n: int = 0
+
+
+## Call when a screen appears: for the next moment, new cards rise in one after
+## another and new bars fill from empty. Later rebuilds (after a click) do not animate.
+static func intro_begin() -> void:
+	_intro_until = Time.get_ticks_msec() + 400
+	_intro_n = 0
+
+
+static func intro() -> bool:
+	return Time.get_ticks_msec() < _intro_until
+
+
+## The stagger delay for the next thing that animates in.
+static func intro_delay() -> float:
+	_intro_n += 1
+	return minf(float(_intro_n) * 0.03, 0.36)
+
+
+## Click feedback for any button: a tick as it goes down, a little pop as it comes back up.
+static func juice(b: BaseButton) -> void:
+	b.button_down.connect(Sfx.tick)
+	b.button_up.connect(pop.bind(b, 1.05, 0.16))
+
+
+## A burst of pixel sparks from the middle of a control (claiming a reward, a new record).
+static func burst(at: Control, color = null, count: int = 16) -> void:
+	if overlay_root == null or not is_instance_valid(at) or not at.is_inside_tree():
+		return
+	var b = Burst.new()
+	overlay_root.add_child(b)
+	b.start(at.get_global_rect().get_center() - overlay_root.global_position, Pal.ACCENT if color == null else color, count)
 
 
 # ---------------------------------------------------------------------------
@@ -312,64 +357,44 @@ static func card(sep: int = 8, tap: Callable = Callable(), pad_px: int = 14) -> 
 
 
 const _BTN_SIZES = {
-	"sm": {"font": 13, "pad_h": 12, "pad_v": 7, "radius": 10},
-	"md": {"font": 15, "pad_h": 16, "pad_v": 10, "radius": 12},
-	"lg": {"font": 17, "pad_h": 20, "pad_v": 14, "radius": 14},
+	"sm": {"font": 13, "pad_h": 11, "pad_v": 5},
+	"md": {"font": 15, "pad_h": 15, "pad_v": 8},
+	"lg": {"font": 17, "pad_h": 20, "pad_v": 11},
 }
 
 
-## Restyle any Button. Variants: primary (gold), good (green), secondary, ghost, danger.
+## Face, lip and text colour of each button variant; "depth" is how far it stands up.
+static func _variant(variant: String) -> Dictionary:
+	match variant:
+		"primary":
+			return {"face": Pal.ACCENT, "lip": Pal.ACCENT_DARK, "fg": Pal.INK, "ring": null, "depth": 2}
+		"good":
+			return {"face": Pal.GOOD, "lip": Pal.GOOD_DARK, "fg": Color("0d2a17"), "ring": null, "depth": 2}
+		"danger":
+			return {"face": Pal.DANGER, "lip": Pal.DANGER_DARK, "fg": Color.WHITE, "ring": null, "depth": 2}
+		"ghost":
+			return {"face": Pal.PANEL2, "lip": Pal.OUTLINE.lightened(0.1), "fg": Pal.TEXT, "ring": Pal.BORDER, "depth": 1}
+	return {"face": Pal.SECOND, "lip": Pal.SECOND_DARK, "fg": Color.WHITE, "ring": null, "depth": 2}
+
+
+## Restyle any Button as a chunky raised pixel button that sinks when pressed.
+## Variants: primary (gold), good (green), secondary (blue), ghost (quiet), danger (red).
 static func style_button(b: Button, variant: String = "primary", size: String = "md") -> void:
 	var sz = _BTN_SIZES.get(size, _BTN_SIZES["md"])
-	var r = sz.radius
-	var ph = sz.pad_h
-	var pv = sz.pad_v
-	var normal
-	var hover
-	var pressed
-	var fg = Pal.TEXT
-	match variant:
-		"primary", "good":
-			var bg = Pal.ACCENT if variant == "primary" else Pal.GOOD
-			var edge = Pal.ACCENT_DARK if variant == "primary" else Pal.GOOD_DARK
-			fg = Pal.INK if variant == "primary" else Color("10251a")
-			# The chunky "3D" key: a thick darker bottom edge that squashes when pressed.
-			normal = sbox(bg, r, edge, 0, ph, pv)
-			normal.border_width_bottom = 4
-			normal.content_margin_bottom = pv + 4
-			hover = normal.duplicate()
-			hover.bg_color = bg.lightened(0.08)
-			pressed = sbox(bg.darkened(0.04), r, edge, 0, ph, pv)
-			pressed.border_width_bottom = 1
-			pressed.content_margin_top = pv + 3
-			pressed.content_margin_bottom = pv + 1
-		"ghost":
-			fg = Pal.MUTED
-			normal = sbox(Color(0, 0, 0, 0), r, Pal.LINE, 1, ph, pv)
-			hover = sbox(Pal.with_alpha(Pal.PANEL2, 0.6), r, Pal.LINE, 1, ph, pv)
-			pressed = sbox(Pal.PANEL2, r, Pal.LINE, 1, ph, pv)
-		"danger":
-			fg = Pal.DANGER
-			normal = sbox(Color(0, 0, 0, 0), r, Pal.DANGER, 1, ph, pv)
-			hover = sbox(Pal.with_alpha(Pal.DANGER, 0.12), r, Pal.DANGER, 1, ph, pv)
-			pressed = sbox(Pal.with_alpha(Pal.DANGER, 0.22), r, Pal.DANGER, 1, ph, pv)
-		_:
-			normal = sbox(Pal.PANEL2, r, Pal.LINE, 1, ph, pv)
-			hover = sbox(Pal.PANEL2.lightened(0.06), r, Pal.LINE, 1, ph, pv)
-			pressed = sbox(Pal.PANEL2.darkened(0.12), r, Pal.LINE, 1, ph, pv)
-	var disabled = normal.duplicate()
-	disabled.bg_color = Pal.with_alpha(normal.bg_color, normal.bg_color.a * 0.45)
-	disabled.border_color = Pal.with_alpha(normal.border_color, 0.45)
-	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("hover", hover)
-	b.add_theme_stylebox_override("pressed", pressed)
-	b.add_theme_stylebox_override("disabled", disabled)
+	var v = _variant(variant)
+	var looks = PixBox.button_set(v.face, v.lip, sz.pad_h, sz.pad_v, v.depth, v.ring)
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color"]:
-		b.add_theme_color_override(k, fg if k.begins_with("font") else Color.WHITE)
-	b.add_theme_color_override("font_disabled_color", Pal.with_alpha(fg, 0.5))
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, v.fg)
+	b.add_theme_color_override("font_disabled_color", Pal.with_alpha(v.fg, 0.45))
 	b.add_theme_font_size_override("font_size", sz.font)
 	b.add_theme_font_override("font", font_bold())
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	b.set_meta("tt_drop", (v.depth + 1) * PixBox.S)
+	b.set_meta("tt_fg", v.fg)
 
 
 ## A button. `icon` is an Icons name shown before the text ("" for none).
@@ -381,6 +406,7 @@ static func button(text, variant: String = "primary", on_press: Callable = Calla
 	style_button(b, variant, size)
 	if icon != "":
 		_button_icon(b, icon, variant, size)
+	juice(b)
 	if on_press.is_valid():
 		b.pressed.connect(on_press)
 	return b
@@ -388,10 +414,12 @@ static func button(text, variant: String = "primary", on_press: Callable = Calla
 
 ## Godot pins a Button's icon to the button's edge, away from centred text.
 ## To keep icon and text together, the Button's own text is made invisible
-## (it still gives the button its size) and an icon + label row is laid on top.
-static func _button_icon(b: Button, icon: String, variant: String, size: String) -> void:
+## (it still gives the button its size) and an icon + label row is laid on top,
+## which sinks with the face when the button is pressed.
+static func _button_icon(b: Button, icon: String, _variant_name: String, size: String) -> void:
 	var sz = _BTN_SIZES.get(size, _BTN_SIZES["md"])
-	var fg = b.get_theme_color("font_color")
+	var fg = b.get_meta("tt_fg", Pal.TEXT)
+	var drop = int(b.get_meta("tt_drop", 0))
 	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
 		b.add_theme_color_override(k, Color(0, 0, 0, 0))
 	var row = HBoxContainer.new()
@@ -399,13 +427,18 @@ static func _button_icon(b: Button, icon: String, variant: String, size: String)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.set_anchors_preset(Control.PRESET_FULL_RECT)
-	if variant == "primary" or variant == "good":
-		row.offset_bottom = -4
+	row.offset_bottom = -drop
 	row.add_child(Icons.rect(icon, 16))
 	row.add_child(label(b.text, sz.font, fg, true))
 	b.add_child(row)
 	b.custom_minimum_size.x = row.get_combined_minimum_size().x + sz.pad_h * 2
 	b.draw.connect(func(): row.modulate.a = 0.5 if b.disabled else 1.0)
+	b.button_down.connect(func():
+		row.offset_top = drop
+		row.offset_bottom = 0)
+	b.button_up.connect(func():
+		row.offset_top = 0
+		row.offset_bottom = -drop)
 
 
 ## A square icon-only button (settings cog, close, edit, delete …).
@@ -419,11 +452,12 @@ static func icon_button(icon: String, on_press: Callable = Callable(), tip: Stri
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.expand_icon = true
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var pad_px = int(max(4, (px - 24) / 2.0))
-	b.add_theme_stylebox_override("normal", sbox(Pal.PANEL, 12, Pal.LINE, 1, pad_px, pad_px))
-	b.add_theme_stylebox_override("hover", sbox(Pal.PANEL2, 12, Pal.LINE, 1, pad_px, pad_px))
-	b.add_theme_stylebox_override("pressed", sbox(Pal.PANEL2.darkened(0.1), 12, Pal.LINE, 1, pad_px, pad_px))
+	var pad_px = int(max(4, (px - 26) / 2.0))
+	var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), pad_px, pad_px - 1, 1, Pal.BORDER)
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	juice(b)
 	if on_press.is_valid():
 		b.pressed.connect(on_press)
 	return b
@@ -449,13 +483,14 @@ static func link(text, on_press: Callable = Callable(), size: int = 13) -> Butto
 	return b
 
 
-## A pill. Active chips are filled with `color` (default gold).
+## A small raised chip. Active chips are filled with `color` (default gold).
 static func chip(text, active: bool = false, on_press: Callable = Callable(), color = null, size: int = 13) -> Button:
 	var b = Button.new()
 	b.text = str(text)
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	style_chip(b, active, color, size)
+	juice(b)
 	if on_press.is_valid():
 		b.pressed.connect(on_press)
 	return b
@@ -463,26 +498,23 @@ static func chip(text, active: bool = false, on_press: Callable = Callable(), co
 
 static func style_chip(b: Button, active: bool, color = null, size: int = 13) -> void:
 	var col = Pal.ACCENT if color == null else color
-	var normal
-	var hover
+	var looks
 	var fg
 	if active:
-		normal = sbox(col, 99, col, 1, 13, 6)
-		hover = sbox(col.lightened(0.08), 99, col, 1, 13, 6)
+		looks = PixBox.button_set(col, col.darkened(0.42), 11, 4, 1, null)
 		fg = Pal.INK
 	else:
-		normal = sbox(Pal.PANEL, 99, Pal.LINE, 1, 13, 6)
-		hover = sbox(Pal.PANEL2, 99, Pal.LINE, 1, 13, 6)
-		fg = Pal.MUTED
-	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("hover", hover)
-	b.add_theme_stylebox_override("pressed", hover)
-	b.add_theme_stylebox_override("disabled", normal)
+		looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 11, 4, 1, Pal.LINE)
+		fg = Pal.TEXT
+	# Each chip gets its own copies: callers are free to adjust a chip's padding.
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k].duplicate())
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_disabled_color"]:
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_disabled_color", "font_hover_pressed_color"]:
 		b.add_theme_color_override(k, fg)
 	b.add_theme_font_size_override("font_size", size)
 	b.add_theme_font_override("font", font_bold())
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 ## A small non-interactive coloured tag ("RARE", "weak: lift").
@@ -545,16 +577,25 @@ static func bar(value: float, color = null, height: int = 10) -> Bar:
 	return Bar.new(value, color, height)
 
 
-## Gold caps heading with an optional control (usually a Kit.link) on the right.
+## A section heading in the pixel font and the current tab's colour, with a rule
+## running to the right and an optional control (usually a Kit.link) at the end.
 static func section_title(text: String, right: Control = null) -> HBoxContainer:
 	var h = hbox(8)
-	var l = h3(text)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(l)
+	h.custom_minimum_size = Vector2(0, 26)
+	var clean = Icons.strip_emoji(text)
+	if clean.length() <= 22:
+		h.add_child(vcenter(PixelFont.rect(clean, 2, Pal.tab_accent())))
+	else:
+		h.add_child(h3(clean))
+	var rule = ColorRect.new()
+	rule.color = Pal.with_alpha(Pal.tab_accent(), 0.3)
+	rule.custom_minimum_size = Vector2(8, 2)
+	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(rule)
 	if right != null:
 		h.add_child(right)
-	var wrap_top = h
-	wrap_top.custom_minimum_size = Vector2(0, 26)
 	return h
 
 

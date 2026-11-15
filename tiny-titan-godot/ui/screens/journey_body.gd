@@ -260,6 +260,8 @@ class PhotoThumb extends Control:
 		t.photo_id = id
 		t.on_click = cb
 		t.tex = App.photo_texture(id) if id != null else null
+		# Photos are smooth; only the pixel art around them is drawn crisp.
+		t.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		t.custom_minimum_size = Vector2(40, 53)
 		t.mouse_filter = Control.MOUSE_FILTER_PASS

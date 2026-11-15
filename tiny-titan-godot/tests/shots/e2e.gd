@@ -90,7 +90,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.3)
 
 	# --- log a first lifting session through the form -------------------------
-	await press("Log a workout")
+	await press("Log your first workout")
 	check(App.tab == "log" and App.log_discipline == null, "log picker open")
 	await ShotHelper.snap(tree, "e2e_picker")
 	await tap_card("Lifting")

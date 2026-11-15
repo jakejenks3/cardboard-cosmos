@@ -84,7 +84,7 @@ func _render() -> void:
 	var narrow = size.x <= 560.0
 	var horizon = int(float(h) * 0.72)
 	if narrow:
-		horizon = mini(horizon, int(150.0 / float(px)))
+		horizon = mini(horizon, int(230.0 / float(px)))
 
 	# Sky bands, dark at the top for longer so text over it stays readable.
 	var band_rgb = []
@@ -99,8 +99,13 @@ func _render() -> void:
 	near_y.resize(w)
 	var sx = 230.0 / float(maxi(w, 60))
 	for x in range(w):
-		far_y[x] = horizon - int(float(h) * 0.07) - int(round(_ridge(x, sx * 0.9, 0.0) * float(h) * 0.05))
-		near_y[x] = horizon + int(float(h) * 0.05) - int(round(_ridge(x, sx * 1.7, 2.4) * float(h) * 0.035))
+		if narrow:
+			# No ridges behind the cards: the sky simply runs down into the background.
+			far_y[x] = horizon
+			near_y[x] = horizon
+		else:
+			far_y[x] = horizon - int(float(h) * 0.07) - int(round(_ridge(x, sx * 0.9, 0.0) * float(h) * 0.05))
+			near_y[x] = horizon + int(float(h) * 0.05) - int(round(_ridge(x, sx * 1.7, 2.4) * float(h) * 0.035))
 
 	var orb = Vector2(pal.orb_at.x * float(w), pal.orb_at.y * float(horizon))
 	if narrow:
@@ -120,7 +125,7 @@ func _render() -> void:
 			if y >= near_y[x]:
 				# Foreground ridge, fading into the app's background colour.
 				var g = clampf(float(y - near_y[x]) / float(maxi(h - near_y[x], 1)), 0.0, 1.0)
-				c = pal.near.lerp(ground, clampf(g * 2.2, 0.0, 1.0))
+				c = ground if narrow else pal.near.lerp(ground, clampf(g * 2.2, 0.0, 1.0))
 			elif y >= far_y[x]:
 				c = pal.far
 			else:

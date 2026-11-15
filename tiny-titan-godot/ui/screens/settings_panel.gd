@@ -25,6 +25,13 @@ func fill() -> void:
 	var st = App.settings()
 
 	# --- hero -------------------------------------------------------------------
+	# --- look ---------------------------------------------------------------------
+	add_child(Kit.h3("Theme"))
+	var themes = Kit.grid(Pal.THEME_ORDER.size(), 8)
+	for id in Pal.THEME_ORDER:
+		themes.add_child(_theme_tile(id))
+	add_child(themes)
+
 	add_child(Kit.h3("Hero"))
 	if p != null:
 		var row = Kit.hbox(14)
@@ -189,6 +196,55 @@ func _on_setting(value, key: String) -> void:
 	Sfx.tick()
 	App.update_settings({key: value})
 	call_deferred("_refill")
+
+
+## A swatch of a theme: its world colour with a panel and the accent on it.
+func _theme_tile(id: String) -> Button:
+	var th = Pal.THEMES[id]
+	var on = id == Pal.theme_id
+	var b = Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(60, 64)
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	b.tooltip_text = th.name
+	var looks = PixBox.button_set(Color(th.bg), Color(th.outline), 6, 6, 1, Pal.ACCENT if on else Color(th.border))
+	for k in ["normal", "hover", "pressed"]:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var v = Kit.vbox(4)
+	v.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v.offset_left = 8
+	v.offset_right = -8
+	v.offset_top = 8
+	v.offset_bottom = -12
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row = Kit.hbox(3)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	for key in ["panel2", "accent", "second"]:
+		var sw = ColorRect.new()
+		sw.color = Color(th[key])
+		sw.custom_minimum_size = Vector2(12, 12)
+		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(sw)
+	v.add_child(row)
+	var l = Kit.label(th.name, 12, Color(th.text), true)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(l)
+	b.add_child(v)
+	b.pressed.connect(_on_theme.bind(id))
+	Kit.juice(b)
+	return b
+
+
+func _on_theme(id: String) -> void:
+	if id == Pal.theme_id:
+		return
+	Sfx.claim()
+	# The shell rebuilds itself in the new colours and reopens this sheet.
+	App.update_settings({"theme": id})
 
 
 func _on_sound(on) -> void:

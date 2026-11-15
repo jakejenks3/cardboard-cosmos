@@ -1,6 +1,8 @@
 class_name Segmented
 extends PanelContainer
 ## One-of-many switch (also used as sub-tabs). Emits `selected(value)`.
+## As a switch it is a sunken track with the chosen option raised; as sub-tabs
+## it is a row of raised buttons with the chosen one in the tab's colour.
 
 signal selected(value)
 
@@ -12,22 +14,23 @@ var _row: HBoxContainer
 var _buttons: Array = []
 
 
-## options = [{"value": v, "label": "Text"}]. `pills` = looser sub-tab style.
+## options = [{"value": v, "label": "Text"}]. `pills` = sub-tab style.
 func setup(options: Array, current, color = null, pills: bool = false) -> void:
 	_options = options
 	value = current
 	_color = color
 	_pills = pills
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if pills:
 		add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	else:
-		add_theme_stylebox_override("panel", Kit.sbox(Pal.WELL, 12, Pal.LINE, 1, 3, 3))
+		add_theme_stylebox_override("panel", PixBox.well(4, 4, null))
 	if _row != null:
 		remove_child(_row)
 		_row.queue_free()
 	_row = HBoxContainer.new()
-	_row.add_theme_constant_override("separation", 6 if pills else 3)
+	_row.add_theme_constant_override("separation", 6 if pills else 2)
 	add_child(_row)
 	_buttons = []
 	for o in options:
@@ -38,6 +41,7 @@ func setup(options: Array, current, color = null, pills: bool = false) -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.clip_text = true
 		b.pressed.connect(_pick.bind(o.value))
+		Kit.juice(b)
 		_row.add_child(b)
 		_buttons.append(b)
 	_restyle()
@@ -64,27 +68,28 @@ func _restyle() -> void:
 	for i in range(_buttons.size()):
 		var b = _buttons[i]
 		var on = _options[i].value == value
-		var radius = 99 if _pills else 9
-		var normal
-		var hover
-		var fg
+		var fg = Pal.INK if on else Pal.TEXT
 		if on:
-			normal = Kit.sbox(col, radius, col, 1, 10, 7)
-			hover = normal
-			fg = Pal.INK
+			var looks = PixBox.button_set(col, col.darkened(0.42), 10, 5, 1, null)
+			for k in ["normal", "hover", "pressed"]:
+				b.add_theme_stylebox_override(k, looks["normal"])
 		elif _pills:
-			normal = Kit.sbox(Pal.PANEL, radius, Pal.LINE, 1, 10, 7)
-			hover = Kit.sbox(Pal.PANEL2, radius, Pal.LINE, 1, 10, 7)
-			fg = Pal.MUTED
+			var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 10, 5, 1, Pal.LINE)
+			for k in ["normal", "hover", "pressed"]:
+				b.add_theme_stylebox_override(k, looks[k])
 		else:
-			normal = Kit.sbox(Color(0, 0, 0, 0), radius, Color(0, 0, 0, 0), 1, 10, 7)
-			hover = Kit.sbox(Pal.with_alpha(Pal.PANEL2, 0.7), radius, Color(0, 0, 0, 0), 1, 10, 7)
+			# Flat inside the track, with the same height as the raised option.
+			var flat = StyleBoxEmpty.new()
+			flat.content_margin_left = 10
+			flat.content_margin_right = 10
+			flat.content_margin_top = 5
+			flat.content_margin_bottom = 5 + 2 * PixBox.S
+			b.add_theme_stylebox_override("normal", flat)
+			b.add_theme_stylebox_override("hover", flat)
+			b.add_theme_stylebox_override("pressed", flat)
 			fg = Pal.MUTED
-		b.add_theme_stylebox_override("normal", normal)
-		b.add_theme_stylebox_override("hover", hover)
-		b.add_theme_stylebox_override("pressed", hover)
 		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 			b.add_theme_color_override(k, fg)
 		b.add_theme_font_size_override("font_size", 13)
 		b.add_theme_font_override("font", Kit.font_bold())

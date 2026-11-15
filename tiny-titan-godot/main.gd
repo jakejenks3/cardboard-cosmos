@@ -39,8 +39,21 @@ var _result_queue = []
 
 
 func _ready() -> void:
-	theme = Kit.theme()
+	Pal.apply(App.settings().get("theme", "arcade"))
 	_fit_window()
+	_build()
+	resized.connect(_layout)
+	App.nav_changed.connect(_refresh)
+	App.changed.connect(_on_changed)
+	App.result_ready.connect(_on_result)
+	App.toast_requested.connect(_on_toast)
+	_refresh()
+
+
+## Build the shell: scene, column, screen holder, tab bar, overlay and toast layers.
+## Called again after a theme change, so everything picks up the new colours.
+func _build() -> void:
+	theme = Kit.theme()
 
 	# The pixel-art sky and mountains behind everything.
 	add_child(Backdrop.new())
@@ -101,11 +114,8 @@ func _ready() -> void:
 	_scroll.add_child(_holder)
 
 	_nav = PanelContainer.new()
-	var ns = StyleBoxFlat.new()
-	ns.bg_color = Pal.with_alpha(Pal.BG2, 0.98)
-	ns.border_color = Pal.LINE
-	ns.border_width_top = 1
-	_nav.add_theme_stylebox_override("panel", ns)
+	_nav.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_nav.add_theme_stylebox_override("panel", PixBox.make(Pal.BG2, {"ring": Pal.BORDER, "lip": 0, "pad_h": 4, "pad_v": 0}))
 	_nav.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_nav.offset_top = -NAV_H
 	_nav.offset_bottom = 0
@@ -129,14 +139,27 @@ func _ready() -> void:
 	_toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toasts.add_theme_constant_override("separation", 6)
 	_column.add_child(_toasts)
-
-	resized.connect(_layout)
 	_layout()
-	App.nav_changed.connect(_refresh)
-	App.changed.connect(_on_changed)
-	App.result_ready.connect(_on_result)
-	App.toast_requested.connect(_on_toast)
+
+
+## The theme changed in Settings: rebuild everything in the new colours and put
+## the Settings sheet back if it was open.
+func _retheme() -> void:
+	var settings_open = false
+	for c in _overlay.get_children():
+		if c is Sheet:
+			settings_open = true
+	Pal.apply(App.settings().get("theme", "arcade"))
+	Kit.reset_style()
+	Kit.clear(self)
+	_screen = null
+	_shown_tab = ""
+	_onboarding = null
+	_results = null
+	_build()
 	_refresh()
+	if settings_open and ResourceLoader.exists("res://ui/screens/settings.gd"):
+		load("res://ui/screens/settings.gd").open()
 
 
 ## Open at a comfortable size on any screen: bigger on high-DPI displays, and
@@ -185,6 +208,10 @@ func _layout() -> void:
 
 
 func _on_changed() -> void:
+	if str(App.settings().get("theme", "arcade")) != Pal.theme_id and Pal.THEMES.has(str(App.settings().get("theme", "arcade"))):
+		# Deferred: this runs inside the button press that asked for the change.
+		call_deferred("_retheme")
+		return
 	# Profile created or wiped: swap between onboarding and the game.
 	if (_onboarding != null) == App.has_profile():
 		_refresh()
@@ -205,10 +232,11 @@ func _refresh() -> void:
 		_shown_tab = App.tab
 		Pal.current_tab = App.tab
 		Kit.clear(_holder)
+		# The new screen's cards rise in and its bars fill.
+		Kit.intro_begin()
 		_screen = _make(SCREENS.get(App.tab, ""), App.tab)
 		_holder.add_child(_screen)
 		_scroll.scroll_vertical = 0
-		Kit.fade_in(_screen, 0.18)
 	_build_nav()
 
 
@@ -270,12 +298,9 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 	if t.id == "log":
 		# The big gold "+" that sticks up out of the bar.
 		var key = Panel.new()
-		var ks = Kit.sbox(Pal.ACCENT, 14, Pal.ACCENT_DARK, 0, 0, 0)
-		ks.border_width_bottom = 3
-		ks.shadow_color = Color(1.0, 0.78, 0.24, 0.28)
-		ks.shadow_size = 8
-		key.add_theme_stylebox_override("panel", ks)
-		key.custom_minimum_size = Vector2(46, 46)
+		key.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		key.add_theme_stylebox_override("panel", PixBox.button_set(Pal.ACCENT, Pal.ACCENT_DARK, 0, 0, 2)["normal"])
+		key.custom_minimum_size = Vector2(48, 50)
 		key.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var plus = Icons.rect("plus", 26, Pal.INK)
@@ -306,6 +331,18 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 	var l = Kit.label(t.label, 11, col, true)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(l)
+	if active and t.id != "log":
+		# A marker in the tab's colour along the top edge of the bar.
+		var mark = ColorRect.new()
+		mark.color = Pal.tab(t.id)
+		mark.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		mark.offset_left = 14
+		mark.offset_right = -14
+		mark.offset_top = 2
+		mark.offset_bottom = 6
+		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(mark)
+	Kit.juice(b)
 	return b
 
 
@@ -351,7 +388,7 @@ func _result_done() -> void:
 # --- toasts -----------------------------------------------------------------
 
 func _on_toast(text: String, kind: String, icon: String) -> void:
-	var col = Pal.LINE
+	var col = Pal.BORDER
 	var ic = icon
 	match kind:
 		"good":
@@ -366,7 +403,8 @@ func _on_toast(text: String, kind: String, icon: String) -> void:
 			if ic == "":
 				ic = "info"
 	var p = PanelContainer.new()
-	p.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL2, 12, col, 1, 12, 9))
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL2, {"ring": col, "lip": 1, "pad_h": 12, "pad_v": 8}))
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var h = Kit.hbox(8)
 	h.add_child(Icons.rect(ic, 20))
