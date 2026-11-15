@@ -90,7 +90,7 @@ func _init() -> void:
 	# Hands keep their best across sessions and the trophies pay XP once.
 	var s14 = derive([climb(2, [[5, "send", 2]]), climb(15, [[3, "send", 2]])])
 	ok(int(s14.hands.pair) == 5 and has(s14, "hand_pocket_fives"), "best pair is kept across sessions", s14.hands)
-	ok(Achievements.all().size() == 148 and Achievements.by_id("hand_royal_flush") != null, "148 trophies in the catalog")
+	ok(Achievements.all().size() == 160 and Achievements.by_id("hand_royal_flush") != null, "160 trophies in the catalog")
 
 	print("HANDS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

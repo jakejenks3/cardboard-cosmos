@@ -16,8 +16,21 @@ extends SceneTree
 const EPS = 1e-6
 ## Added to the engine after the port, so the fixtures (written by the
 ## TypeScript engine) know nothing about them: dropped before comparing.
-const POST_PORT_STATE_KEYS = ["hands", "quirks"]
+## State added after the port ("a.b" reaches into a nested dictionary): stripped before comparing.
+const POST_PORT_STATE_KEYS = ["hands", "quirks", "body.firstPhotoDate", "body.photoSpanDays", "body.photoMonths", "body.photoMonthKeys"]
 const MAX_SHOWN = 15
+
+
+static func _strip_post_port(d: Dictionary) -> void:
+	for k in POST_PORT_STATE_KEYS:
+		var parts = str(k).split(".")
+		var at = d
+		for i in range(parts.size() - 1):
+			at = at.get(parts[i]) if at is Dictionary else null
+			if at == null:
+				break
+		if at is Dictionary:
+			at.erase(parts[parts.size() - 1])
 const TWO_32 = 4294967296.0
 
 var _core_total: int = 0
@@ -165,16 +178,14 @@ func _run_derive_case(c: Dictionary) -> bool:
 	var label: String = "case[%s]" % c.name
 	var input = TTUtil.deep_copy(c.input)
 	var actual = Derive.derive(input)
-	for k in POST_PORT_STATE_KEYS:
-		actual.erase(k)
+	_strip_post_port(actual)
 	var out: Array = []
 	_diff(c.expected, actual, label, out)
 	# The replay must not touch its input.
 	_diff(c.input, input, label + ".input", out)
 	# ... and must give the same answer when asked again.
 	var again = Derive.derive(TTUtil.deep_copy(c.input))
-	for k in POST_PORT_STATE_KEYS:
-		again.erase(k)
+	_strip_post_port(again)
 	var repeat: Array = []
 	_diff(actual, again, label + ".repeat", repeat)
 	if not repeat.is_empty():

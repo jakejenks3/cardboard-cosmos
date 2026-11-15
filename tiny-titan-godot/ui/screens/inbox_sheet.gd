@@ -102,7 +102,10 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	if not warns.is_empty():
 		var wf = Kit.flow(4)
 		for w in warns:
-			wf.add_child(_chip("warning", _short(str(w)), Pal.deep(Pal.ACCENT), str(w)))
+			if str(w) == PhoneInbox.UPDATES:
+				wf.add_child(_chip("edit", "Updates the one already imported", Pal.deep(Pal.ACCENT2), "This day changed in your note after it was imported: importing replaces that entry with this one"))
+			else:
+				wf.add_child(_chip("warning", _short(str(w)), Pal.deep(Pal.ACCENT), str(w)))
 		main.add_child(wf)
 	row.add_child(main)
 	var toggle = Button.new()

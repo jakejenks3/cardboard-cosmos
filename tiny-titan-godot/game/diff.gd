@@ -19,6 +19,14 @@ extends RefCounted
 ##   streak      {current}
 
 
+const PHOTO_MILESTONES = [
+	{"days": 28, "title": "One month on"},
+	{"days": 90, "title": "Three months on"},
+	{"days": 180, "title": "Half a year on"},
+	{"days": 365, "title": "A year on"},
+]
+
+
 static func _level_events(before: Dictionary, after: Dictionary, tracks: Array) -> Array:
 	var ev: Array = []
 	for track in tracks:
@@ -180,6 +188,12 @@ static func diff_body(before: Dictionary, after: Dictionary, entry: Dictionary) 
 	var ev: Array = []
 	ev.append({"type": "bodyxp", "amount": TTUtil.get_or(after.bodyXp, entry.id, 0), "hero": _hero_pair(before, after)})
 	ev.append_array(_level_events(before, after, ["hero"]))
+	# Photo milestones: the album now spans a month, a season, half a year, a year.
+	var span_before: int = int(TTUtil.get_or(before.body, "photoSpanDays", 0))
+	var span_after: int = int(TTUtil.get_or(after.body, "photoSpanDays", 0))
+	for m in PHOTO_MILESTONES:
+		if span_after >= int(m.days) and span_before < int(m.days):
+			ev.append({"type": "pr", "icon": "📸", "title": m.title, "detail": "Compare then and now in Journey → Body."})
 	ev.append_array(_unlock_events(before, after))
 	return ev
 

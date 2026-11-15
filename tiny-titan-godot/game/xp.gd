@@ -142,6 +142,11 @@ static func hang_xp(h: Dictionary) -> float:
 
 
 ## "6 × 10 s · 20 mm · one arm · +10 kg"
+## "20 mm", or "Jug" for edge 0.
+static func edge_label(edge_mm: int) -> String:
+	return "Jug" if edge_mm <= 0 else "%d mm" % edge_mm
+
+
 static func hang_text(h: Dictionary, wu: String) -> String:
 	var parts: Array = []
 	var n: int = int(TTUtil.get_or(h, "count", 1))

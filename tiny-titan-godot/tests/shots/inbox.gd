@@ -175,7 +175,8 @@ func run(m: Node, t: SceneTree) -> void:
 	var card = ShotHelper.find_text(main, "new entries from your phone")
 	while card != null and not (card is Card):
 		card = card.get_parent()
-	await ShotHelper.click(tree, card)
+	# The card's own tap (a synthetic click can land on a child control).
+	card._tap.call()
 	await ShotHelper.wait(tree, 0.5)
 	check(_sheet() != null and ShotHelper.find_button(_sheet(), "Import 2 entries") != null, "tapping the card opens the review")
 	check(ShotHelper.find_text(_sheet(), "5 already imported") != null, "review says 5 already imported")
@@ -185,6 +186,10 @@ func run(m: Node, t: SceneTree) -> void:
 	check(App.sessions().size() == n_sessions + 6, "6 imported sessions in all")
 	var r4 = await _check_and_wait()
 	check(r4.fresh.is_empty() and r4.already == 7, "re-check after that: 0 fresh, 7 already")
+	App.go("home")
+	await ShotHelper.wait(tree, 0.4)
+	check(ShotHelper.find_text(main, "safe to clear") != null, "Home says the note is all imported")
+	await ShotHelper.snap(tree, "inbox_home_all_in")
 
 	# --- clear the note, then write a new one ---------------------------------------
 	_write(note, "")
@@ -201,15 +206,25 @@ func run(m: Node, t: SceneTree) -> void:
 		if s.discipline == "lift" and s.date == today and s.exercises.size() == 1 and is_equal_approx(float(s.exercises[0].sets[0].weightKg), 90.0):
 			got90 = true
 	check(got90, "bench 1x5 @ 90 imported for today")
-	# Editing an already imported day: the changed entry is flagged and left out by default.
+	# Editing an already imported day: the changed entry updates the session it came from.
 	_write(note, "today\nbench 1x5 @ 90\nsquat 1x5 @ 100\n")
 	var r7 = await _check_and_wait()
-	check(r7.fresh.size() == 1 and bool(r7.fresh[0].get("skip", false)) and str(r7.fresh[0].warnings).contains("changed after you imported"), "edited imported day is flagged")
+	check(r7.fresh.size() == 1 and r7.fresh[0].has("replaces") and not bool(r7.fresh[0].get("skip", false)), "edited imported day updates the session it came from")
 	InboxSheet.open(r7)
 	await ShotHelper.wait(tree, 0.5)
 	await ShotHelper.snap(tree, "inbox_review_changed")
-	check(ShotHelper.find_button(_sheet(), "Import 0 entries") != null and ShotHelper.find_button(_sheet(), "Import 0 entries").disabled, "nothing ticked: Import is disabled")
-	await _close_sheets()
+	check(ShotHelper.find_text(_sheet(), "Updates the one") != null, "review says it updates the imported one")
+	var n_before = App.sessions().size()
+	ShotHelper.press(ShotHelper.find_button(_sheet(), "Import 1 entry"))
+	await ShotHelper.wait(tree, 0.5)
+	await _dismiss_reels()
+	var merged = null
+	for s in App.sessions():
+		if s.discipline == "lift" and s.date == today and s.exercises.size() == 2:
+			merged = s
+	check(App.sessions().size() == n_before and merged != null, "same number of sessions; the day now has bench and squat")
+	var r8 = await _check_and_wait()
+	check(r8.fresh.is_empty() and r8.already == 1, "after the update: nothing fresh, 1 already")
 
 	# --- Settings section --------------------------------------------------------------
 	SettingsSheet.open()
@@ -252,6 +267,11 @@ func run(m: Node, t: SceneTree) -> void:
 	await _close_sheets()
 
 	# --- Log picker link ---------------------------------------------------------------------
+	_write(note, "today
+bench 1x5 @ 90
+squat 1x5 @ 100
+run 3km 15:00
+")  # something new to find
 	App.open_log(null)
 	await ShotHelper.wait(tree, 0.4)
 	var link = ShotHelper.find_button(main, "Import from phone")

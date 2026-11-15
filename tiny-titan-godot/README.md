@@ -79,6 +79,10 @@ are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; a
 `+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
 
+Edited a day after importing it? The game notices, shows "Updates the one already imported"
+on the review sheet, and replaces that session instead of adding a copy. Once everything in
+the note is in the game, the Hero tab says so and it is safe to clear the note.
+
 **Progress pictures** go in the same doc: write a line like `progress pics 11/15` (any date line
 works) and put up to three pictures under it, front, side and back in that order. The game shows
 them on the review sheet and imports them as that day's photo check-in, downscaled and stored in
@@ -99,7 +103,7 @@ to workout notes.
   forearms, cycling builds thighs, running leans you out. Six body stages from Scrawny to Titanic.
 - **A boss campaign.** 24 bosses across 6 zones, from the Snooze Button to *The Old You*. Every XP is
   1 damage; training a boss's weakness hits ×1.5.
-- **148 trophies, 75 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
+- **160 trophies, 75 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
   mastery ranks per discipline, and an "Almost there" list of the goals you are closest to.
 - **Fast logging.** Pick an exercise and last time's sets come up already filled in; − / + (hold to
   repeat) on every number; one tap to repeat a previous workout.

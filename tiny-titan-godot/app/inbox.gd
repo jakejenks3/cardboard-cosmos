@@ -18,6 +18,7 @@ signal checked(result)
 const TIMEOUT_SEC = 30.0
 const NOT_SHARED = "That link is not shared. In Google Docs: Share → General access → Anyone with the link."
 const CHANGED_DAY = "this day changed after you imported it; importing adds it again (left out unless you tick it)"
+const UPDATES = "this day changed after you imported it; importing updates that entry"
 
 var _http: HTTPRequest = null
 var _busy = false
@@ -242,6 +243,7 @@ func _got_text(text: String, silent: bool, from_source: bool) -> void:
 	var parsed = QuickLog.parse_any(text, parse_opts())
 	var imported = settings().get("imported", {})
 	var split = PhoneInbox.split_entries(parsed.entries, imported)
+	_resolve_updates(split.fresh)
 	if from_source:
 		_source_keys = split.counts
 		var patch = {"lastChecked": _app().now_ms()}
@@ -266,16 +268,54 @@ static func split_entries(entries: Array, imported: Dictionary) -> Dictionary:
 		else:
 			fresh.append(e)
 	# An imported entry whose text is gone while a new one sits under the same
-	# date line: the player edited a day after importing it.
+	# date line: the player edited a day after importing it. The new entry
+	# remembers the old key (`replaces_key`); `_resolve_updates` then finds the
+	# session it came from so importing updates it instead of adding a copy.
 	var gone = {}
 	for k in imported:
 		if not seen.has(k):
-			gone[QuickLog.key_prefix(str(k))] = true
+			var pf = QuickLog.key_prefix(str(k))
+			if not gone.has(pf):
+				gone[pf] = []
+			gone[pf].append(str(k))
 	for e in fresh:
-		if gone.has(QuickLog.key_prefix(e.key)):
+		var pf = QuickLog.key_prefix(e.key)
+		if gone.has(pf) and not gone[pf].is_empty():
+			e["replaces_key"] = gone[pf].pop_front()
 			e.warnings.append(CHANGED_DAY)
 			e["skip"] = true
 	return {"fresh": fresh, "already": already, "counts": seen}
+
+
+## Entries that replace an edited day: find the session / check-in that was
+## imported from the old text (it carries `inboxKey`) and mark the update.
+func _resolve_updates(fresh: Array) -> void:
+	var app = _app()
+	for e in fresh:
+		if not e.has("replaces_key"):
+			continue
+		var found = null
+		var pool = app.sessions() if e.kind == "session" else app.body()
+		for x in pool:
+			if str(x.get("inboxKey", "")) == str(e.replaces_key):
+				found = x
+		if found == null:
+			continue
+		e["replaces"] = found.id
+		e.warnings.erase(CHANGED_DAY)
+		e.warnings.append(UPDATES)
+		e.erase("skip")
+
+
+## How many entries the note holds when everything in it is already imported
+## (0 while anything is new, unread or unset): the Home card then says it is
+## safe to clear the note.
+func note_all_in() -> int:
+	if not bool(_last.get("ok", false)) or not _last.fresh.is_empty():
+		return 0
+	if str(settings().get("source", "")).strip_edges() == "":
+		return 0
+	return int(_last.already)
 
 
 func _finish(result: Dictionary, silent: bool) -> void:
@@ -310,17 +350,32 @@ func import_entries(entries: Array) -> void:
 		for k in imported.keys():
 			if not _source_keys.has(k):
 				imported.erase(k)
+	var updates = []
+	var body_updates = []
 	var i = 0
 	for e in entries:
 		var d = e.data.duplicate(true)
 		d["date"] = e.date
 		d["createdAt"] = now + i
+		d["inboxKey"] = e.key
 		i += 1
+		if e.has("replaces_key"):
+			imported.erase(e.replaces_key)
 		if e.kind == "session":
 			d["source"] = "manual"
-			sessions.append(app.build_session(d))
+			var old = app.session_by_id(e.replaces) if e.has("replaces") else null
+			if old != null:
+				var ns = app.build_session(d)
+				ns["id"] = old.id
+				ns["createdAt"] = old.createdAt
+				updates.append(ns)
+			else:
+				sessions.append(app.build_session(d))
 		else:
-			d["id"] = Rng.uid("b")
+			var oldb = app.body_by_id(e.replaces) if e.has("replaces") else null
+			d["id"] = oldb.id if oldb != null else Rng.uid("b")
+			if oldb != null:
+				d["createdAt"] = oldb.createdAt
 			# Pictures from the note become this check-in's photos: front, side, back in order.
 			var refs = d.get("photoRefs", [])
 			d.erase("photoRefs")
@@ -333,16 +388,34 @@ func import_entries(entries: Array) -> void:
 						photos[TT.PHOTO_ANGLES[j]] = pid
 			if not photos.is_empty():
 				d["photos"] = photos
-			bodies.append(d)
+			elif oldb != null and oldb.get("photos") is Dictionary:
+				d["photos"] = oldb.photos.duplicate()
+			if oldb != null:
+				body_updates.append(d)
+			else:
+				bodies.append(d)
 		imported[e.key] = int(imported.get(e.key, 0)) + 1
 	app.update_inbox({"imported": imported})
 	# Reviewed: anything left out comes back on the next check.
 	_last.fresh = []
+	for u in updates:
+		app.update_session(u)
+	for b in body_updates:
+		app.update_body(b)
 	if not sessions.is_empty():
 		app.commit_sessions(sessions, "Imported from your phone")
 	for b in bodies:
 		app.commit_body(b)
-	status = "Imported %d entr%s." % [entries.size(), "y" if entries.size() == 1 else "ies"]
+	var n_up = updates.size() + body_updates.size()
+	var n_new = entries.size() - n_up
+	var bits = []
+	if n_new > 0:
+		bits.append("imported %d entr%s" % [n_new, "y" if n_new == 1 else "ies"])
+	if n_up > 0:
+		bits.append("updated %d" % n_up)
+	status = ", ".join(PackedStringArray(bits)).capitalize() + "."
+	if n_up > 0 and sessions.is_empty() and bodies.is_empty():
+		app.toast("Updated %d entr%s from your phone" % [n_up, "y" if n_up == 1 else "ies"], "good", "check")
 
 
 ## "Last checked Nov 14, 18:32" from the saved time (local), or "" when never.

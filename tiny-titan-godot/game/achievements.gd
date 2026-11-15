@@ -85,6 +85,30 @@ static func _max_flash(s: Dictionary):
 	return s.prs.climbMaxFlash if s.prs.climbMaxFlash != null else -2
 
 
+# Hangboard records: the best added kg on an edge (0 before any), and whether any
+# edge of at most `mm` has a record.
+static func _hang_kg(s: Dictionary, table: String, edge: String) -> float:
+	var t = s.prs.get(table)
+	if t == null:
+		return 0.0
+	return float(t.get(edge, 0.0))
+
+
+static func _hang_edge_at_most(s: Dictionary, table: String, mm: int) -> int:
+	var t = s.prs.get(table)
+	if t == null:
+		return 0
+	for k in t:
+		if int(k) > 0 and int(k) <= mm:
+			return 1
+	return 0
+
+
+# A body counter that is null until first used.
+static func _body_n(s: Dictionary, key: String) -> int:
+	return int(TTUtil.get_or(s.body, key, 0))
+
+
 # Card hands (s.hands, see Derive._deal_hands): a grade, or -2 before the hand was ever dealt.
 static func _hand(s: Dictionary, key: String):
 	var v = s.get("hands", {}).get(key)
@@ -306,6 +330,20 @@ static func _build() -> Array:
 			_g("body_streak_4", "Checking In", "Check in four weeks in a row.", "🗓️", 200, "body", func(s): return s.body.bestStreak, 4, "weeks"),
 			_g("body_streak_12", "Accountable", "Check in twelve weeks in a row.", "🗓️", 500, "body", func(s): return s.body.bestStreak, 12, "weeks"),
 			_g("body_streak_26", "Half a Year in Frames", "Check in twenty-six weeks in a row.", "🗓️", 900, "body", func(s): return s.body.bestStreak, 26, "weeks"),
+			# Photo milestones (s.body.photoSpanDays / photoMonths, see Derive._apply_body).
+			_g("body_month_on", "One Month On", "Progress photos four weeks apart.", "📸", 200, "body", func(s): return Achievements._body_n(s, "photoSpanDays"), 28, "days"),
+			_g("body_season_on", "Three Months On", "Progress photos three months apart.", "📸", 400, "body", func(s): return Achievements._body_n(s, "photoSpanDays"), 90, "days"),
+			_g("body_year_on", "A Year in Frames", "Progress photos a year apart.", "📸", 1000, "body", func(s): return Achievements._body_n(s, "photoSpanDays"), 365, "days"),
+			_g("body_months_6", "Half a Year of Snaps", "Progress photos in six different months.", "🖼️", 400, "body", func(s): return Achievements._body_n(s, "photoMonths"), 6),
+			_g("body_months_12", "Calendar Body", "Progress photos in twelve different months.", "🖼️", 900, "body", func(s): return Achievements._body_n(s, "photoMonths"), 12),
+			# Hangboard records by edge (s.prs.hangEdge / hangOneArm / longestHangSec).
+			_g("hang_edge_10", "Micro Edge", "Hang five seconds or more on a 10 mm edge or smaller.", "🧗", 200, "climb", func(s): return Achievements._hang_edge_at_most(s, "hangEdge", 10), 1),
+			_g("hang_plus_20", "Weighted Hang", "Hang +20 kg on a 20 mm edge.", "🧗", 300, "climb", func(s): return Achievements._hang_kg(s, "hangEdge", "20"), 20, "kg"),
+			_g("hang_plus_40", "Iron Fingers", "Hang +40 kg on a 20 mm edge.", "🧗", 600, "climb", func(s): return Achievements._hang_kg(s, "hangEdge", "20"), 40, "kg"),
+			_g("hang_one_arm", "One Arm Bandit", "A one-arm hang of five seconds or more.", "🧗", 300, "climb", func(s): return 1 if s.prs.get("hangOneArm") != null and not s.prs.hangOneArm.is_empty() else 0, 1),
+			_g("hang_one_arm_15", "Half the Hands", "A one-arm hang on a 15 mm edge or smaller.", "🧗", 600, "climb", func(s): return Achievements._hang_edge_at_most(s, "hangOneArm", 15), 1),
+			_g("hang_30s", "Hang Time", "One hang of thirty seconds.", "⏱️", 200, "climb", func(s): return int(TTUtil.get_or(s.prs, "longestHangSec", 0)), 30, "sec"),
+			_g("hang_hour", "Hour of Power", "An hour of hanging in all.", "⏱️", 500, "climb", func(s): return int(int(TTUtil.get_or(s.totals, "hangSec", 0)) / 60.0), 60, "min"),
 
 			# --- collection --------------------------------------------------------
 			_g("items_10", "Collector", "Own 10 pieces of gear.", "🎒", 150, "collection", func(s): return PlayerState.owned_item_count(s), 10),

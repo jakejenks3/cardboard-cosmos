@@ -385,6 +385,27 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 				pr_total += 1
 				_chron(s, {"date": date, "kind": "pr", "icon": "🧗", "title": "Heaviest hang", "val": {"n": st.bestHangKg, "unit": "kg"}, "discipline": "climb"})
 			prs.bestHangKg = maxf(float(prs.bestHangKg) if prs.get("bestHangKg") != null else -9999.0, float(st.bestHangKg))
+		# Hangboard records per edge: the heaviest 5 s+ hang on each edge size,
+		# two-arm and one-arm apart; assisted hangs set no record.
+		for h in session.get("hangs", []):
+			var h_sec: int = int(h.get("sec", 0))
+			var h_add: float = float(h.get("addKg", 0.0))
+			if h_sec <= 0 or int(h.get("count", 0)) <= 0:
+				continue
+			if prs.get("longestHangSec") == null or h_sec > int(prs.longestHangSec):
+				prs.longestHangSec = h_sec
+			if h_sec < 5 or h_add < 0.0:
+				continue
+			var table: String = "hangOneArm" if int(h.get("arms", 2)) == 1 else "hangEdge"
+			if prs.get(table) == null:
+				prs[table] = {}
+			var ek: String = str(int(h.get("edgeMm", 0)))
+			var prev_kg = prs[table].get(ek)
+			if prev_kg == null or h_add > float(prev_kg) + 1e-9:
+				if prev_kg != null:
+					pr_total += 1
+					_chron(s, {"date": date, "kind": "pr", "icon": "🧗", "title": "%s %s hang PR" % [Xp.edge_label(int(ek)), "one-arm" if table == "hangOneArm" else "two-arm"], "val": {"n": h_add, "unit": "kg"}, "discipline": "climb"})
+				prs[table][ek] = h_add
 	elif disc == "run":
 		if prs.longestRunM > 0 and st.distanceM > prs.longestRunM:
 			pr_bonus += Xp.PR_BONUS.longestRun
@@ -587,6 +608,14 @@ static func _apply_body(s: Dictionary, e: Dictionary) -> void:
 				n_photos += 1
 	if n_photos > 0:
 		b.photoEntries += 1
+		# Photo milestones: how long the album spans and how many months it covers.
+		if b.get("firstPhotoDate") == null or e.date < str(b.firstPhotoDate):
+			b.firstPhotoDate = e.date
+		b.photoSpanDays = max(int(TTUtil.get_or(b, "photoSpanDays", 0)), absi(Dates.days_between(str(b.firstPhotoDate), e.date)))
+		if b.get("photoMonthKeys") == null:
+			b.photoMonthKeys = {}
+		b.photoMonthKeys[e.date.substr(0, 7)] = true
+		b.photoMonths = b.photoMonthKeys.size()
 	if n_photos == 3:
 		b.fullSets += 1
 		_chron(s, {"date": e.date, "kind": "body", "icon": "📸", "title": "Progress photos taken", "detail": "Front, side and back.", "ref": e.id})

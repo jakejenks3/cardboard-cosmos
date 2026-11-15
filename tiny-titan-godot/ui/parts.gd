@@ -20,6 +20,8 @@ static func quest_progress_text(q: Dictionary, settings: Dictionary) -> String:
 			return "%s / %s XP" % [Xp.fmt_int(p), Xp.fmt_int(q.target)]
 		"min":
 			return "%s / %s min" % [Xp.fmt_int(p), TTUtil.num_str(q.target)]
+		"sec":
+			return "%s / %s s" % [Xp.fmt_int(p), TTUtil.num_str(q.target)]
 		"sends":
 			return "%s / %s sends" % [TTUtil.num_str(p), TTUtil.num_str(q.target)]
 		"days":

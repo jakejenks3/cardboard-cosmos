@@ -19,7 +19,7 @@ is the Windows handoff.
 
 ## What exists (all working as of the handoff)
 
-- `game/`    Rules engine: XP, levels, PRs, 24-boss campaign, 148 trophies, 75 items,
+- `game/`    Rules engine: XP, levels, PRs, 24-boss campaign, 160 trophies, 75 items,
              15 pets, quests, streaks, loot. Everything is derived by replaying the log,
              never stored. Ported from a TypeScript version and locked to it by fixtures
              in `tests/parity/`. Don't change rules or numbers unless asked; if you do,
@@ -56,6 +56,15 @@ is the Windows handoff.
   (`Achievements.restrict_to`) and drops `hands` before comparing, so adding more
   trophies later means: add them, and they are simply outside parity. Unit test:
   `tests/hands_test.gd`.
+- Added 2026-11-15 (afternoon): phone-note days edited after import now update the
+  session/check-in they came from (sessions carry `inboxKey`; `PhoneInbox._resolve_updates`,
+  entry field `replaces`); a Home card says "safe to clear it" once the whole note is imported
+  (`PhoneInbox.note_all_in`); a "This week" card on Home (XP vs last week, sessions per
+  discipline, PRs); hangboard records per edge (`prs.hangEdge`, `prs.hangOneArm`,
+  `prs.longestHangSec`, 7 `hang_*` trophies, Journey chips); photo milestones
+  (`s.body.photoSpanDays` / `photoMonths`, 5 `body_*` trophies, a "One month on" reel moment
+  from `Diff.PHOTO_MILESTONES`). Parity strips `body.*` photo keys via dotted
+  `POST_PORT_STATE_KEYS`. Catalog: 160 trophies. Unit test: `tests/extras_test.gd`.
 - 19 more chase trophies (ids `quirk_*`: Five by Five, Ladder, Pyramid, Streak Week,
   On the Nose, Commuter, Friday the 13th…) read `s.quirks`, filled by
   `Derive._deal_quirks`; also dropped by parity. Unit test: `tests/quirks_test.gd`.
@@ -113,8 +122,9 @@ the check.
 
 ## Known rough edges
 
-- Editing a day in the phone note after it was imported only warns; it doesn't merge the
-  new line into the existing session.
+- Editing a day in the phone note after it was imported updates that session only when it
+  carries `inboxKey` (imports from 2026-11-15 on); older imports still get the "adds it
+  again" warning and are left unticked.
 - In the Armory, clicking owned gear or a pet equips it at once; the small "i" opens
   details.
 - A few helper widgets (coloured pill, raised key, badge, on/off switch, check box) were

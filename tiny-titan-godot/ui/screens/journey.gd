@@ -392,6 +392,15 @@ func _build_stats() -> void:
 			extras.append(value_chip("Hangs", "%s · %s" % [Xp.fmt_int(t.hangs), ("%d s" % hsec) if hsec < 120 else Fmt.fmt_duration_short(float(hsec))], Pal.CLIMB))
 		if float(TTUtil.get_or(s.prs, "bestHangKg", 0.0)) > 0.0:
 			extras.append(value_chip("Heaviest hang", "+" + Fmt.fmt_weight(float(s.prs.bestHangKg), App.weight_unit()), Pal.CLIMB))
+		for table in ["hangEdge", "hangOneArm"]:
+			if s.prs.get(table) == null:
+				continue
+			var edges = s.prs[table].keys()
+			edges.sort_custom(func(a, b): return int(a) < int(b))
+			for ek in edges:
+				var cap = Xp.edge_label(int(ek)) + (" one arm" if table == "hangOneArm" else "")
+				var kg = float(s.prs[table][ek])
+				extras.append(value_chip(cap, ("+" + Fmt.fmt_weight(kg, App.weight_unit())) if kg > 0.0 else "5 s+", Pal.CLIMB, "Best 5 s+ hang on this edge"))
 		if not extras.is_empty():
 			var ef = Kit.flow(6)
 			for x in extras:
