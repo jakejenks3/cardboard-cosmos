@@ -14,6 +14,9 @@ extends SceneTree
 ## and exits with 1 on any failure, 0 otherwise.
 
 const EPS = 1e-6
+## Added to the engine after the port, so the fixtures (written by the
+## TypeScript engine) know nothing about them: dropped before comparing.
+const POST_PORT_STATE_KEYS = ["hands", "quirks"]
 const MAX_SHOWN = 15
 const TWO_32 = 4294967296.0
 
@@ -33,6 +36,12 @@ func _run() -> bool:
 		print("PARITY derive: 0/0 passed (fixtures missing or unreadable)")
 		print("PARITY core: 0/0 passed (fixtures missing or unreadable)")
 		return false
+	# Replay with the trophy catalog the fixtures were generated with: trophies
+	# added since the port would otherwise unlock, pay XP and shift everything.
+	var fixture_ids: Array = []
+	for a in core.catalog.achievements:
+		fixture_ids.append(a.id)
+	Achievements.restrict_to(fixture_ids)
 
 	var derive_passed: int = 0
 	var started: int = Time.get_ticks_msec()
@@ -156,12 +165,16 @@ func _run_derive_case(c: Dictionary) -> bool:
 	var label: String = "case[%s]" % c.name
 	var input = TTUtil.deep_copy(c.input)
 	var actual = Derive.derive(input)
+	for k in POST_PORT_STATE_KEYS:
+		actual.erase(k)
 	var out: Array = []
 	_diff(c.expected, actual, label, out)
 	# The replay must not touch its input.
 	_diff(c.input, input, label + ".input", out)
 	# ... and must give the same answer when asked again.
 	var again = Derive.derive(TTUtil.deep_copy(c.input))
+	for k in POST_PORT_STATE_KEYS:
+		again.erase(k)
 	var repeat: Array = []
 	_diff(actual, again, label + ".repeat", repeat)
 	if not repeat.is_empty():

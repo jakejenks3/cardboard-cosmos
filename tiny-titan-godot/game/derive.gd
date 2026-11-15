@@ -368,6 +368,23 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 				pr_bonus += Xp.PR_BONUS.climbMaxFlash
 				pr_total += 1
 			prs.climbMaxFlash = max(prs.climbMaxFlash if prs.climbMaxFlash != null else -99, st.maxGradeFlashed)
+		if st.get("maxRouteSent") != null:
+			if prs.get("climbMaxRoute") != null and st.maxRouteSent > prs.climbMaxRoute:
+				pr_bonus += Xp.PR_BONUS.climbMaxRoute
+				pr_total += 1
+				_chron(s, {"date": date, "kind": "pr", "icon": "🧗", "title": "New max route: " + Xp.yds_label(st.maxRouteSent), "discipline": "climb"})
+			prs.climbMaxRoute = max(prs.climbMaxRoute if prs.get("climbMaxRoute") != null else -99, st.maxRouteSent)
+		if st.get("maxRouteFlashed") != null:
+			if prs.get("climbMaxRouteFlash") != null and st.maxRouteFlashed > prs.climbMaxRouteFlash:
+				pr_bonus += Xp.PR_BONUS.climbMaxRouteFlash
+				pr_total += 1
+			prs.climbMaxRouteFlash = max(prs.climbMaxRouteFlash if prs.get("climbMaxRouteFlash") != null else -99, st.maxRouteFlashed)
+		if st.get("bestHangKg") != null:
+			if prs.get("bestHangKg") != null and float(st.bestHangKg) > 0.0 and float(st.bestHangKg) > float(prs.bestHangKg):
+				pr_bonus += Xp.PR_BONUS.bestHang
+				pr_total += 1
+				_chron(s, {"date": date, "kind": "pr", "icon": "🧗", "title": "Heaviest hang", "val": {"n": st.bestHangKg, "unit": "kg"}, "discipline": "climb"})
+			prs.bestHangKg = maxf(float(prs.bestHangKg) if prs.get("bestHangKg") != null else -9999.0, float(st.bestHangKg))
 	elif disc == "run":
 		if prs.longestRunM > 0 and st.distanceM > prs.longestRunM:
 			pr_bonus += Xp.PR_BONUS.longestRun
@@ -425,20 +442,45 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 		t.climbSends += st.sends
 		t.climbFlashes += st.flashes
 		t.climbAttempts += st.attempts
+		if int(TTUtil.get_or(st, "routes", 0)) > 0:
+			t.climbRoutes = int(TTUtil.get_or(t, "climbRoutes", 0)) + int(st.routes)
+		if int(TTUtil.get_or(st, "hangs", 0)) > 0:
+			t.hangs = int(TTUtil.get_or(t, "hangs", 0)) + int(st.hangs)
+			t.hangSec = int(TTUtil.get_or(t, "hangSec", 0)) + int(TTUtil.get_or(st, "hangSec", 0))
 		b.sessionSends = max(b.sessionSends, st.sends)
 		b.sessionFlashes = max(b.sessionFlashes, st.flashes)
 		b.sessionAttempts = max(b.sessionAttempts, st.attempts)
 		var v_points = 0
-		for c in session.climbs:
+		for c in session.get("climbs", []):
 			if c.result != "attempt":
 				v_points += max(0, c.grade) * max(0, c["count"])
 		b.sessionVPoints = max(b.sessionVPoints, v_points)
+		# Card hands: what this session's boulder sends look like as a poker hand.
+		var hc = {}
+		var hf = {}
+		for c in session.get("climbs", []):
+			if c.result == "attempt" or Xp.is_route(c):
+				continue
+			var g: int = int(c.grade)
+			var n: int = max(0, int(c["count"]))
+			if n <= 0:
+				continue
+			hc[g] = int(hc.get(g, 0)) + n
+			if c.result == "flash":
+				hf[g] = int(hf.get(g, 0)) + n
+		if not s.has("hands"):
+			s["hands"] = PlayerState.initial_state(3).hands
+		_deal_hands(s.hands, hc, hf, int(st.sends))
 	elif disc == "run":
 		t.runDistanceM += st.distanceM
 		t.runElevationM += st.elevationM
 	else:
 		t.rideDistanceM += st.distanceM
 		t.rideElevationM += st.elevationM
+
+	if not s.has("quirks"):
+		s["quirks"] = PlayerState.initial_state(3).quirks
+	_deal_quirks(s.quirks, session, st, date, disc)
 
 	# --- weeks / months / streak ---------------------------------------------
 	var wk: String = Dates.week_key(date)
@@ -595,3 +637,193 @@ static func derive(input: Dictionary) -> Dictionary:
 		s.title = t.title
 		s.stage = t.stage
 	return s
+
+
+# ---------------------------------------------------------------------------
+# Card hands (trophies "hand_*"): the sends of one boulder session read like a
+# poker hand. `counts` / `flashes` map grade -> sends / flashes in the session.
+# Each hand keeps its best grade across sessions, so the trophies can ask for
+# "a pair of V5s" or "a straight up to V8".
+# ---------------------------------------------------------------------------
+
+static func _hand_max(h: Dictionary, key: String, v: int) -> void:
+	if h.get(key) == null or v > int(h[key]):
+		h[key] = v
+
+
+static func _deal_hands(h: Dictionary, counts: Dictionary, flashes: Dictionary, total_sends: int) -> void:
+	var grades: Array = counts.keys()
+	grades.sort()
+	for g in grades:
+		var n: int = int(counts[g])
+		if n >= 2:
+			_hand_max(h, "pair", int(g))
+		if n >= 3:
+			_hand_max(h, "three", int(g))
+		if n >= 4:
+			_hand_max(h, "four", int(g))
+		if int(g) == 7 and n >= 7:
+			h.luckySevens = true
+		for g2 in grades:
+			if g2 == g:
+				continue
+			var n2: int = int(counts[g2])
+			if n >= 2 and n2 >= 2:
+				_hand_max(h, "twoPair", mini(int(g), int(g2)))
+			if n >= 3 and n2 >= 2:
+				_hand_max(h, "fullHouse", mini(int(g), int(g2)))
+	for top in grades:
+		var run_ok: bool = true
+		var flash_ok: bool = true
+		for k in range(5):
+			if int(counts.get(int(top) - k, 0)) < 1:
+				run_ok = false
+			if int(flashes.get(int(top) - k, 0)) < 1:
+				flash_ok = false
+		if run_ok:
+			_hand_max(h, "straight", int(top))
+		if flash_ok:
+			_hand_max(h, "straightFlush", int(top))
+	var fl: int = 0
+	for g in flashes:
+		if int(g) >= 3:
+			fl += int(flashes[g])
+	if fl > 0:
+		_hand_max(h, "flush", fl)
+	if total_sends == 21:
+		h.blackjack = true
+	if grades.size() == 1 and int(grades[0]) == 1 and int(counts[grades[0]]) == 2:
+		h.snakeEyes = true
+
+
+# ---------------------------------------------------------------------------
+# Chase feats (trophies "quirk_*"): odd shapes of a session that are fun to go
+# out of your way for. Flags stay true once earned; bests keep their maximum.
+# ---------------------------------------------------------------------------
+
+static func _quirk_max(q: Dictionary, key: String, v) -> void:
+	if q.get(key) == null or v > q[key]:
+		q[key] = v
+
+
+static func _deal_quirks(q: Dictionary, session: Dictionary, st: Dictionary, date: String, disc: String) -> void:
+	# --- calendar oddities (any discipline) ----------------------------------------
+	var month: String = date.substr(5, 2)
+	var day: String = date.substr(8, 2)
+	if Dates.weekday_index(date) == 4 and day == "13":
+		q.friday13 = true
+	if month == "02" and day == "29":
+		q.leapDay = true
+	if month == "01" and day == "01":
+		q.newYear = true
+	var disc_bit: int = 1 << maxi(0, TT.DISCIPLINES.find(disc))
+	var day_bits: int = int(q.dateDisc.get(date, 0)) | disc_bit
+	q.dateDisc[date] = day_bits
+	if day_bits != disc_bit and (day_bits & (day_bits - 1)) != 0:
+		q.doubleHeader = true
+
+	if disc == "lift":
+		var names: Dictionary = {}
+		for ex in session.get("exercises", []):
+			var ws: Array = []
+			var same_reps: int = 0
+			var same_w: bool = true
+			var n_sets: int = 0
+			for one_set in ex.sets:
+				var reps: int = maxi(0, int(one_set.reps))
+				var w: float = maxf(0.0, float(one_set.weightKg))
+				n_sets += 1
+				ws.append(w)
+				if reps == 13:
+					q.bakersDozen = true
+				if w > 0.0:
+					_quirk_max(q, "maxSetVolumeKg", reps * w)
+				else:
+					_quirk_max(q, "maxSetReps", reps)
+				if reps == 5:
+					same_reps += 1
+				if absf(w - float(ws[0])) > 0.01:
+					same_w = false
+			if n_sets > 0:
+				names[Xp.normalize_exercise(ex.name)] = true
+			if n_sets == 5 and same_reps == 5 and same_w and float(ws[0]) > 0.0:
+				q.fiveByFive = true
+			var sevens: int = 0
+			for one_set in ex.sets:
+				if int(one_set.reps) == 7:
+					sevens += 1
+			if sevens >= 7:
+				q.sevenBySeven = true
+			# Ladder: longest run of strictly heavier sets. Pyramid: up 3+, then down 2+.
+			var run_len: int = 1
+			var best_run: int = 1 if n_sets > 0 else 0
+			var up: int = 0
+			var down: int = 0
+			var pyramid: bool = false
+			for i in range(1, ws.size()):
+				if float(ws[i]) > float(ws[i - 1]) + 0.01:
+					run_len += 1
+					if down > 0:
+						up = 0
+						down = 0
+					up += 1
+				else:
+					run_len = 1
+					if float(ws[i]) < float(ws[i - 1]) - 0.01 and up >= 2:
+						down += 1
+						if down >= 2:
+							pyramid = true
+					elif float(ws[i]) < float(ws[i - 1]) - 0.01:
+						up = 0
+						down = 0
+					else:
+						up = 0
+						down = 0
+				best_run = maxi(best_run, run_len)
+			if best_run > 0:
+				_quirk_max(q, "ladderSets", best_run)
+			if pyramid:
+				q.pyramid = true
+		var has_squat: bool = false
+		var has_bench: bool = false
+		var has_dead: bool = false
+		for n in names:
+			if str(n).contains("squat"):
+				has_squat = true
+			if str(n).contains("bench"):
+				has_bench = true
+			if str(n).contains("deadlift"):
+				has_dead = true
+		if has_squat and has_bench and has_dead:
+			q.bigThree = true
+	elif disc == "run":
+		var dist: float = float(st.distanceM)
+		if absf(dist - 5000.0) <= 10.0:
+			q.runExact5 = true
+		if dist >= 3000.0 and st.paceSecPerKm != null and absf(float(st.paceSecPerKm) - 300.0) <= 1.0:
+			q.metronome = true
+		if q.runLastDate == null or date != str(q.runLastDate):
+			if q.runLastDate != null and Dates.days_between(str(q.runLastDate), date) == 1:
+				q.runDayStreak = int(q.runDayStreak) + 1
+			else:
+				q.runDayStreak = 1
+			q.runLastDate = date
+		_quirk_max(q, "runDayStreakBest", int(q.runDayStreak))
+		var mk: String = date.substr(0, 7)
+		q.monthRunM[mk] = float(q.monthRunM.get(mk, 0.0)) + dist
+		_quirk_max(q, "bestMonthRunM", float(q.monthRunM[mk]))
+	elif disc == "ride":
+		var dist: float = float(st.distanceM)
+		if absf(dist - 50000.0) <= 50.0:
+			q.rideExact50 = true
+		var wk: String = Dates.week_key(date)
+		var bits: int = int(q.weekRideDays.get(wk, 0)) | (1 << Dates.weekday_index(date))
+		q.weekRideDays[wk] = bits
+		var n_days: int = 0
+		while bits > 0:
+			n_days += bits & 1
+			bits >>= 1
+		_quirk_max(q, "bestRideWeekDays", n_days)
+		var mk: String = date.substr(0, 7)
+		q.monthRideM[mk] = float(q.monthRideM.get(mk, 0.0)) + dist
+		_quirk_max(q, "bestMonthRideM", float(q.monthRideM[mk]))

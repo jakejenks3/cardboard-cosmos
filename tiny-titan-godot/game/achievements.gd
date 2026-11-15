@@ -25,6 +25,17 @@ const TIER_COLOR = {"bronze": "#c98a5a", "silver": "#c9d1d9", "gold": "#ffc83d",
 
 static var _all = null
 static var _by_id = null
+## When set (an Array of ids), `all()` returns only those trophies, in catalog
+## order. The parity tests use it to replay with the catalog the TypeScript
+## engine had, so trophies added since the port (the card hands) do not change
+## the fixtures' XP, chronicle or unlock lists.
+static var _only = null
+
+
+static func restrict_to(ids) -> void:
+	_only = ids
+	_all = null
+	_by_id = null
 
 
 ## "bronze" | "silver" | "gold" | "platinum", from the trophy's XP.
@@ -74,10 +85,41 @@ static func _max_flash(s: Dictionary):
 	return s.prs.climbMaxFlash if s.prs.climbMaxFlash != null else -2
 
 
+# Card hands (s.hands, see Derive._deal_hands): a grade, or -2 before the hand was ever dealt.
+static func _hand(s: Dictionary, key: String):
+	var v = s.get("hands", {}).get(key)
+	return v if v != null else -2
+
+
+static func _hand_n(s: Dictionary, key: String) -> int:
+	var v = s.get("hands", {}).get(key)
+	return int(v) if v != null else 0
+
+
+static func _hand_flag(s: Dictionary, key: String) -> bool:
+	return bool(s.get("hands", {}).get(key, false))
+
+
+# Chase feats outside climbing (s.quirks, see Derive._deal_quirks): a number, or 0 before it happened.
+static func _quirk(s: Dictionary, key: String):
+	var v = s.get("quirks", {}).get(key)
+	return v if v != null else 0
+
+
+static func _quirk_flag(s: Dictionary, key: String) -> bool:
+	return bool(s.get("quirks", {}).get(key, false))
+
+
 ## Every trophy, in catalog order (do not mutate).
 static func all() -> Array:
 	if _all == null:
-		_all = _build()
+		var built: Array = _build()
+		if _only != null:
+			var keep = {}
+			for id in _only:
+				keep[id] = true
+			built = built.filter(func(a): return keep.has(a.id))
+		_all = built
 	return _all
 
 
@@ -131,6 +173,10 @@ static func _build() -> Array:
 			_g("long_session", "Marathon Session", "Log a session lasting 2 hours or more.", "⏳", 150, "general", func(s): return s.bests.sessionDurationSec / 60.0, 120, "min"),
 			_g("hat_trick", "Hat Trick", "Set three personal records in a single session.", "🎩", 300, "general", func(s): return s.bests.sessionPrs, 3),
 			_g("comeback", "Comeback Kid", "Come back and log a session after two weeks away. The door is always open.", "🚪", 200, "general", func(s): return s.bests.gapDays, 14, "count", true),
+			_c("quirk_double_header", "Double Header", "Two different disciplines on the same day.", "🔁", 150, "general", func(s): return Achievements._quirk_flag(s, "doubleHeader")),
+			_c("quirk_friday_13", "Unlucky for Some", "Train on a Friday the 13th.", "🐉", 100, "general", func(s): return Achievements._quirk_flag(s, "friday13"), true),
+			_c("quirk_leap_day", "Leap of Faith", "Train on the 29th of February.", "🗓️", 200, "general", func(s): return Achievements._quirk_flag(s, "leapDay"), true),
+			_c("quirk_new_year", "Resolution", "Train on the 1st of January.", "🌅", 100, "general", func(s): return Achievements._quirk_flag(s, "newYear"), true),
 
 			# --- lifting -----------------------------------------------------------
 			_g("lift_60", "One Plate", "Lift 60 kg in a set.", "🍽️", 100, "lift", func(s): return s.bests.maxSetKg, 60, "kg"),
@@ -153,6 +199,15 @@ static func _build() -> Array:
 			_g("rel_bench_15", "Bench Boss", "Bench press 1.5× your bodyweight.", "⚖️", 800, "lift", func(s): return s.bests.benchRatio, 1.5, "ratio"),
 			_g("rel_squat_2", "Double Bodyweight Squat", "Squat 2× your bodyweight.", "⚖️", 900, "lift", func(s): return s.bests.squatRatio, 2, "ratio"),
 			_g("rel_deadlift_25", "Gravity Is Optional", "Deadlift 2.5× your bodyweight.", "⚖️", 1000, "lift", func(s): return s.bests.deadliftRatio, 2.5, "ratio"),
+			# --- chase feats: shapes of a session worth going out of your way for ------------
+			_c("quirk_five_by_five", "Five by Five", "One exercise, exactly five sets of exactly five reps, all at the same weight.", "🎯", 200, "lift", func(s): return Achievements._quirk_flag(s, "fiveByFive")),
+			_g("quirk_ladder", "Ladder", "Five sets of one exercise, every set heavier than the last.", "📈", 250, "lift", func(s): return Achievements._quirk(s, "ladderSets"), 5),
+			_c("quirk_pyramid", "Pyramid", "One exercise: climb the weight for three sets or more, then bring it back down for two.", "⛰️", 300, "lift", func(s): return Achievements._quirk_flag(s, "pyramid")),
+			_g("quirk_ton_set", "Ton Up", "Move 1,000 kg in a single set (reps × weight).", "🐘", 300, "lift", func(s): return Achievements._quirk(s, "maxSetVolumeKg"), 1000, "kg"),
+			_g("quirk_century_set", "Century Set", "100 reps in one bodyweight set. No putting it down.", "💯", 250, "lift", func(s): return Achievements._quirk(s, "maxSetReps"), 100),
+			_c("quirk_big_three", "The Big Three", "Squat, bench press and deadlift, all in one session.", "🏋️", 250, "lift", func(s): return Achievements._quirk_flag(s, "bigThree")),
+			_c("quirk_bakers_dozen", "Baker's Dozen", "A set of exactly 13 reps.", "🍽️", 100, "lift", func(s): return Achievements._quirk_flag(s, "bakersDozen"), true),
+			_c("quirk_seven_by_seven", "Sevens", "One exercise, seven sets of seven reps.", "🃏", 150, "lift", func(s): return Achievements._quirk_flag(s, "sevenBySeven"), true),
 
 			# --- climbing ----------------------------------------------------------
 			_g("climb_v2", "Getting Grippy", "Send a V2.", "🪨", 100, "climb", func(s): return Achievements._max_send(s), 2, "grade"),
@@ -171,6 +226,22 @@ static func _build() -> Array:
 			_g("climb_flash_flood", "Flash Flood", "10 flashes in one session.", "🌊", 250, "climb", func(s): return s.bests.sessionFlashes, 10),
 			_g("climb_vpoints_50", "V-Point Hoarder", "Send 50 V-points in one session (a V4 is 4 points).", "🧺", 300, "climb", func(s): return s.bests.sessionVPoints, 50),
 			_g("climb_project", "Project Mode", "10 attempts in one session. Respect the process.", "🧠", 100, "climb", func(s): return s.bests.sessionAttempts, 10),
+			# --- card hands: the sends of one boulder session, read like a poker hand ---------
+			_g("hand_pair", "Pair", "Send two of the same grade, V3 or harder, in one session.", "🃏", 150, "climb", func(s): return Achievements._hand(s, "pair"), 3, "grade"),
+			_g("hand_pocket_fives", "Pocket Fives", "A pair of V5s in one session.", "🃏", 300, "climb", func(s): return Achievements._hand(s, "pair"), 5, "grade"),
+			_g("hand_pocket_sevens", "Pocket Sevens", "A pair of V7s in one session.", "💎", 600, "climb", func(s): return Achievements._hand(s, "pair"), 7, "grade"),
+			_g("hand_two_pair", "Two Pair", "Two different grades sent twice each, both V3 or harder, in one session.", "🃏", 250, "climb", func(s): return Achievements._hand(s, "twoPair"), 3, "grade"),
+			_g("hand_three", "Three of a Kind", "Three sends of one grade, V4 or harder, in one session.", "🃏", 300, "climb", func(s): return Achievements._hand(s, "three"), 4, "grade"),
+			_g("hand_full_house", "Full House", "Three of one grade and two of another, all V3 or harder, in one session.", "🏆", 450, "climb", func(s): return Achievements._hand(s, "fullHouse"), 3, "grade"),
+			_g("hand_four", "Four of a Kind", "Four sends of one grade, V5 or harder, in one session.", "💎", 700, "climb", func(s): return Achievements._hand(s, "four"), 5, "grade"),
+			_g("hand_straight", "Straight", "Five grades in a row, V1 to V5 or higher, all sent in one session.", "⭐", 400, "climb", func(s): return Achievements._hand(s, "straight"), 5, "grade"),
+			_g("hand_broadway", "Broadway", "A straight to the top: V4, V5, V6, V7 and V8 in one session.", "👑", 900, "climb", func(s): return Achievements._hand(s, "straight"), 8, "grade"),
+			_g("hand_flush", "Flush", "Five flashes, all V3 or harder, in one session.", "⚡", 350, "climb", func(s): return Achievements._hand_n(s, "flush"), 5),
+			_g("hand_straight_flush", "Straight Flush", "Flash five grades in a row, V1 to V5 or higher, in one session.", "⚡", 800, "climb", func(s): return Achievements._hand(s, "straightFlush"), 5, "grade"),
+			_g("hand_royal_flush", "Royal Flush", "Flash V6, V7, V8, V9 and V10 in one session.", "👑", 2000, "climb", func(s): return Achievements._hand(s, "straightFlush"), 10, "grade"),
+			_c("hand_blackjack", "Blackjack", "Exactly 21 sends in one session. Not 20. Not 22.", "🧮", 300, "climb", func(s): return Achievements._hand_flag(s, "blackjack"), true),
+			_c("hand_snake_eyes", "Snake Eyes", "A session where you send exactly two V1s and nothing else.", "🃏", 100, "climb", func(s): return Achievements._hand_flag(s, "snakeEyes"), true),
+			_c("hand_lucky_sevens", "Lucky Sevens", "Seven V7 sends in one session.", "💎", 777, "climb", func(s): return Achievements._hand_flag(s, "luckySevens"), true),
 
 			# --- running -----------------------------------------------------------
 			_g("run_5k", "Parkrun", "Run 5 km in one go.", "🏃", 100, "run", func(s): return s.prs.longestRunM, 5000, "m"),
@@ -185,6 +256,10 @@ static func _build() -> Array:
 			_c("run_pace_4", "Rocket Legs", "Average 4:00 /km or faster over 5 km+.", "🚀", 500, "run", func(s): return s.prs.bestPaceSecPerKm != null and s.prs.bestPaceSecPerKm <= 240),
 			_g("run_elev_500", "Hill Hunter", "Climb 500 m of elevation in one run.", "⛰️", 200, "run", func(s): return s.prs.bestRunElevM, 500, "elev"),
 			_g("run_elev_total_5000", "Vert Collector", "Climb 5,000 m of elevation lifetime on foot.", "🗻", 500, "run", func(s): return s.totals.runElevationM, 5000, "elev"),
+			_g("quirk_run_streak", "Streak Week", "Run seven days in a row.", "🔥", 400, "run", func(s): return Achievements._quirk(s, "runDayStreakBest"), 7),
+			_g("quirk_run_month", "Marathon Month", "Run 42.2 km within one calendar month.", "🏅", 300, "run", func(s): return Achievements._quirk(s, "bestMonthRunM"), 42195, "m"),
+			_c("quirk_run_exact_5", "On the Nose", "A run of exactly 5.00 km. Not a step more.", "🎯", 150, "run", func(s): return Achievements._quirk_flag(s, "runExact5"), true),
+			_c("quirk_run_metronome", "Metronome", "A run of 3 km or more at an average pace of exactly 5:00 /km.", "⏱️", 200, "run", func(s): return Achievements._quirk_flag(s, "metronome"), true),
 
 			# --- cycling -----------------------------------------------------------
 			_g("ride_25", "Quarter Century", "Ride 25 km in one go.", "🚲", 100, "ride", func(s): return s.prs.longestRideM, 25000, "m"),
@@ -198,6 +273,9 @@ static func _build() -> Array:
 			_g("ride_elev_1000", "Mountain Goat", "Climb 1,000 m of elevation in one ride.", "🐐", 300, "ride", func(s): return s.prs.bestRideElevM, 1000, "elev"),
 			_g("ride_everest", "Everested", "Climb 8,848 m of elevation lifetime on the bike.", "🏔️", 500, "ride", func(s): return s.totals.rideElevationM, 8848, "elev"),
 			_c("ride_speed_30", "Fast Wheels", "Average 30 km/h over a 20 km+ ride.", "💨", 300, "ride", func(s): return s.prs.bestRideSpeedKmh != null and s.prs.bestRideSpeedKmh >= 30),
+			_g("quirk_ride_commuter", "Commuter", "Ride on five different days of one week.", "🚲", 300, "ride", func(s): return Achievements._quirk(s, "bestRideWeekDays"), 5),
+			_g("quirk_ride_month", "Big Month", "Ride 300 km within one calendar month.", "🛞", 300, "ride", func(s): return Achievements._quirk(s, "bestMonthRideM"), 300000, "m"),
+			_c("quirk_ride_exact_50", "Round Trip", "A ride of exactly 50.0 km.", "🎯", 150, "ride", func(s): return Achievements._quirk_flag(s, "rideExact50"), true),
 
 			# --- hero --------------------------------------------------------------
 			_g("hero_10", "Rising Hero", "Reach hero level 10.", "⭐", 200, "general", func(s): return s.levels.hero.level, 10, "level"),

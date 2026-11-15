@@ -117,7 +117,7 @@ func run(m: Node, t: SceneTree) -> void:
 	for dest in [["adventure", "campaign"], ["adventure", "quests"], ["adventure", "trophies"], ["journey", "stats"], ["journey", "body"], ["journey", "chronicle"], ["journey", "history"], ["armory", null]]:
 		App.go(dest[0], dest[1])
 		await ShotHelper.frames(tree, 6)
-		await ShotHelper.snap(tree, "e2e_%s_%s" % [dest[0], dest[1]])
+		await ShotHelper.snap(tree, "e2e_%s_%s" % [dest[0], dest[1]] if dest[1] != null else "e2e_%s" % dest[0])
 	App.go("home")
 	await ShotHelper.frames(tree, 5)
 

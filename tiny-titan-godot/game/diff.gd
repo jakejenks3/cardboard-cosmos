@@ -130,6 +130,20 @@ static func diff_states(before: Dictionary, after: Dictionary, session: Dictiona
 			"title": "Max flash set" if bp.climbMaxFlash == null else "New max flash!",
 			"detail": Xp.grade_label(ap.climbMaxFlash) if bp.climbMaxFlash == null else "%s (was %s)" % [Xp.grade_label(ap.climbMaxFlash), Xp.grade_label(bp.climbMaxFlash)],
 		})
+	if ap.get("climbMaxRoute") != null and (bp.get("climbMaxRoute") == null or ap.climbMaxRoute > bp.climbMaxRoute):
+		ev.append({
+			"type": "pr",
+			"icon": "🧗",
+			"title": "Max route set" if bp.get("climbMaxRoute") == null else "New max route!",
+			"detail": Xp.yds_label(ap.climbMaxRoute) if bp.get("climbMaxRoute") == null else "%s (was %s)" % [Xp.yds_label(ap.climbMaxRoute), Xp.yds_label(bp.climbMaxRoute)],
+		})
+	if ap.get("bestHangKg") != null and float(ap.bestHangKg) > 0.0 and (bp.get("bestHangKg") == null or float(ap.bestHangKg) > float(bp.bestHangKg)):
+		ev.append({
+			"type": "pr",
+			"icon": "🧗",
+			"title": "Heaviest hang!",
+			"detail": "+%s kg" % _trim(ap.bestHangKg) if bp.get("bestHangKg") == null or float(bp.bestHangKg) <= 0.0 else "+%s kg (was +%s kg)" % [_trim(ap.bestHangKg), _trim(bp.bestHangKg)],
+		})
 	if bp.longestRunM > 0 and ap.longestRunM > bp.longestRunM:
 		ev.append({"type": "pr", "icon": "👟", "title": "Longest run!", "detail": "%s km (was %s km)" % [Fmt.to_fixed(ap.longestRunM / 1000.0, 1), Fmt.to_fixed(bp.longestRunM / 1000.0, 1)]})
 	if bp.longestRideM > 0 and ap.longestRideM > bp.longestRideM:

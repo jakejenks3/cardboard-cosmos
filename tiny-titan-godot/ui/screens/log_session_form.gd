@@ -29,9 +29,18 @@ var notes: String = ""
 var show_extra: bool = false
 
 var lift = null  # LogLiftEditor
-var climbs: Array = []  # [{grade, result, count}]
+var climbs: Array = []  # [{grade, result, count}] (+ style "rope", yds "5.10a" for routes)
 var climb_result: String = "send"
 var more_grades: bool = false
+var scale: String = "v"  # which grade keys show: "v" boulders, "yds" routes (5.xx)
+var hangs: Array = []  # [{edgeMm, sec, arms, addKg, count}]
+var show_hang: bool = false
+var hang_edge: int = 20
+var hang_sec: int = 10
+var hang_arms: int = 2
+var hang_add: String = ""  # added weight in the player's unit ("" = none, "-10" = assisted)
+const HANG_EDGES = [10, 15, 20, 25, 30, 0]
+const HANG_SECS = [5, 7, 10, 15, 20]
 var distance: String = ""
 var elev: String = ""
 
@@ -70,6 +79,11 @@ func _init(owner_screen, d: String, edit_session = null) -> void:
 			"climb":
 				for c in editing.get("climbs", []):
 					climbs.append(c.duplicate())
+					if Xp.is_route(c):
+						scale = "yds"
+				for h in editing.get("hangs", []):
+					hangs.append(h.duplicate())
+				show_hang = not hangs.is_empty()
 			_:
 				distance = LogWidgets.trim_num(Fmt.m_to_unit(float(TTUtil.get_or(editing, "distanceM", 0)), du))
 				var em = float(TTUtil.get_or(editing, "elevationM", 0))
@@ -119,6 +133,12 @@ func draft() -> Dictionary:
 				if int(c.count) > 0:
 					cs.append(c.duplicate())
 			s["climbs"] = cs
+			var hs = []
+			for h in hangs:
+				if int(h.count) > 0:
+					hs.append(h.duplicate())
+			if not hs.is_empty():
+				s["hangs"] = hs
 		_:
 			s["distanceM"] = maxf(0.0, Fmt.unit_to_m(LogWidgets.num(distance), du))
 			var e = LogWidgets.num(elev)
@@ -131,7 +151,7 @@ func is_valid(d: Dictionary) -> bool:
 		"lift":
 			return not d.exercises.is_empty()
 		"climb":
-			return not d.climbs.is_empty()
+			return not d.climbs.is_empty() or not d.get("hangs", []).is_empty()
 	return float(d.distanceM) > 0.0
 
 
@@ -239,9 +259,19 @@ func refresh() -> void:
 			sub = "%s · %d reps · %d sets" % [Fmt.fmt_big_kg(float(st.volumeKg), wu), int(st.reps) + int(st.bwReps), int(st.sets)]
 		"climb":
 			sub = "%d sends" % int(st.sends)
+			var tops = []
 			if st.maxGradeSent != null:
-				sub += " · max " + Xp.grade_label(st.maxGradeSent)
+				tops.append(Xp.grade_label(st.maxGradeSent))
+			if st.get("maxRouteSent") != null:
+				tops.append(Xp.yds_label(st.maxRouteSent))
+			if not tops.is_empty():
+				sub += " · max " + " / ".join(PackedStringArray(tops))
+			var nh = int(TTUtil.get_or(st, "hangs", 0))
+			if nh > 0:
+				sub += " · %d hang%s" % [nh, "" if nh == 1 else "s"]
 			side += "\n%d sends · %d flashes · %d attempts" % [int(st.sends), int(st.flashes), int(st.attempts)]
+			if nh > 0:
+				side += " · %d hangs" % nh
 		"run", "ride":
 			sub = Fmt.fmt_distance(float(d.distanceM), du)
 	if not valid:
@@ -255,7 +285,7 @@ func _invalid_hint() -> String:
 		"lift":
 			return "Add a set with reps"
 		"climb":
-			return "Tap a grade to add a climb"
+			return "Tap a grade, or add a hang"
 	return "Enter a distance"
 
 
@@ -397,6 +427,9 @@ func _build_climb(parent: Control) -> void:
 			text += " · max " + Xp.grade_label(st.maxGradeSent)
 		if int(st.attempts) > 0:
 			text += " · %d attempts" % int(st.attempts)
+		var nh = int(TTUtil.get_or(st, "hangs", 0))
+		if nh > 0:
+			text += " · %d hangs" % nh
 		var tile = LogWidgets.template(lc.date, text, _repeat_climb.bind(lc), "climb", "Same as last · ")
 		parent.add_child(tile)
 	# Flash / send / attempt: three bright toggles.
@@ -406,11 +439,21 @@ func _build_climb(parent: Control) -> void:
 		t.tooltip_text = "Grades you tap now count as a %s" % r
 		toggles.add_child(t)
 	parent.add_child(toggles)
+	# Boulder (V) or rope (5.xx) grade keys.
+	var sc = Kit.segmented([{"value": "v", "label": "Boulder · V"}, {"value": "yds", "label": "Rope · 5.xx"}], scale, _set_scale, Pal.CLIMB)
+	sc.tooltip_text = "Boulder problems take V grades; top rope and lead routes take 5.xx grades"
+	parent.add_child(sc)
 	# The grade keys, coloured along the difficulty ramp.
-	var grid = Kit.grid(6, 5)
-	var top = Xp.MAX_V_GRADE if more_grades else 10
-	for g in range(-1, top + 1):
-		grid.add_child(_grade_key(g))
+	var grid = Kit.grid(6 if scale == "v" else 4, 5)
+	if scale == "v":
+		var top = Xp.MAX_V_GRADE if more_grades else 10
+		for g in range(-1, top + 1):
+			grid.add_child(_grade_key(g))
+	else:
+		# 5.6 … 5.12a to start; "More…" opens up to 5.15a.
+		var top_i = Xp.YDS_GRADES.size() - 1 if more_grades else Xp.yds_index("5.12a")
+		for i in range(1, top_i + 1):
+			grid.add_child(_route_key(i))
 	var more = Kit.button("Less" if more_grades else "More…", "ghost", _toggle_more, "sm")
 	more.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	more.custom_minimum_size.y = 40
@@ -427,9 +470,85 @@ func _build_climb(parent: Control) -> void:
 			flow.add_child(_climb_chip(k))
 		parent.add_child(flow)
 
+	# Hangboard: folded away until used.
+	var hf = LogWidgets.mini_chip(("▾ " if show_hang else "+ ") + "Hangboard", show_hang, _toggle_hang, Pal.CLIMB)
+	hf.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	hf.tooltip_text = "Log dead hangs: edge size, seconds, one or both arms, added weight"
+	parent.add_child(hf)
+	if show_hang:
+		_build_hang(parent)
+
+
+## Edge chips, seconds chips, arms toggles, added weight and a "+ Hang" key,
+## then the hangs logged so far as chips with − / +.
+func _build_hang(parent: Control) -> void:
+	var card = Kit.card(8)
+	card.accent(Pal.CLIMB)
+	var er = Kit.hbox(4)
+	er.add_child(Kit.vcenter(Icons.rect("ruler", 18)))
+	for e in HANG_EDGES:
+		var ec = LogWidgets.mini_chip(("%d mm" % e) if e > 0 else "Jug", hang_edge == e, _set_hang.bind("edge", e), Pal.CLIMB)
+		ec.tooltip_text = ("Edge %d mm deep" % e) if e > 0 else "A jug or a bar"
+		er.add_child(ec)
+	card.add(er)
+	var sr = Kit.hbox(4)
+	sr.add_child(Kit.vcenter(Icons.rect("stopwatch", 18)))
+	for s in HANG_SECS:
+		var scp = LogWidgets.mini_chip("%d s" % s, hang_sec == s, _set_hang.bind("sec", s), Pal.CLIMB)
+		scp.tooltip_text = "Hang for %d seconds" % s
+		sr.add_child(scp)
+	card.add(sr)
+	var ar = Kit.hbox(6)
+	ar.add_child(LogWidgets.toggle("Both arms", "muscle", hang_arms == 2, Pal.CLIMB, _set_hang.bind("arms", 2)))
+	ar.add_child(LogWidgets.toggle("One arm", "bolt", hang_arms == 1, flash_color(), _set_hang.bind("arms", 1)))
+	card.add(ar)
+	var wr = Kit.hbox(6)
+	wr.add_child(Kit.vcenter(Kit.label("Added", 13, Pal.MUTED)))
+	var ws = Kit.stepper(hang_add, 2.5 if wu == "kg" else 5.0, _set_hang_add, {"placeholder": "0", "width": 58, "min": -200.0, "snap": true, "compact": true})
+	LogWidgets.slim_stepper(ws, "hang.add").tooltip_text = "Weight added to the hang (negative = assisted)"
+	wr.add_child(ws)
+	wr.add_child(Kit.vcenter(Kit.label(wu, 11, Pal.MUTED)))
+	wr.add_child(Kit.spacer())
+	var add_btn = Kit.button("+ Hang", "primary", add_hang, "sm")
+	add_btn.tooltip_text = "Add one hang with the settings above"
+	wr.add_child(add_btn)
+	card.add(wr)
+	if not hangs.is_empty():
+		var flow = Kit.flow(6)
+		for k in range(hangs.size()):
+			flow.add_child(_hang_chip(k))
+		card.add(flow)
+	parent.add_child(card)
+
+
+## A logged hang as a chip: "6 × 10 s · 20 mm · one arm · +10 kg" with − / +.
+func _hang_chip(k: int) -> Control:
+	var h = hangs[k]
+	var hue = Pal.CLIMB if int(h.arms) == 2 else flash_color()
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL, {"ring": hue, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 6, "pad_v": 3}))
+	p.tooltip_text = "%s · %d XP" % [Xp.hang_text(h, wu), TTUtil.jsround(Xp.hang_xp(h) * int(h.count))]
+	var row = Kit.hbox(5)
+	row.add_child(Kit.vcenter(Icons.rect("muscle", 16, hue)))
+	row.add_child(Kit.vcenter(Kit.label(Xp.hang_text(h, wu), 13, null, true)))
+	row.add_child(LogWidgets.round_btn("−", bump_hang.bind(k, -1), "One hang fewer"))
+	row.add_child(LogWidgets.round_btn("+", bump_hang.bind(k, 1), "One hang more"))
+	p.add_child(row)
+	return p
+
+
+## One route grade (5.xx) as a chunky key, coloured by the boulder grade it is worth.
+func _route_key(i: int) -> Button:
+	var b = _grade_key(Xp.yds_to_v(i), add_route.bind(i))
+	b.text = Xp.yds_label(i)
+	b.add_theme_font_size_override("font_size", 14)
+	b.tooltip_text = "Add one %s %s" % [Xp.yds_label(i), climb_result]
+	return b
+
 
 ## One grade as a chunky key in its ramp colour.
-func _grade_key(g: int) -> Button:
+func _grade_key(g: int, on_press: Callable = Callable()) -> Button:
 	var hue = grade_hue(g)
 	var b = Button.new()
 	b.text = Xp.grade_label(g)
@@ -450,7 +569,7 @@ func _grade_key(g: int) -> Button:
 	b.add_theme_constant_override("outline_size", 4)
 	b.add_theme_font_override("font", Kit.font_bold())
 	b.add_theme_font_size_override("font_size", 16)
-	b.pressed.connect(add_climb.bind(g))
+	b.pressed.connect(on_press if on_press.is_valid() else add_climb.bind(g))
 	Kit.juice(b)
 	return b
 
@@ -462,9 +581,11 @@ func _climb_chip(k: int) -> Control:
 	var p = PanelContainer.new()
 	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	p.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL, {"ring": hue, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 6, "pad_v": 3}))
-	p.tooltip_text = "%s %s × %d" % [Xp.grade_label(cl.grade), result_label(cl.result).to_lower(), int(cl.count)]
+	p.tooltip_text = "%s %s%s × %d" % [Xp.climb_label(cl), "route " if Xp.is_route(cl) else "", result_label(cl.result).to_lower(), int(cl.count)]
 	var h = Kit.hbox(5)
-	var g = LogWidgets.badge(Xp.grade_label(cl.grade), hue, 13)
+	if Xp.is_route(cl):
+		h.add_child(Kit.vcenter(Icons.rect("mountain", 16, hue)))
+	var g = LogWidgets.badge(Xp.climb_label(cl), hue, 13)
 	LogWidgets.on_face(g.get_child(0), 3)
 	h.add_child(g)
 	h.add_child(Kit.vcenter(Icons.rect(result_icon(cl.result), 16, result_color(cl.result))))
@@ -476,6 +597,11 @@ func _climb_chip(k: int) -> Control:
 
 
 static func _climb_before(a: Dictionary, b: Dictionary) -> bool:
+	# Boulders first, then routes; hardest first within each.
+	if Xp.is_route(a) != Xp.is_route(b):
+		return not Xp.is_route(a)
+	if Xp.is_route(a) and str(a.get("yds")) != str(b.get("yds")):
+		return Xp.yds_index(a.get("yds")) > Xp.yds_index(b.get("yds"))
 	if int(a.grade) != int(b.grade):
 		return int(a.grade) > int(b.grade)
 	return str(a.result) < str(b.result)
@@ -484,11 +610,70 @@ static func _climb_before(a: Dictionary, b: Dictionary) -> bool:
 func add_climb(grade: int) -> void:
 	Sfx.tick()
 	for c in climbs:
-		if int(c.grade) == grade and c.result == climb_result:
+		if not Xp.is_route(c) and int(c.grade) == grade and c.result == climb_result:
 			c.count = int(c.count) + 1
 			screen.rebuild()
 			return
 	climbs.append({"grade": grade, "result": climb_result, "count": 1})
+	screen.rebuild()
+
+
+func add_route(i: int) -> void:
+	Sfx.tick()
+	var label = Xp.yds_label(i)
+	for c in climbs:
+		if Xp.is_route(c) and str(c.get("yds")) == label and c.result == climb_result:
+			c.count = int(c.count) + 1
+			screen.rebuild()
+			return
+	climbs.append({"grade": Xp.yds_to_v(i), "result": climb_result, "count": 1, "style": "rope", "yds": label})
+	screen.rebuild()
+
+
+func add_hang() -> void:
+	Sfx.tick()
+	var add_kg = Fmt.unit_to_kg(LogWidgets.num(hang_add), wu)
+	for h in hangs:
+		if int(h.edgeMm) == hang_edge and int(h.sec) == hang_sec and int(h.arms) == hang_arms and absf(float(h.addKg) - add_kg) < 0.01:
+			h.count = int(h.count) + 1
+			screen.rebuild()
+			return
+	hangs.append({"edgeMm": hang_edge, "sec": hang_sec, "arms": hang_arms, "addKg": add_kg, "count": 1})
+	screen.rebuild()
+
+
+func bump_hang(k: int, delta: int) -> void:
+	if k >= hangs.size():
+		return
+	Sfx.tick()
+	hangs[k].count = maxi(0, int(hangs[k].count) + delta)
+	hangs = hangs.filter(func(h): return int(h.count) > 0)
+	screen.rebuild()
+
+
+func _set_hang(field: String, v) -> void:
+	Sfx.tick()
+	match field:
+		"edge":
+			hang_edge = int(v)
+		"sec":
+			hang_sec = int(v)
+		"arms":
+			hang_arms = int(v)
+	screen.rebuild()
+
+
+func _set_hang_add(t: String) -> void:
+	hang_add = t
+
+
+func _toggle_hang() -> void:
+	show_hang = not show_hang
+	screen.rebuild()
+
+
+func _set_scale(v) -> void:
+	scale = str(v)
 	screen.rebuild()
 
 
@@ -504,9 +689,16 @@ func bump_climb(k: int, delta: int) -> void:
 func _repeat_climb(lc: Dictionary) -> void:
 	Sfx.tap()
 	climbs = []
-	for c in lc.climbs:
+	for c in lc.get("climbs", []):
 		if int(c.count) > 0:
 			climbs.append(c.duplicate())
+			if Xp.is_route(c):
+				scale = "yds"
+	hangs = []
+	for h in lc.get("hangs", []):
+		if int(h.count) > 0:
+			hangs.append(h.duplicate())
+	show_hang = not hangs.is_empty()
 	screen.rebuild()
 
 

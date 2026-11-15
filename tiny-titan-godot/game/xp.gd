@@ -12,6 +12,24 @@ const CLIMB_GRADE_XP = [12, 20, 30, 42, 58, 78, 105, 140, 185, 240, 310, 400, 50
 const MAX_V_GRADE = 17
 const CLIMB_RESULT_MULT = {"flash": 1.3, "send": 1, "attempt": 0.35}
 
+## Roped climbs (top rope / lead) use the Yosemite Decimal System. Each grade is
+## worth a boulder grade's XP (YDS_TO_V, the usual conversion) times ROPE_XP_MULT,
+## since a route is a boulder problem's crux plus a lot more climbing.
+const YDS_GRADES = ["5.5", "5.6", "5.7", "5.8", "5.9", "5.10a", "5.10b", "5.10c", "5.10d", "5.11a", "5.11b", "5.11c", "5.11d", "5.12a", "5.12b", "5.12c", "5.12d", "5.13a", "5.13b", "5.13c", "5.13d", "5.14a", "5.14b", "5.14c", "5.14d", "5.15a"]
+const YDS_TO_V = [-1, -1, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 9, 10, 10, 11, 12, 13, 14]
+const ROPE_XP_MULT = 1.5
+
+## Hangboard: XP per second hung on a HANG_REF_EDGE_MM edge with both arms.
+## Smaller edges pay more (20 mm / edge, capped), one arm pays HANG_ONE_ARM_MULT
+## times as much, and every HANG_KG_PER_DOUBLE kg added doubles it (assistance
+## takes it down the same way, never below a quarter).
+const HANG_XP_PER_SEC = 1.0
+const HANG_REF_EDGE_MM = 20.0
+const HANG_EDGE_MULT_MIN = 0.5
+const HANG_EDGE_MULT_MAX = 2.5
+const HANG_ONE_ARM_MULT = 2.5
+const HANG_KG_PER_DOUBLE = 20.0
+
 const LIFT_XP_PER_KG = 0.1
 const LIFT_XP_PER_REP = 1
 const LIFT_XP_PER_BW_REP = 3
@@ -29,6 +47,9 @@ const PR_BONUS = {
 	"liftExercise": 150,
 	"climbMaxSend": 200,
 	"climbMaxFlash": 100,
+	"climbMaxRoute": 200,
+	"climbMaxRouteFlash": 100,
+	"bestHang": 100,
 	"longestRun": 150,
 	"longestRide": 150,
 }
@@ -78,6 +99,65 @@ static func grade_label(grade) -> String:
 	return "VB" if grade < 0 else "V" + TTUtil.num_str(grade)
 
 
+## Index of a route grade ("5.10a") in YDS_GRADES, or -1. A bare "5.10" is its "a".
+static func yds_index(label) -> int:
+	var s: String = str(label).strip_edges().to_lower()
+	var i: int = YDS_GRADES.find(s)
+	if i < 0 and s.length() >= 4 and not s.ends_with("a") and not s.ends_with("b") and not s.ends_with("c") and not s.ends_with("d"):
+		i = YDS_GRADES.find(s + "a")
+	return i
+
+
+static func yds_label(i) -> String:
+	return YDS_GRADES[clampi(int(i), 0, YDS_GRADES.size() - 1)]
+
+
+## The boulder grade a route grade is worth.
+static func yds_to_v(i) -> int:
+	return YDS_TO_V[clampi(int(i), 0, YDS_TO_V.size() - 1)]
+
+
+static func is_route(c: Dictionary) -> bool:
+	return str(c.get("style", "")) == "rope"
+
+
+## Label of a logged climb: "V4", or "5.10a" for a route.
+static func climb_label(c: Dictionary) -> String:
+	if is_route(c):
+		return str(TTUtil.get_or(c, "yds", yds_label(0)))
+	return grade_label(c.grade)
+
+
+static func route_xp(i) -> float:
+	return climb_grade_xp(yds_to_v(i)) * ROPE_XP_MULT
+
+
+## XP of one hang {edgeMm (0 = jug / bar), sec, arms (1 | 2), addKg (negative = assisted)}.
+static func hang_xp(h: Dictionary) -> float:
+	var edge: float = float(TTUtil.get_or(h, "edgeMm", HANG_REF_EDGE_MM))
+	var edge_mult: float = HANG_EDGE_MULT_MIN if edge <= 0.0 else clampf(HANG_REF_EDGE_MM / edge, HANG_EDGE_MULT_MIN, HANG_EDGE_MULT_MAX)
+	var arm_mult: float = HANG_ONE_ARM_MULT if int(TTUtil.get_or(h, "arms", 2)) == 1 else 1.0
+	var load_mult: float = maxf(0.25, 1.0 + float(TTUtil.get_or(h, "addKg", 0.0)) / HANG_KG_PER_DOUBLE)
+	return maxf(0.0, float(TTUtil.get_or(h, "sec", 0))) * HANG_XP_PER_SEC * edge_mult * arm_mult * load_mult
+
+
+## "6 × 10 s · 20 mm · one arm · +10 kg"
+static func hang_text(h: Dictionary, wu: String) -> String:
+	var parts: Array = []
+	var n: int = int(TTUtil.get_or(h, "count", 1))
+	parts.append("%s%d s" % [("%d × " % n) if n != 1 else "", int(TTUtil.get_or(h, "sec", 0))])
+	var edge: int = int(TTUtil.get_or(h, "edgeMm", 0))
+	parts.append(("%d mm" % edge) if edge > 0 else "jug")
+	if int(TTUtil.get_or(h, "arms", 2)) == 1:
+		parts.append("one arm")
+	var add: float = float(TTUtil.get_or(h, "addKg", 0.0))
+	if add > 0.0:
+		parts.append("+" + Fmt.fmt_weight(add, wu))
+	elif add < 0.0:
+		parts.append("−" + Fmt.fmt_weight(-add, wu))
+	return " · ".join(PackedStringArray(parts))
+
+
 ## Epley estimated one-rep max.
 static func e1rm(weight_kg, reps) -> float:
 	if reps <= 1:
@@ -109,6 +189,12 @@ static func session_stats(s: Dictionary) -> Dictionary:
 		"paceSecPerKm": null,
 		"speedKmh": null,
 		"durationSec": dur,
+		"routes": null,
+		"maxRouteSent": null,
+		"maxRouteFlashed": null,
+		"hangs": null,
+		"hangSec": null,
+		"bestHangKg": null,
 	}
 	if s.discipline == "lift":
 		for ex in s.exercises:
@@ -125,18 +211,36 @@ static func session_stats(s: Dictionary) -> Dictionary:
 				else:
 					st.bwReps += reps
 	elif s.discipline == "climb":
-		for c in s.climbs:
+		for c in s.get("climbs", []):
 			var n = max(0, c["count"])
+			var route: bool = is_route(c)
+			if route and n > 0:
+				st.routes = int(TTUtil.get_or(st, "routes", 0)) + n
 			if c.result == "attempt":
 				st.attempts += n
 			else:
 				st.sends += n
 				if n > 0:
-					st.maxGradeSent = max(TTUtil.get_or(st, "maxGradeSent", -99), c.grade)
+					if route:
+						st.maxRouteSent = max(TTUtil.get_or(st, "maxRouteSent", -99), yds_index(c.get("yds")))
+					else:
+						st.maxGradeSent = max(TTUtil.get_or(st, "maxGradeSent", -99), c.grade)
 				if c.result == "flash":
 					st.flashes += n
 					if n > 0:
-						st.maxGradeFlashed = max(TTUtil.get_or(st, "maxGradeFlashed", -99), c.grade)
+						if route:
+							st.maxRouteFlashed = max(TTUtil.get_or(st, "maxRouteFlashed", -99), yds_index(c.get("yds")))
+						else:
+							st.maxGradeFlashed = max(TTUtil.get_or(st, "maxGradeFlashed", -99), c.grade)
+		for h in s.get("hangs", []):
+			var hn: int = max(0, int(TTUtil.get_or(h, "count", 1)))
+			if hn <= 0:
+				continue
+			st.hangs = int(TTUtil.get_or(st, "hangs", 0)) + hn
+			st.hangSec = int(TTUtil.get_or(st, "hangSec", 0)) + hn * int(TTUtil.get_or(h, "sec", 0))
+			# The heaviest two-arm hang held for at least 5 s is the PR that matters.
+			if int(TTUtil.get_or(h, "arms", 2)) == 2 and int(TTUtil.get_or(h, "sec", 0)) >= 5:
+				st.bestHangKg = maxf(float(TTUtil.get_or(st, "bestHangKg", -9999.0)), float(TTUtil.get_or(h, "addKg", 0.0)))
 	else:
 		st.distanceM = max(0, s.distanceM)
 		var elev = s.get("elevationM")
@@ -263,8 +367,8 @@ static func base_session_xp(s: Dictionary) -> Dictionary:
 		var send_xp = 0
 		var flash_xp = 0
 		var attempt_xp = 0
-		for c in s.climbs:
-			var each = climb_grade_xp(c.grade) * CLIMB_RESULT_MULT[c.result]
+		for c in s.get("climbs", []):
+			var each = (route_xp(yds_index(c.get("yds"))) if is_route(c) else climb_grade_xp(c.grade)) * CLIMB_RESULT_MULT[c.result]
 			var total = each * max(0, c["count"])
 			if c.result == "flash":
 				flash_xp += total
@@ -278,6 +382,12 @@ static func base_session_xp(s: Dictionary) -> Dictionary:
 			parts.append({"label": TTUtil.num_str(st.sends - st.flashes) + " sends", "xp": send_xp})
 		if st.attempts != 0:
 			parts.append({"label": TTUtil.num_str(st.attempts) + " attempts", "xp": attempt_xp})
+		var hang_total: float = 0.0
+		for h in s.get("hangs", []):
+			hang_total += hang_xp(h) * max(0, int(TTUtil.get_or(h, "count", 1)))
+		var n_hangs: int = int(TTUtil.get_or(st, "hangs", 0))
+		if n_hangs != 0:
+			parts.append({"label": TTUtil.num_str(n_hangs) + (" hang" if n_hangs == 1 else " hangs"), "xp": hang_total})
 	else:
 		var km = st.distanceM / 1000.0
 		var per_km = RUN_XP_PER_KM if s.discipline == "run" else RIDE_XP_PER_KM

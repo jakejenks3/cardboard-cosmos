@@ -383,6 +383,20 @@ func _build_stats() -> void:
 		]))
 		cc.add(Charts.pyramid(_grade_counts(sessions), int(max_send) if max_send != null else 3))
 		cc.add(Charts.legend([{"name": "Sends", "color": Pal.CLIMB}, {"name": "Flashes", "color": Charts.flash()}]))
+		# Routes and hangboard, when there are any.
+		var extras = []
+		if s.prs.get("climbMaxRoute") != null:
+			extras.append(value_chip("Hardest route", Xp.yds_label(s.prs.climbMaxRoute), Pal.CLIMB))
+		if int(TTUtil.get_or(t, "hangs", 0)) > 0:
+			var hsec: int = int(TTUtil.get_or(t, "hangSec", 0))
+			extras.append(value_chip("Hangs", "%s · %s" % [Xp.fmt_int(t.hangs), ("%d s" % hsec) if hsec < 120 else Fmt.fmt_duration_short(float(hsec))], Pal.CLIMB))
+		if float(TTUtil.get_or(s.prs, "bestHangKg", 0.0)) > 0.0:
+			extras.append(value_chip("Heaviest hang", "+" + Fmt.fmt_weight(float(s.prs.bestHangKg), App.weight_unit()), Pal.CLIMB))
+		if not extras.is_empty():
+			var ef = Kit.flow(6)
+			for x in extras:
+				ef.add_child(x)
+			cc.add(ef)
 		add_child(cc)
 	if int(by.run) > 0:
 		var pace = s.prs.bestPaceSecPerKm
@@ -459,8 +473,8 @@ func _grade_counts(sessions: Array) -> Dictionary:
 	for x in sessions:
 		if x.discipline != "climb":
 			continue
-		for cl in x.climbs:
-			if cl.result == "attempt":
+		for cl in x.get("climbs", []):
+			if cl.result == "attempt" or Xp.is_route(cl):
 				continue
 			var g = int(cl.grade)
 			if not c.has(g):

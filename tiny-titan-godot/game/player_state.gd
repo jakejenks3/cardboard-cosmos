@@ -9,9 +9,12 @@ extends RefCounted
 ## totals:  {sessions, byDiscipline: {lift, climb, run, ride}, durationSec, activeDays,
 ##           liftVolumeKg, liftReps, liftSets, liftExercises: {normalized name: true},
 ##           climbSends, climbFlashes, climbAttempts,
+##           climbRoutes, hangs, hangSec (null until the first route / hang),
 ##           runDistanceM, runElevationM, rideDistanceM, rideElevationM}
 ## prs:     {lifts: {normalized name: {weightKg, reps, e1rm, date}},
 ##           climbMaxSend (null until a send), climbMaxFlash (null until a flash),
+##           climbMaxRoute, climbMaxRouteFlash (YDS index, null until a route),
+##           bestHangKg (null until a two-arm hang of 5 s or more),
 ##           longestRunM, longestRideM, bestRunElevM, bestRideElevM,
 ##           bestPaceSecPerKm (null; best average pace over a run of at least 5 km),
 ##           bestRideSpeedKmh (null; best average speed over a ride of at least 20 km)}
@@ -32,6 +35,13 @@ extends RefCounted
 ##           latestWeightKg, latestWeightDate, latestBodyFat, latestBodyFatDate (null until logged),
 ##           weekFlags: {monday key: bitmask of Derive.BODY_BITS already rewarded},
 ##           streak (consecutive weeks with a check-in), bestStreak}
+## hands:   card hands dealt by a boulder session (added after the port, so the parity
+##          tests drop it): pair, twoPair, three, four, fullHouse, straight, straightFlush
+##          (best grade, null until dealt), flush (most V3+ flashes in a session, null),
+##          blackjack / snakeEyes / luckySevens (bools). See Derive._deal_hands.
+## quirks:  chase feats outside climbing (added after the port, dropped by the parity
+##          tests): flags and bests read by the "quirk_*" trophies, plus the bookkeeping
+##          they need (last run date, per-month / per-week tallies). See Derive._deal_quirks.
 ## streak:  {current, best, thisWeek, goal}
 ## chronicle: [{date, kind, icon, title, detail?, val?: {n, unit}, discipline?, ref?}]
 ##           kind: "start"|"level"|"stage"|"rank"|"achievement"|"item"|"pet"|"boss"|"pr"|"body"
@@ -68,6 +78,9 @@ static func initial_state(goal) -> Dictionary:
 			"climbSends": 0,
 			"climbFlashes": 0,
 			"climbAttempts": 0,
+			"climbRoutes": null,
+			"hangs": null,
+			"hangSec": null,
 			"runDistanceM": 0,
 			"runElevationM": 0,
 			"rideDistanceM": 0,
@@ -77,12 +90,55 @@ static func initial_state(goal) -> Dictionary:
 			"lifts": {},
 			"climbMaxSend": null,
 			"climbMaxFlash": null,
+			"climbMaxRoute": null,
+			"climbMaxRouteFlash": null,
+			"bestHangKg": null,
 			"longestRunM": 0,
 			"longestRideM": 0,
 			"bestRunElevM": 0,
 			"bestRideElevM": 0,
 			"bestPaceSecPerKm": null,
 			"bestRideSpeedKmh": null,
+		},
+		"hands": {
+			"pair": null,
+			"twoPair": null,
+			"three": null,
+			"four": null,
+			"fullHouse": null,
+			"straight": null,
+			"flush": null,
+			"straightFlush": null,
+			"blackjack": false,
+			"snakeEyes": false,
+			"luckySevens": false,
+		},
+		"quirks": {
+			"fiveByFive": false,
+			"ladderSets": null,
+			"pyramid": false,
+			"maxSetVolumeKg": null,
+			"maxSetReps": null,
+			"bigThree": false,
+			"bakersDozen": false,
+			"sevenBySeven": false,
+			"runExact5": false,
+			"metronome": false,
+			"runLastDate": null,
+			"runDayStreak": 0,
+			"runDayStreakBest": null,
+			"monthRunM": {},
+			"bestMonthRunM": null,
+			"rideExact50": false,
+			"weekRideDays": {},
+			"bestRideWeekDays": null,
+			"monthRideM": {},
+			"bestMonthRideM": null,
+			"dateDisc": {},
+			"doubleHeader": false,
+			"friday13": false,
+			"leapDay": false,
+			"newYear": false,
 		},
 		"bests": {
 			"maxSetKg": 0,

@@ -65,13 +65,18 @@ bench 3x5 @ 80
 squat 5,5,4 @ 100
 pull-up 3x8
 v4 flash x2, v5 send
+tr 5.10a flash, 5.11b
+hang 20mm 10s x6, one arm 15mm 7s x3 +10
 run 5.2km 27:30 +80m
 ride 40km 1h35
 weight 82.4  bf 18
 ```
 
 Weights are in your weight unit unless you write `kg` / `lb`; distances in your distance unit unless
-you write `km` / `mi` / `k`. `title: Push day`, `note: felt strong` and `duration 70min` attach to the
+you write `km` / `mi` / `k`. One set per line works too (`backsquat x5 135`, then `backsquat x5 195`:
+same exercise, sets add up). V grades are boulders; `5.xx` grades (`5.10a`, `tr 5.9`, `lead 5.11c`)
+are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; add `one arm`,
+`+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
 
 - **Google Form instead:** make a form with one paragraph question and share its responses sheet by
@@ -89,7 +94,7 @@ to workout notes.
   forearms, cycling builds thighs, running leans you out. Six body stages from Scrawny to Titanic.
 - **A boss campaign.** 24 bosses across 6 zones, from the Snooze Button to *The Old You*. Every XP is
   1 damage; training a boss's weakness hits ×1.5.
-- **114 trophies, 75 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
+- **148 trophies, 75 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
   mastery ranks per discipline, and an "Almost there" list of the goals you are closest to.
 - **Fast logging.** Pick an exercise and last time's sets come up already filled in; − / + (hold to
   repeat) on every number; one tap to repeat a previous workout.
@@ -101,7 +106,7 @@ to workout notes.
 | Discipline | Base XP | PR bonus |
 |---|---|---|
 | Lifting | volume ÷ 10 (kg) + 1/weighted rep + 3/bodyweight rep + 5/set | +150 per exercise with a new best weight or est. 1RM (max 3) |
-| Climbing | per climb by grade (VB 12 … V4 78 … V7 185 … V10 400 … V17 1550); flash ×1.3, attempt ×0.35 | +200 new max grade, +100 new max flash |
+| Climbing | per climb by grade (VB 12 … V4 78 … V7 185 … V10 400 … V17 1550); flash ×1.3, attempt ×0.35. Routes: the boulder grade they are worth (5.10a ≈ V1, 5.12a ≈ V5) ×1.5. Hangs: 1/s on a 20 mm edge, ×(20 ÷ edge mm), ×2.5 one arm, ×2 per +20 kg | +200 new max grade, +100 new max flash, +200 new max route, +100 heaviest hang |
 | Running | 100/km + 0.8/m elevation | +150 longest run |
 | Cycling | 32/km + 0.8/m elevation | +150 longest ride |
 | Any | +2/min of duration (up to 3 h) | |

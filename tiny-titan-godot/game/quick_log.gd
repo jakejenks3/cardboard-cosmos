@@ -13,7 +13,7 @@ extends RefCounted
 const NO_DATE_NOTE = "no date given, assumed today"
 
 ## What the app shows as the cheat sheet. Every line here must parse (the unit test checks).
-const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send\nrun 5.2km 27:30 +80m\nride 40km 1h35\nweight 82.4  bf 18"
+const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nweight 82.4  bf 18"
 
 const MONTHS = {
 	"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, "apr": 4, "april": 4,
@@ -61,6 +61,9 @@ const CARDIO_WORDS = {
 	"ride": "ride", "rode": "ride", "bike": "ride", "biked": "ride", "cycle": "ride", "cycled": "ride", "cycling": "ride",
 }
 const CLIMB_WORDS = ["climb", "climbing", "climbed", "boulder", "bouldering", "bouldered"]
+## Roped climbing: these words, or a 5.xx grade, make a climb a route.
+const ROPE_WORDS = ["tr", "toprope", "rope", "roped", "route", "routes", "lead", "led", "sport"]
+const HANG_WORDS = ["hang", "hangs", "hangboard", "hangboarding", "deadhang", "deadhangs", "fingerboard", "fingerboarding"]
 const LIFT_WORDS = ["lift", "lifting", "gym", "weights"]
 const BODY_WORDS = ["weight", "bw", "weighed", "weigh", "wt", "bf", "bodyfat", "bodyweight", "body", "fat"]
 const FILLER = ["in", "for", "at", "of", "and", "with", "-", ":", "total", "="]
@@ -301,14 +304,40 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 		_take(block, e, orig, t)
 		return block
 
-	# Climbing.
-	if CLIMB_WORDS.has(first) or _rx("^(?:\\d+\\s*x\\s*)?(?:vb|v\\d{1,2})(?!\\d)").search(t) != null:
+	# Hangboard: joins the day's climb session.
+	# ("hang clean" and "hanging leg raise" are lifts, not hangs.)
+	if (HANG_WORDS.has(first) or _rx("^(?:(?:one|single|1|two|2|both)[ -]?arms? )?(?:dead ?)?hangs?\\b").search(t) != null) and _rx("\\b(?:clean|cleans|snatch|leg|knee|raise|raises|pull|pulls|power)\\b").search(t) == null:
+		var hg = _parse_hang(t, ctx.wu)
+		for bad in hg.bad:
+			out.problems.append({"line": orig, "why": "could not read \"%s\" (try hang 20mm 10s x6)" % bad})
+		if hg.hangs.is_empty():
+			if hg.bad.is_empty():
+				out.problems.append({"line": orig, "why": "no hang found (try hang 20mm 10s x6)"})
+			return block
+		if block.climb == null:
+			block.climb = _session(block, "climb")
+		var he = block.climb
+		if not he.data.has("hangs"):
+			he.data["hangs"] = []
+		for x in hg.hangs:
+			var merged = false
+			for y in he.data.hangs:
+				if int(y.edgeMm) == int(x.edgeMm) and int(y.sec) == int(x.sec) and int(y.arms) == int(x.arms) and absf(float(y.addKg) - float(x.addKg)) < 0.01:
+					y.count = int(y.count) + int(x.count)
+					merged = true
+			if not merged:
+				he.data.hangs.append(x)
+		_take(block, he, orig, t)
+		return block
+
+	# Climbing: boulders (V grades) and routes (5.xx).
+	if CLIMB_WORDS.has(first) or ROPE_WORDS.has(first) or t.begins_with("top rope") or _rx("^(?:\\d+\\s*x\\s*)?(?:vb|v\\d{1,2}|5\\.\\d{1,2}[a-d]?)(?![\\d.])").search(t) != null:
 		var cl = _parse_climb(t)
 		for bad in cl.bad:
-			out.problems.append({"line": orig, "why": "could not read \"%s\" (try v4 flash x2)" % bad})
+			out.problems.append({"line": orig, "why": "could not read \"%s\" (try v4 flash x2, or 5.10a flash)" % bad})
 		if cl.climbs.is_empty():
 			if cl.bad.is_empty():
-				out.problems.append({"line": orig, "why": "no grades found (try v4 flash x2)"})
+				out.problems.append({"line": orig, "why": "no grades found (try v4 flash x2, or 5.10a flash)"})
 			return block
 		if block.climb == null:
 			block.climb = _session(block, "climb")
@@ -316,7 +345,7 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 		for x in cl.climbs:
 			var merged = false
 			for y in e.data.climbs:
-				if int(y.grade) == int(x.grade) and y.result == x.result:
+				if int(y.grade) == int(x.grade) and y.result == x.result and y.get("yds") == x.get("yds"):
 					y.count = int(y.count) + int(x.count)
 					merged = true
 			if not merged:
@@ -613,6 +642,18 @@ static func parse_sets(spec: String, wu: String) -> Dictionary:
 				return {"ok": false, "why": "could not read the reps in \"%s\"" % g.strip_edges()}
 			items.append(item)
 			continue
+		elif _rx("^x\\d+(?:x\\d+)*$").search(toks[0]) != null:
+			# Reps first, one set per line: "x5 135" (5 reps at 135), "x8" (bodyweight),
+			# "x5 x5 x4 80" (three sets, last number is the weight).
+			left = []
+			for tok in toks:
+				var mx = _rx("^x(\\d+(?:x\\d+)*)$").search(tok)
+				if mx != null and item.w == null:
+					left.append_array(Array(mx.get_string(1).split("x", false)))
+				elif item.w == null and tok == toks[toks.size() - 1] and weight_token(tok, wu, true) >= 0.0:
+					item.w = weight_token(tok, wu, true)
+				else:
+					return {"ok": false, "why": "could not read \"%s\" (try x5 135 or 3x5 @ 80)" % g.strip_edges()}
 		elif toks.size() > 1 and weight_token(toks[toks.size() - 1], wu, false) >= 0.0:
 			item.w = weight_token(toks[toks.size() - 1], wu, false)
 			left = toks.slice(0, toks.size() - 1)
@@ -709,10 +750,11 @@ static func is_loaded(name: String, ctx: Dictionary) -> bool:
 # ---------------------------------------------------------------------------
 
 static func _parse_climb(t: String) -> Dictionary:
-	var s = t
+	var s = t.replace("top rope", "toprope").replace("top-rope", "toprope")
 	var toks = s.split(" ", false)
-	if CLIMB_WORDS.has(toks[0].trim_suffix(":")):
-		s = " ".join(toks.slice(1))
+	while not toks.is_empty() and (CLIMB_WORDS.has(toks[0].trim_suffix(":")) or ROPE_WORDS.has(toks[0].trim_suffix(":"))):
+		toks = toks.slice(1)
+	s = " ".join(toks)
 	s = s.replace(";", ",").replace(" and ", ",")
 	var climbs = []
 	var bad = []
@@ -721,33 +763,111 @@ static func _parse_climb(t: String) -> Dictionary:
 		if it == "":
 			continue
 		it = _rx("(vb|v\\d{1,2})(?=[a-z])").sub(it, "$1 ", true)
-		it = _rx("(\\d)x(?=v)").sub(it, "$1x ", true)
+		it = _rx("(\\d)x(?=v|5\\.)").sub(it, "$1x ", true)
 		it = _rx("\\bx\\s+(?=\\d)").sub(it, "x", true)
 		it = _rx("(\\d)\\s+x\\b").sub(it, "$1x", true)
 		var grade = null
+		var yds = ""
 		var count = 1
 		var result = "send"
 		var ok = true
 		for tok in it.split(" ", false):
 			var mg = _rx("^v(\\d{1,2})$").search(tok)
+			var my = _rx("^5\\.\\d{1,2}[a-d]?$").search(tok)
 			var mc = _rx("^(?:x(\\d+)|(\\d+)x)$").search(tok)
 			if tok == "vb" and grade == null:
 				grade = -1
 			elif mg != null and grade == null and int(mg.get_string(1)) <= 17:
 				grade = int(mg.get_string(1))
+			elif my != null and grade == null and Xp.yds_index(tok) >= 0:
+				yds = Xp.yds_label(Xp.yds_index(tok))
+				grade = Xp.yds_to_v(Xp.yds_index(tok))
 			elif mc != null:
 				count = int(mc.get_string(1) if mc.get_string(1) != "" else mc.get_string(2))
 			elif _rx("^\\d+$").search(tok) != null:
 				count = int(tok)
 			elif RESULT_WORDS.has(tok):
 				result = RESULT_WORDS[tok]
+			elif ROPE_WORDS.has(tok):
+				pass
 			else:
 				ok = false
 		if grade == null or not ok or count < 1 or count > 99:
 			bad.append(item.strip_edges())
+		elif yds != "":
+			climbs.append({"grade": grade, "result": result, "count": count, "style": "rope", "yds": yds})
 		else:
 			climbs.append({"grade": grade, "result": result, "count": count})
 	return {"climbs": climbs, "bad": bad}
+
+
+## "hang 20mm 10s x6", "one arm hang 15mm 7s x3 +10", "hangboard 10mm 10s x4 -20lb"
+## (assisted), "hang jug 20s x3". Edge defaults to 20 mm, arms to both; a second
+## hang on the same line ("hang 20mm 10s x6, 15mm 7s x3") keeps the edge / arms
+## of the one before it. Returns {"hangs": [{edgeMm, sec, arms, addKg, count}], "bad": [...]}.
+static func _parse_hang(t: String, wu: String) -> Dictionary:
+	var s = " " + t + " "
+	for w in ["single arm", "one arm", "1 arm", "one-arm", "single-arm", "onearm"]:
+		s = s.replace(w, " onearm ")
+	for w in ["two arms", "two arm", "both arms", "2 arm", "2 arms", "two-arm"]:
+		s = s.replace(w, " twoarms ")
+	s = s.replace("dead hang", "deadhang")
+	s = _rx("(\\d)\\s+(mm|s|sec|secs|second|seconds|kg|lb|lbs)\\b").sub(s, "$1$2", true)
+	s = _rx("\\bx\\s+(?=\\d)").sub(s, "x", true)
+	s = _rx("(\\d)\\s+x\\b").sub(s, "$1x", true)
+	s = _rx("([+-])\\s+(?=\\d)").sub(s, "$1", true)
+	s = s.replace(";", ",").replace(" and ", ",")
+	var hangs = []
+	var bad = []
+	var line_arms = 2
+	var line_edge = -1
+	for item in s.split(",", false):
+		var it = item.strip_edges()
+		if it == "":
+			continue
+		var h = {"edgeMm": -1, "sec": -1, "arms": 0, "addKg": 0.0, "count": 1}
+		var ok = true
+		for tok in it.split(" ", false):
+			if HANG_WORDS.has(tok) or FILLER.has(tok) or tok == "on" or tok == "edge" or tok == "bw" or tok == "bodyweight":
+				continue
+			if tok == "onearm":
+				h.arms = 1
+				continue
+			if tok == "twoarms":
+				h.arms = 2
+				continue
+			if tok == "jug" or tok == "jugs" or tok == "bar":
+				h.edgeMm = 0
+				continue
+			var mm = _rx("^(\\d+)mm$").search(tok)
+			var ms = _rx("^(\\d+)(?:s|sec|secs|second|seconds)$").search(tok)
+			var mc = _rx("^(?:x(\\d+)|(\\d+)x)$").search(tok)
+			var mw = _rx("^([+-])(\\d+(?:\\.\\d+)?)(kg|lb|lbs)?$").search(tok)
+			if mm != null:
+				h.edgeMm = int(mm.get_string(1))
+			elif ms != null:
+				h.sec = int(ms.get_string(1))
+			elif mc != null:
+				h.count = int(mc.get_string(1) if mc.get_string(1) != "" else mc.get_string(2))
+			elif mw != null:
+				var unit = wu if mw.get_string(3) == "" else ("kg" if mw.get_string(3) == "kg" else "lb")
+				var kg = Fmt.unit_to_kg(float(mw.get_string(2)), unit)
+				h.addKg = -kg if mw.get_string(1) == "-" else kg
+			else:
+				ok = false
+		if int(h.edgeMm) < 0:
+			h.edgeMm = line_edge if line_edge >= 0 else 20
+		else:
+			line_edge = int(h.edgeMm)
+		if int(h.arms) == 0:
+			h.arms = line_arms
+		else:
+			line_arms = int(h.arms)
+		if not ok or int(h.sec) <= 0 or int(h.sec) > 600 or int(h.count) < 1 or int(h.count) > 99 or int(h.edgeMm) > 100:
+			bad.append(item.strip_edges())
+		else:
+			hangs.append(h)
+	return {"hangs": hangs, "bad": bad}
 
 
 # ---------------------------------------------------------------------------
@@ -991,8 +1111,10 @@ static func summary(kind: String, data: Dictionary, wu: String, du: String) -> S
 				parts.append("%s %s" % [ex.name, sets_text(ex.sets, wu)])
 		"climb":
 			for c in data.climbs:
-				var g = "VB" if int(c.grade) < 0 else "V%d" % int(c.grade)
+				var g = Xp.climb_label(c) + (" TR" if Xp.is_route(c) else "")
 				parts.append("%s %s%s" % [g, c.result, (" ×%d" % int(c.count)) if int(c.count) > 1 else ""])
+			for h in data.get("hangs", []):
+				parts.append("Hang " + Xp.hang_text(h, wu))
 		_:
 			var head = "Run " if data.discipline == "run" else "Ride "
 			parts.append(head + Fmt.fmt_distance(float(data.distanceM), du))

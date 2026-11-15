@@ -53,13 +53,19 @@ static func summarize_session(s: Dictionary, settings: Dictionary) -> String:
 		if st.bwReps != 0:
 			parts.append("%s BW reps" % TTUtil.num_str(st.bwReps))
 	elif s.discipline == "climb":
-		parts.append("%s send%s" % [TTUtil.num_str(st.sends), "" if st.sends == 1 else "s"])
+		var hangs: int = int(TTUtil.get_or(st, "hangs", 0))
+		if st.sends != 0 or st.attempts != 0 or hangs == 0:
+			parts.append("%s send%s" % [TTUtil.num_str(st.sends), "" if st.sends == 1 else "s"])
 		if st.maxGradeSent != null:
 			parts.append("max %s" % Xp.grade_label(st.maxGradeSent))
+		if st.get("maxRouteSent") != null:
+			parts.append("max %s" % Xp.yds_label(st.maxRouteSent))
 		if st.flashes != 0:
 			parts.append("%s flash%s" % [TTUtil.num_str(st.flashes), "" if st.flashes == 1 else "es"])
 		if st.attempts != 0:
 			parts.append("%s attempts" % TTUtil.num_str(st.attempts))
+		if hangs != 0:
+			parts.append("%s hang%s" % [TTUtil.num_str(hangs), "" if hangs == 1 else "s"])
 	else:
 		parts.append(Fmt.fmt_distance(st.distanceM, settings.distanceUnit))
 		if dur != 0:

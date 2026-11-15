@@ -40,6 +40,15 @@ func _init() -> void:
 		return
 	_data = TTUtil.normalize_json(parsed)
 
+	# Replay with the trophy catalog the fixtures were generated with: trophies
+	# added since the port (the card hands) are outside parity. See parity_derive.gd.
+	var core_text: String = FileAccess.get_file_as_string("res://tests/parity/core_vectors.json")
+	var core = JSON.parse_string(core_text) if core_text != "" else null
+	if core is Dictionary and core.has("catalog"):
+		var fixture_ids: Array = []
+		for a in core.catalog.achievements:
+			fixture_ids.append(a.id)
+		Achievements.restrict_to(fixture_ids)
 	_run_group("quests", _data.quests, _quests_case)
 	_run_group("diff", _data.diff, _diff_case)
 	_run_group("totals", _data.totals, _totals_case)
