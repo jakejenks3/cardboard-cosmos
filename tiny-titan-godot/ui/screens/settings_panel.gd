@@ -89,7 +89,7 @@ func fill() -> void:
 	data.add(btns)
 	var btns2 = Kit.hbox(8)
 	btns2.add_child(Kit.expand(Kit.button("Open data folder", "ghost", _open_folder, "md", "book")))
-	btns2.add_child(Kit.button("Reset", "danger", SettingsPanel.ask_reset.bind(sheet), "md", "trash"))
+	btns2.add_child(Kit.button("Reset", "danger", SettingsPanel.ask_reset.bind(sheet)))
 	data.add(btns2)
 	add_child(data)
 
@@ -189,7 +189,7 @@ func _exit_tree() -> void:
 
 func _build_inbox() -> void:
 	var ib = App.inbox.settings()
-	var card = _card("PHONE INBOX", Kit.button("How it works", "ghost", SettingsPanel.show_how, "sm", "info"))
+	var card = _card("PHONE INBOX", Kit.button("How it works", "ghost", SettingsPanel.show_how, "sm"))
 	card.set_meta("inbox_section", true)
 	var src = Kit.input(str(ib.get("source", "")), "Google Doc link or a file path")
 	src.select_all_on_focus = false
@@ -200,8 +200,8 @@ func _build_inbox() -> void:
 	check.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add(check)
 	var row = Kit.hbox(8)
-	row.add_child(Kit.vcenter(Kit.button("Paste text", "secondary", InboxSheet.open_paste.bind(_close_sheet), "md", "edit")))
-	row.add_child(Kit.spacer())
+	row.add_child(Kit.vcenter(Kit.expand(Kit.button("Paste text", "secondary", InboxSheet.open_paste.bind(_close_sheet), "md", "edit"))))
+	row.add_child(Kit.gap(4))
 	var auto_label = Kit.label("Auto-check", 14, null, true)
 	auto_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(auto_label)

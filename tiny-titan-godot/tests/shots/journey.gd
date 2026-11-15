@@ -9,6 +9,10 @@ var tree: SceneTree
 func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
+	# TINY_TITAN_THEME=ember runs the walkthrough in another theme.
+	if OS.get_environment("TINY_TITAN_THEME") != "":
+		App.update_settings({"theme": OS.get_environment("TINY_TITAN_THEME")})
+		await ShotHelper.wait(tree, 0.5)
 	var args = OS.get_cmdline_user_args()
 	var kind = args[1] if args.size() > 1 else "year"
 	if kind != "year":

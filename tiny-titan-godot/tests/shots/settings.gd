@@ -39,6 +39,10 @@ func _btn(t: String):
 
 
 func run(main: Node, tree: SceneTree) -> void:
+	# TINY_TITAN_THEME=ember runs the walkthrough in another theme.
+	if OS.get_environment("TINY_TITAN_THEME") != "":
+		App.update_settings({"theme": OS.get_environment("TINY_TITAN_THEME")})
+		await ShotHelper.wait(tree, 0.5)
 	App.update_settings({"weightUnit": "kg", "weightStep": 2.5})
 	SettingsSheet.open()
 	await ShotHelper.wait(tree, 0.7)

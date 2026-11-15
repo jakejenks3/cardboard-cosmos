@@ -431,7 +431,13 @@ static func _button_icon(b: Button, icon: String, _variant_name: String, size: S
 	row.add_child(Icons.rect(icon, 16))
 	row.add_child(label(b.text, sz.font, fg, true))
 	b.add_child(row)
-	b.custom_minimum_size.x = row.get_combined_minimum_size().x + sz.pad_h * 2
+	# The label can only be measured properly once it is on screen, so the width
+	# is set now and again whenever the row's size is known or changes.
+	var fit = func():
+		b.custom_minimum_size.x = row.get_combined_minimum_size().x + sz.pad_h * 2
+	fit.call()
+	row.minimum_size_changed.connect(fit)
+	b.ready.connect(fit)
 	b.draw.connect(func(): row.modulate.a = 0.5 if b.disabled else 1.0)
 	b.button_down.connect(func():
 		row.offset_top = drop

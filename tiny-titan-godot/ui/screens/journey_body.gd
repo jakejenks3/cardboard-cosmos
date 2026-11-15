@@ -78,7 +78,10 @@ static func _summary(b: Dictionary, wu: String) -> Card:
 	if b.latestWeightDate != null:
 		wv.add_child(Kit.muted(Dates.format_date(b.latestWeightDate), 11))
 	row.add_child(wv)
-	row.add_child(Kit.vcenter(Kit.button("Check in", "primary", func(): App.open_log("body"), "md", "plus")))
+	var ci = Kit.button("Check in", "primary", func(): App.open_log("body"), "md", "plus")
+	# Room for the icon and the label (the label is not measured until it is on screen).
+	ci.custom_minimum_size.x = Kit.font_bold().get_string_size("Check in", HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 16 + 8 + 34
+	row.add_child(Kit.vcenter(ci))
 	card.add(row)
 
 	var chips = Kit.flow(6)
