@@ -74,6 +74,8 @@ static var LIFT = Color("ff6b35")
 static var CLIMB = Color("23c29b")
 static var RUN = Color("3d9bff")
 static var RIDE = Color("ffb21f")
+## Misc activities (vest walks...): pink, apart from the four disciplines.
+static var MISC = Color("f272b8")
 
 static var HP = Color("ff4d6d")
 ## The weekly bounty: violet, so it never reads as the campaign boss.
@@ -138,6 +140,8 @@ static func disc(d) -> Color:
 			return RUN
 		"ride":
 			return RIDE
+		"misc":
+			return MISC
 	return ACCENT
 
 

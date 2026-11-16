@@ -251,7 +251,8 @@ func build_session(partial: Dictionary) -> Dictionary:
 		s["createdAt"] = now_ms()
 	if not s.has("source"):
 		s["source"] = "manual"
-	s["bonusPct"] = TTUtil.jsround(float(perks.xp[s.discipline]) * 1000.0) / 1000.0
+	# Gear bonuses are per discipline; a misc activity (game/misc.gd) has none.
+	s["bonusPct"] = TTUtil.jsround(float(perks.xp.get(s.discipline, 0.0)) * 1000.0) / 1000.0
 	s["luckPct"] = TTUtil.jsround(float(perks.luck) * 1000.0) / 1000.0
 	return s
 
@@ -277,7 +278,7 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 		events = Diff.diff_states(before, state, fresh[0])
 	else:
 		events = Diff.diff_bulk(before, state, fresh)
-	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null))
+	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null, settings()))
 	var ids = []
 	for s in fresh:
 		ids.append(s.id)
@@ -340,7 +341,7 @@ func _with_extras(events: Array, extras: Array) -> Array:
 		if ["xp", "import", "bodyxp", "boss"].has(out[i].type):
 			at = i + 1
 	for e in extras:
-		if e.type == "bounty":
+		if e.type == "bounty" or e.type == "pr":
 			out.insert(at, e)
 			at += 1
 		else:

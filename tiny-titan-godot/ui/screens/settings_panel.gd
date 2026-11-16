@@ -223,7 +223,7 @@ static func show_how() -> void:
 		var cam = Icons.rect("camera", 20)
 		cam.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		shots.add_child(cam)
-		var words = Kit.para("Screenshots work too. Paste a Strava run or ride, or your scale app's weigh-in screen, into the Doc: the game reads the numbers off the picture. Any other picture is kept as a progress photo.", 14, Pal.TEXT)
+		var words = Kit.para("Screenshots work too. Paste a Strava run, ride or walk, or your scale app's weigh-in screen, into the Doc: the game reads the numbers off the picture. A walk comes in as a weighted vest walk; write \"vest 20\" under it for the weight. Any other picture is kept as a progress photo.", 14, Pal.TEXT)
 		words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		shots.add_child(words)
 		v.add_child(shots)

@@ -200,7 +200,7 @@ func _summary():
 	f.alignment = FlowContainer.ALIGNMENT_CENTER
 	if _import_ev != null:
 		f.add_child(Kit.pill("calendar", "%d sessions" % int(_import_ev.count), Pal.PANEL2, "", Pal.TEXT))
-		for d in TT.DISCIPLINES:
+		for d in TT.SESSION_KINDS:
 			var v = int(_import_ev.byDiscipline.get(d, 0))
 			if v > 0:
 				f.add_child(Kit.pill(d, "+" + Xp.fmt_int(v), Pal.disc(d), "", Color.WHITE))
@@ -250,7 +250,7 @@ func _run() -> void:
 	await _wait(1.0)
 	if not _alive(gen):
 		return
-	if _xp_ev != null:
+	if _xp_ev != null and _xp_ev.get("disc") != null:
 		_phase = "disc"
 		var secs = _ensure_disc_bar().play()
 		await _wait(secs)
@@ -359,7 +359,7 @@ func _skip() -> void:
 	if _count_tween != null and _count_tween.is_valid():
 		_count_tween.kill()
 	_set_count(float(_amount))
-	if _xp_ev != null:
+	if _xp_ev != null and _xp_ev.get("disc") != null:
 		_ensure_disc_bar().finish_now()
 	if _hero_pair != null:
 		_ensure_hero_bar().finish_now()

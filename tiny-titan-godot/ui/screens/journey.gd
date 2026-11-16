@@ -205,7 +205,7 @@ func _then_now_facts(sessions: Array, s: Dictionary, wu: String, du: String) -> 
 		elif x.discipline == "run":
 			if first_run == 0.0 and float(x.get("distanceM", 0)) > 0.0:
 				first_run = float(x.distanceM)
-		elif first_ride == 0.0 and float(x.get("distanceM", 0)) > 0.0:
+		elif x.discipline == "ride" and first_ride == 0.0 and float(x.get("distanceM", 0)) > 0.0:
 			first_ride = float(x.distanceM)
 
 	var lifts = []
@@ -308,13 +308,13 @@ func _weekly_points(sessions: Array, s: Dictionary) -> Array:
 	for i in range(11, -1, -1):
 		var wk = Dates.add_weeks(this_week, -i)
 		idx[wk] = out.size()
-		out.append({"week": wk, "byDiscipline": {"lift": 0, "climb": 0, "run": 0, "ride": 0}, "total": 0})
+		out.append({"week": wk, "byDiscipline": {"lift": 0, "climb": 0, "run": 0, "ride": 0, "misc": 0}, "total": 0})
 	for x in sessions:
 		var wk = Dates.week_key(x.date)
 		if not idx.has(wk):
 			continue
 		var xp = int(s.sessionXp.get(x.id, 0))
-		out[idx[wk]].byDiscipline[x.discipline] += xp
+		out[idx[wk]].byDiscipline[x.discipline] = int(out[idx[wk]].byDiscipline.get(x.discipline, 0)) + xp
 		out[idx[wk]].total += xp
 	return out
 
@@ -438,6 +438,11 @@ func _build_stats() -> void:
 		if spd != null and float(spd) > 0.0:
 			best2.append(value_chip("Top speed", Fmt.fmt_speed(spd, du), Pal.RIDE))
 		add_child(_distance_card("ride", t.rideDistanceM, t.rideElevationM, s.prs.longestRideM, du, best2))
+	# Misc activities (game/misc.gd): one card per kind that was ever logged.
+	for k in Misc.ORDER:
+		var mt = Misc.totals(s, k)
+		if mt != null and int(mt.sessions) > 0:
+			add_child(_misc_card(k, mt, du))
 
 
 ## "1.2 blue whales" -> ["1.2", "blue whales"].
@@ -475,6 +480,37 @@ func _fact_tile(f: Dictionary, sc: int) -> Card:
 	row.add_child(Kit.vcenter(PixelFont.rect(parts[0], sc, _fact_color(str(f.detail)))))
 	c.add(row)
 	c.add(Kit.clip(parts[1], 13, null, true))
+	return c
+
+
+## A misc activity: how far in all, how often, the longest, and its marks as chips.
+func _misc_card(kind: String, mt: Dictionary, du: String) -> Card:
+	var m = Misc.meta(kind)
+	var c = Kit.card(10)
+	c.accent(Pal.MISC)
+	c.set_meta("misc_card", kind)
+	var h = Kit.hbox(10)
+	h.add_child(Parts.disc_badge(TT.MISC, 34, str(m.icon)))
+	h.add_child(Kit.vcenter(PixelFont.rect(str(m.short), 2, Pal.MISC)))
+	c.add(h)
+	var a = split_unit(Fmt.fmt_distance(float(mt.distanceM), du))
+	var l = split_unit(Fmt.fmt_distance(float(mt.longestM), du))
+	var n = Xp.fmt_int(int(mt.sessions))
+	var sc = fit_scale([a[0], n, l[0]], 96, 3)
+	c.add(_tiles([
+		well_tile(a[0], a[1] + " total", Pal.MISC, sc),
+		well_tile(n, "session" if int(mt.sessions) == 1 else "sessions", Pal.TEXT, sc),
+		well_tile(l[0], l[1] + " longest", Pal.TEXT, sc),
+	]))
+	var chips = []
+	if float(mt.heaviestKg) > 0.0:
+		chips.append(value_chip("Heaviest %s" % str(m.loadName).to_lower(), Fmt.fmt_weight(float(mt.heaviestKg), App.weight_unit()), Pal.MISC))
+	if int(mt.durationSec) > 0:
+		chips.append(value_chip("Time", Fmt.fmt_duration_short(float(mt.durationSec)), Pal.MISC))
+	if float(mt.elevationM) >= 0.5:
+		chips.append(value_chip("Climbed", Fmt.fmt_elevation(float(mt.elevationM), du), Pal.MISC))
+	chips.append(value_chip("XP earned", Xp.fmt_int(int(mt.xp)), Pal.MISC, "Hero XP from this activity"))
+	c.add(_tiles(chips, 2))
 	return c
 
 

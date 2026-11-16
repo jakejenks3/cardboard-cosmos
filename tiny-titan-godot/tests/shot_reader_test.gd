@@ -220,7 +220,10 @@ func _init() -> void:
 
 	# --- things that are not runs or rides ------------------------------------------------
 	var walk = read(strava_walk())
-	ok(walk.kind == "text" and str(walk.why).contains("a walk"), "a walk is left out, with the reason", walk)
+	ok(walk.kind == "walk" and near(walk.get("dist"), 1.2) and walk.get("distUnit") == "mi" and walk.get("sec") == 1450 and walk.get("title") == "Lunch Walk", "a walk is read like a run, as a walk", walk)
+	var stroll = strava_walk()
+	stroll[0] = line("Activity", 400, 178, 120, 29)
+	ok(read(stroll).kind == "walk", "a walk named only in the title", read(stroll))
 	var hike = strava_walk()
 	hike[0] = line("Activity", 400, 178, 120, 29)
 	hike[2] = line("Evening Hike", 40, 497, 280, 48)
@@ -362,7 +365,12 @@ func _init() -> void:
 
 	# --- into the log: everything else ----------------------------------------------------------------------
 	var w = p("photo images/walk.jpg", shots)
-	ok(w.entries.is_empty() and w.problems.size() == 1 and w.problems[0].get("picture") == "images/walk.jpg" and str(w.problems[0].why).contains("a walk"), "a walk is reported with its picture", w)
+	ok(w.entries.size() == 1 and w.problems.is_empty() and w.entries[0].data.discipline == "misc" and w.entries[0].data.kind == "vest_walk" and near(w.entries[0].data.distanceM, 1931.2, 0.2) and w.entries[0].get("shots") == ["images/walk.jpg"], "a walk picture is a vest walk (tests/misc_test.gd has the rest)", w)
+	var hk = strava_walk()
+	hk[0] = line("Hike", 422, 178, 77, 29)
+	hk[2] = line("Trail Hike", 40, 497, 260, 48)
+	var hp = p("photo images/hike.jpg", {"images/hike.jpg": shot(hk)})
+	ok(hp.entries.is_empty() and hp.problems.size() == 1 and hp.problems[0].get("picture") == "images/hike.jpg" and str(hp.problems[0].why).contains("a hike"), "a hike is reported with its picture", hp)
 	var ph = p("photo images/me.jpg", {"images/me.jpg": shot([line("NIKE", 300, 900, 120, 40)])})
 	ok(ph.entries.size() == 1 and ph.entries[0].kind == "body" and ph.entries[0].data.get("photoRefs") == ["images/me.jpg"] and not ph.entries[0].has("shots"), "a picture with no words is a progress photo, as before", ph)
 	var unk = p("photo images/me.jpg", {})
@@ -372,7 +380,7 @@ func _init() -> void:
 	var titled = p("title: Tempo day\nphoto images/run.jpg", shots)
 	ok(titled.entries.size() == 1 and titled.entries[0].data.get("title") == "Tempo day", "a typed title wins over the picture's", titled)
 	var mi = p("photo images/run.jpg\nphoto images/ride.jpg\nphoto images/scale.png\nphoto images/walk.jpg", shots, {"distanceUnit": "mi", "weightUnit": "lb"})
-	ok(mi.entries.size() == 3 and mi.problems.size() == 1, "four pictures: a run, a ride, a weigh-in and one left out", [mi.entries.size(), mi.problems.size()])
+	ok(mi.entries.size() == 4 and mi.problems.is_empty(), "four pictures: a run, a ride, a weigh-in and a walk", [mi.entries.size(), mi.problems.size()])
 
 	print("SHOTS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

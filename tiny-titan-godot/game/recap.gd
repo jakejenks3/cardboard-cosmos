@@ -13,6 +13,7 @@ extends RefCounted
 ##   xp (session XP), heroXp (all hero XP earned in the period),
 ##   levelFrom, levelTo (hero level before and after),
 ##   liftKg, liftSets, sends, topGrade (null or V index), routes, runM, rideM, elevM,
+##   miscM (distance of misc activities such as vest walks),
 ##   prs: [chronicle entries], trophies: [ids], items: [ids], pets: [ids],
 ##   bosses: [boss ids], bounties: {won, crushed, weeks: [records]},
 ##   coins (earned in the period), best: {id, discipline, xp, date} or null,
@@ -85,7 +86,7 @@ static func _numbers(from: String, to: String, state: Dictionary, sessions: Arra
 	var out = {
 		"sessions": 0, "activeDays": 0, "durationSec": 0, "by": {}, "xp": 0,
 		"liftKg": 0.0, "liftSets": 0, "sends": 0, "topGrade": null, "routes": 0,
-		"runM": 0.0, "rideM": 0.0, "elevM": 0.0, "best": null,
+		"runM": 0.0, "rideM": 0.0, "elevM": 0.0, "miscM": 0.0, "best": null,
 	}
 	var days: Dictionary = {}
 	for x in sessions:
@@ -115,6 +116,8 @@ static func _numbers(from: String, to: String, state: Dictionary, sessions: Arra
 			"ride":
 				out.rideM += float(st.distanceM)
 				out.elevM += float(st.elevationM)
+			"misc":
+				out.miscM += float(st.distanceM)
 	out.activeDays = days.size()
 	return out
 

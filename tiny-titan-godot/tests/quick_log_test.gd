@@ -192,7 +192,7 @@ heel raise x10 195")))
 
 	# --- the cheat sheet the app shows parses cleanly ---------------------------------------------
 	var cs = p(QuickLog.CHEAT_SHEET)
-	ok(cs.problems.is_empty() and cs.entries.size() == 5, "cheat sheet: 5 entries, no problems", [cs.entries.size(), cs.problems])
+	ok(cs.problems.is_empty() and cs.entries.size() == 6, "cheat sheet: 6 entries, no problems", [cs.entries.size(), cs.problems])
 
 	# --- keys ---------------------------------------------------------------------------------
 	var k1 = p("yesterday\nbench 3x5 @ 80\nrun 5km")

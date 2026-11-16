@@ -17,6 +17,8 @@ extends RefCounted
 ##   lift:   exercises: [{name: String, sets: [{reps: int, weightKg: number (0 = bodyweight)}]}]
 ##   climb:  climbs: [{grade: int (V-scale, -1 = VB), result: "flash"|"send"|"attempt", count: int}]
 ##   run/ride: distanceM: number, elevationM: number
+##   misc (game/misc.gd; discipline "misc", not one of DISCIPLINES): kind ("vest_walk"),
+##           distanceM, elevationM, loadKg (the weight carried)
 ##
 ## QuestClaim: id, questId ("d:2026-01-01:1" / "w:2026-01-05:2"), xp, claimedAt (epoch ms), date
 ##
@@ -30,6 +32,11 @@ extends RefCounted
 ##   optional weightStep (size of one +/- tap on a weight, in the chosen unit)
 
 const DISCIPLINES = ["lift", "climb", "run", "ride"]
+## Activities outside the four disciplines are sessions with this discipline
+## (see game/misc.gd): hero XP only, no level track, none of the four's numbers.
+const MISC = "misc"
+## Everything a session can be, in the order lists and charts show them.
+const SESSION_KINDS = ["lift", "climb", "run", "ride", "misc"]
 
 # Colours validated as a categorical set on the app's dark surfaces
 # (CVD-safe adjacent pairs, >= 3:1 contrast).
@@ -38,6 +45,8 @@ const DISCIPLINE_META = {
 	"climb": {"name": "Climbing", "verb": "Climb", "icon": "🧗", "color": "#199e70", "stat": "GRIP", "statName": "Grip"},
 	"run": {"name": "Running", "verb": "Run", "icon": "👟", "color": "#3987e5", "stat": "STAM", "statName": "Stamina"},
 	"ride": {"name": "Cycling", "verb": "Ride", "icon": "🚴", "color": "#c98500", "stat": "PWR", "statName": "Power"},
+	# Not a discipline (it is not in DISCIPLINES): here so a misc session has a name wherever one is shown.
+	"misc": {"name": "Misc", "verb": "Log", "icon": "🦺", "color": "#f272b8", "stat": "MISC", "statName": "Misc"},
 }
 
 const PHOTO_ANGLES = ["front", "side", "back"]

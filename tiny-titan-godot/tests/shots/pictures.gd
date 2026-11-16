@@ -2,10 +2,11 @@ extends RefCounted
 ## Screenshots in the phone note (run with the "new" data; Windows only, because
 ## it uses the text reader that is part of Windows). Fake phone screenshots are
 ## drawn here, packed into a zip shaped like Google's export of a Doc and handed
-## to the inbox. A workout screenshot must come out as a run, a scale screenshot
-## as a weigh-in, a walk is left out with the reason, and a picture without
-## words stays a progress photo. Then: nothing is offered twice, not the next
-## day either, and a new picture is a new entry. Prints CHECK lines.
+## to the inbox. A workout screenshot must come out as a run, a walk as a
+## weighted vest walk (game/misc.gd), a scale screenshot as a weigh-in, a hike is
+## left out with the reason, and a picture without words stays a progress photo.
+## Then: nothing is offered twice, not the next day either, and a new picture is
+## a new entry. Prints CHECK lines.
 
 const W = 720
 const H = 1560
@@ -180,6 +181,7 @@ func run(m: Node, t: SceneTree) -> void:
 	var run_png = await _workout("Run", "Morning Run", "Today at 6:15 AM  Springfield, Oregon", "4.02 mi", "10:21 /mi", "41:37", "112 ft", "6,480")
 	var scale_png = await _scale("180.4")
 	var walk_png = await _workout("Walk", "Lunch Walk", "Today at 12:10 PM  Springfield, Oregon", "1.20 mi", "20:08 /mi", "24:10", "12 ft", "2,950")
+	var hike_png = await _workout("Hike", "Trail Hike", "Today at 3:30 PM  Springfield, Oregon", "4.10 mi", "24:30 /mi", "1:40:27", "980 ft", "9,900")
 	var photo_png = await _picture(Color(0.55, 0.6, 0.66), [], [[250, 300, 220, 220, Color(0.86, 0.68, 0.55)], [200, 540, 320, 620, Color(0.2, 0.35, 0.6)], [230, 1160, 110, 330, Color(0.15, 0.15, 0.2)], [380, 1160, 110, 330, Color(0.15, 0.15, 0.2)]])
 	var shots_dir = OS.get_environment("TINY_TITAN_SHOTS")
 	if shots_dir != "":
@@ -189,7 +191,7 @@ func run(m: Node, t: SceneTree) -> void:
 			f.close()
 
 	# --- first read: the text reader runs ------------------------------------------------
-	var zip1 = _zip([scale_png, run_png, walk_png, photo_png])
+	var zip1 = _zip([scale_png, run_png, hike_png, photo_png, walk_png])
 	var t0 = Time.get_ticks_msec()
 	var r1 = await _read_note(zip1)
 	print("PICTURES first read took %d ms" % (Time.get_ticks_msec() - t0))
@@ -197,12 +199,19 @@ func run(m: Node, t: SceneTree) -> void:
 	check(r1.ok, "the note was read (%s)" % str(r1.get("error")))
 	var run_e = null
 	var body_e = null
+	var walk_e = null
 	for e in r1.fresh:
-		if e.kind == "session":
-			run_e = e
-		else:
+		if e.kind != "session":
 			body_e = e
-	check(r1.fresh.size() == 2 and run_e != null and body_e != null, "a run and a check-in were found (%d entries)" % r1.fresh.size())
+		elif e.data.discipline == "run":
+			run_e = e
+		elif e.data.discipline == "misc":
+			walk_e = e
+	check(r1.fresh.size() == 3 and run_e != null and body_e != null and walk_e != null, "a run, a vest walk and a check-in were found (%d entries)" % r1.fresh.size())
+	if walk_e != null:
+		check(walk_e.data.get("kind") == "vest_walk" and _near(walk_e.data.get("distanceM"), 1931.2, 0.2) and walk_e.data.get("durationSec") == 1450 and walk_e.data.get("title") == "Lunch Walk", "walk: 1.20 mi in 24:10 as a weighted vest walk (%s m, %s s)" % [str(walk_e.data.get("distanceM")), str(walk_e.data.get("durationSec"))])
+		check(not walk_e.data.has("loadKg") and walk_e.warnings.size() == 1 and str(walk_e.warnings[0]).contains("vest"), "walk: no vest known yet, and it says how to add one")
+		check(str(walk_e.summary) == "Lunch Walk: Vest walk 1.2 mi · 24:10 · 12 ft up", "walk: summary (%s)" % str(walk_e.summary))
 	if run_e != null:
 		check(run_e.data.discipline == "run" and _near(run_e.data.get("distanceM"), 6469.6, 0.2), "run: 4.02 mi (%s m)" % str(run_e.data.get("distanceM")))
 		check(run_e.data.get("durationSec") == 2497, "run: 41:37 (%s s)" % str(run_e.data.get("durationSec")))
@@ -221,10 +230,10 @@ func run(m: Node, t: SceneTree) -> void:
 	for pr in r1.problems:
 		if pr.has("picture"):
 			walk_pr = pr
-	check(r1.problems.size() == 1 and walk_pr != null and str(walk_pr.why).contains("a walk"), "the walk is left out, and says why (%s)" % str(r1.problems))
+	check(r1.problems.size() == 1 and walk_pr != null and str(walk_pr.why).contains("a hike"), "the hike is left out, and says why (%s)" % str(r1.problems))
 	check(not DirAccess.dir_exists_absolute(data_dir.path_join("reading")), "the pictures written for the reader are gone again")
 	var cache = JSON.parse_string(FileAccess.get_file_as_string(data_dir.path_join(PhoneInbox.PAGES_FILE)))
-	check(cache is Dictionary and cache.size() == 4, "what was read is remembered for all 4 pictures")
+	check(cache is Dictionary and cache.size() == 5, "what was read is remembered for all 5 pictures")
 
 	InboxSheet.open(r1)
 	await ShotHelper.wait(tree, 0.6)
@@ -236,8 +245,8 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.snap(tree, "pictures_review_2")
 
 	# --- import ---------------------------------------------------------------------------
-	var imp = ShotHelper.find_button(_sheet(), "Import 2 entries")
-	check(imp != null, "Import 2 entries button")
+	var imp = ShotHelper.find_button(_sheet(), "Import 3 entries")
+	check(imp != null, "Import 3 entries button")
 	ShotHelper.press(imp)
 	await ShotHelper.wait(tree, 0.8)
 	await ShotHelper.snap(tree, "pictures_reel")
@@ -246,6 +255,8 @@ func run(m: Node, t: SceneTree) -> void:
 	check(runs.size() == 1 and runs[0].get("title") == "Morning Run" and runs[0].date == today and str(runs[0].get("inboxKey", "")) != "", "the run is in the log")
 	var bodies = App.body()
 	check(bodies.size() == 1 and _near(bodies[0].get("weightKg"), 81.83, 0.011) and bodies[0].get("photos", {}).has("front") and App.has_photo(bodies[0].photos.front), "the check-in is in the log with its weight and its photo")
+	var vest_walks = App.sessions().filter(func(s): return s.discipline == "misc")
+	check(vest_walks.size() == 1 and vest_walks[0].get("kind") == "vest_walk" and vest_walks[0].get("title") == "Lunch Walk" and Misc.sessions(App.state) == 1, "the vest walk is in the log")
 	App.go("journey", "history")
 	await ShotHelper.wait(tree, 1.0)
 	await ShotHelper.snap(tree, "pictures_log")
@@ -256,13 +267,13 @@ func run(m: Node, t: SceneTree) -> void:
 	App.inbox._got_zip(zip1, false)
 	check(box.r != null, "pictures seen before are not read again (the answer is immediate)")
 	var r2 = box.r if box.r != null else await _read_note(zip1)
-	check(r2.ok and r2.fresh.is_empty() and r2.already == 2 and r2.problems.size() == 1, "second check: nothing new, 2 already imported (%d new, %d already)" % [r2.fresh.size(), r2.already])
+	check(r2.ok and r2.fresh.is_empty() and r2.already == 3 and r2.problems.size() == 1, "second check: nothing new, 3 already imported (%d new, %d already)" % [r2.fresh.size(), r2.already])
 
 	# --- the next day -----------------------------------------------------------------------
 	var tomorrow = Dates.add_days(today, 1)
 	App.today = tomorrow
 	var r3 = await _read_note(zip1)
-	check(r3.ok and r3.fresh.is_empty() and r3.already == 2, "the next day: still nothing new")
+	check(r3.ok and r3.fresh.is_empty() and r3.already == 3, "the next day: still nothing new")
 	var run2_png = await _workout("Run", "Evening Run", "Today at 6:40 PM  Springfield, Oregon", "5.50 mi", "9:48 /mi", "53:54", "140 ft", "8,870")
 	var zip2 = _zip([run2_png])
 	var r4 = await _read_note(zip2)

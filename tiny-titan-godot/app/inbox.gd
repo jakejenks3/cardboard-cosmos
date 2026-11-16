@@ -131,8 +131,12 @@ func parse_opts() -> Dictionary:
 				for st in ex.sets:
 					if float(st.get("weightKg", 0)) > 0.0:
 						loaded[Xp.normalize_exercise(ex.name)] = true
+	# The weight carried in the last misc session of each kind (the vest of the last vest walk).
+	var last_load = {}
+	for k in Misc.ORDER:
+		last_load[k] = Misc.last_load_kg(app.sessions(), k)
 	return {"today": app.today, "weightUnit": app.weight_unit(), "distanceUnit": app.distance_unit(),
-		"exercises": names, "loaded": loaded.keys(), "shots": _readings}
+		"exercises": names, "loaded": loaded.keys(), "shots": _readings, "lastLoadKg": last_load}
 
 
 ## Fetch (link) or read (file path) the note, then emit `checked`. A file is read

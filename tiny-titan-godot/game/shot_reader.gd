@@ -11,9 +11,9 @@ extends RefCounted
 ## apart on one line are separate segments, so two columns never run together).
 ##
 ## ShotReader.read(page) -> reading:
-##   {"kind": "run"|"ride"|"body"|"text"|"photo", "words", "why",
+##   {"kind": "run"|"ride"|"walk"|"body"|"text"|"photo", "words", "why",
 ##    "rel": ""|"today"|"yesterday", "month", "day", "year" (0 = not printed),
-##    run / ride: "dist", "distUnit", "sec", "elev", "elevUnit", "title",
+##    run / ride / walk: "dist", "distUnit", "sec", "elev", "elevUnit", "title",
 ##    body: "weight", "weightUnit", "fat",
 ##    "extras": ["Steps 6,480", ...]}
 ## "text" is a screenshot it could not turn into anything ("why" says so).
@@ -53,11 +53,13 @@ const RUN_SPORTS = ["run", "trail run", "virtual run", "treadmill", "treadmill r
 const RIDE_SPORTS = ["ride", "virtual ride", "mountain bike ride", "gravel ride", "e-bike ride", "ebike ride",
 	"e-mountain bike ride", "bike ride", "road ride", "indoor ride", "indoor cycling", "cycling", "bike"]
 ## Sports the game has no place for: named plainly instead of guessed at.
-const OTHER_SPORTS = {"walk": "a walk", "hike": "a hike", "swim": "a swim", "row": "a row", "rowing": "a row",
+## A walk is read like a run (the phone note makes it a vest walk, game/misc.gd).
+const WALK_SPORTS = ["walk"]
+const OTHER_SPORTS = {"hike": "a hike", "swim": "a swim", "row": "a row", "rowing": "a row",
 	"weight training": "a weights session", "workout": "a workout", "yoga": "yoga", "rock climb": "a climb",
 	"alpine ski": "skiing", "nordic ski": "skiing", "backcountry ski": "skiing", "snowboard": "snowboarding",
 	"elliptical": "an elliptical session", "stair stepper": "a stair session", "kayaking": "kayaking"}
-const OTHER_WORDS = {"walk": "a walk", "hike": "a hike", "swim": "a swim", "ski": "skiing", "row": "a row",
+const OTHER_WORDS = {"hike": "a hike", "swim": "a swim", "ski": "skiing", "row": "a row",
 	"yoga": "yoga", "kayak": "kayaking"}
 
 ## Labels on a scale screen kept as a note with their number. Those in PERCENT
@@ -75,7 +77,7 @@ const FAT_LABELS = ["body fat", "body fat %", "body fat percentage", "body fat r
 
 const WHY_TEXT = "it has writing on it, but not a run, ride or weigh-in the game knows how to read"
 const WHY_NO_DISTANCE = "it looks like a workout, but the distance on it could not be read"
-const WHY_OTHER = "it shows %s, and the game reads only runs and rides from pictures"
+const WHY_OTHER = "it shows %s, and the game reads only runs, rides and walks from pictures"
 ## A page with these words is a lifting log, not a weigh-in, whatever "weight" it shows.
 const LIFT_WORDS_RX = "\\b(?:reps?|sets?|exercises?|1rm|volume)\\b"
 
@@ -470,12 +472,16 @@ static func _sport(segs: Array, dist_label: Dictionary, title: String, found: Di
 			return {"kind": "run", "name": k}
 		if RIDE_SPORTS.has(k):
 			return {"kind": "ride", "name": k}
+		if WALK_SPORTS.has(k):
+			return {"kind": "walk", "name": k}
 		if OTHER_SPORTS.has(k):
 			return {"kind": "other", "name": OTHER_SPORTS[k]}
 	var t = norm(title)
 	for w in OTHER_WORDS:
 		if _rx("\\b%s\\b" % w).search(t) != null:
 			return {"kind": "other", "name": OTHER_WORDS[w]}
+	if _rx("\\bwalk\\b").search(t) != null:
+		return {"kind": "walk", "name": "walk"}
 	if found.has("pace") and not found.has("speed"):
 		return {"kind": "run", "name": "run"}
 	if found.has("speed") and not found.has("pace"):

@@ -7,7 +7,8 @@ extends RefCounted
 ## QuickLog.parse(text, opts) -> {"entries": [...], "problems": [{"line", "why"}]}
 ## opts = {"today": "YYYY-MM-DD", "weightUnit": "kg"|"lb", "distanceUnit": "km"|"mi",
 ##         "exercises": [known display names], "loaded": [normalised names that have weights in the log],
-##         "shots": {picture name: what it says (ShotReader.read plus "seen": the day it was first seen)}}
+##         "shots": {picture name: what it says (ShotReader.read plus "seen": the day it was first seen)},
+##         "lastLoadKg": {misc kind: the weight carried last time, used when a line gives none}}
 ## Every line that is not a comment either becomes part of an entry or a problem:
 ## nothing is dropped silently.
 
@@ -17,7 +18,7 @@ const SHOT_YESTERDAY = "the picture says \"Yesterday\": counted back from the da
 const SHOT_NO_DATE = "no date on the picture: taken as the day the game first saw it"
 
 ## What the app shows as the cheat sheet. Every line here must parse (the unit test checks).
-const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nweight 82.4  bf 18"
+const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nvest walk 3km 40:00 10kg\nweight 82.4  bf 18"
 
 const MONTHS = {
 	"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, "apr": 4, "april": 4,
@@ -198,6 +199,7 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 		"loaded": loaded,
 		"shots": opts.get("shots", {}) if opts.get("shots", {}) is Dictionary else {},
 		"used_shots": {},
+		"last_load": opts.get("lastLoadKg", {}) if opts.get("lastLoadKg", {}) is Dictionary else {},
 	}
 
 
@@ -275,7 +277,7 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 				return block
 			ctx.used_shots[sid] = true
 			var kind = str(shot.get("kind", "photo"))
-			if kind == "run" or kind == "ride":
+			if kind == "run" or kind == "ride" or kind == "walk":
 				_shot_session(block, toks[1], shot, orig, ctx, out)
 				return block
 			if kind == "body":
@@ -331,6 +333,38 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 				e.data[k] = b[k]
 		e.raw.append(orig)
 		e.norm.append(t)
+		return block
+
+	# Misc activities (game/misc.gd): "vest walk 3km 40:00 10kg" is its own
+	# session; a "vest 10kg" line under one sets the weight carried.
+	var mk = _misc_kind(t)
+	if mk.kind != "":
+		var mres = _parse_misc(mk.kind, mk.rest, ctx)
+		if not mres.ok:
+			out.problems.append({"line": orig, "why": mres.why})
+			return block
+		var me = _session(block, TT.MISC)
+		me.data["kind"] = mk.kind
+		me.data["distanceM"] = mres.distanceM
+		me.data["elevationM"] = mres.elevationM
+		if mres.durationSec > 0:
+			me.data["durationSec"] = mres.durationSec
+		me.warnings.append_array(mres.warnings)
+		_set_load(me, mk.kind, mres.loadKg, ctx)
+		_take(block, me, orig, t)
+		return block
+	var lw = _load_line(t, ctx)
+	if not lw.is_empty():
+		var cur = block.current
+		if cur == null or str(cur.data.get("discipline", "")) != TT.MISC or str(Misc.meta(cur.data.get("kind")).loadWord) != str(lw.word):
+			out.problems.append({"line": orig, "why": "no %s walk above it to put the %s on" % [lw.word, lw.word]})
+			return block
+		if float(lw.kg) <= 0.0 or float(lw.kg) > MAX_LOAD_KG:
+			out.problems.append({"line": orig, "why": "that %s weight looks wrong" % lw.word})
+			return block
+		_set_load(cur, str(cur.data.kind), float(lw.kg), ctx)
+		cur.raw.append(orig)
+		cur.norm.append(t)
 		return block
 
 	# Running / cycling: every line is its own session.
@@ -514,6 +548,122 @@ static func key_prefix(key: String) -> String:
 
 
 # ---------------------------------------------------------------------------
+# Misc activities (game/misc.gd)
+# ---------------------------------------------------------------------------
+
+## What a walk read from a screenshot becomes.
+const WALK_KIND = "vest_walk"
+const MAX_LOAD_KG = 150.0
+
+
+## {"kind", "rest"} when the line starts with a misc kind's words ("vest walk ..."), else kind "".
+static func _misc_kind(t: String) -> Dictionary:
+	for k in Misc.ORDER:
+		for phrase in Misc.KINDS[k].words:
+			var w: String = str(phrase)
+			if t == w or t.begins_with(w + " ") or t.begins_with(w + ":"):
+				return {"kind": str(k), "rest": t.substr(w.length()).trim_prefix(":").strip_edges()}
+	return {"kind": "", "rest": ""}
+
+
+## {"word", "kg"} for a line that only sets a carried weight ("vest 10kg", "vest: 20 lb", "vest 20"), else {}.
+static func _load_line(t: String, ctx: Dictionary) -> Dictionary:
+	for k in Misc.ORDER:
+		var word: String = str(Misc.KINDS[k].loadWord)
+		if word == "":
+			continue
+		var m = _rx("^%s:? ?(\\d+(?:[.,]\\d+)?) ?(kg|kgs|lb|lbs)?$" % word).search(t)
+		if m != null:
+			var unit: String = ctx.wu
+			if m.get_string(2) != "":
+				unit = "kg" if m.get_string(2).begins_with("k") else "lb"
+			return {"word": word, "kg": Fmt.unit_to_kg(float(m.get_string(1).replace(",", ".")), unit)}
+	return {}
+
+
+## Put the carried weight on a misc entry. Below zero means none was written:
+## the one used last time is taken (and said so), else none at all.
+static func _set_load(e: Dictionary, kind: String, kg: float, ctx: Dictionary) -> void:
+	var name: String = str(Misc.meta(kind).loadName).to_lower()
+	# The note about a weight that was not written goes when one is.
+	if e.has("load_note"):
+		e.warnings.erase(e.load_note)
+		e.erase("load_note")
+	if not Misc.has_field(kind, "load"):
+		return
+	if kg >= 0.0:
+		e.data["loadKg"] = kg
+		return
+	var usual: float = float(ctx.last_load.get(kind, 0.0))
+	if usual > 0.0:
+		e.data["loadKg"] = usual
+		e["load_note"] = "used your last %s weight (%s); a line \"%s 10\" under it changes it" % [name, Fmt.fmt_weight(usual, ctx.wu), name]
+	else:
+		e.data.erase("loadKg")
+		e["load_note"] = "no %s weight; add a line like \"%s 10\" under it, or edit it after importing" % [name, name]
+	e.warnings.append(e.load_note)
+
+
+## The weight carried, taken out of a misc line: "10kg", "20 lb", "@10kg",
+## "with 10 kg", or a bare number that is not the distance (in the player's unit).
+## Returns {"kg": float (-1.0 when none is written), "rest": the line without it}.
+static func _take_load(rest: String, ctx: Dictionary) -> Dictionary:
+	var m = _rx("(?:^| )(?:@ ?|with |w/ ?)?(\\d+(?:\\.\\d+)?) ?(kg|kgs|lb|lbs)\\b(?: vest)?").search(rest)
+	if m != null:
+		var unit: String = "kg" if m.get_string(2).begins_with("k") else "lb"
+		return {"kg": Fmt.unit_to_kg(float(m.get_string(1)), unit), "rest": (rest.substr(0, m.get_start()) + " " + rest.substr(m.get_end())).strip_edges()}
+	m = _rx("(?:^| )@ ?(\\d+(?:\\.\\d+)?)(?= |$)").search(rest)
+	if m != null:
+		return {"kg": Fmt.unit_to_kg(float(m.get_string(1)), ctx.wu), "rest": (rest.substr(0, m.get_start()) + " " + rest.substr(m.get_end())).strip_edges()}
+	var toks = _merge_units(_rx("(\\d),(\\d)").sub(rest, "$1.$2", true).replace(",", " "))
+	var has_dist = false
+	for tok in toks:
+		if _rx("^\\d+(?:\\.\\d+)?(?:km|k|mi|mile|miles)$").search(tok) != null:
+			has_dist = true
+	var bare = []
+	for i in range(toks.size()):
+		if _rx("^\\d+(?:\\.\\d+)?$").search(toks[i]) == null:
+			continue
+		var prev = toks[i - 1] if i > 0 else ""
+		var nxt = toks[i + 1] if i + 1 < toks.size() else ""
+		if ELEV_WORDS.has(prev) or ELEV_WORDS.has(nxt):
+			continue
+		if _rx("^\\d+(?:\\.\\d+)?(?:h|hr|hrs|hour|hours)$").search(prev) != null:
+			continue
+		bare.append(i)
+	# With a written distance the first bare number is the weight; without one
+	# the first is the distance and the second the weight.
+	var pick = -1
+	if has_dist and bare.size() >= 1:
+		pick = bare[0]
+	elif not has_dist and bare.size() >= 2:
+		pick = bare[1]
+	if pick < 0:
+		return {"kg": -1.0, "rest": rest}
+	var kg = Fmt.unit_to_kg(float(toks[pick]), ctx.wu)
+	toks.remove_at(pick)
+	return {"kg": kg, "rest": " ".join(PackedStringArray(toks))}
+
+
+## A misc line after its opening words: distance, time and climb read like a
+## run, plus the weight carried.
+## Returns {"ok", "why", "distanceM", "elevationM", "durationSec", "loadKg" (-1 = none written), "warnings"}.
+static func _parse_misc(kind: String, rest: String, ctx: Dictionary) -> Dictionary:
+	var short: String = str(Misc.meta(kind).short).to_lower()
+	var example: String = "%s 3km 40:00 10kg" % short
+	var carried = {"kg": -1.0, "rest": rest}
+	if Misc.has_field(kind, "load"):
+		carried = _take_load(rest, ctx)
+		if float(carried.kg) > MAX_LOAD_KG:
+			return {"ok": false, "why": "that %s weight looks wrong" % str(Misc.meta(kind).loadName).to_lower()}
+	var c = _parse_cardio("run " + str(carried.rest), ctx)
+	if not c.ok:
+		return {"ok": false, "why": str(c.why).replace("run 5.2km 27:30", example)}
+	return {"ok": true, "why": "", "distanceM": snappedf(float(c.distRaw), 0.1), "elevationM": snappedf(float(c.elevRaw), 0.01),
+		"durationSec": int(c.durationSec), "loadKg": float(carried.kg), "warnings": c.warnings}
+
+
+# ---------------------------------------------------------------------------
 # Pictures the game could read (game/shot_reader.gd)
 # ---------------------------------------------------------------------------
 
@@ -571,7 +721,12 @@ static func _shot_session(block: Dictionary, ref: String, shot: Dictionary, orig
 			elev = ev
 		_:
 			elev = ev * (1.0 if ctx.du == "km" else FT_TO_M)
-	var e = _session(block, str(shot.kind))
+	# A walk is a misc activity: the vest walk, with the vest worn last time
+	# (the picture cannot say; a "vest 10kg" line under it does).
+	var walk: bool = str(shot.kind) == "walk"
+	var e = _session(block, TT.MISC if walk else str(shot.kind))
+	if walk:
+		e.data["kind"] = WALK_KIND
 	# Kept as exact as the picture: 4.02 mi must still read 4.02 mi afterwards.
 	e.data["distanceM"] = snappedf(dist, 0.1)
 	e.data["elevationM"] = snappedf(maxf(elev, 0.0), 0.01)
@@ -595,6 +750,8 @@ static func _shot_session(block: Dictionary, ref: String, shot: Dictionary, orig
 	e["shots"] = [ref]
 	e["extras"] = extras
 	e["shot_tag"] = tag
+	if walk:
+		_set_load(e, WALK_KIND, -1.0, ctx)
 	_take(block, e, orig, tag)
 
 
@@ -1225,7 +1382,7 @@ static func _parse_cardio(t: String, ctx: Dictionary) -> Dictionary:
 	if not ignored.is_empty():
 		warnings.append("ignored \"%s\"" % " ".join(PackedStringArray(ignored)))
 	return {"ok": true, "disc": disc, "distanceM": TTUtil.jsround(dist), "elevationM": TTUtil.jsround(maxf(elev, 0.0)),
-		"durationSec": maxi(secs, 0), "warnings": warnings}
+		"durationSec": maxi(secs, 0), "warnings": warnings, "distRaw": dist, "elevRaw": maxf(elev, 0.0)}
 
 
 # ---------------------------------------------------------------------------
@@ -1331,15 +1488,24 @@ static func summary(kind: String, data: Dictionary, wu: String, du: String) -> S
 				parts.append("%s %s%s" % [g, c.result, (" ×%d" % int(c.count)) if int(c.count) > 1 else ""])
 			for h in data.get("hangs", []):
 				parts.append("Hang " + Xp.hang_text(h, wu))
+		"misc":
+			var mk = str(data.get("kind", ""))
+			var mhead = str(Misc.meta(mk).short)
+			if Misc.has_field(mk, "distance"):
+				mhead += " " + Fmt.fmt_distance(float(data.get("distanceM", 0.0)), du, 2)
+			parts.append(mhead)
 		_:
 			var head = "Run " if data.discipline == "run" else "Ride "
 			parts.append(head + Fmt.fmt_distance(float(data.distanceM), du, 2))
+	var timed = data.discipline == "run" or data.discipline == "ride" or data.discipline == "misc"
 	if data.get("durationSec") != null and int(data.durationSec) > 0:
-		if data.discipline == "run" or data.discipline == "ride":
+		if timed:
 			parts.append(Fmt.fmt_duration(float(data.durationSec)))
 		else:
 			parts.append(Fmt.fmt_duration_short(float(data.durationSec)))
-	if (data.discipline == "run" or data.discipline == "ride") and int(data.get("elevationM", 0)) > 0:
+	if data.discipline == "misc" and float(data.get("loadKg", 0.0)) > 0.0:
+		parts.append(Misc.load_text(data.get("kind"), float(data.loadKg), wu))
+	if timed and float(data.get("elevationM", 0)) >= 0.5:
 		parts.append(Fmt.fmt_elevation(float(data.elevationM), du) + " up")
 	var text = " · ".join(PackedStringArray(parts))
 	if data.get("title") != null:

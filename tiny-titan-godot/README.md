@@ -69,6 +69,7 @@ tr 5.10a flash, 5.11b
 hang 20mm 10s x6, one arm 15mm 7s x3 +10
 run 5.2km 27:30 +80m
 ride 40km 1h35
+vest walk 3km 40:00 10kg
 weight 82.4  bf 18
 ```
 
@@ -78,6 +79,19 @@ same exercise, sets add up). V grades are boulders; `5.xx` grades (`5.10a`, `tr 
 are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; add `one arm`,
 `+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
+`vest walk 3km 40:00 10kg` logs a weighted vest walk (see Miscellaneous below); leave the weight
+out and the last vest you logged is used, or put `vest 10kg` on the line under it.
+
+**Miscellaneous** (Log tab, under the four disciplines): activities that are not lifting,
+climbing, running or cycling. For now there is one, the **weighted vest walk**: distance, time,
+climb and the weight of the vest (quick picks, and "same as last" fills the whole form). It earns
+XP for the hero (60 per km, 0.8 per metre climbed, both +2.5% for every kg in the vest up to
+double, plus the usual 2 per minute: about 490 for an hour's 5 km with a 20 lb vest), so it hits
+the boss and the weekly bounty, pays coins, can drop loot and counts for the weekly goal and the
+streak. It has no level of its own and leaves the four disciplines alone: their XP, totals,
+records and quests never see it. The longest walk and the heaviest vest are records. Vest walks
+show in Journey (the log, a card in Stats, the Story), on the Hero tab's week card and in the
+recaps.
 
 **Lift library** (Journey → Lifts): about 170 lifts grouped by body part, with equipment
 chips (barbell, dumbbell, cable, machine…), a search box and sorting by name, most done,
@@ -102,8 +116,9 @@ max elevation, calories...) are kept as its note. A weigh-in comes in with weigh
 the other readings (muscle, body water, bone mass...) as its note. The review sheet shows the
 picture next to what was read, so you can check it before importing. A date printed on the picture
 is used; a picture that only says "Today" counts as the day the game first saw it (the arrows on
-the review sheet move it). Walks, hikes and other sports are left out with the reason shown, and a
-picture with no writing on it is still a progress photo.
+the review sheet move it). A walk comes in as a weighted vest walk, with the vest you logged last
+(write `vest 20` under the picture to set it). Hikes and other sports are left out with the reason
+shown, and a picture with no writing on it is still a progress photo.
 
 - **Google Form instead:** make a form with one paragraph question and share its responses sheet by
   link (Anyone with the link); paste the sheet's link. Every response is a row, dated automatically.
@@ -194,6 +209,7 @@ godot --headless --path . --script res://tests/parity_misc.gd
 godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd   # the phone-inbox parser
 godot --headless --path . --script res://tests/shot_reader_test.gd # reading screenshots
+godot --headless --path . --script res://tests/misc_test.gd        # misc activities (vest walks)
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```
 

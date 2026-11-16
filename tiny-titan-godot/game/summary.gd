@@ -66,6 +66,8 @@ static func summarize_session(s: Dictionary, settings: Dictionary) -> String:
 			parts.append("%s attempts" % TTUtil.num_str(st.attempts))
 		if hangs != 0:
 			parts.append("%s hang%s" % [TTUtil.num_str(hangs), "" if hangs == 1 else "s"])
+	elif s.discipline == TT.MISC:
+		parts = Misc.summary_parts(s, st, settings)
 	else:
 		parts.append(Fmt.fmt_distance(st.distanceM, settings.distanceUnit))
 		if dur != 0:

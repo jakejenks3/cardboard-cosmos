@@ -246,6 +246,8 @@ static func session_stats(s: Dictionary) -> Dictionary:
 			# The heaviest two-arm hang held for at least 5 s is the PR that matters.
 			if int(TTUtil.get_or(h, "arms", 2)) == 2 and int(TTUtil.get_or(h, "sec", 0)) >= 5:
 				st.bestHangKg = maxf(float(TTUtil.get_or(st, "bestHangKg", -9999.0)), float(TTUtil.get_or(h, "addKg", 0.0)))
+	elif s.discipline == TT.MISC:
+		Misc.fill_stats(s, st)
 	else:
 		st.distanceM = max(0, s.distanceM)
 		var elev = s.get("elevationM")
@@ -393,6 +395,8 @@ static func base_session_xp(s: Dictionary) -> Dictionary:
 		var n_hangs: int = int(TTUtil.get_or(st, "hangs", 0))
 		if n_hangs != 0:
 			parts.append({"label": TTUtil.num_str(n_hangs) + (" hang" if n_hangs == 1 else " hangs"), "xp": hang_total})
+	elif s.discipline == TT.MISC:
+		parts.append_array(Misc.xp_parts(s, st))
 	else:
 		var km = st.distanceM / 1000.0
 		var per_km = RUN_XP_PER_KM if s.discipline == "run" else RIDE_XP_PER_KM

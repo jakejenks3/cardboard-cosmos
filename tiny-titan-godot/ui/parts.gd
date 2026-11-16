@@ -130,8 +130,9 @@ static func progress_line(progress: Dictionary, color = null) -> Control:
 	return v
 
 
-## A raised square in a discipline's colour with its pixel icon.
-static func disc_badge(d: String, px: int = 40) -> Control:
+## A raised square in a discipline's colour with its pixel icon (or `icon`,
+## e.g. the vest of a misc activity on the misc colour).
+static func disc_badge(d: String, px: int = 40, icon: String = "") -> Control:
 	var p = PanelContainer.new()
 	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	p.add_theme_stylebox_override("panel", PixBox.make(Pal.disc(d), {"lip": 1, "lip_color": Pal.disc(d).darkened(0.45), "pad_h": 0, "pad_v": 0}))
@@ -140,9 +141,16 @@ static func disc_badge(d: String, px: int = 40) -> Control:
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var c = CenterContainer.new()
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	c.add_child(Icons.rect(d, px - 16))
+	c.add_child(Icons.rect(icon if icon != "" else d, px - 16))
 	p.add_child(c)
 	return p
+
+
+## The badge of a session: its discipline's, or for a misc activity its kind's icon on the misc colour.
+static func session_badge(session: Dictionary, px: int = 40) -> Control:
+	if Misc.is_misc(session):
+		return disc_badge(TT.MISC, px, str(Misc.meta(Misc.kind_of(session)).icon))
+	return disc_badge(str(session.discipline), px)
 
 
 ## A discipline as a bright tile: icon, level in big pixel digits, and how far
@@ -193,13 +201,13 @@ static func session_row(session: Dictionary, xp) -> Control:
 	var d = session.discipline
 	var card = Kit.card(4, App.open_log.bind(d, session.id), 8)
 	var row = Kit.hbox(10)
-	row.add_child(disc_badge(d, 38))
+	row.add_child(session_badge(session, 38))
 	var main = Kit.vbox(1)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var title = session.get("title")
 	if title == null or str(title) == "":
-		title = TT.DISCIPLINE_META[d].name
+		title = Misc.title(session) if Misc.is_misc(session) else TT.DISCIPLINE_META[d].name
 	var head = Kit.hbox(6)
 	head.add_child(Kit.clip(Icons.strip_emoji(title), 14, null, true))
 	head.add_child(Kit.muted(Dates.relative_day(session.date, App.today), 11))

@@ -154,7 +154,8 @@ static func weekly_quests(wk: String, s: Dictionary, all_sessions: Array, claims
 	var discs: Dictionary = {}
 	for x in sessions:
 		days[x.date] = true
-		discs[x.discipline] = true
+		if TT.DISCIPLINES.has(x.discipline):
+			discs[x.discipline] = true
 
 	out.append(_quest("w:%s:0" % wk, "weekly", wk, "Consistency", "Train on %s different days this week." % TTUtil.num_str(goal), "📆", null, goal, days.size(), "days", 400, claims))
 

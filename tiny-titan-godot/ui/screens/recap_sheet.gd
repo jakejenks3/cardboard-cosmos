@@ -201,7 +201,7 @@ static func poster(r: Dictionary) -> Control:
 		lv.add_child(Kit.pill("coin", "+" + Xp.fmt_int(r.coins), Pal.ACCENT))
 	xcol.add_child(lv)
 	var chips = Kit.flow(5)
-	for d in TT.DISCIPLINES:
+	for d in TT.SESSION_KINDS:
 		var n = int(r.by.get(d, 0))
 		if n > 0:
 			chips.add_child(Kit.icon_chip(d, str(n), Pal.disc(d), "", Color.WHITE))
@@ -228,6 +228,9 @@ static func poster(r: Dictionary) -> Control:
 	if float(r.rideM) > 0.0:
 		var ride = JourneyScreen.split_unit(Fmt.fmt_distance(r.rideM, du, 0))
 		extra.append([ride[0], ("%s RIDDEN" % ride[1]).to_upper(), Pal.RIDE])
+	if float(r.get("miscM", 0.0)) > 0.0 and extra.size() < 4:
+		var walked = JourneyScreen.split_unit(Fmt.fmt_distance(r.miscM, du))
+		extra.append([walked[0], ("%s WALKED" % walked[1]).to_upper(), Pal.MISC])
 	card.add(tiles)
 	# One tile per discipline trained, in its colour (up to four across).
 	if not extra.is_empty():

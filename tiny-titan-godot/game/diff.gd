@@ -5,7 +5,8 @@ extends RefCounted
 ##
 ## Every event is a Dictionary with a "type":
 ##   xp          {discipline, amount, parts: [{label, xp}], prBonus, bonusPct,
-##                hero: {before, after}, disc: {before, after}}   (before / after are LevelInfo)
+##                hero: {before, after}, disc: {before, after}}   (before / after are LevelInfo;
+##                disc is null for a misc session, which has no level track)
 ##   import      {count, xp, byDiscipline: {lift, climb, run, ride}, hero: {before, after}}
 ##   bodyxp      {amount, hero: {before, after}}
 ##   levelup     {track: "hero" | discipline, from, to}
@@ -18,6 +19,7 @@ extends RefCounted
 ##   pet         {id}
 ##   streak      {current}
 ## Added after the port, by `diff_extras` only (the ported functions stay as they were):
+##   pr          records of misc activities (Misc.record_events), in the player's units
 ##   bounty      {week, monster, damage, weak: bool, hpBefore, hpAfter, maxHp,
 ##                defeated: bool (newly), crushed: bool (newly), coins (paid by this
 ##                change), streak}   (none for more damage to a beaten monster,
@@ -113,10 +115,10 @@ static func diff_states(before: Dictionary, after: Dictionary, session: Dictiona
 		"prBonus": max(0, amount - with_perk),
 		"bonusPct": bonus_pct,
 		"hero": _hero_pair(before, after),
-		"disc": {"before": before.levels[d], "after": after.levels[d]},
+		"disc": {"before": before.levels[d], "after": after.levels[d]} if before.levels.has(d) else null,
 	})
 	ev.append_array(_boss_events(before, after, d))
-	ev.append_array(_level_events(before, after, [d, "hero"]))
+	ev.append_array(_level_events(before, after, [d, "hero"] if before.levels.has(d) else ["hero"]))
 
 	# PRs
 	var bp: Dictionary = before.prs
@@ -179,7 +181,7 @@ static func diff_bulk(before: Dictionary, after: Dictionary, sessions: Array) ->
 	var xp = 0
 	for s in sessions:
 		var v = TTUtil.get_or(after.sessionXp, s.id, 0)
-		by_discipline[s.discipline] += v
+		by_discipline[s.discipline] = by_discipline.get(s.discipline, 0) + v
 		xp += v
 	ev.append({"type": "import", "count": sessions.size(), "xp": xp, "byDiscipline": by_discipline, "hero": _hero_pair(before, after)})
 	ev.append_array(_boss_events(before, after, null, true))
@@ -208,8 +210,8 @@ static func diff_body(before: Dictionary, after: Dictionary, entry: Dictionary) 
 ## bounty and coins earned. `discipline` is the logged session's (null for a
 ## batch or a check-in). Kept apart from diff_states / diff_bulk / diff_body
 ## so those still match the fixtures.
-static func diff_extras(before: Dictionary, after: Dictionary, discipline = null) -> Array:
-	var ev: Array = []
+static func diff_extras(before: Dictionary, after: Dictionary, discipline = null, settings = null) -> Array:
+	var ev: Array = Misc.record_events(before, after, settings)
 	var bw = before.get("weekly")
 	var aw = after.get("weekly")
 	if aw is Dictionary:

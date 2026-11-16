@@ -78,7 +78,7 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 		bb.add_child(Kit.center(Icons.rect("scale", 24)))
 		row.add_child(bb)
 	else:
-		row.add_child(Parts.disc_badge(disc, 40))
+		row.add_child(Parts.session_badge(e.data, 40))
 	var main = Kit.vbox(4)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER

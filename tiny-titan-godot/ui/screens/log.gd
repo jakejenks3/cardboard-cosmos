@@ -1,7 +1,8 @@
 class_name LogScreen
 extends UiScreen
-## Log tab: the discipline picker, the session form (lift / climb / run / ride)
-## and the body check-in. What is shown follows App.log_discipline,
+## Log tab: the discipline picker, the session form (lift / climb / run / ride,
+## or a misc activity such as the weighted vest walk) and the body check-in.
+## What is shown follows App.log_discipline ("lift"..., "body", or "misc:<kind>"),
 ## App.editing_session_id and App.editing_body_id.
 ##
 ## The half-filled form lives in `_form` (a LogSessionForm or LogBodyForm), not
@@ -41,6 +42,8 @@ func _target_key() -> String:
 		return "body:new"
 	if d != null and Xp.is_discipline(d):
 		return "new:" + str(d)
+	if d != null and str(d).begins_with(TT.MISC + ":") and Misc.KINDS.has(str(d).substr(TT.MISC.length() + 1)):
+		return "new:" + str(d)
 	return "picker"
 
 
@@ -56,6 +59,8 @@ func _sync_form() -> void:
 	elif _key.begins_with("edit:"):
 		var s = App.session_by_id(App.editing_session_id)
 		_form = LogSessionForm.new(self, str(s.discipline), s)
+	elif str(App.log_discipline).begins_with(TT.MISC + ":"):
+		_form = LogSessionForm.new(self, TT.MISC, null, str(App.log_discipline).substr(TT.MISC.length() + 1))
 	else:
 		_form = LogSessionForm.new(self, str(App.log_discipline), null)
 
@@ -110,6 +115,14 @@ func _build_picker() -> void:
 		grid.add_child(_picker_tile(d))
 	add_child(grid)
 	add_child(_body_tile())
+	# Miscellaneous: activities outside the four disciplines (game/misc.gd).
+	var mhead = Kit.section_title("Miscellaneous")
+	mhead.set_meta("misc_section", true)
+	add_child(mhead)
+	var misc = Kit.grid(1 if Misc.ORDER.size() == 1 else 2, 10)
+	for k in Misc.ORDER:
+		misc.add_child(_misc_tile(k))
+	add_child(misc)
 	# Workouts jotted on the phone (app/inbox.gd).
 	var imp = Kit.button("Import from phone", "ghost", InboxSheet.check_and_review.bind(Callable()), "sm", "speech")
 	imp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -151,6 +164,22 @@ func _body_tile() -> Button:
 	b.custom_minimum_size.y = 64
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.tooltip_text = "Weight, body fat and progress photos"
+	return b
+
+
+## A misc activity's key, in the misc colour: its icon, its name and what it takes.
+func _misc_tile(kind: String) -> Button:
+	var m = Misc.meta(kind)
+	var h = Kit.hbox(12)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_child(Icons.rect(str(m.icon), 34))
+	var t = LogWidgets.on_face(Kit.label(str(m.name), 18, null, true))
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(t)
+	var b = LogWidgets.key(str(m.name), Pal.MISC, h, _pick.bind("%s:%s" % [TT.MISC, kind]), 12, 10, 2, Pal.MISC.lightened(0.3))
+	b.custom_minimum_size.y = 64
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = str(m.tip)
 	return b
 
 

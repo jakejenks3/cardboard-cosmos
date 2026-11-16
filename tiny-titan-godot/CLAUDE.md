@@ -30,7 +30,7 @@ is the Windows handoff.
              `sfx.gd` (synthesized sounds), `inbox.gd` (phone inbox).
 - `ui/`      `pal.gd` (colours as theme variables: Arcade, Ember, Forest, Slate),
              `pix_box.gd` (pixel-art 9-patch panels/buttons), `kit.gd` (toolkit),
-             `widgets/`, `parts.gd` (shared rows/tiles), `icons.gd` (81 pixel icons, no
+             `widgets/`, `parts.gd` (shared rows/tiles), `icons.gd` (85 pixel icons, no
              emoji anywhere), `pixel_font.gd`, `backdrop.gd` (pixel sky),
              `ui_screen.gd` (base class), `screens/` (one script per screen).
 - `main.gd`  The shell: column, tab bar, overlays, theme switching.
@@ -131,8 +131,31 @@ is the Windows handoff.
   (`TINY_TITAN_UNITS=lb,mi` shows pounds and miles).
 - Also 2026-11-16: an undated typed line changed on a LATER day is a new entry, not an edit
   of the old one (`PhoneInbox._resolve_updates` compares the dates).
+- Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
+  activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
+  A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
+  (`TT.MISC`), a `kind`, `distanceM`, `elevationM`, `loadKg`. "misc" is NOT in
+  `TT.DISCIPLINES` (it has no level, rank, quest or boss weakness) but it IS in
+  `TT.SESSION_KINDS` and `TT.DISCIPLINE_META` (name "Misc", colour `Pal.MISC`, icons `misc`
+  and `vest`). It goes through `Derive._apply_session` like any session (hero XP, boss and
+  bounty damage, coins, loot, weekly goal, streak) with three guards there: no `s.xp[disc]`,
+  no `byDiscipline[disc]`, no quirks; its totals and records are `state.misc`
+  (`Misc.record`), a key that only exists once a misc session was logged, so parity is
+  untouched. XP: `Misc.xp_parts` (per km and per metre climbed, times `load_mult`). Adding
+  an activity = one more row in `Misc.KINDS` + its id in `Misc.ORDER` (fields "distance",
+  "elevation", "load"; `words` / `loadWord` for the phone note): the Log picker's
+  Miscellaneous section, the form (`LogSessionForm` with `kind`; `App.open_log("misc:<kind>")`),
+  the history row, the Stats card, the reel and the recap all read the catalog. Phone note:
+  `vest walk 3km 40:00 10kg`, a `vest 10kg` line under one, and a walk screenshot
+  (`ShotReader` kind "walk") all become vest walks; with no weight written the last one
+  logged is used (`opts.lastLoadKg`). Tests: `tests/misc_test.gd`, walkthrough
+  `tests/shots/misc.gd` (year data).
 
 ## Rules that matter in this codebase
+
+- A session's discipline may be "misc": never index a four-key table with
+  `session.discipline` (use `.get`, or `TT.SESSION_KINDS` for lists and charts), and never
+  let an `else:` mean "it must be a ride".
 
 - Never use `:=`. Make one operand a float when dividing. Optional dictionary fields
   need `.get()`. Stored callables are invoked with `.call()`.
@@ -164,6 +187,7 @@ godot --headless --path . --script res://tests/parity_misc.gd
 godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd
 godot --headless --path . --script res://tests/shot_reader_test.gd
+godot --headless --path . --script res://tests/misc_test.gd
 ```
 
 Walkthroughs that drive the real UI and save screenshots (set `TINY_TITAN_DATA` and
@@ -175,6 +199,7 @@ godot --path . res://tests/shots.tscn -- res://tests/shots/e2e.gd fresh
 
 Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, shop, bounty, settings, inbox,
 themes, climb_more (routes and hangboard), pictures (screenshots in the note, `new` data, Windows only),
+misc (the Miscellaneous section and vest walks),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -199,7 +224,9 @@ the check.
   the bounties are a pure function of the log.
 - Strava import (the API) is deliberately left out for now; Strava SCREENSHOTS in the phone
   note are read (see above).
-- Screenshot reading needs Windows. Only runs, rides and weigh-ins are read; the layouts it
+- Misc activities have no trophies, gear or pets of their own yet, and a walk screenshot
+  is always taken as a weighted vest walk (there is no plain walk).
+- Screenshot reading needs Windows. Only runs, rides, walks and weigh-ins are read; the layouts it
   was tried on are Strava's activity page and one smart-scale app (the user's own). A new
   layout that fails shows up as "Picture left out": get the words with `realdoc`
   (`App.inbox._readings`) and extend the label tables in `game/shot_reader.gd`.

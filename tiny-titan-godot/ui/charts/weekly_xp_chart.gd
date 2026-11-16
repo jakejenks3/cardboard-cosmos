@@ -17,9 +17,9 @@ func setup(points: Array) -> void:
 		mx = maxf(mx, float(p.total))
 	nice_max = Charts.nice_ceil(mx)
 	used = []
-	for d in TT.DISCIPLINES:
+	for d in TT.SESSION_KINDS:
 		for p in data:
-			if float(p.byDiscipline[d]) > 0.0:
+			if float(p.byDiscipline.get(d, 0)) > 0.0:
 				used.append(d)
 				break
 	custom_minimum_size = Vector2(0, PLOT_H)
@@ -53,8 +53,8 @@ func _draw() -> void:
 		var p = data[i]
 		var x = floorf(PAD_L + i * slot + (slot - bar_w) / 2.0)
 		var segs = []
-		for d in TT.DISCIPLINES:
-			if float(p.byDiscipline[d]) > 0.0:
+		for d in TT.SESSION_KINDS:
+			if float(p.byDiscipline.get(d, 0)) > 0.0:
 				segs.append(d)
 		var acc = 0.0
 		var dim = hover != -1 and hover != i
@@ -84,7 +84,7 @@ func _draw() -> void:
 			{"t": "Week of " + Dates.format_date(hp.week), "bold": true},
 			{"t": Xp.fmt_int(hp.total) + " XP"},
 		]
-		for d in TT.DISCIPLINES:
-			if float(hp.byDiscipline[d]) > 0.0:
+		for d in TT.SESSION_KINDS:
+			if float(hp.byDiscipline.get(d, 0)) > 0.0:
 				lines.append({"t": "%s: %s" % [TT.DISCIPLINE_META[d].name, Xp.fmt_int(hp.byDiscipline[d])], "sw": Pal.disc(d)})
 		draw_tip(lines, PAD_L + (hover + 0.5) * slot)

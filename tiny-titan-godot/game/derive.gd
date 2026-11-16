@@ -419,7 +419,7 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 				if prs.bestPaceSecPerKm != null:
 					pr_total += 1
 				prs.bestPaceSecPerKm = st.paceSecPerKm
-	else:
+	elif disc == "ride":
 		if prs.longestRideM > 0 and st.distanceM > prs.longestRideM:
 			pr_bonus += Xp.PR_BONUS.longestRide
 			pr_total += 1
@@ -431,10 +431,18 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 				if prs.bestRideSpeedKmh != null:
 					pr_total += 1
 				prs.bestRideSpeedKmh = st.speedKmh
+	elif disc == TT.MISC:
+		# An activity outside the four disciplines (game/misc.gd): its own totals and records.
+		var mr: Dictionary = Misc.record(s, session, st)
+		pr_bonus += int(mr.bonus)
+		pr_total += int(mr.prs)
 
 	# --- XP -------------------------------------------------------------------
 	var xp: int = TTUtil.jsround(base * (1 + TTUtil.get_or(session, "bonusPct", 0))) + pr_bonus
-	s.xp[disc] += xp
+	if s.xp.has(disc):
+		s.xp[disc] += xp
+	else:
+		Misc.add_xp(s, session, xp)
 	s.sessionXp[session.id] = xp
 	_add_hero_xp(s, date, xp)
 
@@ -442,7 +450,8 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 	var t: Dictionary = s.totals
 	var b: Dictionary = s.bests
 	t.sessions += 1
-	t.byDiscipline[disc] += 1
+	if t.byDiscipline.has(disc):
+		t.byDiscipline[disc] += 1
 	t.durationSec += st.durationSec
 	s.dateCounts[date] = s.dateCounts.get(date, 0) + 1
 	if s.dateCounts[date] == 1:
@@ -496,13 +505,14 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 	elif disc == "run":
 		t.runDistanceM += st.distanceM
 		t.runElevationM += st.elevationM
-	else:
+	elif disc == "ride":
 		t.rideDistanceM += st.distanceM
 		t.rideElevationM += st.elevationM
 
 	if not s.has("quirks"):
 		s["quirks"] = PlayerState.initial_state(3).quirks
-	_deal_quirks(s.quirks, session, st, date, disc)
+	if TT.DISCIPLINES.has(disc):
+		_deal_quirks(s.quirks, session, st, date, disc)
 
 	# --- weeks / months / streak ---------------------------------------------
 	var wk: String = Dates.week_key(date)

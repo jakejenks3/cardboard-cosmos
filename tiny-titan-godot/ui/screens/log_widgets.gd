@@ -36,10 +36,10 @@ static func is_date_key(t: String) -> bool:
 
 
 ## "← [icon] Title  [trash]".
-static func topbar(icon: String, title: String, on_back: Callable, on_delete: Callable = Callable()) -> HBoxContainer:
+static func topbar(icon: String, title: String, on_back: Callable, on_delete: Callable = Callable(), badge_icon: String = "") -> HBoxContainer:
 	var h = Kit.hbox(8)
 	h.add_child(Kit.icon_button("arrow_left", on_back, "Back", 34))
-	h.add_child(Kit.vcenter(Parts.disc_badge(icon, 30) if Xp.is_discipline(icon) else Icons.rect(icon, 24)))
+	h.add_child(Kit.vcenter(Parts.disc_badge(icon, 30, badge_icon) if (Xp.is_discipline(icon) or icon == TT.MISC) else Icons.rect(icon, 24)))
 	var t = Kit.clip(title, 19, null, true)
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(t)
@@ -147,11 +147,11 @@ static func unit_chip(text: String) -> PanelContainer:
 
 
 ## A one-tap "start from this" tile: discipline badge, what it holds, when, Use →.
-static func template(date_key: String, text: String, on_tap: Callable, icon: String = "lift", sub_prefix: String = "") -> Card:
+static func template(date_key: String, text: String, on_tap: Callable, icon: String = "lift", sub_prefix: String = "", badge_icon: String = "") -> Card:
 	var c = Kit.card(0, on_tap, 8)
 	var h = Kit.hbox(10)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Parts.disc_badge(icon, 30))
+	h.add_child(Parts.disc_badge(icon, 30, badge_icon))
 	var v = Kit.vbox(0)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER

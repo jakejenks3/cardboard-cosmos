@@ -278,7 +278,7 @@ func _week_card(s: Dictionary) -> Control:
 	row.add_child(Kit.spacer())
 	c.add(row)
 	var chips = Kit.flow(6)
-	for d in TT.DISCIPLINES:
+	for d in TT.SESSION_KINDS:
 		var n = int(now.by.get(d, 0))
 		if n > 0:
 			chips.add_child(Kit.icon_chip(d, str(n), Pal.disc(d), "%d %s session%s" % [n, TT.DISCIPLINE_META[d].name.to_lower(), "" if n == 1 else "s"], Color.WHITE))

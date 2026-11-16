@@ -124,8 +124,11 @@ static func weak_for(wk: String, weeks: Dictionary):
 		if used.has(d):
 			pool.append(d)
 	if pool.is_empty():
-		if weeks.has(wk) and not weeks[wk].list.is_empty():
-			return weeks[wk].list[0].disc
+		# The first of the four disciplines trained that week (a misc activity is never a weakness).
+		if weeks.has(wk):
+			for x in weeks[wk].list:
+				if TT.DISCIPLINES.has(x.disc):
+					return x.disc
 		return null
 	return pool[Rng.hash_string("bounty-weak:" + wk) % pool.size()]
 

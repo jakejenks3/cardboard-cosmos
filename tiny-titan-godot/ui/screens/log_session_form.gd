@@ -2,7 +2,9 @@ class_name LogSessionForm
 extends RefCounted
 ## The session form of the Log tab (new or editing): date, duration with quick
 ## chips, the discipline's own part (lift editor / climbing grades / run & ride
-## distance), title & notes, the live XP preview and Save / Delete.
+## distance), title & notes, the live XP preview and Save / Delete. A misc
+## activity (game/misc.gd, discipline "misc" plus `kind`) uses the distance part
+## and, when its kind carries a weight, a row for it (the vest of a vest walk).
 ##
 ## The draft lives here, so the screen can rebuild its controls at any time
 ## without losing what was typed.
@@ -43,6 +45,10 @@ const HANG_EDGES = [10, 15, 20, 25, 30, 0]
 const HANG_SECS = [5, 7, 10, 15, 20]
 var distance: String = ""
 var elev: String = ""
+## Misc activities: which one, and the weight carried in the player's unit ("" = none).
+var kind: String = ""
+var carried: String = ""
+const LOAD_PICKS = {"lb": [10, 20, 30, 40], "kg": [5, 10, 15, 20]}
 
 var last_same = null
 
@@ -54,10 +60,12 @@ var _chip_row: HBoxContainer = null
 var _pace_slot: HBoxContainer = null
 
 
-func _init(owner_screen, d: String, edit_session = null) -> void:
+func _init(owner_screen, d: String, edit_session = null, misc_kind: String = "") -> void:
 	screen = owner_screen
 	discipline = d
 	editing = edit_session
+	if d == TT.MISC:
+		kind = Misc.kind_of(editing) if editing != null else misc_kind
 	wu = App.weight_unit()
 	du = App.distance_unit()
 	date = str(editing.date) if editing != null else App.today
@@ -89,9 +97,14 @@ func _init(owner_screen, d: String, edit_session = null) -> void:
 				var em = float(TTUtil.get_or(editing, "elevationM", 0))
 				if em > 0.0:
 					elev = LogWidgets.trim_num(em if du == "km" else em * FT_PER_M)
-	# The most recent session of this discipline, for one-tap "same as last time".
+				var lk = Misc.load_kg(editing) if d == TT.MISC else 0.0
+				if lk > 0.0:
+					carried = LogWidgets.trim_num(Fmt.kg_to_unit(lk, wu), 1)
+	# The most recent session of this discipline (and kind), for one-tap "same as last time".
 	for s in App.sessions():
 		if s.discipline != discipline or (editing != null and s.id == editing.id):
+			continue
+		if discipline == TT.MISC and Misc.kind_of(s) != kind:
 			continue
 		if last_same == null or s.date > last_same.date or (s.date == last_same.date and s.createdAt > last_same.createdAt):
 			last_same = s
@@ -143,6 +156,11 @@ func draft() -> Dictionary:
 			s["distanceM"] = maxf(0.0, Fmt.unit_to_m(LogWidgets.num(distance), du))
 			var e = LogWidgets.num(elev)
 			s["elevationM"] = maxf(0.0, e if du == "km" else e / FT_PER_M)
+			if discipline == TT.MISC:
+				s["kind"] = kind
+				var lv = maxf(0.0, LogWidgets.num(carried))
+				if lv > 0.0 and Misc.has_field(kind, "load"):
+					s["loadKg"] = Fmt.unit_to_kg(lv, wu)
 	return s
 
 
@@ -152,6 +170,8 @@ func is_valid(d: Dictionary) -> bool:
 			return not d.exercises.is_empty()
 		"climb":
 			return not d.climbs.is_empty() or not d.get("hangs", []).is_empty()
+		"misc":
+			return Misc.is_valid(d)
 	return float(d.distanceM) > 0.0
 
 
@@ -162,7 +182,11 @@ func is_valid(d: Dictionary) -> bool:
 func build(parent: Control) -> void:
 	var meta = TT.DISCIPLINE_META[discipline]
 	var verb = "Edit" if editing != null else "Log"
-	parent.add_child(LogWidgets.topbar(discipline, "%s %s" % [verb, str(meta.name).to_lower()], close, remove if editing != null else Callable()))
+	if discipline == TT.MISC:
+		var mm = Misc.meta(kind)
+		parent.add_child(LogWidgets.topbar(discipline, "%s %s" % [verb, str(mm.short).to_lower()], close, remove if editing != null else Callable(), str(mm.icon)))
+	else:
+		parent.add_child(LogWidgets.topbar(discipline, "%s %s" % [verb, str(meta.name).to_lower()], close, remove if editing != null else Callable()))
 	if editing != null and str(TTUtil.get_or(editing, "source", "manual")) == "strava" and (discipline == "lift" or discipline == "climb"):
 		var hc = Kit.card(6, Callable(), 10)
 		hc.accent(Pal.ACCENT)
@@ -250,7 +274,7 @@ func refresh() -> void:
 		return
 	var st = Xp.session_stats(d)
 	var base = Xp.base_session_xp(d)
-	var bonus = float(TTUtil.get_or(editing, "bonusPct", 0.0)) if editing != null else float(App.perks.xp[discipline])
+	var bonus = float(TTUtil.get_or(editing, "bonusPct", 0.0)) if editing != null else float(App.perks.xp.get(discipline, 0.0))
 	var est = TTUtil.jsround(float(base.xp) * (1.0 + bonus))
 	var side = "XP for this session, incl. +%d%% gear bonus" % TTUtil.jsround(bonus * 100.0) if bonus > 0.0 else "XP for this session"
 	var sub = ""
@@ -274,6 +298,12 @@ func refresh() -> void:
 				side += " · %d hangs" % nh
 		"run", "ride":
 			sub = Fmt.fmt_distance(float(d.distanceM), du)
+		"misc":
+			sub = Fmt.fmt_distance(float(d.distanceM), du)
+			var lkg = Misc.load_kg(d)
+			if lkg > 0.0:
+				sub += " · " + Misc.load_text(kind, lkg, wu)
+				side += "\n%s: ×%s for the walk" % [Misc.load_text(kind, lkg, wu), TTUtil.num_str(snappedf(Misc.load_mult(kind, lkg), 0.01))]
 	if not valid:
 		sub = _invalid_hint()
 	_fill_pace(st)
@@ -717,7 +747,7 @@ func _toggle_more() -> void:
 # ---------------------------------------------------------------------------
 
 func _last_cardio():
-	if last_same != null and (last_same.discipline == "run" or last_same.discipline == "ride") and float(TTUtil.get_or(last_same, "distanceM", 0)) > 0.0:
+	if last_same != null and (last_same.discipline == "run" or last_same.discipline == "ride" or last_same.discipline == TT.MISC) and float(TTUtil.get_or(last_same, "distanceM", 0)) > 0.0:
 		return last_same
 	return null
 
@@ -733,7 +763,9 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 		var text = Fmt.fmt_distance(float(lc.distanceM), du)
 		if lc.get("durationSec") != null and int(lc.durationSec) > 0:
 			text += " · " + Fmt.fmt_duration(float(lc.durationSec))
-		_cardio_template = LogWidgets.template(lc.date, text, _use_last_cardio.bind(lc), discipline, "Same as last · ")
+		if discipline == TT.MISC and Misc.load_kg(lc) > 0.0:
+			text += " · " + Misc.load_text(kind, Misc.load_kg(lc), wu)
+		_cardio_template = LogWidgets.template(lc.date, text, _use_last_cardio.bind(lc), discipline, "Same as last · ", str(Misc.meta(kind).icon) if discipline == TT.MISC else "")
 		_cardio_template.visible = distance.strip_edges() == ""
 		parent.add_child(_cardio_template)
 	var col = Pal.disc(discipline)
@@ -771,6 +803,9 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	ev.add_child(erow)
 	row.add_child(ev)
 	c.add(row)
+	# The weight carried (the vest of a vest walk), with one-tap picks.
+	if discipline == TT.MISC and Misc.has_field(kind, "load"):
+		c.add(_load_row(col))
 	# Live pace / speed.
 	_pace_slot = Kit.hbox(6)
 	c.add(_pace_slot)
@@ -788,13 +823,57 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	link_focus.call_deferred()
 
 
-## The live pace (run) or speed (ride) chip under the distance.
+## The weight row of a misc activity: the number, its unit, and quick picks
+## (the one used last time first).
+func _load_row(col: Color) -> Control:
+	var name = str(Misc.meta(kind).loadName)
+	var v = Kit.vbox(4)
+	v.add_child(Kit.label("%s weight" % name, 12, Pal.MUTED, true))
+	var row = Kit.hbox(6)
+	var le = LogWidgets.big_input(carried, "0", "load", 76, 18)
+	le.tooltip_text = "%s weight (%s)" % [name, wu]
+	le.text_changed.connect(func(t):
+		carried = t
+		refresh())
+	row.add_child(le)
+	row.add_child(LogWidgets.unit_chip(wu))
+	var picks = []
+	var last_kg = Misc.load_kg(last_same) if last_same != null else 0.0
+	if last_kg > 0.0:
+		picks.append(LogWidgets.trim_num(Fmt.kg_to_unit(last_kg, wu), 1))
+	for n in LOAD_PICKS.get(wu, LOAD_PICKS.kg):
+		if picks.size() < 4 and not picks.has(str(n)):
+			picks.append(str(n))
+	for pk in picks:
+		var chip = LogWidgets.mini_chip(pk, LogWidgets.num(carried) > 0.0 and is_equal_approx(LogWidgets.num(carried), LogWidgets.num(pk)), _pick_load.bind(pk), col, 8)
+		chip.tooltip_text = "%s %s %s" % [pk, wu, name.to_lower()]
+		row.add_child(chip)
+	v.add_child(row)
+	return v
+
+
+func _pick_load(text: String) -> void:
+	Sfx.tick()
+	carried = text
+	screen.rebuild()
+
+
+## The live pace (run, walk) or speed (ride) chip under the distance.
 func _fill_pace(st: Dictionary) -> void:
 	if _pace_slot == null or not is_instance_valid(_pace_slot):
 		return
 	Kit.clear(_pace_slot)
 	var text = ""
 	var tip = ""
+	if discipline == TT.MISC:
+		if st.get("paceSecPerKm") != null:
+			_pace_slot.add_child(_pace_chip(Fmt.fmt_pace(float(st.paceSecPerKm), du), "Average pace", "stopwatch"))
+		var lkg = float(TTUtil.get_or(st, "loadKg", 0.0))
+		if lkg > 0.0:
+			_pace_slot.add_child(_pace_chip("×%s XP" % TTUtil.num_str(snappedf(Misc.load_mult(kind, lkg), 0.01)), "What the weight adds to the walk", str(Misc.meta(kind).icon)))
+		if _pace_slot.get_child_count() == 0:
+			_pace_slot.add_child(Kit.label("Add a time for pace", 12, Pal.MUTED))
+		return
 	if discipline == "run" and st.get("paceSecPerKm") != null:
 		text = Fmt.fmt_pace(float(st.paceSecPerKm), du)
 		tip = "Average pace"
@@ -804,16 +883,21 @@ func _fill_pace(st: Dictionary) -> void:
 	if text == "":
 		_pace_slot.add_child(Kit.label("Add a time for %s" % ("pace" if discipline == "run" else "speed"), 12, Pal.MUTED))
 		return
+	_pace_slot.add_child(_pace_chip(text, tip, "stopwatch"))
+
+
+## A raised chip in the discipline's colour: an icon and a live number.
+func _pace_chip(text: String, tip: String, icon: String) -> PanelContainer:
 	var chip = PanelContainer.new()
 	chip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var col = Pal.disc(discipline)
 	chip.add_theme_stylebox_override("panel", PixBox.make(col, {"lip": 1, "lip_color": col.darkened(0.45), "pad_h": 8, "pad_v": 2}))
 	chip.tooltip_text = tip
 	var h = Kit.hbox(6)
-	h.add_child(Kit.vcenter(Icons.rect("stopwatch", 16)))
+	h.add_child(Kit.vcenter(Icons.rect(icon, 16)))
 	h.add_child(LogWidgets.on_face(Kit.label(text, 14, null, true)))
 	chip.add_child(h)
-	_pace_slot.add_child(chip)
+	return chip
 
 
 func _use_last_cardio(lc: Dictionary) -> void:
@@ -822,6 +906,8 @@ func _use_last_cardio(lc: Dictionary) -> void:
 	elev = _elev_text(float(TTUtil.get_or(lc, "elevationM", 0)))
 	if lc.get("durationSec") != null and int(lc.durationSec) > 0:
 		set_duration(int(lc.durationSec))
+	if discipline == TT.MISC and Misc.load_kg(lc) > 0.0:
+		carried = LogWidgets.trim_num(Fmt.kg_to_unit(Misc.load_kg(lc), wu), 1)
 	screen.rebuild()
 
 
