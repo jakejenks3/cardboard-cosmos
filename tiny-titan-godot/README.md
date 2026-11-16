@@ -94,6 +94,17 @@ works) and put up to three pictures under it, front, side and back in that order
 them on the review sheet and imports them as that day's photo check-in, downscaled and stored in
 its own data folder, so once they are in the game you can delete them from the doc and your phone.
 
+**Screenshots** work as well (Windows only): paste a Strava run or ride, or your scale app's
+weigh-in screen, into the doc and the game reads the numbers off the picture with the text reader
+that is part of Windows (nothing leaves the computer, nothing is installed). A run or ride comes in
+with its distance, moving time, elevation gain and title; the other numbers on the screen (steps,
+max elevation, calories...) are kept as its note. A weigh-in comes in with weight and body fat, and
+the other readings (muscle, body water, bone mass...) as its note. The review sheet shows the
+picture next to what was read, so you can check it before importing. A date printed on the picture
+is used; a picture that only says "Today" counts as the day the game first saw it (the arrows on
+the review sheet move it). Walks, hikes and other sports are left out with the reason shown, and a
+picture with no writing on it is still a progress photo.
+
 - **Google Form instead:** make a form with one paragraph question and share its responses sheet by
   link (Anyone with the link); paste the sheet's link. Every response is a row, dated automatically.
 - **Synced file instead:** put a plain-text file in a folder synced by Drive / Dropbox / iCloud /
@@ -182,6 +193,7 @@ godot --headless --path . --script res://tests/parity_derive.gd
 godot --headless --path . --script res://tests/parity_misc.gd
 godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd   # the phone-inbox parser
+godot --headless --path . --script res://tests/shot_reader_test.gd # reading screenshots
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```
 

@@ -6,11 +6,15 @@ extends RefCounted
 ##
 ## QuickLog.parse(text, opts) -> {"entries": [...], "problems": [{"line", "why"}]}
 ## opts = {"today": "YYYY-MM-DD", "weightUnit": "kg"|"lb", "distanceUnit": "km"|"mi",
-##         "exercises": [known display names], "loaded": [normalised names that have weights in the log]}
+##         "exercises": [known display names], "loaded": [normalised names that have weights in the log],
+##         "shots": {picture name: what it says (ShotReader.read plus "seen": the day it was first seen)}}
 ## Every line that is not a comment either becomes part of an entry or a problem:
 ## nothing is dropped silently.
 
 const NO_DATE_NOTE = "no date given, assumed today"
+const SHOT_TODAY = "the picture says \"Today\": taken as the day the game first saw it"
+const SHOT_YESTERDAY = "the picture says \"Yesterday\": counted back from the day the game first saw it"
+const SHOT_NO_DATE = "no date on the picture: taken as the day the game first saw it"
 
 ## What the app shows as the cheat sheet. Every line here must parse (the unit test checks).
 const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nweight 82.4  bf 18"
@@ -192,12 +196,14 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 		"du": str(opts.get("distanceUnit", "km")),
 		"known_norm": known_norm,
 		"loaded": loaded,
+		"shots": opts.get("shots", {}) if opts.get("shots", {}) is Dictionary else {},
+		"used_shots": {},
 	}
 
 
 static func _new_block(header: String, date: String, note: String) -> Dictionary:
 	return {"header": header, "date": date, "note": note, "lift": null, "climb": null, "body": null,
-		"current": null, "pending": [], "entries": []}
+		"current": null, "pending": [], "entries": [], "shot_bodies": {}}
 
 
 static func _run(lines: Array, ctx: Dictionary, out: Dictionary, fixed) -> void:
@@ -259,6 +265,25 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 	# A picture in the note: the inbox turns each image of a Google Doc into
 	# "photo images/image1.jpg". Up to three join the day's check-in, in order.
 	if first == "photo" and toks.size() == 2 and (toks[1].contains("/") or toks[1].contains(".")):
+		# A picture the game could read (a workout or weigh-in screenshot) is that
+		# workout or weigh-in, not a progress photo.
+		var shot = ctx.shots.get(toks[1])
+		if shot is Dictionary and str(shot.get("kind", "photo")) != "photo":
+			# The same screenshot pasted twice is still one workout.
+			var sid = str(shot.get("id", toks[1]))
+			if ctx.used_shots.has(sid):
+				return block
+			ctx.used_shots[sid] = true
+			var kind = str(shot.get("kind", "photo"))
+			if kind == "run" or kind == "ride":
+				_shot_session(block, toks[1], shot, orig, ctx, out)
+				return block
+			if kind == "body":
+				_shot_body(block, toks[1], shot, orig, ctx, out)
+				return block
+			if kind == "text":
+				out.problems.append({"line": orig, "why": str(shot.get("why", ShotReader.WHY_TEXT)), "picture": toks[1]})
+				return block
 		var e = _body_entry(block)
 		var refs = e.data.get("photoRefs", [])
 		if refs.size() >= TT.PHOTO_ANGLES.size():
@@ -443,17 +468,33 @@ static func _close(block: Dictionary, ctx: Dictionary, out: Dictionary) -> void:
 		out.problems.append({"line": x.orig, "why": "no session on that day to attach it to"})
 	block.pending = []
 	for e in block.entries:
-		out.entries.append({
-			"key": entry_key(e.disc, block.header, e.norm),
+		# An entry read from a picture may carry its own day, and is keyed by what
+		# the picture says: another picture is another entry, never an edit of this one.
+		var date = str(e.get("date", block.date))
+		e.data["date"] = date
+		var header = block.header
+		var shown = e.data
+		if e.has("shots"):
+			header += "|" + str(e.get("shot_tag", ""))
+			if e.kind == "session":
+				shown = e.data.duplicate()
+				shown.erase("notes")
+		var entry = {
+			"key": entry_key(e.disc, header, e.norm),
 			"kind": e.kind,
-			"date": block.date,
-			"date_note": block.note,
+			"date": date,
+			"date_note": str(e.get("date_note", block.note)),
 			"data": e.data,
-			"summary": summary(e.kind, e.data, ctx.wu, ctx.du),
+			"summary": summary(e.kind, shown, ctx.wu, ctx.du),
 			"warnings": e.warnings,
 			"raw": e.raw,
-		})
+		}
+		if e.has("shots"):
+			entry["shots"] = e.shots
+			entry["extras"] = e.get("extras", [])
+		out.entries.append(entry)
 	block.entries = []
+	block.shot_bodies = {}
 
 
 ## Stable id for an entry: its kind, the raw date-header text and its raw lines
@@ -470,6 +511,148 @@ static func key_prefix(key: String) -> String:
 	if parts.size() < 3:
 		return key
 	return parts[0] + "-" + parts[1]
+
+
+# ---------------------------------------------------------------------------
+# Pictures the game could read (game/shot_reader.gd)
+# ---------------------------------------------------------------------------
+
+## The day a picture's entry belongs to: {"date", "note", "printed", "warn"}.
+## A calendar date printed on the picture wins, then the note's own date line,
+## then the day the game first saw the picture ("Today" and "Yesterday" on it
+## are counted from that day, so the answer does not drift while it waits).
+static func shot_date(block: Dictionary, shot: Dictionary, ctx: Dictionary) -> Dictionary:
+	var seen = str(shot.get("seen", ctx.today))
+	if _rx("^\\d{4}-\\d{2}-\\d{2}$").search(seen) == null or seen > ctx.today:
+		seen = ctx.today
+	var month = int(shot.get("month", 0))
+	if month > 0:
+		var year = int(shot.get("year", 0))
+		var key = _year_or_last(str(year) if year > 0 else "", month, int(shot.get("day", 0)), seen)
+		if key != "" and key <= ctx.today:
+			var warn = ""
+			if block.header != "" and block.date != key:
+				warn = "the picture is dated %s, so it is not on the day written above it" % Dates.format_date(key, {"month": "short", "day": "numeric"})
+			return {"date": key, "note": "", "printed": true, "warn": warn}
+	if block.header != "":
+		return {"date": block.date, "note": block.note, "printed": false, "warn": ""}
+	match str(shot.get("rel", "")):
+		"today":
+			return {"date": seen, "note": SHOT_TODAY, "printed": false, "warn": ""}
+		"yesterday":
+			return {"date": Dates.add_days(seen, -1), "note": SHOT_YESTERDAY, "printed": false, "warn": ""}
+	return {"date": seen, "note": SHOT_NO_DATE, "printed": false, "warn": ""}
+
+
+## A workout screenshot: its own run or ride.
+static func _shot_session(block: Dictionary, ref: String, shot: Dictionary, orig: String, ctx: Dictionary, out: Dictionary) -> void:
+	var v = float(shot.get("dist", 0.0))
+	var dist = 0.0
+	match str(shot.get("distUnit", "")):
+		"km":
+			dist = v * 1000.0
+		"mi":
+			dist = v * Fmt.M_PER_MI
+		"m":
+			dist = v
+		"yd":
+			dist = v * 0.9144
+		_:
+			dist = Fmt.unit_to_m(v, ctx.du)
+	if dist <= 0.0 or dist > 1000000.0:
+		out.problems.append({"line": orig, "why": "the distance on the picture looks wrong", "picture": ref})
+		return
+	var ev = float(shot.get("elev", 0.0))
+	var elev = 0.0
+	match str(shot.get("elevUnit", "")):
+		"ft":
+			elev = ev * FT_TO_M
+		"m":
+			elev = ev
+		_:
+			elev = ev * (1.0 if ctx.du == "km" else FT_TO_M)
+	var e = _session(block, str(shot.kind))
+	# Kept as exact as the picture: 4.02 mi must still read 4.02 mi afterwards.
+	e.data["distanceM"] = snappedf(dist, 0.1)
+	e.data["elevationM"] = snappedf(maxf(elev, 0.0), 0.01)
+	var sec = int(shot.get("sec", 0))
+	if sec > 0:
+		e.data["durationSec"] = sec
+	var title = str(shot.get("title", "")).strip_edges()
+	if title != "":
+		e.data["title"] = title
+	var extras = []
+	for x in shot.get("extras", []):
+		extras.append(str(x))
+	if not extras.is_empty():
+		e.data["notes"] = " · ".join(PackedStringArray(extras))
+	var d = shot_date(block, shot, ctx)
+	e["date"] = d.date
+	e["date_note"] = d.note
+	if d.warn != "":
+		e.warnings.append(d.warn)
+	var tag = "shot %s %dm %ds +%dm" % [str(shot.kind), TTUtil.jsround(dist), sec, TTUtil.jsround(elev)]
+	e["shots"] = [ref]
+	e["extras"] = extras
+	e["shot_tag"] = tag
+	_take(block, e, orig, tag)
+
+
+## A weigh-in screenshot: weight and body fat for the day's check-in (its own
+## check-in when the picture itself is dated).
+static func _shot_body(block: Dictionary, ref: String, shot: Dictionary, orig: String, ctx: Dictionary, out: Dictionary) -> void:
+	var kg = -1.0
+	if shot.get("weight") != null:
+		var unit = str(shot.get("weightUnit", ""))
+		kg = Fmt.unit_to_kg(float(shot.weight), unit if unit != "" else ctx.wu)
+		if kg < 25.0 or kg > 350.0:
+			out.problems.append({"line": orig, "why": "the weight on the picture looks wrong", "picture": ref})
+			return
+		kg = snappedf(kg, 0.01)
+	var fat = -1.0
+	if shot.get("fat") != null:
+		fat = float(shot.fat)
+		if fat < 2.0 or fat > 70.0:
+			fat = -1.0
+	if kg < 0.0 and fat < 0.0:
+		out.problems.append({"line": orig, "why": "no weight could be read from the picture", "picture": ref})
+		return
+	var d = shot_date(block, shot, ctx)
+	var e
+	if d.printed:
+		e = block.shot_bodies.get(d.date)
+		if e == null:
+			e = {"kind": "body", "disc": "body", "data": {"date": d.date}, "raw": [], "norm": [], "warnings": [],
+				"date": d.date, "date_note": ""}
+			block.shot_bodies[d.date] = e
+			block.entries.append(e)
+	else:
+		e = _body_entry(block)
+		if not e.has("date"):
+			e["date"] = d.date
+			e["date_note"] = d.note
+	if d.warn != "" and not e.warnings.has(d.warn):
+		e.warnings.append(d.warn)
+	if kg >= 0.0:
+		if e.data.has("weightKg"):
+			e.warnings.append("two weights for this day, kept the last")
+		e.data["weightKg"] = kg
+	if fat >= 0.0:
+		if e.data.has("bodyFatPct"):
+			e.warnings.append("two body fat readings for this day, kept the last")
+		e.data["bodyFatPct"] = fat
+	var tag = "shot body %d %d" % [TTUtil.jsround(kg * 100.0), TTUtil.jsround(fat * 10.0)]
+	if not e.has("shots"):
+		e["shots"] = []
+		e["extras"] = []
+		e["shot_tag"] = tag
+	for x in shot.get("extras", []):
+		e.extras.append(str(x))
+	if not e.extras.is_empty():
+		e.data["note"] = " · ".join(PackedStringArray(e.extras))
+	e.shots.append(ref)
+	e.raw.append(orig)
+	e.norm.append(tag)
 
 
 # ---------------------------------------------------------------------------
@@ -1150,7 +1333,7 @@ static func summary(kind: String, data: Dictionary, wu: String, du: String) -> S
 				parts.append("Hang " + Xp.hang_text(h, wu))
 		_:
 			var head = "Run " if data.discipline == "run" else "Ride "
-			parts.append(head + Fmt.fmt_distance(float(data.distanceM), du))
+			parts.append(head + Fmt.fmt_distance(float(data.distanceM), du, 2))
 	if data.get("durationSec") != null and int(data.durationSec) > 0:
 		if data.discipline == "run" or data.discipline == "ride":
 			parts.append(Fmt.fmt_duration(float(data.durationSec)))

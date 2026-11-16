@@ -11,6 +11,13 @@ extends Node
 ## The note is never cleared by the game, so what was imported is remembered as
 ## {key: count} in saved.inbox.imported: for each key the first `count`
 ## occurrences in the text are already in the log, any further ones are new.
+##
+## Pictures in a Google Doc are read too (app/ocr.gd, Windows only): a workout
+## screenshot becomes a run or ride and a scale screenshot a weigh-in
+## (game/shot_reader.gd); a picture with no text on it stays a progress photo.
+## What was found on each picture is kept in inbox_pictures.json beside the
+## save, so a picture is read once and "Today" printed on it keeps meaning the
+## day the game first saw it.
 
 ## result = {"ok", "error", "fresh": [entry...], "already": int, "problems": [...]}
 signal checked(result)
@@ -19,6 +26,8 @@ const TIMEOUT_SEC = 30.0
 const NOT_SHARED = "That link is not shared. In Google Docs: Share → General access → Anyone with the link."
 const CHANGED_DAY = "this day changed after you imported it; importing adds it again (left out unless you tick it)"
 const UPDATES = "this day changed after you imported it; importing updates that entry"
+const PAGES_FILE = "inbox_pictures.json"
+const COULD_NOT_READ = "the Windows text reader did not answer, so the pictures are kept as photos"
 
 var _http: HTTPRequest = null
 var _busy = false
@@ -34,6 +43,17 @@ var last_text = ""
 ## are only written to disk (as progress photos) when their check-in is imported.
 var _images = {}
 var _image_tex = {}
+## md5 of each picture in the note, by its name.
+var _hash = {}
+## What the text reader found on pictures seen before:
+## {md5: {"seen": "YYYY-MM-DD", "page": {...}}} (null until loaded from PAGES_FILE).
+var _pages = null
+## What each picture in the note says, by its lower-case name (ShotReader.read plus "seen").
+var _readings = {}
+## The text reader at work: {"job", "text", "silent", "todo": {name: md5}}.
+var _reading = null
+## Why the pictures could not be read on this check ("" when they were).
+var _unread = ""
 
 
 func _app():
@@ -41,6 +61,7 @@ func _app():
 
 
 func _ready() -> void:
+	set_process(false)
 	var st = settings()
 	if str(st.get("source", "")).strip_edges() != "" and bool(st.get("auto", true)):
 		# In the background a moment after start; failures stay quiet on launch.
@@ -111,7 +132,7 @@ func parse_opts() -> Dictionary:
 					if float(st.get("weightKg", 0)) > 0.0:
 						loaded[Xp.normalize_exercise(ex.name)] = true
 	return {"today": app.today, "weightUnit": app.weight_unit(), "distanceUnit": app.distance_unit(),
-		"exercises": names, "loaded": loaded.keys()}
+		"exercises": names, "loaded": loaded.keys(), "shots": _readings}
 
 
 ## Fetch (link) or read (file path) the note, then emit `checked`. A file is read
@@ -130,6 +151,7 @@ func check(silent: bool = false) -> void:
 		if not FileAccess.file_exists(path):
 			_finish({"ok": false, "error": "Could not find the file %s." % path}, silent)
 			return
+		_readings = {}
 		_got_text(FileAccess.get_file_as_string(path), silent, true)
 		return
 	if _http == null:
@@ -161,6 +183,7 @@ func _on_http(result: int, code: int, _headers: PackedStringArray, body: PackedB
 	if body.size() > 4 and body[0] == 0x50 and body[1] == 0x4B:
 		_got_zip(body, _silent)
 		return
+	_readings = {}
 	_got_text(body.get_string_from_utf8(), _silent, true)
 
 
@@ -184,13 +207,140 @@ func _got_zip(bytes: PackedByteArray, silent: bool) -> void:
 	for name in z.get_files():
 		if str(name).to_lower().ends_with(".html") and html == "":
 			html = z.read_file(name).get_string_from_utf8()
-		elif str(name).begins_with("images/"):
-			images[str(name)] = z.read_file(name)
+		elif str(name).begins_with("images/") and not str(name).ends_with("/"):
+			var data = z.read_file(name)
+			if not data.is_empty():
+				images[str(name)] = data
 	z.close()
 	DirAccess.remove_absolute(path)
 	_images = images
 	_image_tex = {}
-	_got_text(html_to_text(html), silent, true)
+	_read_pictures(html_to_text(html), silent)
+
+
+static func _md5(bytes: PackedByteArray) -> String:
+	if bytes.is_empty():
+		return "empty"
+	var hc = HashingContext.new()
+	hc.start(HashingContext.HASH_MD5)
+	hc.update(bytes)
+	return hc.finish().hex_encode()
+
+
+## What the text reader found on the pictures seen before (inbox_pictures.json).
+func _load_pages() -> Dictionary:
+	if _pages == null:
+		_pages = {}
+		var path = _app().DATA_DIR + PAGES_FILE
+		if FileAccess.file_exists(path):
+			var raw = JSON.parse_string(FileAccess.get_file_as_string(path))
+			if raw is Dictionary:
+				for k in raw:
+					if raw[k] is Dictionary and raw[k].get("page") is Dictionary:
+						_pages[str(k)] = raw[k]
+	return _pages
+
+
+func _save_pages() -> void:
+	var f = FileAccess.open(_app().DATA_DIR + PAGES_FILE, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(_pages))
+		f.close()
+
+
+static func _page_ok(entry) -> bool:
+	return entry is Dictionary and entry.get("page") is Dictionary and int(entry.page.get("v", 0)) == ShotReader.VERSION
+
+
+## Have the pictures of the note read (only the ones not seen before), then
+## carry on with its text. Without a text reader they all stay photos.
+func _read_pictures(text: String, silent: bool) -> void:
+	_hash = {}
+	_unread = ""
+	var pages = _load_pages()
+	var todo = {}
+	var files = {}
+	var queued = {}
+	for name in _images:
+		var h = PhoneInbox._md5(_images[name])
+		_hash[name] = h
+		if not PhoneInbox._page_ok(pages.get(h)) and not queued.has(h):
+			queued[h] = true
+			todo[name] = h
+			files[name] = _images[name]
+	if todo.is_empty() or not Ocr.available():
+		_pictures_done(text, silent)
+		return
+	var job = Ocr.start(files, _app().DATA_DIR + "reading")
+	if job.is_empty():
+		_unread = COULD_NOT_READ
+		_pictures_done(text, silent)
+		return
+	_busy = true
+	_reading = {"job": job, "text": text, "silent": silent, "todo": todo}
+	set_process(true)
+
+
+## While the text reader works: ask it whether it is done.
+func _process(_delta: float) -> void:
+	if _reading == null:
+		set_process(false)
+		return
+	var r = Ocr.poll(_reading.job)
+	if r == null:
+		return
+	var was = _reading
+	_reading = null
+	set_process(false)
+	_busy = false
+	if r.ok:
+		var pages = _load_pages()
+		for name in r.pages:
+			var h = str(was.todo.get(name, ""))
+			if h == "":
+				continue
+			var old = pages.get(h)
+			var seen = str(old.get("seen", _app().today)) if old is Dictionary else str(_app().today)
+			pages[h] = {"seen": seen, "page": r.pages[name]}
+		for name in was.todo:
+			if not r.pages.has(name):
+				pages[str(was.todo[name])] = {"seen": str(_app().today), "page": ShotReader.page({})}
+		_save_pages()
+	else:
+		_unread = COULD_NOT_READ
+	_pictures_done(was.text, was.silent)
+
+
+## The pictures are read (or cannot be): forget the ones no longer in the note,
+## work out what each one says and read the note's text.
+func _pictures_done(text: String, silent: bool) -> void:
+	var pages = _load_pages()
+	var here = {}
+	for name in _hash:
+		here[_hash[name]] = true
+	var dropped = false
+	for h in pages.keys():
+		if not here.has(h):
+			pages.erase(h)
+			dropped = true
+	if dropped:
+		_save_pages()
+	_readings = {}
+	for name in _images:
+		var entry = pages.get(_hash.get(name, ""))
+		if not PhoneInbox._page_ok(entry):
+			continue
+		var r = ShotReader.read(entry.page)
+		r["seen"] = str(entry.get("seen", _app().today))
+		r["id"] = str(_hash.get(name, name))
+		_readings[str(name).to_lower()] = r
+	_got_text(text, silent, true)
+
+
+func _exit_tree() -> void:
+	if _reading != null:
+		Ocr.cancel(_reading.job)
+		_reading = null
 
 
 ## Google's HTML export -> plain lines. Each picture becomes its own line,
@@ -230,6 +380,7 @@ func image_texture(ref: String):
 
 ## Read pasted text the same way (nothing is fetched). Returns the result.
 func check_text(text: String) -> Dictionary:
+	_readings = {}
 	_got_text(text, false, false)
 	return _last
 
@@ -241,6 +392,9 @@ func _got_text(text: String, silent: bool, from_source: bool) -> void:
 		return
 	last_text = text
 	var parsed = QuickLog.parse_any(text, parse_opts())
+	if from_source and _unread != "":
+		parsed.problems.append({"line": "pictures", "why": _unread, "picture": ""})
+		_unread = ""
 	var imported = settings().get("imported", {})
 	var split = PhoneInbox.split_entries(parsed.entries, imported)
 	_resolve_updates(split.fresh)
@@ -300,6 +454,13 @@ func _resolve_updates(fresh: Array) -> void:
 			if str(x.get("inboxKey", "")) == str(e.replaces_key):
 				found = x
 		if found == null:
+			continue
+		if str(found.get("date", "")) != str(e.date):
+			# The same words under an undated (or "today") line on another day: a
+			# new entry, not an edit of the old one.
+			e.erase("replaces_key")
+			e.warnings.erase(CHANGED_DAY)
+			e.erase("skip")
 			continue
 		e["replaces"] = found.id
 		e.warnings.erase(CHANGED_DAY)

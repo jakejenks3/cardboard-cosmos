@@ -218,6 +218,15 @@ static func show_how() -> void:
 	var v = Kit.vbox(10)
 	v.add_child(cheat)
 	v.add_child(Kit.para("4. Press Check now, or just start the game. Nothing is imported until you say so; lines it cannot read are shown, never dropped.", 14, Pal.TEXT))
+	if Ocr.available():
+		var shots = Kit.hbox(8)
+		var cam = Icons.rect("camera", 20)
+		cam.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		shots.add_child(cam)
+		var words = Kit.para("Screenshots work too. Paste a Strava run or ride, or your scale app's weigh-in screen, into the Doc: the game reads the numbers off the picture. Any other picture is kept as a progress photo.", 14, Pal.TEXT)
+		words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		shots.add_child(words)
+		v.add_child(shots)
 	v.add_child(Kit.muted_para("A Google Form's responses sheet or a file in a synced folder works too. Anyone with the link can read the note, so keep it to workouts.", 12))
 	SettingsPanel.show_info("How it works", [
 		"1. Make a Google Doc on your phone.",

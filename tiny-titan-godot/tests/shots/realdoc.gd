@@ -10,19 +10,25 @@ func run(main: Node, tree: SceneTree) -> void:
 	if url == "":
 		print("REALDOC: TINY_TITAN_INBOX_URL not set")
 		return
+	# TINY_TITAN_UNITS=lb,mi shows the review in pounds and miles.
+	var units = OS.get_environment("TINY_TITAN_UNITS").split(",", false)
+	if units.size() == 2:
+		App.update_settings({"weightUnit": units[0], "distanceUnit": units[1]})
 	App.inbox.set_source(url)
 	print("REALDOC fetch url: ", PhoneInbox.fetch_url(url))
 	var box = {"r": null}
+	var t0 = Time.get_ticks_msec()
 	App.inbox.checked.connect(func(r): box.r = r, CONNECT_ONE_SHOT)
 	App.inbox.check(false)
-	for i in range(200):
+	for i in range(600):
 		if box.r != null:
 			break
 		await ShotHelper.wait(tree, 0.1)
 	var r = box.r
 	if r == null:
-		print("REALDOC: no answer after 20 s")
+		print("REALDOC: no answer after 60 s")
 		return
+	print("REALDOC answered in %d ms; pictures read: %s" % [Time.get_ticks_msec() - t0, JSON.stringify(App.inbox._readings)])
 	print("REALDOC ok=%s error=%s already=%d" % [str(r.ok), str(r.get("error")), int(r.get("already", 0))])
 	print("REALDOC raw text ----")
 	print(App.inbox.last_text)

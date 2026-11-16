@@ -109,6 +109,29 @@ is the Windows handoff.
   - Tests: `tests/bounty_test.gd` (bounty, coins, shop, new art), walkthroughs
     `tests/shots/shop.gd` (year and week data) and `tests/shots/bounty.gd` (year).
 
+- Screenshots in the phone note (added 2026-11-16): a picture in the Google Doc is read, not
+  just stored. `app/ocr.gd` (`Ocr`) has the text reader that is part of Windows
+  (Windows.Media.Ocr) read the pictures through a PowerShell script it writes into
+  `<data>/reading/` (removed afterwards; no window, nothing leaves the machine; other systems:
+  `Ocr.available()` is false and every picture stays a progress photo). `PhoneInbox` starts it
+  after unzipping (`_read_pictures`), polls it in `_process`, and keeps what was found per
+  picture (md5 of its bytes) in `<data>/inbox_pictures.json` with the day it was first seen,
+  so a picture is read once. `game/shot_reader.gd` (`ShotReader`, pure) turns the words and
+  their positions into a reading: `run` / `ride` (labels Distance, Moving Time, Elevation
+  Gain... with the number under or beside each), `body` (weight, body fat, the rest as a
+  note), `text` (a screenshot it cannot use: shown as a "Picture left out" card with the
+  reason, e.g. a walk) or `photo`. `QuickLog` gets the readings as `opts.shots` and turns a
+  `photo images/x.png` line with a reading into that entry (`_shot_session`, `_shot_body`,
+  `shot_date`). Dates: printed on the picture > the note's date line > the day first seen.
+  Keys: a picture's entry is keyed by what it says (`shot_tag`), so a different picture is
+  never an "edit" of an imported one. Entries carry `shots` (picture names) and `extras`
+  for the review sheet. Tests: `tests/shot_reader_test.gd` (made-up pages laid out like real
+  screenshots), walkthrough `tests/shots/pictures.gd` (`new` data; draws fake screenshots and
+  runs them through the real Windows reader). The real doc was checked with `realdoc`
+  (`TINY_TITAN_UNITS=lb,mi` shows pounds and miles).
+- Also 2026-11-16: an undated typed line changed on a LATER day is a new entry, not an edit
+  of the old one (`PhoneInbox._resolve_updates` compares the dates).
+
 ## Rules that matter in this codebase
 
 - Never use `:=`. Make one operand a float when dividing. Optional dictionary fields
@@ -140,6 +163,7 @@ godot --headless --path . --script res://tests/parity_derive.gd
 godot --headless --path . --script res://tests/parity_misc.gd
 godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd
+godot --headless --path . --script res://tests/shot_reader_test.gd
 ```
 
 Walkthroughs that drive the real UI and save screenshots (set `TINY_TITAN_DATA` and
@@ -150,7 +174,8 @@ godot --path . res://tests/shots.tscn -- res://tests/shots/e2e.gd fresh
 ```
 
 Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, shop, bounty, settings, inbox,
-themes, climb_more (routes and hangboard), realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
+themes, climb_more (routes and hangboard), pictures (screenshots in the note, `new` data, Windows only),
+realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
 to the doc link and run the `realdoc` scenario with `new` data: it prints the text the
@@ -172,7 +197,14 @@ the check.
 - Logging an old session for an earlier week changes the bounty HP of the weeks after it
   (the HP is built from the four weeks before), so a past bounty can flip. By design:
   the bounties are a pure function of the log.
-- Strava import is deliberately left out for now.
+- Strava import (the API) is deliberately left out for now; Strava SCREENSHOTS in the phone
+  note are read (see above).
+- Screenshot reading needs Windows. Only runs, rides and weigh-ins are read; the layouts it
+  was tried on are Strava's activity page and one smart-scale app (the user's own). A new
+  layout that fails shows up as "Picture left out": get the words with `realdoc`
+  (`App.inbox._readings`) and extend the label tables in `game/shot_reader.gd`.
+- A picture that only says "Today" is dated by the day the game first saw it, which is wrong
+  if the game is opened days later (the review sheet has arrows to move it).
 
 ## Git
 

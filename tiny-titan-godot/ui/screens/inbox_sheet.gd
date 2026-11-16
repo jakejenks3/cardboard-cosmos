@@ -3,8 +3,10 @@ extends RefCounted
 ## "From your phone": the review sheet for what the phone inbox found
 ## (app/inbox.gd). One compact card per new entry with a toggle to leave it out
 ## and, for guessed dates, a day nudge; then the lines it could not read and
-## the Import button. Also the "Paste text" sheet and the shared
-## check-then-review flow used by Settings and the Log picker.
+## the Import button. An entry read from a screenshot shows that picture and
+## everything else found on it; a picture it could not use gets its own card
+## saying why. Also the "Paste text" sheet and the shared check-then-review
+## flow used by Settings and the Log picker.
 
 ## `result` as emitted by PhoneInbox.checked. `before_import` runs right before importing.
 static func open(result: Dictionary) -> void:
@@ -21,7 +23,12 @@ static func open(result: Dictionary) -> void:
 	for e in fresh:
 		sheet.box.add_child(_entry_card(e, ui))
 
-	var problems = result.get("problems", [])
+	var problems = []
+	for pr in result.get("problems", []):
+		if pr.has("picture"):
+			sheet.box.add_child(_picture_card(pr))
+		else:
+			problems.append(pr)
 	var already = int(result.get("already", 0))
 	if not problems.is_empty() or already > 0:
 		var info = Kit.flow(6)
@@ -88,6 +95,8 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	main.add_child(Kit.para(str(e.summary), 13, Pal.TEXT))
 	if e.kind == "body" and not e.data.get("photoRefs", []).is_empty():
 		main.add_child(_thumbs(e.data.photoRefs))
+	if not e.get("shots", []).is_empty():
+		main.add_child(_from_picture(e, Pal.SECOND if disc == "body" else Pal.disc(disc)))
 	var warns = e.get("warnings", [])
 	if not warns.is_empty():
 		var wf = Kit.flow(4)
@@ -137,6 +146,62 @@ static func _thumbs(refs: Array) -> Control:
 		col.add_child(name)
 		row.add_child(col)
 	return row
+
+
+## A screenshot, small and phone-shaped.
+static func _shot_thumb(tex: Texture2D) -> Control:
+	var tile = PanelContainer.new()
+	tile.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	tile.add_theme_stylebox_override("panel", PixBox.well(2, 2, Pal.BORDER))
+	tile.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	tile.tooltip_text = "The picture from your note"
+	var img = TextureRect.new()
+	img.texture = tex
+	img.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	img.custom_minimum_size = Vector2(40, 72)
+	img.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tile.add_child(img)
+	return tile
+
+
+## For an entry read from a screenshot: the picture, a tag saying so, and the
+## other numbers found on it (they are kept as the entry's note).
+static func _from_picture(e: Dictionary, color: Color) -> Control:
+	var row = Kit.hbox(8)
+	for ref in e.shots:
+		var tex = App.inbox.image_texture(str(ref))
+		if tex != null:
+			row.add_child(_shot_thumb(tex))
+	var chips = Kit.flow(4)
+	chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chips.add_child(Kit.icon_chip("camera", "Read from a picture", color, "Everything here was read from the screenshot in your note"))
+	for x in e.get("extras", []):
+		chips.add_child(Kit.icon_chip("", str(x), Pal.PANEL2, "Also on the picture: kept as a note"))
+	row.add_child(chips)
+	return row
+
+
+## A picture the game could not use, with the reason in words.
+static func _picture_card(pr: Dictionary) -> Card:
+	var c = Kit.card(6, Callable(), 10)
+	c.accent(Pal.DANGER)
+	var row = Kit.hbox(10)
+	var tex = App.inbox.image_texture(str(pr.get("picture", "")))
+	if tex != null:
+		row.add_child(_shot_thumb(tex))
+	else:
+		row.add_child(Kit.vcenter(Icons.rect("warning", 24)))
+	var main = Kit.vbox(2)
+	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	main.add_child(Kit.label("Picture left out" if tex != null else "Pictures not read", 14, null, true))
+	var why = str(pr.get("why", ""))
+	main.add_child(Kit.para(why.substr(0, 1).to_upper() + why.substr(1) + ".", 13, Pal.MUTED))
+	row.add_child(main)
+	c.add(row)
+	return c
 
 
 ## The first clause of a warning, for its chip.
