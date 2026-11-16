@@ -64,7 +64,7 @@ nov 14
 bench 3x5 @ 80
 squat 5,5,4 @ 100
 pull-up 3x8
-v4 flash x2, v5 send
+v4 flash x2, v5 send 3 attempts
 tr 5.10a flash, 5.11b
 hang 20mm 10s x6, one arm 15mm 7s x3 +10
 run 5.2km 27:30 +80m
@@ -81,6 +81,13 @@ are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; a
 session above them; `---` starts a second session on the same day; `#` starts a comment.
 `vest walk 3km 40:00 10kg` logs a weighted vest walk (see Miscellaneous below); leave the weight
 out and the last vest you logged is used, or put `vest 10kg` on the line under it.
+
+On a climb, every result word is its own tally and takes the number beside it. `v3 send 3 attempts`
+is one send plus three tries that did not go (the same as logging one Send and three Attempts in
+the Log tab); `v4 5 attempts` is five tries and no send; `v3 2 sends 3 attempts` and
+`v3 send, 3 attempts` work too. `v3 3rd go` (or `v3 send in 3`) says which go it went on: one send
+and two tries, and `1st go` is a flash. `v4 x3 no send` is three tries. A climb the game cannot
+tell apart is shown as a line it could not read, never guessed.
 
 **Miscellaneous** (Log tab, under the four disciplines): activities that are not lifting,
 climbing, running or cycling. For now there is one, the **weighted vest walk**: distance, time,

@@ -18,7 +18,7 @@ const SHOT_YESTERDAY = "the picture says \"Yesterday\": counted back from the da
 const SHOT_NO_DATE = "no date on the picture: taken as the day the game first saw it"
 
 ## What the app shows as the cheat sheet. Every line here must parse (the unit test checks).
-const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nvest walk 3km 40:00 10kg\nweight 82.4  bf 18"
+const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send 3 attempts\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nvest walk 3km 40:00 10kg\nweight 82.4  bf 18"
 
 const MONTHS = {
 	"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, "apr": 4, "april": 4,
@@ -56,11 +56,19 @@ const LOADED_WORDS = ["squat", "bench", "deadlift", "press", "row", "curl", "thr
 	"pushdown", "clean", "snatch", "swing", "raise", "face pull", "extension", "fly", "shrug", "weighted"]
 
 const RESULT_WORDS = {
-	"flash": "flash", "f": "flash", "flashed": "flash", "fl": "flash",
-	"send": "send", "s": "send", "sent": "send", "top": "send", "topped": "send",
+	"flash": "flash", "f": "flash", "flashed": "flash", "fl": "flash", "flashes": "flash",
+	"send": "send", "s": "send", "sent": "send", "sends": "send", "top": "send", "topped": "send", "tops": "send",
 	"attempt": "attempt", "attempts": "attempt", "att": "attempt", "a": "attempt", "fail": "attempt",
-	"failed": "attempt", "project": "attempt", "proj": "attempt", "tried": "attempt",
+	"failed": "attempt", "fails": "attempt", "project": "attempt", "proj": "attempt", "tried": "attempt",
+	"try": "attempt", "tries": "attempt", "fall": "attempt", "falls": "attempt", "fell": "attempt",
+	"go": "attempt", "goes": "attempt", "burn": "attempt", "burns": "attempt",
+	"unsent": "attempt", "dnf": "attempt",
 }
+## "3rd go", "in 3 tries": the word that may follow the number.
+const GO_WORDS = ["go", "goes", "try", "tries", "attempt", "attempts", "shot", "shots", "burn", "burns"]
+## Joining words inside one climb: "v3 send + 3 attempts", "v3 3 attempts then send".
+const CLIMB_FILLER = ["then", "plus", "+", "&", "-", "after", "with"]
+const ORDINAL_WORDS = {"first": "1st", "second": "2nd", "third": "3rd", "fourth": "4th", "fifth": "5th"}
 const CARDIO_WORDS = {
 	"run": "run", "ran": "run", "running": "run", "jog": "run", "jogged": "run", "jogging": "run",
 	"ride": "ride", "rode": "ride", "bike": "ride", "biked": "ride", "cycle": "ride", "cycled": "ride", "cycling": "ride",
@@ -1128,47 +1136,190 @@ static func _parse_climb(t: String) -> Dictionary:
 	s = s.replace(";", ",").replace(" and ", ",")
 	var climbs = []
 	var bad = []
+	# The climb before on this line: a bare "3 attempts" after it is about that one.
+	var prev = null
 	for item in s.split(",", false):
 		var it = item.strip_edges()
 		if it == "":
 			continue
-		it = _rx("(vb|v\\d{1,2})(?=[a-z])").sub(it, "$1 ", true)
-		it = _rx("(\\d)x(?=v|5\\.)").sub(it, "$1x ", true)
-		it = _rx("\\bx\\s+(?=\\d)").sub(it, "x", true)
-		it = _rx("(\\d)\\s+x\\b").sub(it, "$1x", true)
-		var grade = null
-		var yds = ""
-		var count = 1
-		var result = "send"
-		var ok = true
-		for tok in it.split(" ", false):
-			var mg = _rx("^v(\\d{1,2})$").search(tok)
-			var my = _rx("^5\\.\\d{1,2}[a-d]?$").search(tok)
-			var mc = _rx("^(?:x(\\d+)|(\\d+)x)$").search(tok)
-			if tok == "vb" and grade == null:
-				grade = -1
-			elif mg != null and grade == null and int(mg.get_string(1)) <= 17:
-				grade = int(mg.get_string(1))
-			elif my != null and grade == null and Xp.yds_index(tok) >= 0:
-				yds = Xp.yds_label(Xp.yds_index(tok))
-				grade = Xp.yds_to_v(Xp.yds_index(tok))
-			elif mc != null:
-				count = int(mc.get_string(1) if mc.get_string(1) != "" else mc.get_string(2))
-			elif _rx("^\\d+$").search(tok) != null:
-				count = int(tok)
-			elif RESULT_WORDS.has(tok):
-				result = RESULT_WORDS[tok]
-			elif ROPE_WORDS.has(tok):
-				pass
-			else:
-				ok = false
-		if grade == null or not ok or count < 1 or count > 99:
-			bad.append(item.strip_edges())
-		elif yds != "":
-			climbs.append({"grade": grade, "result": result, "count": count, "style": "rope", "yds": yds})
-		else:
-			climbs.append({"grade": grade, "result": result, "count": count})
+		var got = _climb_item(it, prev)
+		if got == null:
+			bad.append(it)
+			prev = null
+			continue
+		climbs.append_array(got.climbs)
+		prev = got
 	return {"climbs": climbs, "bad": bad}
+
+
+## One climb of a line: "v4 flash x2", "v3 send 3 attempts", "v5 3rd go".
+## Every result word is its own tally and takes the number written beside it,
+## "3 attempts" (before the word) or "flash x2" (after it). So "v3 send 3 attempts"
+## is one send and three attempts, "v4 5 attempts" is five attempts and no send,
+## and a bare "v3" is one send. An attempt is a try that did not go, like the
+## Attempt button of the Log tab. "3rd go" (or "in 3") says which go it went on:
+## one send and the tries before it; "1st go" is a flash. "no send" says nothing
+## topped: "v4 x3 no send" is three attempts.
+## `prev` is the climb before it on the line ({grade, yds}, or null): tries with
+## no grade ("v3 send, 3 attempts") belong to that one.
+## Returns {"climbs": [...], "grade", "yds", "tries": only attempts}, or null
+## when it cannot be read.
+static func _climb_item(text: String, prev) -> Variant:
+	var it = text.replace("(", " ").replace(")", " ")
+	# "no send", "did not top": every try on it was an attempt.
+	var no_top = false
+	var mnot = _rx("\\b(?:no|not|never|didnt|didn't|did not) (?:send|sent|sends|top|topped|tops)\\b")
+	if mnot.search(it) != null:
+		no_top = true
+		it = mnot.sub(it, " ", true)
+	for w in ORDINAL_WORDS:
+		it = _rx("\\b" + w + "\\b").sub(it, ORDINAL_WORDS[w], true)
+	it = _rx("\\bon (?:the |my )?(?=\\d{1,3}(?:st|nd|rd|th)\\b)").sub(it, "", true)
+	it = _rx("(vb|v\\d{1,2})(?=[a-z])").sub(it, "$1 ", true)
+	it = _rx("(\\d)x(?=v|5\\.)").sub(it, "$1x ", true)
+	it = _rx("\\bx\\s+(?=\\d)").sub(it, "x", true)
+	it = _rx("(\\d)\\s+x\\b").sub(it, "$1x", true)
+	var toks = []
+	for raw in it.split(" ", false):
+		var w = raw.trim_suffix(":")
+		if w != "":
+			toks.append(w)
+	var grade = null
+	var yds = ""
+	var nth = -1
+	# What is left once the grade is out, in order: numbers ({word: ""}) and result words.
+	var marks = []
+	var i = 0
+	while i < toks.size():
+		var tok: String = toks[i]
+		i += 1
+		var mg = _rx("^v(\\d{1,2})$").search(tok)
+		var my = _rx("^5\\.\\d{1,2}[a-d]?$").search(tok)
+		var mx = _rx("^x(\\d{1,3})$").search(tok)
+		var mn = _rx("^(?:\\+?(\\d{1,3})|(\\d{1,3})x)$").search(tok)
+		var mo = _rx("^(\\d{1,3})(?:st|nd|rd|th)$").search(tok)
+		var num_next = i < toks.size() and _rx("^\\d{1,3}$").search(toks[i]) != null
+		if tok == "vb" and grade == null:
+			grade = -1
+		elif mg != null and grade == null and int(mg.get_string(1)) <= 17:
+			grade = int(mg.get_string(1))
+		elif my != null and grade == null and Xp.yds_index(tok) >= 0:
+			yds = Xp.yds_label(Xp.yds_index(tok))
+			grade = Xp.yds_to_v(Xp.yds_index(tok))
+		elif mo != null or (tok == "in" and num_next):
+			# "3rd go", "in 3 goes": it went on that go.
+			if nth >= 0:
+				return null
+			if mo != null:
+				nth = int(mo.get_string(1))
+			else:
+				nth = int(toks[i])
+				i += 1
+			if i < toks.size() and GO_WORDS.has(toks[i]):
+				i += 1
+		elif (tok == "after" or tok == "with") and num_next and not (i + 1 < toks.size() and RESULT_WORDS.has(toks[i + 1])):
+			# "send after 3": tries, even with no word after the number.
+			marks.append({"word": "attempt", "n": int(toks[i]), "back": false})
+			i += 1
+		elif mx != null:
+			marks.append({"word": "", "n": int(mx.get_string(1)), "back": true})
+		elif mn != null:
+			marks.append({"word": "", "n": int(mn.get_string(1) if mn.get_string(1) != "" else mn.get_string(2)), "back": false})
+		elif RESULT_WORDS.has(tok):
+			marks.append({"word": RESULT_WORDS[tok], "n": -1, "back": false})
+		elif ROPE_WORDS.has(tok) or CLIMB_FILLER.has(tok):
+			pass
+		else:
+			return null
+
+	# Give every number to the result word beside it. "x2" goes with the word
+	# before it when it can, a plain number with the word after it.
+	var slots = []
+	var held = -1
+	var loose = -1
+	for k in range(marks.size()):
+		var m = marks[k]
+		if m.word != "":
+			if int(m.n) >= 0 and held >= 0:
+				return null
+			slots.append({"r": m.word, "n": int(m.n) if int(m.n) >= 0 else held})
+			held = -1
+			continue
+		var word_next = k + 1 < marks.size() and marks[k + 1].word != "" and int(marks[k + 1].n) < 0
+		var word_before = k > 0 and marks[k - 1].word != "" and int(slots.back().n) < 0
+		if word_before and (m.back or not word_next):
+			slots.back().n = int(m.n)
+		elif word_next:
+			held = int(m.n)
+		elif loose < 0:
+			loose = int(m.n)
+		else:
+			return null
+	if loose >= 0:
+		# A number with no word beside it: "v4 x2" is two sends. Next to words
+		# that have their own numbers it could mean anything.
+		if not slots.is_empty():
+			return null
+		slots.append({"r": "attempt" if no_top else "send", "n": loose})
+	if no_top:
+		if nth >= 0:
+			return null
+		for sl in slots:
+			if sl.r != "attempt":
+				return null
+		if slots.is_empty() and grade != null:
+			slots.append({"r": "attempt", "n": -1})
+	if nth >= 0:
+		# Only a plain "send" (or "flash" for the 1st go) may stand beside it.
+		var flashed = false
+		for sl in slots:
+			if int(sl.n) >= 0 or sl.r == "attempt":
+				return null
+			if sl.r == "flash":
+				flashed = true
+		if nth < 1 or (flashed and nth > 1):
+			return null
+		if nth == 1:
+			slots = [{"r": "flash", "n": 1}]
+		else:
+			slots = [{"r": "send", "n": 1}, {"r": "attempt", "n": nth - 1}]
+	elif slots.is_empty():
+		slots.append({"r": "send", "n": -1})
+
+	# One tally per result. Numbers add up; a word with no number counts once,
+	# unless the same result also has a number ("project 5 attempts" is five).
+	var order = []
+	var said = {}
+	for sl in slots:
+		if not order.has(sl.r):
+			order.append(sl.r)
+		if int(sl.n) >= 0:
+			said[sl.r] = int(said.get(sl.r, 0)) + int(sl.n)
+	# "v4 send flash" with no numbers is one climb, flashed.
+	if order.has("flash") and order.has("send") and not said.has("flash") and not said.has("send"):
+		order.erase("send")
+	if grade == null:
+		# "v4 5 attempts, no send" adds nothing to the tries before it.
+		if no_top and marks.is_empty() and prev != null and bool(prev.tries):
+			return {"climbs": [], "grade": prev.grade, "yds": prev.yds, "tries": true}
+		if prev == null or nth >= 0 or order != ["attempt"]:
+			return null
+		grade = prev.grade
+		yds = str(prev.yds)
+	var out = []
+	for r in order:
+		var n = int(said[r]) if said.has(r) else 1
+		if n > 99:
+			return null
+		if n < 1:
+			continue
+		if yds != "":
+			out.append({"grade": grade, "result": r, "count": n, "style": "rope", "yds": yds})
+		else:
+			out.append({"grade": grade, "result": r, "count": n})
+	if out.is_empty():
+		return null
+	return {"climbs": out, "grade": grade, "yds": yds, "tries": order == ["attempt"]}
 
 
 ## "hang 20mm 10s x6", "one arm hang 15mm 7s x3 +10", "hangboard 10mm 10s x4 -20lb"

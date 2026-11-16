@@ -131,6 +131,12 @@ is the Windows handoff.
   (`TINY_TITAN_UNITS=lb,mi` shows pounds and miles).
 - Also 2026-11-16: an undated typed line changed on a LATER day is a new entry, not an edit
   of the old one (`PhoneInbox._resolve_updates` compares the dates).
+- Also 2026-11-16: one climb in the note can hold several results (`QuickLog._climb_item`).
+  Every result word is its own tally with the number beside it: `v3 send 3 attempts` is
+  1 send + 3 attempts (an attempt is a try that did not go, as in the Log tab), `v4 5 attempts`
+  is attempts only, `v3 3rd go` / `send in 3` is a send on that go (N-1 attempts), `no send`
+  makes it all attempts, and `3 attempts` with no grade after a comma belongs to the climb
+  before it. What it cannot tell apart stays a problem line, never a guess.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

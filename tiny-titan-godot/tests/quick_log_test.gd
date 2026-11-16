@@ -56,6 +56,18 @@ func date_of(text: String) -> String:
 	return "" if r.entries.is_empty() else str(r.entries[0].date)
 
 
+## The climbs of a one-entry text as "V3s1 V3a3" (grade, first letter of the
+## result, how many); "" when the text is not exactly one entry.
+func tally(text: String) -> String:
+	var e = one(text)
+	if e.is_empty():
+		return ""
+	var out = []
+	for c in e.data.get("climbs", []):
+		out.append("%s%s%d" % [Xp.climb_label(c), str(c.result).substr(0, 1), int(c.count)])
+	return " ".join(PackedStringArray(out))
+
+
 func _init() -> void:
 	# --- normalising -------------------------------------------------------------
 	ok(sets_of(one("﻿Bench 3×5 @ 80\r\n")) == [[5, 80.0], [5, 80.0], [5, 80.0]], "BOM, CRLF, times sign", sets_of(one("﻿Bench 3×5 @ 80\r\n")))
@@ -128,6 +140,41 @@ heel raise x10 195")))
 	var badc = p("v4 flash x2, v4 crimpy")
 	ok(badc.entries.size() == 1 and badc.problems.size() == 1, "a bad climb item is a problem, the rest kept")
 	ok(p("v18").problems.size() == 1, "V18 is out of range")
+
+	# One climb can hold a send and attempts: every result word is its own tally.
+	var sa = one("v1 flash, v2 flash, v3 send 3 attempts, v4 5 attempts")
+	ok(not sa.is_empty() and sa.data.climbs == [{"grade": 1, "result": "flash", "count": 1}, {"grade": 2, "result": "flash", "count": 1}, {"grade": 3, "result": "send", "count": 1}, {"grade": 3, "result": "attempt", "count": 3}, {"grade": 4, "result": "attempt", "count": 5}], "send + attempts on one climb", sa.get("data"))
+	ok(sa.get("summary") == "V1 flash · V2 flash · V3 send · V3 attempt ×3 · V4 attempt ×5", "send + attempts: summary", sa.get("summary"))
+	if not sa.is_empty():
+		var sst = Xp.session_stats(sa.data)
+		ok(int(sst.sends) == 3 and int(sst.flashes) == 2 and int(sst.attempts) == 8 and int(sst.maxGradeSent) == 3, "send + attempts: 3 tops (2 flashed), 8 tries, best send V3 not V4", [sst.sends, sst.flashes, sst.attempts, sst.maxGradeSent])
+	for same in ["v3 send 3 attempts", "v3 send, 3 attempts", "v3 send and 3 attempts", "v3 send + 3 attempts", "v3 send (3 attempts)", "v3 send 3 tries", "v3 s 3 a", "v3 send after 3 attempts", "v3 send after 3", "v3 sent with 3 fails"]:
+		ok(tally(same) == "V3s1 V3a3", "one send and three tries: " + same, tally(same))
+	ok(tally("v4 5 attempts") == "V4a5", "tries with no send word are only tries", tally("v4 5 attempts"))
+	ok(tally("v3 3 attempts then send") == "V3a3 V3s1", "tries first, then the send", tally("v3 3 attempts then send"))
+	ok(tally("v3 2 sends 3 attempts") == "V3s2 V3a3" and tally("2x v3 send 3 tries") == "V3s2 V3a3", "each word takes the number before it")
+	ok(tally("v3 flash x2 attempt x3") == "V3f2 V3a3", "x2 goes with the word before it", tally("v3 flash x2 attempt x3"))
+	ok(tally("v4 2 flash") == "V4f2" and tally("v4 x2 flash") == "V4f2" and tally("v5 3") == "V5s3", "one number and one word: as before")
+	ok(tally("v4 project 5 attempts") == "V4a5", "two words for the same result are one tally", tally("v4 project 5 attempts"))
+	ok(tally("v3 send flash") == "V3f1", "send + flash with no numbers is one flashed climb", tally("v3 send flash"))
+	ok(tally("v3 send 0 attempts") == "V3s1", "0 attempts adds nothing", tally("v3 send 0 attempts"))
+	ok(tally("v3 send 3 attempts\nv3 2 attempts") == "V3s1 V3a5", "tries on a later line add up")
+	var rs = one("5.10a send 2 attempts")
+	ok(tally("5.10a send 2 attempts") == "5.10as1 5.10aa2" and rs.data.climbs.all(func(c): return c.get("style") == "rope"), "a route takes a send and tries too", rs.get("data"))
+	# "3rd go" says which go it went on.
+	for third in ["v3 3rd go", "v3 sent 3rd go", "v3 sent on the 3rd go", "v3 send in 3", "v3 send in 3 goes", "v3 third try"]:
+		ok(tally(third) == "V3s1 V3a2", "third go = a send and two tries: " + third, tally(third))
+	ok(tally("v3 first go") == "V3f1" and tally("v3 send 1st go") == "V3f1", "first go is a flash")
+	# "no send": everything on it was a try.
+	ok(tally("v4 5 attempts no send") == "V4a5" and tally("v4 5 attempts, no send") == "V4a5", "no send after tries adds nothing")
+	ok(tally("v4 no send") == "V4a1" and tally("v4 x3 no send") == "V4a3" and tally("v5 unsent") == "V5a1", "no send alone is a try")
+	# What cannot be told apart stays a problem, never a guess.
+	for no in ["v3 flash 2nd go", "v4 flash x2 3", "v4 send no send", "v3 v4", "v4 x0", "v4 x150"]:
+		ok(p(no).entries.is_empty() and p(no).problems.size() == 1, "not guessed: " + no, p(no))
+	var half = p("v4 flash, 5 send")
+	ok(half.problems.size() == 1 and half.entries.size() == 1 and half.entries[0].data.climbs == [{"grade": 4, "result": "flash", "count": 1}], "a send with no grade is not given the grade before it", half)
+	ok(p("v4 crimpy, 3 attempts").problems.size() == 2 and p("v4 crimpy, 3 attempts").entries.is_empty(), "tries after an unreadable climb are attached to nothing")
+	ok(p("v4, no send").problems.size() == 1, "no send after a send is a problem")
 
 	# --- running / cycling ------------------------------------------------------------
 	var run = one("run 5.2km 27:30 +80m")
