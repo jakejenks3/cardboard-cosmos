@@ -109,12 +109,21 @@ to workout notes.
   forearms, cycling builds thighs, running leans you out. Six body stages from Scrawny to Titanic.
 - **A boss campaign.** 24 bosses across 6 zones, from the Snooze Button to *The Old You*. Every XP is
   1 damage; training a boss's weakness hits ×1.5.
-- **160 trophies, 75 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
+- **A weekly bounty.** A new small monster every Monday, sized from your own last four weeks.
+  Beat it by Sunday night for coins, crush it (150% of its HP) for more, and keep a winning run
+  going. Winning bounties also earns its own set of gear.
+- **Coins and a shop.** Every 10 XP is a coin; bounties, bosses, trophies and quests pay extra.
+  Armory → Shop sells 33 pieces of gear (hats, masks, wings, a greatsword, auras…). Each tile
+  shows your own hero trying the piece on, and one item is 30% off every week.
+- **171 trophies, 122 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
   mastery ranks per discipline, and an "Almost there" list of the goals you are closest to.
 - **Fast logging.** Pick an exercise and last time's sets come up already filled in; − / + (hold to
   repeat) on every number; one tap to repeat a previous workout.
 - **Looking back.** Then-vs-now, a dated story of every milestone, weekly XP, training heatmap,
   strength progression, send pyramid, body-weight trend and photo comparison.
+- **Recaps.** Any week or month as one poster: XP, sessions, records, bosses, trophies, the
+  bounty, and a then / now photo pair. Journey → Stats → Recaps, or tap "This week" on the Hero
+  tab. **Save picture** writes it to your Pictures folder (in "Tiny Titan") to keep or share.
 
 ## How the numbers work
 
@@ -129,6 +138,11 @@ to workout notes.
 Hero level needs `400 + 90·L + 6·L²` XP per level. Boss HP runs from 400 to 40,000. A weekly check-in
 pays 60 XP for a weight, 20 for body fat and 15 per photo angle, once per week: the game rewards
 showing up, never a number on the scale.
+
+Coins: 1 per 10 XP of a session, check-in or claimed quest; a campaign boss 40 (zone boss 150);
+a trophy 10 / 25 / 50 / 100 by tier; a weekly bounty 100, +10 for each win in a row (up to +50)
+and +50 for a crush. Coins are counted from your log like everything else, so editing or deleting
+an entry recounts them; only what you bought is saved.
 
 ## Project layout
 
@@ -168,6 +182,7 @@ godot --headless --path . --script res://tests/parity_derive.gd
 godot --headless --path . --script res://tests/parity_misc.gd
 godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd   # the phone-inbox parser
+godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```
 
 `tests/shots/*.gd` are scripted walkthroughs that drive the real screens and save screenshots, for

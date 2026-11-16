@@ -17,6 +17,12 @@ extends RefCounted
 ##   item        {id, how: "drop" | "unlock" | "start"}
 ##   pet         {id}
 ##   streak      {current}
+## Added after the port, by `diff_extras` only (the ported functions stay as they were):
+##   bounty      {week, monster, damage, weak: bool, hpBefore, hpAfter, maxHp,
+##                defeated: bool (newly), crushed: bool (newly), coins (paid by this
+##                change), streak}   (none for more damage to a beaten monster,
+##                unless that crushes it)
+##   coins       {amount, balance}
 
 
 const PHOTO_MILESTONES = [
@@ -195,6 +201,55 @@ static func diff_body(before: Dictionary, after: Dictionary, entry: Dictionary) 
 		if span_after >= int(m.days) and span_before < int(m.days):
 			ev.append({"type": "pr", "icon": "📸", "title": m.title, "detail": "Compare then and now in Journey → Body."})
 	ev.append_array(_unlock_events(before, after))
+	return ev
+
+
+## The reel events of the things added after the port: damage to the weekly
+## bounty and coins earned. `discipline` is the logged session's (null for a
+## batch or a check-in). Kept apart from diff_states / diff_bulk / diff_body
+## so those still match the fixtures.
+static func diff_extras(before: Dictionary, after: Dictionary, discipline = null) -> Array:
+	var ev: Array = []
+	var bw = before.get("weekly")
+	var aw = after.get("weekly")
+	if aw is Dictionary:
+		var old: Dictionary = {}
+		if bw is Dictionary:
+			for r in bw.history:
+				old[r.week] = r
+			if bw.current != null and not old.has(bw.current.week):
+				old[bw.current.week] = bw.current
+		var recs: Array = aw.history.duplicate()
+		if aw.current != null and not recs.has(aw.current):
+			recs.append(aw.current)
+		for r in recs:
+			var was = old.get(r.week)
+			var dmg_before: int = int(was.damage) if was != null else 0
+			if int(r.damage) <= dmg_before:
+				continue
+			var was_beaten: bool = was != null and was.defeated
+			var newly: bool = r.defeated and not was_beaten
+			var newly_crushed: bool = r.crushed and not (was != null and was.crushed)
+			# Extra damage to a monster that is already down only matters when it crushes it.
+			if was_beaten and not newly_crushed:
+				continue
+			ev.append({
+				"type": "bounty",
+				"week": r.week,
+				"monster": r.monster,
+				"damage": int(r.damage) - dmg_before,
+				"weak": discipline != null and r.weak == discipline,
+				"hpBefore": maxi(0, int(r.hp) - dmg_before),
+				"hpAfter": maxi(0, int(r.hp) - int(r.damage)),
+				"maxHp": int(r.hp),
+				"defeated": newly,
+				"crushed": newly_crushed,
+				"coins": int(r.coins) - (int(was.coins) if was != null else 0),
+				"streak": int(r.streak),
+			})
+	var gained: int = Wallet.earned(after) - Wallet.earned(before)
+	if gained > 0:
+		ev.append({"type": "coins", "amount": gained, "balance": Wallet.balance(after)})
 	return ev
 
 

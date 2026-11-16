@@ -100,26 +100,12 @@ static func _summary(b: Dictionary, wu: String) -> Card:
 		bf.tooltip_text = tip
 		bf.mouse_filter = Control.MOUSE_FILTER_STOP
 		chips.add_child(bf)
-	var sk = _icon_tag("flame" if int(b.streak) > 0 else "ember", "%d wk streak" % int(b.streak), Pal.ACCENT2 if int(b.streak) > 0 else Pal.PANEL2)
+	var sk = Kit.icon_chip("flame" if int(b.streak) > 0 else "ember", "%d wk streak" % int(b.streak), Pal.ACCENT2 if int(b.streak) > 0 else Pal.PANEL2)
 	sk.tooltip_text = "Weekly check-in streak · best %d" % int(b.bestStreak)
 	sk.mouse_filter = Control.MOUSE_FILTER_STOP
 	chips.add_child(sk)
 	card.add(chips)
 	return card
-
-
-## A small tag with a pixel icon in front.
-static func _icon_tag(icon: String, text: String, color: Color) -> PanelContainer:
-	var p = PanelContainer.new()
-	p.add_theme_stylebox_override("panel", Kit.sbox(color, 5, null, 0, 7, 2))
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var h = Kit.hbox(4)
-	h.add_child(Kit.vcenter(Icons.rect(icon, 14)))
-	var dark = color.get_luminance() > 0.5
-	h.add_child(Kit.label(text, 12, Pal.INK if dark else Pal.TEXT, true))
-	p.add_child(h)
-	return p
 
 
 static func _photo(e: Dictionary, a: String):
@@ -206,7 +192,7 @@ static func _compare(st: Dictionary, angle: String, with_angle: Array, wu: Strin
 	if then_e.id != now_e.id:
 		var chips = Kit.flow(6)
 		chips.alignment = FlowContainer.ALIGNMENT_CENTER
-		chips.add_child(_icon_tag("calendar", "%d days apart" % Dates.days_between(then_e.date, now_e.date), Pal.ACCENT))
+		chips.add_child(Kit.icon_chip("calendar", "%d days apart" % Dates.days_between(then_e.date, now_e.date), Pal.ACCENT))
 		if TTUtil.truthy(then_e.get("weightKg")) and TTUtil.truthy(now_e.get("weightKg")):
 			var d = float(now_e.weightKg) - float(then_e.weightKg)
 			chips.add_child(Kit.tag("%s%s" % ["+" if d > 0.0 else ("−" if d < 0.0 else "±"), Fmt.fmt_weight(absf(d), wu)], Pal.GOOD if d < 0.0 else Pal.SECOND, d < 0.0, 12))

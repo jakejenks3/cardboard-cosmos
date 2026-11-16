@@ -28,7 +28,8 @@ extends RefCounted
 ##           weekendWarrior (0/1), maxRank,
 ##           benchRatio, squatRatio, deadliftRatio (best lift / bodyweight)}
 ## achievements: {id: {at: date key, sessionId}}            sessionId = id of the session / check-in / claim
-## items:        {id: {at, sessionId?, how: "start"|"drop"|"unlock"}}   (starter kit: at = "", no sessionId)
+## items:        {id: {at, sessionId?, how: "start"|"drop"|"unlock"|"shop"}}   (starter kit: at = "", no sessionId;
+##               shop: sessionId = the purchase id)
 ## pets:         {id: {at, sessionId}}
 ## campaign: {index (boss currently being fought), damage (dealt to it), totalDamage,
 ##            defeated: {boss id: {at, sessionId}}}
@@ -44,6 +45,12 @@ extends RefCounted
 ## quirks:  chase feats outside climbing (added after the port, dropped by the parity
 ##          tests): flags and bests read by the "quirk_*" trophies, plus the bookkeeping
 ##          they need (last run date, per-month / per-week tallies). See Derive._deal_quirks.
+## weekly:  the weekly bounties (added after the port, set by Bounty.settle at the end of
+##          Derive.derive, dropped by the parity tests): {wins, crushes, streak, bestStreak,
+##          coins, history: [record], current: record}. Not in initial_state: read it with
+##          Bounty.of(s) / Bounty.wins(s).
+## coins:   {earned, spent, balance, by: {...}} (added after the port, set by Wallet.tally,
+##          dropped by the parity tests). Read with Wallet.balance(s).
 ## streak:  {current, best, thisWeek, goal}
 ## chronicle: [{date, kind, icon, title, detail?, val?: {n, unit}, discipline?, ref?}]
 ##           kind: "start"|"level"|"stage"|"rank"|"achievement"|"item"|"pet"|"boss"|"pr"|"body"

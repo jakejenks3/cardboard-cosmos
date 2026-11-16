@@ -45,71 +45,18 @@ func build() -> void:
 # Small pieces
 # ---------------------------------------------------------------------------
 
-## A raised coloured pill: optional icon + bold text. With `tip` it shows a tooltip.
-static func pill(icon: String, text: String, color: Color, tip: String = "", fg = null, font_px: int = 12) -> PanelContainer:
-	var p = PanelContainer.new()
-	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	p.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 7, "pad_v": 3}))
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	p.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
-	p.tooltip_text = tip
-	var h = Kit.hbox(4)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if icon != "":
-		h.add_child(Kit.vcenter(Icons.rect(icon, 16)))
-	if text != "":
-		h.add_child(Kit.vcenter(Kit.label(text, font_px, Pal.INK if fg == null else fg, true)))
-	p.add_child(h)
-	return p
-
-
-## A pixel-font caption that is as big as fits in `width` (scale 4 down to 1).
-static func big_number(text: String, color: Color, width: int, max_scale: int = 4) -> TextureRect:
-	var w = PixelFont.measure(text).x
-	var sc = max_scale
-	while sc > 1 and w * sc > width:
-		sc -= 1
-	var r = PixelFont.rect(text, sc, color)
-	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	return r
-
-
-## Let clicks on a tile's contents reach the tappable card around them.
-static func passthrough(n: Node) -> void:
-	for c in n.get_children():
-		if c is Control and not (c is BaseButton):
-			c.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		passthrough(c)
-
-
-## A thick HP bar with the numbers written on it in the pixel font.
-static func hp_bar(hp_left: float, hp_max: float, height: int = 22, tip: String = "") -> Control:
-	var holder = MarginContainer.new()
-	holder.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
-	holder.tooltip_text = tip
-	holder.add_child(Kit.bar(hp_left / maxf(1.0, hp_max), Pal.HP, height))
-	var cap = PixelFont.rect("%s / %s" % [Xp.fmt_int(TTUtil.jsround(hp_left)), Xp.fmt_int(TTUtil.jsround(hp_max))], 2 if height >= 18 else 1, Color.WHITE)
-	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cc = Kit.center(cap)
-	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(cc)
-	return holder
-
-
 static func weak_pill(d: String) -> Control:
 	var tip = "Weak to %s: those sessions hit for ×%s" % [str(TT.DISCIPLINE_META[d].name).to_lower(), TTUtil.num_str(Campaign.WEAK_MULT)]
-	return pill(d, "×%s" % TTUtil.num_str(Campaign.WEAK_MULT), Pal.disc(d), tip, Color.WHITE, 13)
+	return Kit.pill(d, "×%s" % TTUtil.num_str(Campaign.WEAK_MULT), Pal.disc(d), tip, Color.WHITE, 13)
 
 
 ## The reward chips of a boss: XP in gold, its unique gear in its rarity colour.
 static func reward_pills(boss: Dictionary) -> Array:
-	var out = [pill("star", "+%s" % Xp.fmt_int(boss.xp), Pal.ACCENT, "Hero XP for the knockout", null, 13)]
+	var out = [Kit.pill("star", "+%s" % Xp.fmt_int(boss.xp), Pal.ACCENT, "Hero XP for the knockout", null, 13)]
 	if boss.get("rewardItem") != null:
 		var it = Items.by_id(boss.rewardItem)
 		if it != null:
-			out.append(pill("gift", it.name, Pal.rarity(it.rarity), "Drops unique gear: %s" % it.name, null, 12))
+			out.append(Kit.pill("gift", it.name, Pal.rarity(it.rarity), "Drops unique gear: %s" % it.name, null, 12))
 	return out
 
 
@@ -140,7 +87,7 @@ func _campaign(state: Dictionary) -> void:
 	card.add(bv)
 	var name_up = str(boss.name).to_upper()
 	if PixelFont.measure(name_up).x * 2 <= 370:
-		card.add(AdventureScreen.big_number(name_up, Pal.TEXT, 370, 3))
+		card.add(Kit.big_number(name_up, Pal.TEXT, 370, 3))
 	else:
 		var tl = Kit.para(boss.name, 18, null, true)
 		tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -149,7 +96,7 @@ func _campaign(state: Dictionary) -> void:
 	ep.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card.add(ep)
 	var how = "Every XP you earn from a session deals 1 damage.\nTrain its weakness for ×%s. Overkill carries over." % TTUtil.num_str(Campaign.WEAK_MULT)
-	card.add(Kit.pad(AdventureScreen.hp_bar(hp_left, float(boss.hp), 22, how), 0, 2, 0, 2))
+	card.add(Kit.pad(Kit.hp_bar(hp_left, float(boss.hp), 22, how), 0, 2, 0, 2))
 	var chips = Kit.hbox(8)
 	chips.alignment = BoxContainer.ALIGNMENT_CENTER
 	var weak = boss.get("weak")
@@ -159,6 +106,9 @@ func _campaign(state: Dictionary) -> void:
 		chips.add_child(p)
 	card.add(chips)
 	add_child(card)
+
+	# --- this week's bounty: a side quest sized from your own recent weeks ------
+	add_child(BountyView.card(true))
 
 	# --- three numbers ----------------------------------------------------------
 	var tiles = Kit.grid(3, 8)
@@ -184,7 +134,7 @@ func _stat_tile(value: String, caption: String, color: Color, icon: String) -> C
 	top.add_child(Kit.vcenter(Icons.rect(icon, 14)))
 	top.add_child(Kit.vcenter(Kit.label(caption, 11, Pal.MUTED, true)))
 	t.add(top)
-	t.add(AdventureScreen.big_number(value, color, 104, 3))
+	t.add(Kit.big_number(value, color, 104, 3))
 	return t
 
 
@@ -270,7 +220,7 @@ func _boss_tile(b: Dictionary, bi: int, status: String) -> Control:
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tile.add(n)
 	tile.tooltip_text = b.name if known else "Unknown boss"
-	AdventureScreen.passthrough(tile.box)
+	Kit.passthrough(tile.box)
 	return tile
 
 
@@ -298,20 +248,20 @@ static func open_boss(bi: int) -> void:
 			var at = ""
 			if c.defeated.has(b.id):
 				at = Dates.format_date(c.defeated[b.id].get("at", ""))
-			chips.add_child(AdventureScreen.pill("check", ("Defeated " + at).strip_edges(), Pal.GOOD))
+			chips.add_child(Kit.pill("check", ("Defeated " + at).strip_edges(), Pal.GOOD))
 		"current":
-			chips.add_child(AdventureScreen.pill("sword", "Fighting now", Pal.HP, "", Color.WHITE))
+			chips.add_child(Kit.pill("sword", "Fighting now", Pal.HP, "", Color.WHITE))
 		_:
-			chips.add_child(AdventureScreen.pill("lock", "%s HP" % Xp.fmt_int(b.hp), Pal.PANEL2, "", Pal.TEXT))
+			chips.add_child(Kit.pill("lock", "%s HP" % Xp.fmt_int(b.hp), Pal.PANEL2, "", Pal.TEXT))
 	if b.get("zoneBoss", false):
-		chips.add_child(AdventureScreen.pill("crown", "Zone boss", Pal.ACCENT2))
+		chips.add_child(Kit.pill("crown", "Zone boss", Pal.ACCENT2))
 	if known and b.get("weak") != null:
 		chips.add_child(AdventureScreen.weak_pill(b.weak))
 	for p in AdventureScreen.reward_pills(b):
 		chips.add_child(p)
 	s.box.add_child(chips)
 	if status == "current":
-		s.box.add_child(AdventureScreen.hp_bar(maxf(0.0, float(b.hp) - float(c.damage)), float(b.hp), 22))
+		s.box.add_child(Kit.hp_bar(maxf(0.0, float(b.hp) - float(c.damage)), float(b.hp), 22))
 	s.open()
 
 
@@ -328,10 +278,10 @@ func _quests(q: Dictionary) -> void:
 	top.add_child(_quest_ring("WEEKLY", q.weekly, "calendar"))
 	add_child(top)
 
-	add_child(Kit.section_title("Daily", AdventureScreen.pill("clock", "Midnight", Pal.PANEL2, "Daily quests reset at midnight", Pal.TEXT, 11)))
+	add_child(Kit.section_title("Daily", Kit.pill("clock", "Midnight", Pal.PANEL2, "Daily quests reset at midnight", Pal.TEXT, 11)))
 	add_child(_quest_list(q.daily))
 	var hint = "Last day!" if days_left == 0 else "%dd left" % days_left
-	add_child(Kit.section_title("Weekly", AdventureScreen.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly quests reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
+	add_child(Kit.section_title("Weekly", Kit.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly quests reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
 	add_child(_quest_list(q.weekly))
 
 
@@ -415,7 +365,7 @@ func _trophies(state: Dictionary) -> void:
 	var tf = Kit.hbox(6)
 	for t in tiers:
 		var tc = Pal.hex(Achievements.TIER_COLOR[t])
-		var tp = AdventureScreen.pill(TIER_ICON[t], "%d/%d" % [tiers[t][0], tiers[t][1]], tc, "%s: %d of %d" % [t.capitalize(), tiers[t][0], tiers[t][1]], null, 13)
+		var tp = Kit.pill(TIER_ICON[t], "%d/%d" % [tiers[t][0], tiers[t][1]], tc, "%s: %d of %d" % [t.capitalize(), tiers[t][0], tiers[t][1]], null, 13)
 		tp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tf.add_child(tp)
 	sum.add(tf)
@@ -454,7 +404,7 @@ func _trophies(state: Dictionary) -> void:
 		add_child(Kit.section_title("Next up"))
 		add_child(_trophy_grid(todo))
 	if not got.is_empty():
-		add_child(Kit.section_title("Earned", AdventureScreen.pill("check", str(got.size()), Pal.GOOD)))
+		add_child(Kit.section_title("Earned", Kit.pill("check", str(got.size()), Pal.GOOD)))
 		add_child(_trophy_grid(got))
 
 
@@ -531,7 +481,7 @@ func _trophy_tile(r: Dictionary) -> Control:
 	if p != null and not hidden:
 		tip += "\n" + Fmt.fmt_progress(p, App.settings())
 	tile.tooltip_text = tip
-	AdventureScreen.passthrough(tile.box)
+	Kit.passthrough(tile.box)
 	return tile
 
 
@@ -549,10 +499,10 @@ static func open_trophy(r: Dictionary) -> void:
 	s.box.add_child(d)
 	var chips = Kit.flow(8)
 	chips.alignment = FlowContainer.ALIGNMENT_CENTER
-	chips.add_child(AdventureScreen.pill(TIER_ICON[tier], tier.capitalize(), tc))
-	chips.add_child(AdventureScreen.pill("star", "+%s" % Xp.fmt_int(a.xp), Pal.ACCENT))
+	chips.add_child(Kit.pill(TIER_ICON[tier], tier.capitalize(), tc))
+	chips.add_child(Kit.pill("star", "+%s" % Xp.fmt_int(a.xp), Pal.ACCENT))
 	if u != null:
-		chips.add_child(AdventureScreen.pill("check", Dates.format_date(u.get("at", "")), Pal.GOOD))
+		chips.add_child(Kit.pill("check", Dates.format_date(u.get("at", "")), Pal.GOOD))
 	s.box.add_child(chips)
 	if r.p != null and not hidden:
 		var col = Pal.disc(a.group) if TT.DISCIPLINE_META.has(a.group) else Pal.ACCENT

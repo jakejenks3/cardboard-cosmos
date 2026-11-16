@@ -1,29 +1,40 @@
 class_name ArmoryScreen
 extends UiScreen
-## Armory tab: dress the hero in unlocked gear, pick a companion, change the look.
-## Port of tiny-titan/src/screens/Armory.tsx.
+## Armory tab: dress the hero in unlocked gear, pick a companion, change the
+## look, and spend coins in the shop.
+## Port of tiny-titan/src/screens/Armory.tsx (the shop was added after the port).
 ##
 ## Tapping an owned item puts it on at once (sparks, and the preview hero
 ## updates); tapping what the hero already wears, or a locked item, opens its
 ## detail sheet. The small "i" on a tile (or a right-click) opens the details.
-## Companions work the same way.
+## Companions work the same way. Shop items show the hero trying them on, with
+## the price; tapping one opens its sheet, where it can be bought.
 
 const TILE_COLS = 3
 
-## "head" … "aura" | "pets" | "look"
+## "shop" | "head" … "aura" | "pets" | "look"
 var tab: String = "head"
+## Shop list: "sale" (not owned yet) | "owned".
+var shop_show: String = "sale"
 
 
 func build() -> void:
+	if App.armory_tab_request != "":
+		tab = App.armory_tab_request
+		App.armory_tab_request = ""
 	var state = App.state
 
-	# --- header: the title and two count chips --------------------------------
+	# --- header: the title, the coins and two count chips ------------------------
 	var head = Kit.hbox(8)
 	var title = Kit.h1("Armory")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	head.add_child(AdventureScreen.pill("chest", "%d/%d" % [state.items.size(), Items.all().size()], Pal.PANEL2, "Gear collected", Pal.TEXT))
-	head.add_child(AdventureScreen.pill("paw", "%d/%d" % [state.pets.size(), Pets.all().size()], Pal.PANEL2, "Companions found", Pal.TEXT))
+	var coins = Kit.coin_pill(App.coins(), "Coins to spend in the shop. Tap to open it.", 13)
+	coins.gui_input.connect(_coins_input)
+	coins.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	head.add_child(coins)
+	head.add_child(Kit.pill("chest", "%d/%d" % [state.items.size(), Items.all().size()], Pal.PANEL2, "Gear collected", Pal.TEXT))
+	head.add_child(Kit.pill("paw", "%d/%d" % [state.pets.size(), Pets.all().size()], Pal.PANEL2, "Companions found", Pal.TEXT))
 	add_child(head)
 
 	add_child(_hero_card())
@@ -36,8 +47,15 @@ func build() -> void:
 		add_child(card)
 	elif tab == "pets":
 		add_child(_pet_grid())
+	elif tab == "shop":
+		_shop()
 	else:
 		add_child(_item_grid())
+
+
+func _coins_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_set_tab("shop")
 
 
 # ---------------------------------------------------------------------------
@@ -76,11 +94,11 @@ func _hero_card() -> Control:
 	for d in TT.DISCIPLINES:
 		var v = float(perks.xp.get(d, 0))
 		if v > 0.0:
-			chips.add_child(AdventureScreen.pill(d, "+%d%% XP" % TTUtil.jsround(v * 100.0), Pal.GOOD, "+%d%% %s XP" % [TTUtil.jsround(v * 100.0), str(TT.DISCIPLINE_META[d].name).to_lower()]))
+			chips.add_child(Kit.pill(d, "+%d%% XP" % TTUtil.jsround(v * 100.0), Pal.GOOD, "+%d%% %s XP" % [TTUtil.jsround(v * 100.0), str(TT.DISCIPLINE_META[d].name).to_lower()]))
 	if float(perks.get("luck", 0)) > 0.0:
-		chips.add_child(AdventureScreen.pill("dice", "+%d%% luck" % TTUtil.jsround(float(perks.luck) * 100.0), Pal.GOOD, "Better loot drops"))
+		chips.add_child(Kit.pill("dice", "+%d%% luck" % TTUtil.jsround(float(perks.luck) * 100.0), Pal.GOOD, "Better loot drops"))
 	if chips.get_child_count() == 0:
-		chips.add_child(AdventureScreen.pill("bolt", "No bonuses yet", Pal.PANEL2, "Gear and companions with perks add XP bonuses. Perks stack.", Pal.MUTED))
+		chips.add_child(Kit.pill("bolt", "No bonuses yet", Pal.PANEL2, "Gear and companions with perks add XP bonuses. Perks stack.", Pal.MUTED))
 	card.add(chips)
 	return card
 
@@ -98,7 +116,7 @@ static func perk_bits(perks: Dictionary) -> Array:
 
 
 # ---------------------------------------------------------------------------
-# Slot / pets / look chips
+# Shop / slot / pets / look chips
 # ---------------------------------------------------------------------------
 
 func _tabs() -> Control:
@@ -110,6 +128,9 @@ func _tabs() -> Control:
 		if App.state.items.has(it.id):
 			counts[it.slot][0] += 1
 	var f = Kit.flow(6)
+	var shop_chip = Kit.chip("Shop", tab == "shop", _set_tab.bind("shop"), Pal.ACCENT)
+	shop_chip.icon = Icons.tex("bag")
+	f.add_child(shop_chip)
 	for s in TT.SLOTS:
 		var c = counts.get(s, [0, 0])
 		f.add_child(Kit.chip("%s %d/%d" % [TT.SLOT_NAMES[s], c[0], c[1]], tab == s, _set_tab.bind(s)))
@@ -136,6 +157,132 @@ func _on_look(patch: Dictionary) -> void:
 
 
 # ---------------------------------------------------------------------------
+# The shop
+# ---------------------------------------------------------------------------
+
+func _shop() -> void:
+	var state = App.state
+	var wk = Dates.week_key(App.today)
+	var balance = App.coins()
+
+	# --- the purse ---------------------------------------------------------------
+	var purse = Kit.card(6, Callable(), 12)
+	purse.accent(Pal.ACCENT)
+	purse.mouse_filter = Control.MOUSE_FILTER_STOP
+	purse.tooltip_text = "You earn 1 coin for every 10 XP you log.\nWeekly bounties, bosses, trophies and quests pay extra."
+	var prow = Kit.hbox(10)
+	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prow.add_child(Kit.vcenter(Icons.rect("coin", 40)))
+	prow.add_child(Kit.vcenter(PixelFont.rect(Xp.fmt_int(balance), 4, Pal.ACCENT)))
+	var pcap = Kit.vbox(0)
+	pcap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pcap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	pcap.add_child(Kit.label("coins", 14, null, true))
+	var c = state.get("coins")
+	if c is Dictionary:
+		pcap.add_child(Kit.muted("earned %s · spent %s" % [Xp.fmt_int(c.earned), Xp.fmt_int(c.spent)], 11))
+	prow.add_child(pcap)
+	purse.add(prow)
+	add_child(purse)
+
+	# --- this week's deal -----------------------------------------------------------
+	var deal = Items.by_id(Wallet.deal_id(wk))
+	if deal != null:
+		add_child(_deal_card(deal, wk))
+
+	# --- everything for sale ---------------------------------------------------------
+	var all = Wallet.shop_items()
+	var n_owned = all.filter(func(i): return state.items.has(i.id)).size()
+	add_child(Kit.segmented([
+		{"value": "sale", "label": "For sale %d" % (all.size() - n_owned)},
+		{"value": "owned", "label": "Bought %d" % n_owned},
+	], shop_show, _set_shop_show, Pal.ACCENT))
+	var list = all.filter(func(i): return state.items.has(i.id) == (shop_show == "owned"))
+	if list.is_empty():
+		if shop_show == "owned":
+			add_child(Kit.empty("bag", "Nothing bought yet", "Tap anything for sale to try it on."))
+		else:
+			add_child(Kit.empty("trophy", "You bought the lot", "The shelves are empty. Respect."))
+		return
+	var g = Kit.grid(TILE_COLS, 8)
+	var loadout = App.loadout()
+	for it in list:
+		g.add_child(_shop_tile(it, wk, loadout))
+	add_child(g)
+
+
+func _set_shop_show(v) -> void:
+	shop_show = str(v)
+	Sfx.tick()
+	rebuild()
+
+
+## The week's 30%-off item, with the hero trying it on.
+func _deal_card(it: Dictionary, wk: String) -> Control:
+	var state = App.state
+	var owned = state.items.has(it.id)
+	var rc = Pal.rarity(it.rarity)
+	var card = Kit.card(6, ArmoryDetail.open_item.bind(it), 10)
+	card.accent(Pal.GOOD, true)
+	var row = Kit.hbox(12)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var pic = PixelRect.make(Art.item_tryon_texture(it.id, state, App.profile(), App.loadout()), 2.0)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var plate = PanelContainer.new()
+	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": rc, "lip": 0, "inset": true, "pad_h": 2, "pad_v": 2}))
+	plate.add_child(pic)
+	row.add_child(plate)
+	var main = Kit.vbox(5)
+	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var kick = Kit.hbox(6)
+	kick.add_child(Kit.tag("DEAL OF THE WEEK", Pal.GOOD, true, 10))
+	kick.add_child(Kit.tag("-%d%%" % TTUtil.jsround(Wallet.DEAL_OFF * 100.0), Pal.ACCENT, true, 10))
+	main.add_child(kick)
+	main.add_child(Kit.clip(it.name, 17, null, true))
+	var prices = Kit.hbox(8)
+	if owned:
+		prices.add_child(Kit.pill("check", "Yours already", Pal.PANEL2, "", Pal.TEXT))
+	else:
+		prices.add_child(Kit.coin_pill(Wallet.price(it, wk), "", 14))
+		prices.add_child(Kit.vcenter(Kit.muted("was %s" % Xp.fmt_int(Wallet.base_price(it)), 12)))
+	main.add_child(prices)
+	var left = Bounty.days_left(App.today)
+	main.add_child(Kit.muted("New deal on Monday (%d day%s left)" % [left, "" if left == 1 else "s"], 11))
+	row.add_child(main)
+	row.add_child(Kit.vcenter(Icons.rect("chevron_right", 18)))
+	card.add(row)
+	return card
+
+
+## A shop tile: the hero trying the item on, its name and its price.
+func _shop_tile(it: Dictionary, wk: String, loadout: Dictionary) -> Control:
+	var state = App.state
+	var owned = state.items.has(it.id)
+	var rc = Pal.rarity(it.rarity)
+	var tex = Art.item_tryon_texture(it.id, state, App.profile(), loadout)
+	var check = Wallet.can_buy(state, it, wk)
+	var tip = "%s · %s" % [str(it.rarity).capitalize(), TT.SLOT_NAMES[it.slot]]
+	var perks = Items.perk_summary(it.get("perk"))
+	if not perks.is_empty():
+		tip += " · " + ", ".join(PackedStringArray(perks))
+	var card = _tile(PixelRect.make(tex, 2.0), it.name, rc, false, false, ArmoryDetail.open_item.bind(it), Callable(), tip, null, false)
+	if owned:
+		card.add(Kit.center(Kit.pill("check", "Owned", Pal.PANEL2, "", Pal.TEXT, 11)))
+	elif check.why == "level":
+		card.add(Kit.center(Kit.pill("lock", "Lv %d" % Wallet.min_level(it), Pal.PANEL2, "", Pal.MUTED, 11)))
+	else:
+		var price = Kit.pill("coin", Xp.fmt_int(check.price), Pal.ACCENT if check.ok else Pal.PANEL2, "", null if check.ok else Pal.MUTED, 12)
+		card.add(Kit.center(price))
+	if it.id == Wallet.deal_id(wk) and not owned:
+		card.accent(Pal.GOOD)
+	Kit.passthrough(card.box)
+	return card
+
+
+# ---------------------------------------------------------------------------
 # Item grid
 # ---------------------------------------------------------------------------
 
@@ -154,6 +301,7 @@ static func _item_rank(it: Dictionary, state: Dictionary) -> int:
 func _item_grid() -> Control:
 	var g = Kit.grid(TILE_COLS, 8)
 	var loadout = App.loadout()
+	var wk = Dates.week_key(App.today)
 	if tab == "body":
 		var bare = loadout.duplicate()
 		bare["body"] = null
@@ -162,6 +310,10 @@ func _item_grid() -> Control:
 		g.add_child(_tile(PixelRect.make(tex, 2.0), "Shirtless", Pal.LINE, shirtless, false, Callable() if shirtless else _equip_now.bind("body", null), Callable(), "Show off the gains", null, true))
 	for it in ArmoryScreen.slot_items(tab, App.state):
 		var owned = App.state.items.has(it.id)
+		if not owned and Wallet.is_shop(it):
+			# For sale: shown on the hero, with its price.
+			g.add_child(_shop_tile(it, wk, loadout))
+			continue
 		var equipped = loadout.get(it.slot) == it.id
 		var tex = Art.item_preview_texture(it.id, App.state, App.profile(), loadout, not owned)
 		var tap = Callable()
@@ -194,7 +346,7 @@ func _tap_burst(card: Control, col: Color, cb: Callable) -> void:
 ## One grid tile: the picture on a rarity-coloured edge and the name under it.
 ## Worn = gold edge and an "ON" chip; locked = dimmed with a lock; the small
 ## "i" opens the details (as does a right-click).
-func _tile(pic: Control, title: String, rc: Color, active: bool, locked: bool, on_tap: Callable, on_info: Callable, tip: String = "", progress = null, burst: bool = false) -> Control:
+func _tile(pic: Control, title: String, rc: Color, active: bool, locked: bool, on_tap: Callable, on_info: Callable, tip: String = "", progress = null, burst: bool = false) -> Card:
 	var card = Kit.card(4, Callable(), 6)
 	if on_tap.is_valid():
 		card.on_tap(_tap_burst.bind(card, rc, on_tap) if burst else on_tap)
@@ -221,7 +373,7 @@ func _tile(pic: Control, title: String, rc: Color, active: bool, locked: bool, o
 		top.add_child(info)
 	top.add_child(Kit.spacer())
 	if active:
-		top.add_child(AdventureScreen.pill("", "ON", Pal.ACCENT, "", null, 11))
+		top.add_child(Kit.pill("", "ON", Pal.ACCENT, "", null, 11))
 	elif locked:
 		top.add_child(Icons.rect("lock", 20))
 	holder.add_child(top)
@@ -232,7 +384,7 @@ func _tile(pic: Control, title: String, rc: Color, active: bool, locked: bool, o
 	card.add(n)
 	if progress != null:
 		card.add(Kit.bar(Goals.progress_ratio(progress), rc, 4))
-	AdventureScreen.passthrough(card.box)
+	Kit.passthrough(card.box)
 	return card
 
 

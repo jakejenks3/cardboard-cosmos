@@ -194,45 +194,28 @@ func _breakdown() -> String:
 	return "\n".join(bits)
 
 
-## A raised coloured pill: icon + bold text.
-static func _pill(icon: String, text: String, color: Color, fg = null) -> Control:
-	var p = PanelContainer.new()
-	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	p.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 7, "pad_v": 3}))
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var h = Kit.hbox(4)
-	if icon != "":
-		h.add_child(Kit.vcenter(Icons.rect(icon, 16)))
-	if text != "":
-		h.add_child(Kit.vcenter(Kit.label(text, 12, Pal.INK if fg == null else fg, true)))
-	p.add_child(h)
-	return p
-
-
 ## Under the XP: a few chips instead of a sentence (the full breakdown is the tooltip).
 func _summary():
 	var f = Kit.flow(6)
 	f.alignment = FlowContainer.ALIGNMENT_CENTER
 	if _import_ev != null:
-		f.add_child(_pill("calendar", "%d sessions" % int(_import_ev.count), Pal.PANEL2, Pal.TEXT))
+		f.add_child(Kit.pill("calendar", "%d sessions" % int(_import_ev.count), Pal.PANEL2, "", Pal.TEXT))
 		for d in TT.DISCIPLINES:
 			var v = int(_import_ev.byDiscipline.get(d, 0))
 			if v > 0:
-				f.add_child(_pill(d, "+" + Xp.fmt_int(v), Pal.disc(d), Color.WHITE))
+				f.add_child(Kit.pill(d, "+" + Xp.fmt_int(v), Pal.disc(d), "", Color.WHITE))
 		return f
 	if _body_ev != null:
 		if int(_body_ev.amount) > 0:
-			f.add_child(_pill("scale", "Weekly check-in", Pal.GOOD))
+			f.add_child(Kit.pill("scale", "Weekly check-in", Pal.GOOD))
 		else:
-			f.add_child(_pill("check", "Logged", Pal.PANEL2, Pal.TEXT))
+			f.add_child(Kit.pill("check", "Logged", Pal.PANEL2, "", Pal.TEXT))
 		return f
 	if _xp_ev != null:
 		if int(_xp_ev.prBonus) > 0:
-			f.add_child(_pill("trophy", "PR +%s" % Xp.fmt_int(_xp_ev.prBonus), Pal.ACCENT))
+			f.add_child(Kit.pill("trophy", "PR +%s" % Xp.fmt_int(_xp_ev.prBonus), Pal.ACCENT))
 		if float(_xp_ev.get("bonusPct", 0)) > 0.0:
-			f.add_child(_pill("chest", "+%d%% gear" % TTUtil.jsround(float(_xp_ev.bonusPct) * 100.0), Pal.GOOD))
+			f.add_child(Kit.pill("chest", "+%d%% gear" % TTUtil.jsround(float(_xp_ev.bonusPct) * 100.0), Pal.GOOD))
 	if f.get_child_count() == 0:
 		f.queue_free()
 		return null
@@ -283,7 +266,7 @@ func _run() -> void:
 	for i in range(_cards.size()):
 		var delay = 0.3
 		if i > 0:
-			delay = 1.1 if _cards[i - 1].type == "boss" else 0.65
+			delay = 1.1 if ["boss", "bounty"].has(_cards[i - 1].type) else 0.65
 		# A long reel (a big import) speeds up a little after the first ten.
 		if i >= 10:
 			delay *= 0.6
@@ -339,6 +322,14 @@ func _reveal(i: int, animate: bool) -> void:
 					_confetti.burst(1.2)
 				else:
 					Sfx.hit()
+			"bounty":
+				if ev.defeated or ev.crushed:
+					Sfx.boss_down()
+					_confetti.burst(1.0)
+				else:
+					Sfx.hit()
+			"coins":
+				Sfx.claim()
 			"rank":
 				Sfx.rank()
 				_confetti.burst(1.2)
@@ -482,7 +473,7 @@ func _burst_color(ev: Dictionary):
 				return Pal.rarity(pet.rarity)
 		"rank":
 			return Pal.hex(Xp.RANKS[int(ev.to)].color)
-		"stage", "pr":
+		"stage", "pr", "coins":
 			return Pal.ACCENT
 	return null
 
@@ -544,6 +535,18 @@ func _build_card(ev: Dictionary, animate: bool):
 	match ev.type:
 		"boss":
 			return _boss_card(ev, animate)
+		"bounty":
+			return _bounty_card(ev, animate)
+		"coins":
+			var c = _rcard(Pal.ACCENT)
+			c.main.add_child(_kicker("COINS", Pal.ACCENT))
+			var h = Kit.hbox(8)
+			h.add_child(PixelFont.rect("+" + Xp.fmt_int(ev.amount), 3, Pal.ACCENT))
+			h.add_child(Kit.vcenter(Kit.label("for the shop", 14, null, true)))
+			c.main.add_child(h)
+			c.main.add_child(_sub("%s in your purse" % Xp.fmt_int(ev.balance)))
+			c.panel.tooltip_text = "1 coin per 10 XP, plus bounties, bosses, trophies and quests. Spend them in Armory, Shop."
+			return _finish(c, _icon_cell("coin", Pal.ACCENT))
 		"rank":
 			var rank = Xp.RANKS[int(ev.to)]
 			var rc = Pal.hex(rank.color)
@@ -634,6 +637,68 @@ func _boss_card(ev: Dictionary, animate: bool) -> Control:
 		else:
 			_boss_foot(parts, float(ev.hpAfter), false)
 	return card
+
+
+## The weekly bounty taking a hit (and going down), like the boss card but violet.
+func _bounty_card(ev: Dictionary, animate: bool) -> Control:
+	var mon = Bounty.monster(ev.monster)
+	var won = ev.defeated or ev.crushed
+	var c = _rcard(Pal.BOUNTY, true)
+	var bv = BossView.new()
+	bv.setup(ev.monster, 64.0, false)
+	bv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var kick_row = Kit.hbox(6)
+	kick_row.add_child(Kit.tag("WEEKLY BOUNTY", Pal.BOUNTY, false, 10))
+	if ev.weak:
+		kick_row.add_child(Kit.tag("×%s" % TTUtil.num_str(Bounty.WEAK_MULT), Pal.ACCENT, true, 10))
+	c.main.add_child(kick_row)
+	c.main.add_child(_title_l(mon.name))
+	var max_hp = maxf(1.0, float(ev.maxHp))
+	var hp = Kit.bar(float(ev.hpBefore) / max_hp, Pal.BOUNTY, 12)
+	c.main.add_child(Kit.pad(hp, 0, 2, 0, 2))
+	var foot = Kit.rich("", 13, Pal.with_alpha(Pal.TEXT, 0.75))
+	c.main.add_child(foot)
+	if ev.weak:
+		c.panel.tooltip_text = "Super effective: its weakness hits for ×%s." % TTUtil.num_str(Bounty.WEAK_MULT)
+	var hit_text = "[b]−%s[/b] · %s / %s HP" % [Xp.fmt_int(ev.damage), Xp.fmt_int(ev.hpAfter), Xp.fmt_int(ev.maxHp)]
+	var parts = {"ev": ev, "bv": bv, "kick_row": kick_row, "foot": foot, "panel": c.panel}
+	var card = _finish(c, bv)
+	if animate:
+		foot.text = "[b]−%s[/b] · %s / %s HP" % [Xp.fmt_int(ev.damage), Xp.fmt_int(ev.hpBefore), Xp.fmt_int(ev.maxHp)]
+		var tw = card.create_tween()
+		tw.tween_interval(0.2)
+		tw.tween_callback(func():
+			hp.set_value(float(ev.hpAfter) / max_hp, true, 0.7)
+			bv.hit()
+			foot.text = hit_text)
+		if won:
+			tw.tween_interval(0.7)
+			tw.tween_callback(func(): _bounty_down(parts, true))
+	else:
+		hp.set_value(float(ev.hpAfter) / max_hp, false)
+		if won:
+			_bounty_down(parts, false)
+		else:
+			foot.text = hit_text
+	return card
+
+
+func _bounty_down(parts: Dictionary, animate: bool) -> void:
+	if not is_instance_valid(parts.panel):
+		return
+	var ev = parts.ev
+	Kit.clear(parts.kick_row)
+	parts.kick_row.add_child(_kicker("BOUNTY CRUSHED" if ev.crushed else "BOUNTY CLAIMED", Pal.ACCENT))
+	parts.kick_row.add_child(Icons.rect("coin", 16))
+	parts.bv.set_dim(true)
+	parts.panel.accent(Pal.ACCENT, true)
+	var text = "[b][color=%s]+%s coins[/color][/b]" % [Kit.hex_of(Pal.ACCENT), Xp.fmt_int(ev.coins)]
+	if int(ev.streak) >= 2:
+		text += " · %d in a row" % int(ev.streak)
+	parts.foot.text = text
+	if animate:
+		Kit.pop(parts.panel, 1.04, 0.3)
+		Kit.burst(parts.panel, Pal.ACCENT, 28)
 
 
 func _boss_foot(parts: Dictionary, hp: float, down: bool) -> void:

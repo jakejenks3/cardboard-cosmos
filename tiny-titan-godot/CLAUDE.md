@@ -19,7 +19,7 @@ is the Windows handoff.
 
 ## What exists (all working as of the handoff)
 
-- `game/`    Rules engine: XP, levels, PRs, 24-boss campaign, 160 trophies, 75 items,
+- `game/`    Rules engine: XP, levels, PRs, 24-boss campaign, 171 trophies, 122 items,
              15 pets, quests, streaks, loot. Everything is derived by replaying the log,
              never stored. Ported from a TypeScript version and locked to it by fixtures
              in `tests/parity/`. Don't change rules or numbers unless asked; if you do,
@@ -64,7 +64,7 @@ is the Windows handoff.
   `prs.longestHangSec`, 7 `hang_*` trophies, Journey chips); photo milestones
   (`s.body.photoSpanDays` / `photoMonths`, 5 `body_*` trophies, a "One month on" reel moment
   from `Diff.PHOTO_MILESTONES`). Parity strips `body.*` photo keys via dotted
-  `POST_PORT_STATE_KEYS`. Catalog: 160 trophies. Unit test: `tests/extras_test.gd`.
+  `POST_PORT_STATE_KEYS`. Unit test: `tests/extras_test.gd`.
 - Lift library (added 2026-11-15, evening): Journey → Lifts. `game/lift_library.gd` holds the
   catalog (about 170 lifts as rows of name, part, equipment, family, also-works, tip, other
   names) and the pure logic: `rows(sessions)` joins the catalog with the log (other names
@@ -76,6 +76,38 @@ is the Windows handoff.
 - 19 more chase trophies (ids `quirk_*`: Five by Five, Ladder, Pyramid, Streak Week,
   On the Nose, Commuter, Friday the 13th…) read `s.quirks`, filled by
   `Derive._deal_quirks`; also dropped by parity. Unit test: `tests/quirks_test.gd`.
+- Weekly bounty, coins, shop, recaps (added 2026-11-15, night):
+  - `game/bounty.gd`: a small boss every Monday-week. HP = 90% of the average session XP of
+    the four weeks before (floor 500); the week's session XP is the damage (x1.5 for its
+    weak discipline); beating it pays coins, 150% of its HP "crushes" it. It is a pure
+    function of the log, run at the end of `Derive.derive` (`Bounty.settle` fills
+    `s.weekly`); wins are NOT in `s.chronicle` (the Story page joins `Bounty.chronicle`).
+    Screens: `ui/screens/bounty_view.gd` (card on Hero and Adventure, detail sheet), reel
+    card type `bounty`. 18 monsters, three new boss sprites (mimic, bat, eye).
+  - `game/wallet.gd`: coins are counted from the log (`Wallet.tally` fills `s.coins`;
+    1 coin per 10 XP, plus bounties, bosses, trophies, quests). Purchases ARE stored:
+    `saved.purchases` = [{id, itemId, cost, at, date}], replayed as steps
+    (`Derive._apply_purchase`, item `how: "shop"`). `App.buy_item(id)`. Shop items are
+    catalog items with `unlock.kind == "shop"`; one is 30% off each week (`Wallet.deal_id`).
+    Screen: Armory -> Shop (`ui/screens/armory.gd`, buy sheet in `armory_detail.gd`);
+    unowned shop gear is drawn on the hero with `Art.item_tryon_texture`.
+  - 47 more pieces of gear (catalog 122): 33 in the shop, 8 for bounty wins (`bounty_*`),
+    6 for hangboard / routes / photos / lift variety / card hands / Friday the 13th. New
+    drawing kinds are listed at the top of `game/items.gd`; all are new `match` branches in
+    `avatar/equipment.gd`, so the ported art is untouched. 11 more trophies (`bounty_*`,
+    `shop_*`, `items_80`): catalog 171.
+  - Parity: `Items.restrict_to(ids)` pins the 75 ported items the way
+    `Achievements.restrict_to` pins the trophies, and `weekly` / `coins` are in
+    `POST_PORT_STATE_KEYS`. The reel's new events come from `Diff.diff_extras`, called by
+    `App`, so `diff_states` / `diff_bulk` / `diff_body` still match the fixtures.
+  - `game/recap.gd` + `ui/screens/recap_sheet.gd`: a week or month as one poster (Journey ->
+    Stats -> Recaps, the Hero tab's "This week" card, and a "recap is ready" card at the
+    start of a week / month). "Save picture" renders the poster off screen to a PNG in
+    Pictures/Tiny Titan (`App.recap_dir()`; inside the data folder during tests).
+  - Shared widgets moved into `ui/kit.gd`: `pill`, `icon_chip`, `coin_pill`, `big_number`,
+    `passthrough`, `hp_bar`, `switch` (`ui/widgets/pix_switch.gd`). Icons `coin`, `bag`.
+  - Tests: `tests/bounty_test.gd` (bounty, coins, shop, new art), walkthroughs
+    `tests/shots/shop.gd` (year and week data) and `tests/shots/bounty.gd` (year).
 
 ## Rules that matter in this codebase
 
@@ -117,7 +149,7 @@ Walkthroughs that drive the real UI and save screenshots (set `TINY_TITAN_DATA` 
 godot --path . res://tests/shots.tscn -- res://tests/shots/e2e.gd fresh
 ```
 
-Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, settings, inbox,
+Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, shop, bounty, settings, inbox,
 themes, climb_more (routes and hangboard), realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -135,8 +167,11 @@ the check.
   again" warning and are left unticked.
 - In the Armory, clicking owned gear or a pet equips it at once; the small "i" opens
   details.
-- A few helper widgets (coloured pill, raised key, badge, on/off switch, check box) were
-  built inside individual screens and could move into `ui/kit.gd`.
+- A walkthrough that hits a script error still prints its checks: read the log for
+  `ERROR` as well as for failed checks.
+- Logging an old session for an earlier week changes the bounty HP of the weeks after it
+  (the HP is built from the four weeks before), so a past bounty can flip. By design:
+  the bounties are a pure function of the log.
 - Strava import is deliberately left out for now.
 
 ## Git
@@ -146,3 +181,6 @@ the check.
   The repo root is a different game: never touch it.
 - This local folder is an unzipped copy, not a git clone (checked 2026-11-15). Ask the
   user before pushing anything.
+- Commits are made in a clone at `C:\Users\jdjen\Documents\cardboard-cosmos` (same branch):
+  copy the changed files into its `tiny-titan-godot/` folder (keep the clone's own
+  `project.godot`; skip `.godot/` and `shots-today/`) and commit there.

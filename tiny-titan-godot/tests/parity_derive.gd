@@ -17,7 +17,7 @@ const EPS = 1e-6
 ## Added to the engine after the port, so the fixtures (written by the
 ## TypeScript engine) know nothing about them: dropped before comparing.
 ## State added after the port ("a.b" reaches into a nested dictionary): stripped before comparing.
-const POST_PORT_STATE_KEYS = ["hands", "quirks", "body.firstPhotoDate", "body.photoSpanDays", "body.photoMonths", "body.photoMonthKeys"]
+const POST_PORT_STATE_KEYS = ["hands", "quirks", "weekly", "coins", "body.firstPhotoDate", "body.photoSpanDays", "body.photoMonths", "body.photoMonthKeys"]
 const MAX_SHOWN = 15
 
 
@@ -55,6 +55,11 @@ func _run() -> bool:
 	for a in core.catalog.achievements:
 		fixture_ids.append(a.id)
 	Achievements.restrict_to(fixture_ids)
+	# The same for gear: the shop, bounty and newer unlock items came after the port.
+	var fixture_items: Array = []
+	for it in core.catalog.items:
+		fixture_items.append(it.id)
+	Items.restrict_to(fixture_items)
 
 	var derive_passed: int = 0
 	var started: int = Time.get_ticks_msec()

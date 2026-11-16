@@ -22,6 +22,14 @@ extends RefCounted
 ##   backpack{color,accent?} crashpad{color,accent} barbell{} shield{color,accent}
 ##   saddlebag{color} belt{color,buckle} chalkbag{color} pendant{color}
 ##   medal{ribbon,disc} bib{color} aura{style: flame|gold|rainbow|frost}
+## Added after the port (shop, bounty and newer unlocks):
+##   headphones{color,accent?} wizard{color,accent?} viking{color,accent?} catears{color,accent?}
+##   partyhat{color,accent?} halo{color} mask{color,accent?} beard{color} glasses3d{}
+##   armor{color,accent?} gi{color,accent} shirt patterns flower|tux, boxing{color,accent?}
+##   kilt{color,accent} boots{color,accent?,jets?} wings{color,accent?,style?: bat}
+##   sword{color,accent?} banner{color,accent?} scarf{color} bowtie{color}
+##   champbelt{color,buckle,gem?} sash{color} aura styles spark|leaf|hearts|shadow|coins
+## unlock {"kind": "shop", "price": int, "minHeroLevel"?: int}: bought with coins (see Wallet).
 
 ## Loot weights per rarity (legendaries never drop: they are earned).
 const RARITY_WEIGHT = {
@@ -36,6 +44,17 @@ const _PERK_LABEL = {"lift": "lifting", "climb": "climbing", "run": "running", "
 
 static var _all = null
 static var _by_id = null
+## When set (an Array of ids), `all()` returns only those items, in catalog
+## order. The parity tests use it to replay with the 75 items the TypeScript
+## engine had (see Achievements.restrict_to).
+static var _only = null
+
+
+static func restrict_to(ids) -> void:
+	_only = ids
+	_all = null
+	_by_id = null
+	Wallet.reset_cache()
 
 
 static func _start() -> Dictionary:
@@ -44,6 +63,14 @@ static func _start() -> Dictionary:
 
 static func _drop(min_hero_level = null) -> Dictionary:
 	var u = {"kind": "drop"}
+	if min_hero_level != null:
+		u["minHeroLevel"] = min_hero_level
+	return u
+
+
+# Sold in the shop for coins, optionally only from a hero level on.
+static func _shop(price: int, min_hero_level = null) -> Dictionary:
+	var u = {"kind": "shop", "price": price}
 	if min_hero_level != null:
 		u["minHeroLevel"] = min_hero_level
 	return u
@@ -96,7 +123,11 @@ static func _min_disc_level(s: Dictionary) -> int:
 ## Every item, in catalog order (do not mutate).
 static func all() -> Array:
 	if _all == null:
-		_all = _build()
+		var list: Array = _build()
+		if _only != null:
+			var keep: Array = _only
+			list = list.filter(func(i): return keep.has(i.id))
+		_all = list
 	return _all
 
 
@@ -140,6 +171,11 @@ static func unlock_hint(it: Dictionary) -> String:
 		return "Random drop"
 	if kind == "unlock":
 		return it.unlock.hint
+	if kind == "shop":
+		var lv = it.unlock.get("minHeroLevel")
+		if TTUtil.truthy(lv):
+			return "Shop: " + Xp.fmt_int(it.unlock.price) + " coins (hero Lv " + TTUtil.num_str(lv) + "+)"
+		return "Shop: " + Xp.fmt_int(it.unlock.price) + " coins"
 	return "Starter kit"
 
 
@@ -241,4 +277,57 @@ static func _build() -> Array:
 			{"id": "wallbreaker_visor", "name": "Wallbreaker Visor", "slot": "head", "rarity": "epic", "discipline": "run", "flavor": "Kilometre thirty-two never saw it coming.", "perk": {"xp": {"run": 0.04}}, "unlock": _boss("the_wall"), "visual": {"kind": "cap", "color": "#00bfa5", "accent": "#ffeb3b", "visor": true}},
 			{"id": "chainring_shield", "name": "Chainring Shield", "slot": "back", "rarity": "epic", "discipline": "ride", "flavor": "Fifty-three teeth of pure defence.", "perk": {"xp": {"ride": 0.04}}, "unlock": _boss("col_du_doom"), "visual": {"kind": "shield", "color": "#b0bec5", "accent": "#c98500"}},
 			{"id": "titans_laurel", "name": "Titan's Laurel", "slot": "head", "rarity": "legendary", "flavor": "You beat the only opponent that ever mattered.", "perk": {"xp": {"all": 0.06}, "luck": 0.1}, "unlock": _boss("old_you"), "visual": {"kind": "laurel", "color": "#ffd54f", "accent": "#7cb342"}},
+			# ===== added after the port (outside the parity fixtures) ===============
+			# --- the shop: bought with coins ------------------------------------------
+			{"id": "shop_party_hat", "name": "Party Hat", "slot": "head", "rarity": "common", "flavor": "Every PR is a birthday.", "unlock": _shop(150), "visual": {"kind": "partyhat", "color": "#ff4081", "accent": "#ffeb3b"}},
+			{"id": "shop_3d_glasses", "name": "3D Glasses", "slot": "face", "rarity": "common", "flavor": "The gains really pop.", "unlock": _shop(150), "visual": {"kind": "glasses3d"}},
+			{"id": "shop_tux_tee", "name": "Tuxedo Tee", "slot": "body", "rarity": "common", "flavor": "Formal, but here to lift.", "unlock": _shop(150), "visual": {"kind": "shirt", "color": "#1b1b1b", "accent": "#ffffff", "pattern": "tux"}},
+			{"id": "shop_neon_wraps", "name": "Neon Wraps", "slot": "hands", "rarity": "common", "flavor": "Visible from the car park.", "unlock": _shop(150), "visual": {"kind": "wraps", "color": "#76ff03"}},
+			{"id": "shop_camo_shorts", "name": "Camo Shorts", "slot": "legs", "rarity": "common", "flavor": "Nobody will see leg day coming.", "unlock": _shop(150), "visual": {"kind": "shorts", "color": "#556b2f", "accent": "#8d9b6a"}},
+			{"id": "shop_bowtie", "name": "Bow Tie", "slot": "accessory", "rarity": "common", "flavor": "Dress for the PR you want.", "unlock": _shop(150), "visual": {"kind": "bowtie", "color": "#e91e63"}},
+			{"id": "shop_neon_shades", "name": "Neon Shades", "slot": "face", "rarity": "uncommon", "flavor": "The future is bright. So is the gym lighting.", "unlock": _shop(300), "visual": {"kind": "sunglasses", "color": "#00e5ff", "frame": "#ff4081"}},
+			{"id": "shop_headphones", "name": "Gym Headphones", "slot": "head", "rarity": "uncommon", "flavor": "Noise cancelling. People cancelling.", "unlock": _shop(350), "visual": {"kind": "headphones", "color": "#2b2f3a", "accent": "#ff5252"}},
+			{"id": "shop_cat_ears", "name": "Cat Ears", "slot": "head", "rarity": "uncommon", "flavor": "Nine lives. Zero rest days.", "unlock": _shop(350), "visual": {"kind": "catears", "color": "#2b2b2b", "accent": "#ff80ab"}},
+			{"id": "shop_beard", "name": "Lumberjack Beard", "slot": "face", "rarity": "uncommon", "flavor": "Adds 10 kg to every lift. Feels like it, anyway.", "unlock": _shop(350), "visual": {"kind": "beard", "color": "#6b3f1f"}},
+			{"id": "shop_aloha", "name": "Aloha Shirt", "slot": "body", "rarity": "uncommon", "flavor": "Rest-day energy, any day.", "unlock": _shop(350), "visual": {"kind": "shirt", "color": "#00acc1", "accent": "#ffeb3b", "pattern": "flower"}},
+			{"id": "shop_disco_tights", "name": "Disco Tights", "slot": "legs", "rarity": "uncommon", "flavor": "Stayin' alive through the last set.", "unlock": _shop(350), "visual": {"kind": "tights", "color": "#ffd54f", "accent": "#ff4081"}},
+			{"id": "shop_cowboy_boots", "name": "Cowboy Boots", "slot": "feet", "rarity": "uncommon", "flavor": "Yeehaw is a valid lifting cue.", "unlock": _shop(350), "visual": {"kind": "boots", "color": "#8d5524", "accent": "#ffd54f"}},
+			{"id": "shop_scarf", "name": "Hero Scarf", "slot": "accessory", "rarity": "uncommon", "flavor": "Blows in a wind only you can feel.", "unlock": _shop(350), "visual": {"kind": "scarf", "color": "#e53935"}},
+			{"id": "shop_heart_aura", "name": "Good Vibes", "slot": "aura", "rarity": "uncommon", "flavor": "You love this. Admit it.", "unlock": _shop(400), "visual": {"kind": "aura", "style": "hearts"}},
+			{"id": "shop_boxing_gloves", "name": "Boxing Gloves", "slot": "hands", "rarity": "rare", "flavor": "For fighting the urge to skip.", "unlock": _shop(700), "visual": {"kind": "boxing", "color": "#d32f2f"}},
+			{"id": "shop_gold_kicks", "name": "Gold Kicks", "slot": "feet", "rarity": "rare", "flavor": "Every step is a flex.", "perk": {"luck": 0.05}, "unlock": _shop(700), "visual": {"kind": "shoes", "color": "#ffd54f", "accent": "#ffffff", "sole": "#ff8f00"}},
+			{"id": "shop_wizard_hat", "name": "Wizard Hat", "slot": "head", "rarity": "rare", "flavor": "Gains are a kind of magic.", "perk": {"luck": 0.05}, "unlock": _shop(800), "visual": {"kind": "wizard", "color": "#4527a0", "accent": "#ffd54f"}},
+			{"id": "shop_luchador", "name": "Luchador Mask", "slot": "face", "rarity": "rare", "flavor": "Identity: secret. Elbow drop: famous.", "unlock": _shop(800), "visual": {"kind": "mask", "color": "#d32f2f", "accent": "#ffd54f"}},
+			{"id": "shop_gi", "name": "Dojo Gi", "slot": "body", "rarity": "rare", "flavor": "Black belt in showing up.", "unlock": _shop(800), "visual": {"kind": "gi", "color": "#f5f5f5", "accent": "#212121"}},
+			{"id": "shop_kilt", "name": "Highland Kilt", "slot": "legs", "rarity": "rare", "flavor": "Caber toss ready.", "perk": {"xp": {"lift": 0.03}}, "unlock": _shop(800), "visual": {"kind": "kilt", "color": "#2e7d32", "accent": "#c62828"}},
+			{"id": "shop_greatsword", "name": "Greatsword", "slot": "back", "rarity": "rare", "flavor": "Never drawn. Always carried.", "unlock": _shop(800), "visual": {"kind": "sword", "color": "#cfd8dc", "accent": "#ffd54f"}},
+			{"id": "shop_spark_aura", "name": "Static Charge", "slot": "aura", "rarity": "rare", "flavor": "Do not touch the squat rack.", "unlock": _shop(900), "visual": {"kind": "aura", "style": "spark"}},
+			{"id": "shop_leaf_aura", "name": "Autumn Drift", "slot": "aura", "rarity": "rare", "flavor": "Outdoor miles, wherever you are.", "unlock": _shop(900), "visual": {"kind": "aura", "style": "leaf"}},
+			{"id": "shop_viking_helm", "name": "Viking Helm", "slot": "head", "rarity": "epic", "flavor": "Rowing counts as cardio and as pillaging.", "perk": {"xp": {"lift": 0.04}}, "unlock": _shop(1800, 10), "visual": {"kind": "viking", "color": "#90a4ae", "accent": "#fff3e0"}},
+			{"id": "shop_feather_wings", "name": "Feather Wings", "slot": "back", "rarity": "epic", "flavor": "Light on your feet.", "perk": {"xp": {"run": 0.04}}, "unlock": _shop(1800, 10), "visual": {"kind": "wings", "color": "#ffffff", "accent": "#cfd8dc"}},
+			{"id": "shop_knight_plate", "name": "Knight's Plate", "slot": "body", "rarity": "epic", "flavor": "Heavy. Shiny. Worth it.", "perk": {"xp": {"all": 0.03}}, "unlock": _shop(1800, 12), "visual": {"kind": "armor", "color": "#b0bec5", "accent": "#ffd54f"}},
+			{"id": "shop_rocket_boots", "name": "Rocket Boots", "slot": "feet", "rarity": "epic", "flavor": "Technically still cardio.", "perk": {"xp": {"ride": 0.04}}, "unlock": _shop(1800, 12), "visual": {"kind": "boots", "color": "#eceff1", "accent": "#ff5252", "jets": true}},
+			{"id": "shop_champ_belt", "name": "Champion's Belt", "slot": "accessory", "rarity": "epic", "flavor": "Undisputed. Undefeated. Unwashed.", "perk": {"xp": {"all": 0.03}}, "unlock": _shop(1800, 15), "visual": {"kind": "champbelt", "color": "#212121", "buckle": "#ffd54f"}},
+			{"id": "shop_war_banner", "name": "War Banner", "slot": "back", "rarity": "epic", "flavor": "Your gym. Your colours.", "perk": {"xp": {"climb": 0.04}}, "unlock": _shop(2000, 15), "visual": {"kind": "banner", "color": "#c62828", "accent": "#ffd54f"}},
+			{"id": "shop_shadow_aura", "name": "Shadow Veil", "slot": "aura", "rarity": "epic", "flavor": "Trains before sunrise. Obviously.", "perk": {"xp": {"all": 0.03}}, "unlock": _shop(2000, 15), "visual": {"kind": "aura", "style": "shadow"}},
+			{"id": "shop_halo", "name": "Halo", "slot": "head", "rarity": "legendary", "flavor": "Never skipped a warm-up. Allegedly.", "perk": {"xp": {"all": 0.04}}, "unlock": _shop(4500, 20), "visual": {"kind": "halo", "color": "#ffe082"}},
+			{"id": "shop_dragon_wings", "name": "Dragon Wings", "slot": "back", "rarity": "legendary", "flavor": "Grown, not bought. Well. Bought.", "perk": {"xp": {"all": 0.04}}, "unlock": _shop(4500, 25), "visual": {"kind": "wings", "color": "#c62828", "accent": "#ff8a65", "style": "bat"}},
+
+			# --- weekly bounty rewards ---------------------------------------------------
+			{"id": "bounty_cap", "name": "Bounty Hunter's Cap", "slot": "head", "rarity": "uncommon", "flavor": "One monster down. A lifetime of Mondays to go.", "unlock": _goal("Win a weekly bounty", func(s): return Bounty.wins(s), 1), "visual": {"kind": "cap", "color": "#5d4037", "accent": "#ffd54f"}},
+			{"id": "bounty_cloak", "name": "Hunter's Cloak", "slot": "back", "rarity": "rare", "flavor": "Smells faintly of mimic.", "perk": {"luck": 0.05}, "unlock": _goal("Win 3 weekly bounties", func(s): return Bounty.wins(s), 3), "visual": {"kind": "cape", "color": "#33691e", "inner": "#1b5e20"}},
+			{"id": "bounty_gauntlets", "name": "Trophy Gauntlets", "slot": "hands", "rarity": "rare", "flavor": "Each knuckle has a story.", "perk": {"xp": {"all": 0.02}}, "unlock": _goal("Win 6 weekly bounties", func(s): return Bounty.wins(s), 6), "visual": {"kind": "gloves", "color": "#ff8f00"}},
+			{"id": "bounty_tooth", "name": "Mimic-Tooth Necklace", "slot": "accessory", "rarity": "epic", "flavor": "It still bites a little.", "perk": {"luck": 0.08}, "unlock": _goal("Win 10 weekly bounties", func(s): return Bounty.wins(s), 10), "visual": {"kind": "pendant", "color": "#fff8e1"}},
+			{"id": "bounty_boots", "name": "Tracker's Boots", "slot": "feet", "rarity": "epic", "flavor": "They know where Monday hides.", "perk": {"xp": {"all": 0.03}}, "unlock": _goal("Win 15 weekly bounties", func(s): return Bounty.wins(s), 15), "visual": {"kind": "boots", "color": "#4e342e", "accent": "#a1887f"}},
+			{"id": "bounty_crown", "name": "Bounty King's Crown", "slot": "head", "rarity": "legendary", "flavor": "Twenty-five weeks, twenty-five monsters.", "perk": {"xp": {"all": 0.05}, "luck": 0.1}, "unlock": _goal("Win 25 weekly bounties", func(s): return Bounty.wins(s), 25), "visual": {"kind": "crown", "color": "#ffd54f", "gem": "#7c4dff"}},
+			{"id": "bounty_mark", "name": "Hunter's Mark", "slot": "aura", "rarity": "epic", "flavor": "The coins follow you now.", "perk": {"luck": 0.1}, "unlock": _goal("Win 4 weekly bounties in a row", func(s): return Bounty.best_streak(s), 4, "weeks"), "visual": {"kind": "aura", "style": "coins"}},
+			{"id": "bounty_crushers", "name": "Golden Crushers", "slot": "hands", "rarity": "rare", "flavor": "For when winning is not enough.", "unlock": _goal("Crush 3 weekly bounties (150% of their HP)", func(s): return Bounty.crushes(s), 3), "visual": {"kind": "boxing", "color": "#ffc107", "accent": "#5d4037"}},
+
+			# --- unlocks for the newer kinds of training -------------------------------------
+			{"id": "hang_tape", "name": "Finger Tape", "slot": "hands", "rarity": "uncommon", "discipline": "climb", "flavor": "Holds the skin on. Mostly.", "unlock": _goal("Hang for 10 minutes in all on the hangboard", func(s): return int(floor(float(TTUtil.get_or(s.totals, "hangSec", 0)) / 60.0)), 10, "min"), "visual": {"kind": "wraps", "color": "#fff8e1"}},
+			{"id": "rope_coil", "name": "Rope Coil", "slot": "accessory", "rarity": "rare", "discipline": "climb", "flavor": "Sixty metres of trust.", "perk": {"xp": {"climb": 0.03}}, "unlock": _goal("Climb 20 roped routes", func(s): return int(TTUtil.get_or(s.totals, "climbRoutes", 0)), 20), "visual": {"kind": "sash", "color": "#ff7043"}},
+			{"id": "press_lanyard", "name": "Photographer's Pass", "slot": "accessory", "rarity": "uncommon", "flavor": "Access all areas of your own progress.", "unlock": _goal("Take progress photos in 3 different months", func(s): return int(TTUtil.get_or(s.body, "photoMonths", 0)), 3), "visual": {"kind": "medal", "ribbon": "#212121", "disc": "#90caf9"}},
+			{"id": "variety_tank", "name": "Variety Pack Tank", "slot": "body", "rarity": "uncommon", "discipline": "lift", "flavor": "Twenty-five lifts and counting.", "unlock": _goal("Log 25 different lifts", func(s): return s.totals.liftExercises.size(), 25), "visual": {"kind": "tank", "color": "#c62828", "accent": "#ffffff"}},
+			{"id": "dealer_visor", "name": "Card Shark Visor", "slot": "head", "rarity": "uncommon", "discipline": "climb", "flavor": "The house always sends.", "unlock": _cond("Send a straight: five grades in a row in one boulder session", func(s): return s.get("hands") is Dictionary and s.hands.get("straight") != null), "visual": {"kind": "cap", "color": "#1b5e20", "accent": "#ffd54f", "visor": true}},
+			{"id": "hockey_mask", "name": "Friday Mask", "slot": "face", "rarity": "rare", "flavor": "You trained on Friday the 13th. Nothing went wrong. Probably.", "unlock": _cond("Train on a Friday the 13th", func(s): return s.get("quirks") is Dictionary and s.quirks.get("friday13", false) == true), "visual": {"kind": "mask", "color": "#f5f5f5", "accent": "#b71c1c"}},
 	]

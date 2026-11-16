@@ -5,6 +5,7 @@ extends RefCounted
 ##
 ##   var state = Derive.derive({
 ##       "sessions": [...], "claims": [...], "body": [...],   # body is optional
+##       "purchases": [...],                                  # optional, see Wallet
 ##       "weeklyGoal": 3,
 ##       "today": Dates.today_key(),   # date key used for the "current" streaks
 ##   })
@@ -634,6 +635,17 @@ static func _apply_claim(s: Dictionary, claim: Dictionary) -> void:
 	_settle(s, claim.date, claim.id)
 
 
+# Something bought in the shop (see Wallet): the item joins the collection.
+static func _apply_purchase(s: Dictionary, buy: Dictionary) -> void:
+	var item = Items.by_id(buy.get("itemId"))
+	if item == null or s.items.has(item.id):
+		return
+	var date: String = str(buy.get("date", ""))
+	s.items[item.id] = _unlock(date, buy.get("id"), {"how": "shop"})
+	_chron(s, {"date": date, "kind": "item", "icon": "🪙", "title": "Bought " + item.name, "detail": item.flavor, "ref": item.id})
+	_settle(s, date, buy.get("id"))
+
+
 ## Replay the whole log into a PlayerState. `input`:
 ##   {"sessions": [Session], "claims": [QuestClaim], "body": [BodyEntry] (optional),
 ##    "weeklyGoal": int, "today": date key}
@@ -649,6 +661,8 @@ static func derive(input: Dictionary) -> Dictionary:
 		steps.append({"t": claim.claimedAt, "claim": claim})
 	for entry in TTUtil.get_or(input, "body", []):
 		steps.append({"t": entry.createdAt, "body": entry})
+	for buy in TTUtil.get_or(input, "purchases", []):
+		steps.append({"t": buy.at, "buy": buy})
 	# Stable: steps logged at the same instant replay in input order.
 	TTUtil.stable_sort(steps, func(a, b): return a.t < b.t)
 	for step in steps:
@@ -658,6 +672,8 @@ static func derive(input: Dictionary) -> Dictionary:
 			_apply_claim(s, step.claim)
 		elif step.has("body"):
 			_apply_body(s, step.body)
+		elif step.has("buy"):
+			_apply_purchase(s, step.buy)
 	var now_week: String = Dates.week_key(input.today)
 	s.streak = compute_streak(s.weekCounts, input.weeklyGoal, now_week)
 	s.body.streak = _body_streak(s, now_week).current
@@ -665,6 +681,10 @@ static func derive(input: Dictionary) -> Dictionary:
 		var t: Dictionary = compute_title(s)
 		s.title = t.title
 		s.stage = t.stage
+	# Added after the port (the parity tests drop both keys): the weekly
+	# bounties, worked out from the replayed log, then the coin count.
+	Bounty.settle(s, TTUtil.get_or(input, "sessions", []), input.today)
+	Wallet.tally(s, input)
 	return s
 
 

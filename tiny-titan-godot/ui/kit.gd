@@ -552,6 +552,95 @@ static func disc_tag(d: String) -> PanelContainer:
 	return p
 
 
+## A raised coloured pill: optional icon + bold text. With `tip` it shows a tooltip.
+static func pill(icon: String, text: String, color: Color, tip: String = "", fg = null, font_px: int = 12) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 7, "pad_v": 3}))
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
+	p.tooltip_text = tip
+	var h = hbox(4)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon != "":
+		h.add_child(vcenter(Icons.rect(icon, 16)))
+	if text != "":
+		h.add_child(vcenter(label(text, font_px, Pal.INK if fg == null else fg, true)))
+	p.add_child(h)
+	return p
+
+
+## A small flat chip: an icon and a few words on a colour. `fg` defaults to
+## dark ink on a bright colour and light text on a dark one. With `tip` it
+## shows a tooltip.
+static func icon_chip(icon: String, text: String, color: Color, tip: String = "", fg = null) -> PanelContainer:
+	var p = PanelContainer.new()
+	var quiet = color == Pal.PANEL2
+	p.add_theme_stylebox_override("panel", sbox(color, 5, Pal.LINE if quiet else null, 1 if quiet else 0, 7, 3))
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
+	p.tooltip_text = tip
+	var h = hbox(4)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon != "":
+		h.add_child(vcenter(Icons.rect(icon, 14)))
+	if fg == null:
+		fg = Pal.INK if color.get_luminance() > 0.5 else Pal.TEXT
+	h.add_child(vcenter(label(text, 12, fg, true)))
+	p.add_child(h)
+	return p
+
+
+## A coin amount as a gold pill ("[coin] 1,240").
+static func coin_pill(amount, tip: String = "", font_px: int = 12) -> PanelContainer:
+	return pill("coin", Xp.fmt_int(amount), Pal.ACCENT, tip, null, font_px)
+
+
+## A pixel-font caption that is as big as fits in `width` (scale `max_scale` down to 1).
+static func big_number(text: String, color: Color, width: int, max_scale: int = 4) -> TextureRect:
+	var w = PixelFont.measure(text).x
+	var sc = max_scale
+	while sc > 1 and w * sc > width:
+		sc -= 1
+	var r = PixelFont.rect(text, sc, color)
+	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return r
+
+
+## Let clicks on a tile's contents reach the tappable card around them.
+static func passthrough(n: Node) -> void:
+	for c in n.get_children():
+		if c is Control and not (c is BaseButton):
+			c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		passthrough(c)
+
+
+## A thick HP bar with the numbers written on it in the pixel font.
+static func hp_bar(hp_left: float, hp_max: float, height: int = 22, tip: String = "") -> Control:
+	var holder = MarginContainer.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
+	holder.tooltip_text = tip
+	holder.add_child(bar(hp_left / maxf(1.0, hp_max), Pal.HP, height))
+	var cap = PixelFont.rect("%s / %s" % [Xp.fmt_int(TTUtil.jsround(hp_left)), Xp.fmt_int(TTUtil.jsround(hp_max))], 2 if height >= 18 else 1, Color.WHITE)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cc = center(cap)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(cc)
+	return holder
+
+
+## An on / off switch: a sunken track with a raised knob, green with a tick when on.
+## `on_change.call(new_value)`.
+static func switch(on: bool, on_change: Callable, tip: String = "") -> PixSwitch:
+	var sw = PixSwitch.new()
+	sw.setup(on, tip)
+	sw.pressed.connect(func(): on_change.call(not on))
+	juice(sw)
+	return sw
+
+
 ## A text field. `numeric` centres the text and suits number entry.
 static func input(value = "", placeholder: String = "", numeric: bool = false) -> LineEdit:
 	var e = LineEdit.new()

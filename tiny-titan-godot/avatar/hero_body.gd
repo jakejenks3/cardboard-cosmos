@@ -420,10 +420,12 @@ static func draw_hero(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
 
 	# neck
 	p.rect(m.cx - int(floor(m.neckW / 2.0)), m.neckTop, m.neckW, m.neckH + 1, m.skin)
+	if accessory != null:
+		Equipment.draw_accessory_over(p, accessory, m, frame)
 
 	_draw_head(p, m, i)
 	var hat = v.get("head")
-	var covers_top: bool = hat != null and ["beanie", "cap", "helmet", "bandana"].has(hat.kind) and not (hat.kind == "cap" and hat.get("visor", false))
+	var covers_top: bool = hat != null and ["beanie", "cap", "helmet", "bandana", "wizard", "viking"].has(hat.kind) and not (hat.kind == "cap" and hat.get("visor", false))
 	_draw_hair(p, m, i, covers_top)
 	if hat != null:
 		Equipment.draw_head_item(p, hat, m)

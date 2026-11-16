@@ -320,6 +320,15 @@ static func _build() -> Array:
 			_g("zone_5", "King of the Col", "Clear the Spoke Highlands.", "⛰️", 1200, "campaign", func(s): return PlayerState.defeated_count(s), 20),
 			_g("zone_6", "Titan Ascendant", "Defeat The Old You and clear Titan's Summit.", "👑", 2500, "campaign", func(s): return PlayerState.defeated_count(s), 24),
 			_g("damage_100k", "Heavy Hitter", "Deal 100,000 total damage.", "💥", 500, "campaign", func(s): return s.campaign.totalDamage, 100000),
+			# Weekly bounties (s.weekly, see Bounty): outside the parity fixtures.
+			_g("bounty_1", "Bounty Hunter", "Win a weekly bounty.", "🪙", 100, "campaign", func(s): return Bounty.wins(s), 1),
+			_g("bounty_5", "Monster of the Week", "Win 5 weekly bounties.", "🪙", 250, "campaign", func(s): return Bounty.wins(s), 5),
+			_g("bounty_15", "Pest Control", "Win 15 weekly bounties.", "🪙", 500, "campaign", func(s): return Bounty.wins(s), 15),
+			_g("bounty_30", "Scourge of Mondays", "Win 30 weekly bounties.", "👑", 1000, "campaign", func(s): return Bounty.wins(s), 30),
+			_g("bounty_streak_4", "On a Roll", "Win 4 weekly bounties in a row.", "🔥", 300, "campaign", func(s): return Bounty.best_streak(s), 4, "weeks"),
+			_g("bounty_streak_10", "Unshakeable", "Win 10 weekly bounties in a row.", "🔥", 800, "campaign", func(s): return Bounty.best_streak(s), 10, "weeks"),
+			_g("bounty_crush_1", "Overkill", "Crush a weekly bounty: deal 150% of its HP.", "💥", 150, "campaign", func(s): return Bounty.crushes(s), 1),
+			_g("bounty_crush_10", "No Survivors", "Crush 10 weekly bounties.", "💥", 600, "campaign", func(s): return Bounty.crushes(s), 10),
 
 			# --- body --------------------------------------------------------------
 			_g("body_first", "Baseline", "Log your body weight for the first time.", "⚖️", 100, "body", func(s): return s.body.weightEntries, 1),
@@ -351,4 +360,8 @@ static func _build() -> Array:
 			_g("items_45", "Walking Wardrobe", "Own 45 pieces of gear.", "🏬", 900, "collection", func(s): return PlayerState.owned_item_count(s), 45),
 			_g("pets_5", "Animal Friend", "Befriend 5 companions.", "🐾", 200, "collection", func(s): return PlayerState.owned_pet_count(s), 5),
 			_g("pets_10", "Zookeeper", "Befriend 10 companions.", "🦁", 700, "collection", func(s): return PlayerState.owned_pet_count(s), 10),
+			# The shop (see Wallet): outside the parity fixtures.
+			_g("shop_1", "Retail Therapy", "Buy something in the shop.", "🪙", 100, "collection", func(s): return Wallet.bought_count(s), 1),
+			_g("shop_10", "Fashion Victim", "Buy 10 things in the shop.", "🪙", 400, "collection", func(s): return Wallet.bought_count(s), 10),
+			_g("items_80", "Museum Piece", "Own 80 pieces of gear.", "🏬", 1500, "collection", func(s): return PlayerState.owned_item_count(s), 80),
 	]

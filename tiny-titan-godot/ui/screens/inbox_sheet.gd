@@ -51,18 +51,8 @@ static func open(result: Dictionary) -> void:
 
 ## A small tag with an icon; the full text, if any, in the tooltip.
 static func _chip(icon: String, text: String, color: Color, tip: String) -> PanelContainer:
-	var p = PanelContainer.new()
-	p.add_theme_stylebox_override("panel", Kit.sbox(color, 5, Pal.LINE if color == Pal.PANEL2 else null, 1 if color == Pal.PANEL2 else 0, 7, 3))
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	p.tooltip_text = tip
-	p.mouse_filter = Control.MOUSE_FILTER_STOP if tip != "" else Control.MOUSE_FILTER_IGNORE
-	var h = Kit.hbox(4)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Kit.vcenter(Icons.rect(icon, 14)))
 	var shown = text if text.length() <= 40 else text.substr(0, 38) + "…"
-	h.add_child(Kit.label(shown, 12, Pal.TEXT, true))
-	p.add_child(h)
-	return p
+	return Kit.icon_chip(icon, shown, color, tip, Pal.TEXT)
 
 
 ## One found entry: its discipline badge, the date (with a nudge for guessed

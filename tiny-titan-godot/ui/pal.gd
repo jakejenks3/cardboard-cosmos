@@ -76,6 +76,8 @@ static var RUN = Color("3d9bff")
 static var RIDE = Color("ffb21f")
 
 static var HP = Color("ff4d6d")
+## The weekly bounty: violet, so it never reads as the campaign boss.
+static var BOUNTY = Color("a66bff")
 
 ## Each tab has its own accent, used for its headings, sub-tabs and tab-bar label,
 ## so the five areas of the game do not all look the same.

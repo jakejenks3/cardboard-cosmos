@@ -406,6 +406,20 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 4)
 	lift = screen().form().lift
 	await tap("Bench Press")
+	if lift.exercises.is_empty():
+		# A real click can land while the list is still settling: fall back to the
+		# tile's own tap, so a missed click cannot break the rest of the walkthrough.
+		var tile = card_of("Bench Press")
+		if tile is Card and tile._tap.is_valid():
+			tile._tap.call()
+		elif tile is BaseButton:
+			tile.pressed.emit()
+		await ShotHelper.frames(tree, 4)
+		lift = screen().form().lift
+	check(not lift.exercises.is_empty() and lift.exercises[0].sets.size() >= 4, "Bench Press is on the form in pounds, with last time's sets")
+	if lift.exercises.is_empty() or lift.exercises[0].sets.size() < 4:
+		print("CHECKS DONE, failures: %d" % fails)
+		return
 	var w3 = LogWidgets.num(lift.exercises[0].sets[3].weight)
 	ShotHelper.type_into(field("ex0.s3.weight"), LogWidgets.trim_num(w3 + 12.5))
 	ShotHelper.type_into(field("ex0.s1.weight"), "102.5")

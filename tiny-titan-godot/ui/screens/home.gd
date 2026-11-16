@@ -21,6 +21,10 @@ func build() -> void:
 	who.add_child(Kit.clip(profile.name, 22, null, true))
 	who.add_child(Kit.clip(s.title, 13, Pal.ACCENT, true))
 	top.add_child(who)
+	var purse = Kit.coin_pill(App.coins(), "Coins. Tap to open the shop.", 13)
+	purse.gui_input.connect(_purse_input)
+	purse.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	top.add_child(Kit.vcenter(purse))
 	top.add_child(Kit.vcenter(Kit.icon_button("settings", _open_settings, "Settings")))
 	add_child(top)
 
@@ -47,6 +51,22 @@ func build() -> void:
 		drow.add_child(Kit.para("Phone note all imported (%d entr%s): safe to clear it" % [n_in, "y" if n_in == 1 else "ies"], 12, Pal.MUTED))
 		dc.add(drow)
 		add_child(dc)
+
+	# --- a finished week or month has a recap waiting ---------------------------
+	var ready = _recap_ready()
+	if ready != null:
+		var rc = Kit.card(4, _open_recap.bind(ready[0], ready[1]), 10)
+		rc.accent(Pal.tab("journey"), true)
+		var rrow = Kit.hbox(10)
+		rrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rrow.add_child(Kit.vcenter(Icons.rect("calendar", 26)))
+		var what = "Last week's recap is ready" if ready[0] == "week" else "Your %s recap is ready" % Recap.MONTHS[int(str(ready[1]).substr(5, 2)) - 1]
+		var rl = Kit.para(what, 15, null, true)
+		rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rrow.add_child(rl)
+		rrow.add_child(Kit.vcenter(Kit.tag("Open", Pal.tab("journey"), true, 12)))
+		rc.add(rrow)
+		add_child(rc)
 
 	# --- the hero in the gym, with the level right under it -------------------
 	var lv = s.levels.hero
@@ -144,6 +164,9 @@ func build() -> void:
 	boss_card.add(brow)
 	add_child(boss_card)
 
+	# --- this week's bounty ----------------------------------------------------
+	add_child(BountyView.card(false))
+
 	# --- the four disciplines: one bright tile each ---------------------------
 	var tiles = Kit.grid(4, 8)
 	for d in TT.DISCIPLINES:
@@ -233,9 +256,9 @@ func _week_card(s: Dictionary) -> Control:
 	var wk = Dates.week_key(App.today)
 	var now = _week_numbers(s, wk)
 	var last = _week_numbers(s, Dates.add_weeks(wk, -1))
-	var c = Kit.card(6, App.go.bind("journey", "stats"), 10)
+	var c = Kit.card(6, RecapSheet.open.bind("week", wk), 10)
 	c.accent(Pal.SECOND)
-	c.tooltip_text = "Monday to Sunday. Tap for all your stats."
+	c.tooltip_text = "Monday to Sunday. Tap for this week's recap."
 	var head = Kit.hbox(8)
 	var ttl = Kit.clip("This week", 14, null, true)
 	ttl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -258,28 +281,44 @@ func _week_card(s: Dictionary) -> Control:
 	for d in TT.DISCIPLINES:
 		var n = int(now.by.get(d, 0))
 		if n > 0:
-			chips.add_child(_count_chip(d, str(n), Pal.disc(d), "%d %s session%s" % [n, TT.DISCIPLINE_META[d].name.to_lower(), "" if n == 1 else "s"]))
+			chips.add_child(Kit.icon_chip(d, str(n), Pal.disc(d), "%d %s session%s" % [n, TT.DISCIPLINE_META[d].name.to_lower(), "" if n == 1 else "s"], Color.WHITE))
 	if now.prs > 0:
-		chips.add_child(_count_chip("medal", "%d PR%s" % [now.prs, "" if now.prs == 1 else "s"], Pal.ACCENT, "Records set this week"))
+		chips.add_child(Kit.icon_chip("medal", "%d PR%s" % [now.prs, "" if now.prs == 1 else "s"], Pal.ACCENT, "Records set this week", Color.WHITE))
 	if now.sessions == 0:
 		chips.add_child(Kit.vcenter(Kit.muted("nothing logged yet: the week is young", 12)))
 	c.add(chips)
 	return c
 
 
-## A small coloured chip: an icon and a number.
-func _count_chip(icon: String, text: String, color: Color, tip: String) -> Control:
-	var p = PanelContainer.new()
-	p.add_theme_stylebox_override("panel", Kit.sbox(color, 5, null, 0, 7, 3))
-	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	p.mouse_filter = Control.MOUSE_FILTER_STOP
-	p.tooltip_text = tip
-	var h = Kit.hbox(4)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Kit.vcenter(Icons.rect(icon, 14)))
-	h.add_child(Kit.vcenter(Kit.label(text, 12, Color.WHITE, true)))
-	p.add_child(h)
-	return p
+## The recap to offer: last month's in the first week of a month, else last
+## week's from Monday to Wednesday; only when something was logged in it and
+## it was not opened yet. [kind, key] or null.
+func _recap_ready():
+	var today = App.today
+	var seen = App.recap_seen()
+	var options = []
+	if int(today.substr(8, 2)) <= 7:
+		options.append(["month", Recap.shift("month", today.substr(0, 7), -1)])
+	if Dates.weekday_index(today) <= 2:
+		options.append(["week", Dates.add_weeks(Dates.week_key(today), -1)])
+	for o in options:
+		if str(seen.get(o[0], "")) == o[1]:
+			continue
+		var b = Recap.bounds(o[0], o[1])
+		for x in App.sessions():
+			if str(x.date) >= b[0] and str(x.date) <= b[1]:
+				return o
+	return null
+
+
+func _open_recap(kind: String, key: String) -> void:
+	App.mark_recap_seen(kind, key)
+	RecapSheet.open(kind, key)
+
+
+func _purse_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		App.open_shop()
 
 
 func _open_settings() -> void:

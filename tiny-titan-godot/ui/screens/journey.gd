@@ -11,7 +11,7 @@ const THEN_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "traine
 const CHRONICLE_FILTERS = [
 	{"id": "all", "label": "Everything", "kinds": null},
 	{"id": "level", "label": "Levels", "kinds": ["start", "level", "stage", "rank"]},
-	{"id": "boss", "label": "Bosses", "kinds": ["boss"]},
+	{"id": "boss", "label": "Bosses", "kinds": ["boss", "bounty"]},
 	{"id": "achievement", "label": "Trophies", "kinds": ["achievement"]},
 	{"id": "loot", "label": "Loot", "kinds": ["item", "pet"]},
 	{"id": "pr", "label": "Records", "kinds": ["pr"]},
@@ -327,6 +327,19 @@ func _build_stats() -> void:
 
 	_then_now()
 
+	# --- recaps: a week or a month as one poster --------------------------------------
+	var rc = Kit.card(6, Callable(), 10)
+	rc.accent(Pal.tab_accent())
+	var rrow = Kit.hbox(8)
+	rrow.add_child(Kit.vcenter(Icons.rect("calendar", 26)))
+	var rl = Kit.label("Recaps", 15, null, true)
+	rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rrow.add_child(Kit.vcenter(rl))
+	rrow.add_child(Kit.button("This week", "secondary", RecapSheet.open.bind("week", Dates.week_key(App.today)), "sm"))
+	rrow.add_child(Kit.button("This month", "secondary", RecapSheet.open.bind("month", App.today.substr(0, 7)), "sm"))
+	rc.add(rrow)
+	add_child(rc)
+
 	# --- totals as big-number tiles ---------------------------------------------
 	var hours = float(t.durationSec) / 3600.0
 	var time_text = ("%dH" % int(floor(hours))) if hours >= 1.0 else ("%dM" % TTUtil.jsround(float(t.durationSec) / 60.0))
@@ -590,6 +603,8 @@ static func _moment_color(kind: String) -> Color:
 	match kind:
 		"boss":
 			return Pal.HP
+		"bounty":
+			return Pal.BOUNTY
 		"stage", "level", "start":
 			return Pal.ACCENT
 		"rank":
@@ -607,7 +622,8 @@ static func _moment_color(kind: String) -> Color:
 
 func _build_chronicle() -> void:
 	var s = App.state
-	var chron = s.chronicle
+	# The weekly bounty wins are kept apart from the ported chronicle: join them here.
+	var chron = s.chronicle + Bounty.chronicle(s)
 	if chron.is_empty():
 		add_child(Kit.empty("book", "An empty page", "Levels, bosses, trophies and records land here."))
 		return

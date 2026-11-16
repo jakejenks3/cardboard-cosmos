@@ -69,7 +69,7 @@ func fill() -> void:
 	goal_row.tooltip_text = "Sessions per week that keep your streak alive"
 	train.add(goal_row)
 	var snd = bool(st.get("sound", true))
-	train.add(_row("sound_on" if snd else "sound_off", "Sound", _switch(snd, _on_sound, "Sound effects")))
+	train.add(_row("sound_on" if snd else "sound_off", "Sound", Kit.switch(snd, _on_sound, "Sound effects")))
 	add_child(train)
 
 	# --- phone inbox ----------------------------------------------------------------
@@ -124,16 +124,6 @@ func _row(icon: String, label_text: String, control: Control) -> HBoxContainer:
 		h.add_child(Kit.spacer())
 	h.add_child(control)
 	return h
-
-
-## An on / off switch: a sunken track with a raised knob, green with a tick when on.
-## `on_change.call(new_value)`.
-func _switch(on: bool, on_change: Callable, tip: String) -> Button:
-	var sw = PixSwitch.new()
-	sw.setup(on, tip)
-	sw.pressed.connect(func(): on_change.call(not on))
-	Kit.juice(sw)
-	return sw
 
 
 ## A small "i" button that opens a sheet with the explanation.
@@ -205,7 +195,7 @@ func _build_inbox() -> void:
 	var auto_label = Kit.label("Auto-check", 14, null, true)
 	auto_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(auto_label)
-	row.add_child(_switch(bool(ib.get("auto", true)), _on_inbox_auto, "Check when the game starts"))
+	row.add_child(Kit.switch(bool(ib.get("auto", true)), _on_inbox_auto, "Check when the game starts"))
 	card.add(row)
 	var line = App.inbox.status
 	if line == "":
@@ -440,31 +430,3 @@ static func _do_reset(sh = null) -> void:
 	App.reset_all()
 	if sh != null and is_instance_valid(sh):
 		sh.close()
-
-
-class PixSwitch extends Button:
-	var on = false
-
-	func setup(value: bool, tip: String) -> void:
-		on = value
-		tooltip_text = tip
-		focus_mode = Control.FOCUS_NONE
-		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		custom_minimum_size = Vector2(72, 38)
-		size_flags_horizontal = Control.SIZE_SHRINK_END
-		size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		var none = StyleBoxEmpty.new()
-		for k in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
-			add_theme_stylebox_override(k, none)
-
-	func _draw() -> void:
-		var track = Pal.deep(Pal.GOOD) if on else Pal.WELL
-		draw_style_box(PixBox.make(track, {"lip": 0, "inset": true, "pad_h": 0, "pad_v": 0}), Rect2(Vector2.ZERO, size))
-		var kw = 34.0
-		var kr = Rect2(size.x - kw - 4.0 if on else 4.0, 4.0, kw, size.y - 8.0)
-		var face = Pal.GOOD if on else Pal.PANEL2
-		draw_style_box(PixBox.make(face, {"lip": 1, "lip_color": face.darkened(0.45), "pad_h": 0, "pad_v": 0}), kr)
-		if on:
-			var ic = Icons.tex("check")
-			draw_texture_rect(ic, Rect2(kr.position + Vector2((kw - 16.0) / 2.0, (kr.size.y - 22.0) / 2.0), Vector2(16, 16)), false)

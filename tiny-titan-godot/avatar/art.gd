@@ -142,6 +142,29 @@ static func item_preview_texture(item_id: String, state: Dictionary, profile: Di
 	return tex
 
 
+## A copy of `state` that also owns `item_id`, so the hero can be drawn (or a
+## HeroView set up) wearing something from the shop before it is bought.
+static func tryon_state(state: Dictionary, item_id: String) -> Dictionary:
+	if state.items.has(item_id):
+		return state
+	var s2: Dictionary = state.duplicate()
+	var owned: Dictionary = state.items.duplicate()
+	owned[item_id] = {"at": "", "how": "preview"}
+	s2["items"] = owned
+	return s2
+
+
+## The player's own hero (static, frame 0) wearing their loadout with `item_id`
+## put in its slot, whether or not they own it: the shop's "try it on" picture.
+static func item_tryon_texture(item_id: String, state: Dictionary, profile: Dictionary, loadout: Dictionary) -> ImageTexture:
+	var item = Items.by_id(item_id)
+	if item == null:
+		return hero_texture(state, profile, loadout, "idle", 0, false)
+	var worn: Dictionary = loadout.duplicate()
+	worn[item.slot] = item_id
+	return hero_texture(tryon_state(state, item_id), profile, worn, "idle", 0, false)
+
+
 ## Drop every cached texture (they are rebuilt on demand).
 static func clear_cache() -> void:
 	_tex_cache.clear()

@@ -26,7 +26,7 @@ const KEEP_BACKUPS = 14
 const PHOTO_MAX_SIDE = 1280
 const DEFAULT_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
 
-## Source of truth: {profile, settings, sessions, claims, body, loadout, activePet, strava, updatedAt}
+## Source of truth: {profile, settings, sessions, claims, body, purchases, loadout, activePet, strava, updatedAt}
 var saved: Dictionary = {}
 ## Derived PlayerState (see game/player_state.gd).
 var state: Dictionary = {}
@@ -39,6 +39,8 @@ var today: String = ""
 var tab: String = "home"  # home | adventure | log | journey | armory
 var adventure_tab: String = "campaign"  # campaign | quests | trophies
 var journey_tab: String = "stats"  # stats | body | chronicle | history
+## Set by `open_shop`: the Armory shows its Shop tab the next time it is shown.
+var armory_tab_request: String = ""
 ## What the Log tab shows: null = picker, a discipline id, or "body".
 var log_discipline = null
 ## An exercise the lift form should add the next time it builds (set by the
@@ -116,6 +118,16 @@ func body() -> Array:
 	return saved.body
 
 
+## What has been bought in the shop: [{id, itemId, cost, at, date}].
+func purchases() -> Array:
+	return saved.purchases
+
+
+## Coins to spend (see Wallet).
+func coins() -> int:
+	return Wallet.balance(state)
+
+
 func loadout() -> Dictionary:
 	return saved.loadout
 
@@ -172,6 +184,37 @@ func claimable_quests() -> int:
 
 func next_goals(limit: int = 4) -> Array:
 	return NextUp.next_goals(state, limit)
+
+
+## True when the data folder was redirected with TINY_TITAN_DATA (the automated tests).
+func is_test_data() -> bool:
+	return OS.get_environment("TINY_TITAN_DATA") != ""
+
+
+## Where recap pictures are saved: "Tiny Titan" inside the Pictures folder
+## (inside the data folder during tests, or when there is no Pictures folder).
+func recap_dir() -> String:
+	var pics = "" if is_test_data() else OS.get_system_dir(OS.SYSTEM_DIR_PICTURES)
+	if pics == "":
+		return DATA_DIR + "recaps"
+	return pics.path_join("Tiny Titan")
+
+
+## The last recap of each kind the player opened from the Hero tab:
+## {"week": Monday key, "month": "YYYY-MM"} (either may be missing).
+func recap_seen() -> Dictionary:
+	var v = saved.settings.get("recapSeen")
+	return v if v is Dictionary else {}
+
+
+## Remember that a recap was opened, so the Hero tab stops offering it.
+## Saved without re-deriving the hero: it does not change the log.
+func mark_recap_seen(kind: String, key: String) -> void:
+	var seen = recap_seen().duplicate()
+	seen[kind] = key
+	saved.settings["recapSeen"] = seen
+	_write()
+	changed.emit()
 
 
 func now_ms() -> int:
@@ -234,6 +277,7 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 		events = Diff.diff_states(before, state, fresh[0])
 	else:
 		events = Diff.diff_bulk(before, state, fresh)
+	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null))
 	var ids = []
 	for s in fresh:
 		ids.append(s.id)
@@ -260,7 +304,7 @@ func commit_body(entry: Dictionary) -> void:
 	var before = state
 	saved.body.append(entry)
 	_commit()
-	result_ready.emit({"key": entry.id, "events": Diff.diff_body(before, state, entry), "title": "Checked in!"})
+	result_ready.emit({"key": entry.id, "events": _with_extras(Diff.diff_body(before, state, entry), Diff.diff_extras(before, state)), "title": "Checked in!"})
 
 
 func update_body(entry: Dictionary) -> void:
@@ -285,7 +329,44 @@ func claim_quest(q: Dictionary) -> void:
 	saved.claims.append({"id": Rng.uid("q"), "questId": q.id, "xp": q.xp, "claimedAt": now_ms(), "date": today})
 	_commit()
 	Sfx.claim()
-	toast("+%s XP — %s" % [Xp.fmt_int(q.xp), q.title], "good", "gift")
+	toast("+%s XP, +%s coins — %s" % [Xp.fmt_int(q.xp), Xp.fmt_int(Wallet.xp_coins(q.xp)), q.title], "good", "gift")
+
+
+## Reel events with the bounty card right after the boss cards and the coins last.
+func _with_extras(events: Array, extras: Array) -> Array:
+	var out: Array = events.duplicate()
+	var at: int = 0
+	for i in range(out.size()):
+		if ["xp", "import", "bodyxp", "boss"].has(out[i].type):
+			at = i + 1
+	for e in extras:
+		if e.type == "bounty":
+			out.insert(at, e)
+			at += 1
+		else:
+			out.append(e)
+	return out
+
+
+## Buy a shop item with coins. Returns "" when bought, else why not
+## ("owned" | "level" | "coins" | "unknown"). Nothing is charged twice:
+## the purchase is a line in the save and the coins are counted from the log.
+func buy_item(id: String) -> String:
+	var it = Items.by_id(id)
+	if it == null or not Wallet.is_shop(it):
+		return "unknown"
+	var check = Wallet.can_buy(state, it, Dates.week_key(today))
+	if not check.ok:
+		return check.why
+	var before = state
+	saved.purchases.append({"id": Rng.uid("b"), "itemId": id, "cost": int(check.price), "at": now_ms(), "date": today})
+	_commit()
+	for ach_id in state.achievements:
+		if not before.achievements.has(ach_id):
+			var a = Achievements.by_id(ach_id)
+			if a != null:
+				toast("Trophy: %s (+%s XP)" % [a.name, Xp.fmt_int(a.xp)], "good", "trophy")
+	return ""
 
 
 func equip(slot: String, id) -> void:
@@ -349,6 +430,13 @@ func open_log(discipline = null, edit_id = null) -> void:
 		else:
 			editing_session_id = edit_id
 	tab = "log"
+	nav_changed.emit()
+
+
+## Go to the Armory with the shop open.
+func open_shop() -> void:
+	armory_tab_request = "shop"
+	tab = "armory"
 	nav_changed.emit()
 
 
@@ -552,6 +640,7 @@ static func empty_saved() -> Dictionary:
 		"sessions": [],
 		"claims": [],
 		"body": [],
+		"purchases": [],
 		"loadout": DEFAULT_LOADOUT.duplicate(true),
 		"activePet": null,
 		"strava": {"lastSyncAt": null, "athleteName": null},
@@ -581,6 +670,10 @@ static func parse_saved(raw):
 		for b in o.body:
 			if b is Dictionary and b.get("id") is String:
 				out.body.append(b)
+	if o.get("purchases") is Array:
+		for p in o.purchases:
+			if p is Dictionary and p.get("itemId") is String and (p.get("at") is int or p.get("at") is float) and (p.get("cost") is int or p.get("cost") is float):
+				out.purchases.append({"id": str(p.get("id", "")), "itemId": p.itemId, "cost": int(p.cost), "at": int(p.at), "date": str(p.get("date", ""))})
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)
 	if o.get("activePet") is String:
@@ -670,6 +763,7 @@ func _recompute() -> void:
 		"sessions": saved.sessions,
 		"claims": saved.claims,
 		"body": saved.body,
+		"purchases": saved.get("purchases", []),
 		"weeklyGoal": saved.settings.weeklyGoal,
 		"today": today,
 	})

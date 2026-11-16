@@ -49,6 +49,10 @@ func _init() -> void:
 		for a in core.catalog.achievements:
 			fixture_ids.append(a.id)
 		Achievements.restrict_to(fixture_ids)
+		var fixture_items: Array = []
+		for it in core.catalog.items:
+			fixture_items.append(it.id)
+		Items.restrict_to(fixture_items)
 	_run_group("quests", _data.quests, _quests_case)
 	_run_group("diff", _data.diff, _diff_case)
 	_run_group("totals", _data.totals, _totals_case)
