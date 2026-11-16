@@ -137,6 +137,9 @@ is the Windows handoff.
   is attempts only, `v3 3rd go` / `send in 3` is a send on that go (N-1 attempts), `no send`
   makes it all attempts, and `3 attempts` with no grade after a comma belongs to the climb
   before it. What it cannot tell apart stays a problem line, never a guess.
+- Also 2026-11-16: a vest walk may be written as a sentence (`2.5 mile walk with 30 lb vest`).
+  `QuickLog._misc_kind` accepts a misc activity's words anywhere in a line that has a distance
+  and no `NxM` sets, so `weighted vest walking lunge 3x10` stays a lift.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -176,7 +179,11 @@ is the Windows handoff.
   `tests/shots/anchor.gd` proves it and finds buttons by their text.
 - The user's real save lives in Godot's user-data folder for "Tiny Titan", outside this
   project. NEVER run tests against it: set the `TINY_TITAN_DATA` environment variable to
-  a throwaway folder for every test run.
+  a throwaway folder for every test run. The walkthrough runner (`tests/shots.tscn`) REPLACES
+  the whole save with demo data when it starts. When the user asks for something to be put
+  into the real save: back that folder up, do the work on a copy of it with a runner that
+  loads no demo data, check the result, and only then copy the changed files back (the game
+  must not be running).
 
 ## How to check your work
 

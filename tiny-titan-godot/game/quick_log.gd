@@ -565,12 +565,36 @@ const MAX_LOAD_KG = 150.0
 
 
 ## {"kind", "rest"} when the line starts with a misc kind's words ("vest walk ..."), else kind "".
+## Small words dropped from a misc line said as a sentence ("walked 2 miles with the vest").
+const MISC_SMALL_WORDS = ["the", "my", "a", "wearing", "on"]
+
+## Which misc activity a line is, and the line without its opening words:
+## {"kind", "rest"} ("" when it is none). The words normally open the line
+## ("vest walk 3km 40:00 10kg"); in a line that has a distance and no sets they
+## may stand anywhere ("2.5 mile walk with 30 lb vest", "walked 2 miles with
+## the vest"), so a lift such as "weighted vest walking lunge 3x10" stays a lift.
 static func _misc_kind(t: String) -> Dictionary:
 	for k in Misc.ORDER:
 		for phrase in Misc.KINDS[k].words:
 			var w: String = str(phrase)
 			if t == w or t.begins_with(w + " ") or t.begins_with(w + ":"):
 				return {"kind": str(k), "rest": t.substr(w.length()).trim_prefix(":").strip_edges()}
+	if _rx("\\d ?(?:km|k|mi|mile|miles)\\b").search(t) == null or _rx("\\d ?x ?\\d").search(t) != null:
+		return {"kind": "", "rest": ""}
+	for k in Misc.ORDER:
+		for phrase in Misc.KINDS[k].words:
+			var rest = " " + t + " "
+			var found = true
+			for w in str(phrase).split(" ", false):
+				var m = _rx(" " + w + "(?:s|ed|ing)?(?= )").search(rest)
+				if m == null:
+					found = false
+					break
+				rest = rest.substr(0, m.get_start()) + rest.substr(m.get_end())
+			if found:
+				for small in MISC_SMALL_WORDS:
+					rest = rest.replace(" " + small + " ", " ")
+				return {"kind": str(k), "rest": _rx("\\s+").sub(rest, " ", true).strip_edges()}
 	return {"kind": "", "rest": ""}
 
 

@@ -80,7 +80,8 @@ are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; a
 `+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
 `vest walk 3km 40:00 10kg` logs a weighted vest walk (see Miscellaneous below); leave the weight
-out and the last vest you logged is used, or put `vest 10kg` on the line under it.
+out and the last vest you logged is used, or put `vest 10kg` on the line under it. Written as a
+sentence it works too: `2.5 mile walk with 30 lb vest`.
 
 On a climb, every result word is its own tally and takes the number beside it. `v3 send 3 attempts`
 is one send plus three tries that did not go (the same as logging one Send and three Attempts in

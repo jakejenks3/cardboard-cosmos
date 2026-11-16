@@ -184,6 +184,18 @@ func _init() -> void:
 	ok(after_line.size() == 1 and near(after_line[0].data.loadKg, 15.0) and after_line[0].warnings.is_empty(), "a 'vest 15kg' line under it sets the vest", after_line)
 	ok(p("vest walk 40:00").entries.is_empty() and p("vest walk 40:00").problems.size() == 1, "no distance is a problem, not an entry", p("vest walk 40:00"))
 	ok(p("vest 15kg").entries.is_empty() and p("vest 15kg").problems.size() == 1, "a vest line with no walk above it is a problem", p("vest 15kg"))
+	# Said as a sentence, the way it gets typed on a phone: the words anywhere in a line that has a distance.
+	var said = p("11/16: 2.5 mile walk with 30 lb vest", mi_lb.merged({"today": "2026-11-16"}))
+	var said_e = said.entries[0] if said.entries.size() == 1 else {"data": {}}
+	ok(said.problems.is_empty() and said.entries.size() == 1 and said_e.data.get("kind") == "vest_walk" and said_e.get("date") == "2026-11-16", "'2.5 mile walk with 30 lb vest' is a vest walk on its date", said)
+	ok(near(said_e.data.get("distanceM", 0.0), 2.5 * MI, 0.6) and near(said_e.data.get("loadKg", 0.0), 30.0 * LB) and not said_e.data.has("durationSec") and said_e.get("warnings", [""]).is_empty(), "2.5 miles, a 30 lb vest, no time and no warning", said_e.get("data"))
+	ok(said_e.get("summary") == "Vest walk 2.5 mi · 30 lb vest", "its line in the review", said_e.get("summary"))
+	var said2 = p("walked 2 miles in 38:30 with the vest", mi_lb.merged({"lastLoadKg": {"vest_walk": 20.0 * LB}})).entries
+	ok(said2.size() == 1 and said2[0].data.get("kind") == "vest_walk" and near(said2[0].data.distanceM, 2.0 * MI, 0.6) and said2[0].data.get("durationSec") == 2310 and near(said2[0].data.loadKg, 20.0 * LB), "'walked 2 miles in 38:30 with the vest': the last vest weight is used", said2)
+	for lift_line in ["weighted vest walking lunges 3x10 @ 20", "walking lunge 3x10"]:
+		var ll = p(lift_line, mi_lb)
+		ok(ll.entries.size() == 1 and ll.entries[0].data.get("discipline") == "lift", "a lift with those words stays a lift: " + lift_line, ll)
+	ok(p("2.5 mile walk", mi_lb).entries.all(func(e): return e.data.get("discipline") != "misc"), "a walk with no vest word is not taken as a vest walk")
 	var mixed = p("nov 14\nbench 3x5 @ 80\nvest walk 3km 40:00 10kg\nsquat 3x5 @ 100\nrun 5km 25:00")
 	ok(mixed.entries.size() == 3 and mixed.problems.is_empty() and mixed.entries[0].data.discipline == "lift" and mixed.entries[0].data.exercises.size() == 2, "between lifts it is its own session and does not split the lifting", mixed)
 	ok(p("vest walk 3km 40:00 10kg").entries[0].key == QuickLog.parse("vest walk 3km 40:00 10kg", opts({"today": "2026-11-20"})).entries[0].key, "the key is the same on any day")
