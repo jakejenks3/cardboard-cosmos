@@ -448,8 +448,8 @@ func equip(slot: String, id) -> void:
 	_commit()
 
 
-## Phone inbox settings ({source, imported, lastChecked, auto}). Saved without
-## re-deriving the hero: none of it changes the log.
+## Phone inbox settings ({source, imported, lastChecked, auto, names}). Saved
+## without re-deriving the hero: none of it changes the log.
 func update_inbox(patch: Dictionary) -> void:
 	saved.inbox.merge(patch, true)
 	_write()
@@ -720,7 +720,7 @@ static func empty_saved() -> Dictionary:
 		"activePet": null,
 		"strava": {"lastSyncAt": null, "athleteName": null},
 		"updatedAt": 0,
-		"inbox": {"source": "", "imported": {}, "lastChecked": 0, "auto": true},
+		"inbox": {"source": "", "imported": {}, "lastChecked": 0, "auto": true, "names": {}},
 	}
 
 
@@ -768,6 +768,11 @@ static func parse_saved(raw):
 			out.inbox.lastChecked = int(ib.lastChecked)
 		if ib.get("auto") is bool:
 			out.inbox.auto = ib.auto
+		# What the player decided a typed lift name means ("" = a lift of its own).
+		if ib.get("names") is Dictionary:
+			for k in ib.names:
+				if ib.names[k] is String:
+					out.inbox.names[str(k)] = ib.names[k]
 	return out
 
 

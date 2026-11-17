@@ -208,7 +208,17 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 	var loaded = {}
 	for n in opts.get("loaded", []):
 		loaded[Xp.normalize_exercise(n)] = true
+	# The lifts the player has actually logged (newest first), and what they
+	# decided a typed name means ({LiftMatch.key(typed): lift name, "" = its own lift}).
+	var own = opts.get("own", []) if opts.get("own", []) is Array else []
+	var own_norm = {}
+	for n in own:
+		own_norm[Xp.normalize_exercise(n)] = str(n)
 	return {
+		"own": own,
+		"own_norm": own_norm,
+		"names": opts.get("names", {}) if opts.get("names", {}) is Dictionary else {},
+		"picks": {},
 		"today": today,
 		"wu": str(opts.get("weightUnit", "kg")),
 		"du": str(opts.get("distanceUnit", "km")),
@@ -484,6 +494,11 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 		le.data.exercises.append(target)
 	target.sets.append_array(l.sets)
 	le.warnings.append_array(l.warnings)
+	# A name that was not exactly a lift the player has: the review asks about it.
+	if str(l.pick.kind) != "exact" or l.pick.has("decided"):
+		if not le.has("picks"):
+			le["picks"] = {}
+		le.picks[l.pick.key] = l.pick
 	_take(block, le, orig, t)
 	return block
 
@@ -591,6 +606,8 @@ static func _close(block: Dictionary, ctx: Dictionary, out: Dictionary) -> void:
 		if e.has("shots"):
 			entry["shots"] = e.shots
 			entry["extras"] = e.get("extras", [])
+		if e.has("picks"):
+			entry["names"] = e.picks.values()
 		out.entries.append(entry)
 	block.entries = []
 	block.shot_bodies = {}
@@ -1042,7 +1059,8 @@ static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
 		i = later
 		typed = _lift_name(toks, i)
 		p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
-	var name = resolve_exercise(typed, ctx)
+	var pick = pick_exercise(typed, ctx)
+	var name: String = str(pick.name)
 	var warnings = []
 	var sets = []
 	if p.bare:
@@ -1064,7 +1082,7 @@ static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
 			return {"ok": false, "why": "that weight looks wrong"}
 	if sets.size() > 40:
 		return {"ok": false, "why": "too many sets"}
-	return {"ok": true, "name": name, "sets": sets, "warnings": warnings}
+	return {"ok": true, "name": name, "sets": sets, "warnings": warnings, "pick": pick}
 
 
 ## The exercise name typed before token `cut` of a lifting line (dashes and colons dropped).
@@ -1122,8 +1140,11 @@ static func _knows_exercise(typed: String, ctx: Dictionary) -> bool:
 ## name off from the sets, so only a number followed by a word names use counts.
 static func _name_tail(tail: Array, strict: bool) -> bool:
 	for k in range(tail.size()):
-		var w: String = str(tail[k]).trim_suffix(":")
+		var w: String = str(tail[k]).trim_suffix(":").trim_suffix(",")
 		if w == "" or w == "-" or w == "=":
+			continue
+		# A short form names use ("1UE" = one arm) is part of a name.
+		if LiftMatch.WORDS.has(w):
 			continue
 		if AMOUNT_WORDS.has(w) or w.contains("@") or w.contains(",") or w.contains("+"):
 			return false
@@ -1265,6 +1286,69 @@ static func _compact(s: String) -> String:
 
 ## Typed name -> a known exercise name where possible, else the typed name in Title Case.
 static func resolve_exercise(typed: String, ctx: Dictionary) -> String:
+	return str(pick_exercise(typed, ctx).name)
+
+
+## Which lift a typed name is, with what the review needs to ask about it:
+## {"key", "typed", "name", "kind", "closest"} (+ "decided" when the player has
+## already said what these words mean).
+##   kind "exact": a lift the player has, a short name ("bench"), a library
+##                 lift, or a name they decided on. Nothing to ask.
+##        "match": not exact, but the same words as one of those in another
+##                 order or spelling ("row - cable, 1UE" / "single arm cable
+##                 row"), or the start of exactly one: taken as that lift, and
+##                 the review asks whether that is right.
+##        "new":   none of those: a lift of its own under the typed name.
+##                 `closest` names the nearest lift when one is near enough to
+##                 ask about.
+## The player's own lift wins over the library's name for the same lift, so a
+## new spelling joins the history they already have.
+static func pick_exercise(typed: String, ctx: Dictionary) -> Dictionary:
+	var key = LiftMatch.key(typed)
+	if ctx.picks.has(key):
+		return ctx.picks[key]
+	var pick = {"key": key, "typed": typed, "name": "", "kind": "exact", "closest": ""}
+	var decided = ctx.names.get(key)
+	var known = _exact_known(typed, ctx)
+	if decided is String:
+		pick.name = decided
+		if decided == "":
+			pick.name = known if known != "" else plain_name(typed)
+		pick["decided"] = true
+	else:
+		if known == "":
+			known = LiftMatch.library_name(typed)
+		if known != "":
+			var mine = ""
+			if not ctx.own_norm.has(Xp.normalize_exercise(known)):
+				mine = LiftMatch.same_lift(known, ctx.own)
+			pick.name = known if mine == "" else mine
+			if mine != "":
+				pick.kind = "match"
+		else:
+			var start = _unique_prefix(typed, ctx)
+			var found = LiftMatch.find(typed, ctx.known_norm.values(), 2)
+			var best = found[0] if not found.is_empty() else {"name": "", "score": 0.0}
+			# Two lifts equally near ("row": Barbell Row, Dumbbell Row...) are no "closest".
+			var alone = found.size() < 2 or float(best.score) - float(found[1].score) > 0.04
+			if start != "":
+				pick.name = start
+				pick.kind = "match"
+			elif float(best.score) >= LiftMatch.SAME:
+				pick.name = str(best.name)
+				pick.kind = "match"
+			else:
+				pick.name = _title_case(typed)
+				pick.kind = "new"
+				if float(best.score) >= LiftMatch.CLOSE and alone:
+					pick.closest = str(best.name)
+	ctx.picks[key] = pick
+	return pick
+
+
+## A name the reader knows for certain: one of the known lifts as typed, a
+## short name, or one of those give or take spaces, dashes and a plural. "" when none.
+static func _exact_known(typed: String, ctx: Dictionary) -> String:
 	var n = Xp.normalize_exercise(typed)
 	if ctx.known_norm.has(n):
 		return ctx.known_norm[n]
@@ -1276,16 +1360,42 @@ static func resolve_exercise(typed: String, ctx: Dictionary) -> String:
 		var kc = _compact(k)
 		if kc == c or kc == singular:
 			return ctx.known_norm[k]
-	if n.length() >= 3:
-		var hits = []
-		for k in ctx.known_norm:
-			if k.begins_with(n):
-				hits.append(ctx.known_norm[k])
-		if hits.size() == 1:
-			return hits[0]
+	return ""
+
+
+## The one known lift whose name starts with what was typed ("incline" for
+## Incline Bench Press), or "".
+static func _unique_prefix(typed: String, ctx: Dictionary) -> String:
+	var n = Xp.normalize_exercise(typed)
+	if n.length() < 3:
+		return ""
+	var hits = []
+	for k in ctx.known_norm:
+		if k.begins_with(n):
+			hits.append(ctx.known_norm[k])
+	return str(hits[0]) if hits.size() == 1 else ""
+
+
+## The name a typed lift gets when it is none of the player's: the library's
+## name when it is a library lift, else what was typed, in Title Case.
+static func plain_name(typed: String) -> String:
+	var lib = LiftMatch.library_name(typed)
+	return lib if lib != "" else _title_case(typed)
+
+
+## Short forms that are written in capitals in a lift's name.
+const CAPITALS = ["ghd", "ghr", "db", "kb", "bb", "ez", "trx", "rdl", "ohp", "1ue", "1le", "sa", "sl", "bw", "t2b"]
+
+
+## A new lift's name from what was typed: "ghd sit-ups" -> "GHD Sit-ups".
+static func _title_case(typed: String) -> String:
 	var out = []
-	for w in n.split(" ", false):
-		out.append(w.substr(0, 1).to_upper() + w.substr(1))
+	for w in Xp.normalize_exercise(typed).split(" ", false):
+		var bare = w.trim_suffix(",")
+		if CAPITALS.has(bare):
+			out.append(bare.to_upper() + w.substr(bare.length()))
+		else:
+			out.append(w.substr(0, 1).to_upper() + w.substr(1))
 	return " ".join(PackedStringArray(out))
 
 
@@ -1293,6 +1403,11 @@ static func is_loaded(name: String, ctx: Dictionary) -> bool:
 	var n = Xp.normalize_exercise(name)
 	if ctx.loaded.has(n):
 		return true
+	# "Muscle-up" in the library, "muscle up" in the log: the same lift.
+	var c = _compact(n)
+	for k in ctx.loaded:
+		if _compact(str(k)) == c:
+			return true
 	for w in LOADED_WORDS:
 		if n.contains(w):
 			return true

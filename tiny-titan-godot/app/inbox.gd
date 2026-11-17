@@ -122,8 +122,11 @@ static func fetch_url(source: String) -> String:
 func parse_opts() -> Dictionary:
 	var app = _app()
 	var names = []
+	var own = []
 	for x in LiftHistory.exercise_suggestions(app.sessions(), Summary.DEFAULT_EXERCISES):
 		names.append(x.name)
+		if int(x.get("count", 0)) > 0:
+			own.append(x.name)
 	var loaded = {}
 	for s in app.sessions():
 		if s.discipline == "lift":
@@ -136,7 +139,43 @@ func parse_opts() -> Dictionary:
 	for k in Misc.ORDER:
 		last_load[k] = Misc.last_load_kg(app.sessions(), k)
 	return {"today": app.today, "weightUnit": app.weight_unit(), "distanceUnit": app.distance_unit(),
-		"exercises": names, "loaded": loaded.keys(), "shots": _readings, "lastLoadKg": last_load}
+		"exercises": names, "own": own, "names": settings().get("names", {}),
+		"loaded": loaded.keys(), "shots": _readings, "lastLoadKg": last_load}
+
+
+## What the player said a typed lift name means (the review's yes / no / other):
+## `lift` is the lift it is, "" for a lift of its own under the typed name.
+## Filed under LiftMatch.key(typed), so the same words are not asked about again.
+func name_lift(key: String, lift: String) -> void:
+	var names = settings().get("names", {}).duplicate()
+	names[key] = lift
+	_app().update_inbox({"names": names})
+
+
+func names_count() -> int:
+	return settings().get("names", {}).size()
+
+
+## Forget every such decision: the game works the names out again, and asks.
+func forget_names() -> void:
+	_app().update_inbox({"names": {}})
+
+
+## Read the note text of the last check again, after a lift name was decided:
+## the same entries, with the new names. Nothing is fetched, and the pictures
+## and their readings stay as they were.
+func reparse() -> Dictionary:
+	if not bool(_last.get("ok", false)) or last_text == "":
+		return _last
+	var parsed = QuickLog.parse_any(last_text, parse_opts())
+	# A note about pictures that were not read is said once, by the check itself.
+	for pr in _last.get("problems", []):
+		if str(pr.get("line", "")) == "pictures" and str(pr.get("picture", "x")) == "":
+			parsed.problems.append(pr)
+	var split = PhoneInbox.split_entries(parsed.entries, settings().get("imported", {}))
+	_resolve_updates(split.fresh)
+	_last = {"ok": true, "error": "", "fresh": split.fresh, "already": split.already, "problems": parsed.problems}
+	return _last
 
 
 ## Fetch (link) or read (file path) the note, then emit `checked`. A file is read
@@ -519,6 +558,17 @@ func import_entries(entries: Array) -> void:
 		for k in imported.keys():
 			if not _source_keys.has(k):
 				imported.erase(k)
+	# A lift name the review showed (taken as one of the player's lifts, or as
+	# a new one) and that was imported like that is what was meant: remember it.
+	var names = settings().get("names", {}).duplicate()
+	var learned = false
+	for e in entries:
+		for pk in e.get("names", []):
+			if not names.has(str(pk.key)):
+				names[str(pk.key)] = str(pk.name) if str(pk.kind) == "match" else ""
+				learned = true
+	if learned:
+		app.update_inbox({"names": names})
 	var updates = []
 	var body_updates = []
 	var read_new = 0

@@ -206,6 +206,16 @@ func _build_inbox() -> void:
 	status.add_child(Kit.vcenter(Icons.rect("clock", 16)))
 	status.add_child(Kit.clip(line, 12, Pal.MUTED))
 	card.add(status)
+	# Lift names the review was told about ("row - cable, 1UE" is my Single-Arm Cable Row).
+	var n_names = App.inbox.names_count()
+	if n_names > 0:
+		var remembered = Kit.hbox(6)
+		remembered.add_child(Kit.vcenter(Icons.rect("lift", 16)))
+		remembered.add_child(Kit.clip("%d lift name%s remembered" % [n_names, "" if n_names == 1 else "s"], 12, Pal.MUTED))
+		var forget = Kit.button("Forget", "ghost", _forget_names, "sm")
+		forget.tooltip_text = "The next import works the names out again, and asks"
+		remembered.add_child(forget)
+		card.add(remembered)
 	add_child(card)
 
 
@@ -245,6 +255,13 @@ func _commit_source(t: String) -> void:
 		return
 	_pending_source = null
 	App.inbox.set_source(t)
+
+
+func _forget_names() -> void:
+	Sfx.tick()
+	App.inbox.forget_names()
+	App.toast("Forgotten: the next import asks about those names again", "info")
+	call_deferred("_refill")
 
 
 func _on_inbox_auto(on) -> void:

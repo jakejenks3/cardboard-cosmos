@@ -83,6 +83,16 @@ session above them; `---` starts a second session on the same day; `#` starts a 
 An exercise name may hold a number of its own (`neck 4 way - 3x20@10`, `1 arm row 3x10 @ 40`): put
 a dash or a colon between such a name and its sets the first time; once it is in your log the game
 knows it. A decimal may be typed without its zero (`.5 mile`).
+
+A lift name does not have to be exact. The game compares the words, not the letters: another
+order, dashes and commas, plurals, short forms (`db`, `1UE`, `pulley`) and a small typo all read as
+the same lift, and one of your own lifts wins over the library's name for it, so your history
+stays in one piece. In the review each such name gets a row saying what it was taken as, with
+three keys: the tick (yes), the cross (no, it is a lift of its own) and the pencil (pick another
+lift, or type a name). A name it has never seen is marked as a new lift, with the closest one
+offered when there is one. What you answer, or import as shown, is remembered, so the same words
+are asked about once (Settings → Phone inbox → Forget starts over). A line the game cannot read
+at all is listed with the reason and an example of how to write it.
 `vest walk 3km 40:00 10kg` logs a weighted vest walk (see Miscellaneous below); leave the weight
 out and the last vest you logged is used, or put `vest 10kg` on the line under it. Written as a
 sentence it works too: `2.5 mile walk with 30 lb vest`.
@@ -245,6 +255,7 @@ godot --headless --path . --script res://tests/quick_log_test.gd   # the phone-i
 godot --headless --path . --script res://tests/shot_reader_test.gd # reading screenshots
 godot --headless --path . --script res://tests/misc_test.gd        # misc activities (vest walks)
 godot --headless --path . --script res://tests/reading_test.gd     # pages read
+godot --headless --path . --script res://tests/lift_match_test.gd  # which lift a typed name means
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```
 

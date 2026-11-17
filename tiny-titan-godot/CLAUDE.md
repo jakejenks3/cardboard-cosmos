@@ -148,8 +148,41 @@ is the Windows handoff.
     line is still cut at its first number; only when that does not read, `_later_cut` tries a
     later start, and takes it only when the words before it are clearly a name: an exercise
     already logged (`_knows_exercise`), a name cut off by a dash or a colon, or a number followed
-    by a word from `NAME_NUMBER_WORDS` ("way", "arm", "degree"...). Amounts (`AMOUNT_WORDS`:
-    `bench 3 sets of 5 at 80`, `bench 80 - 3x5`) stay problem lines, with the same message.
+    by a word from `NAME_NUMBER_WORDS` ("way", "arm", "degree"...) or a short form names use
+    (`LiftMatch.WORDS`: "1UE"). Amounts (`AMOUNT_WORDS`: `bench 3 sets of 5 at 80`,
+    `bench 80 - 3x5`) stay problem lines, with the same message.
+  - The review sheet says WHY a line was not read (`InboxSheet._unread_card`: the line and its
+    reason, which carries an example); the reason used to sit in a tooltip.
+- Lift names that are not exact (added 2026-11-17): `game/lift_match.gd` (`LiftMatch`, pure).
+  A typed lift name is compared by its WORDS: order, dashes, commas, plurals, short forms
+  (`WORDS`: db, 1UE, pulley...), words written apart (`PAIRS`, `TAILS`: "push down") and one
+  typo in a word of five letters or more do not count; a word that only says a library lift's
+  equipment or body part is not held against it ("chest fly - cable" is Cable Fly), other
+  equipment costs (`WRONG_GEAR`). `find(typed, known)` scores candidates: `SAME` (0.95) and up
+  is the same lift, `CLOSE` (0.5) and up is offered as closest.
+  - `QuickLog.pick_exercise(typed, ctx)` returns {key, typed, name, kind, closest}. "exact": one
+    of the player's lifts, a short name (`ALIASES`), a library lift (it now gets the library's
+    name: "db bench" is Dumbbell Bench Press), or a name already decided. "match": the same
+    words, or the start of exactly one known lift: taken as that lift. "new": a lift of its
+    own (`plain_name`; `CAPITALS` keeps "GHD", "1UE"), with `closest` when one lift is clearly
+    nearest. The player's own lift wins over the library's name for the same lift
+    (`LiftMatch.same_lift`), so a new spelling joins the history they have. Needs `opts.own`
+    (lifts actually logged) and `opts.names` (decisions); without them it reads as before.
+  - A lift entry carries `names` (the picks that are not exact). The review sheet shows a row
+    per name (`InboxSheet._name_row`): what was written, what it is taken as, and three keys:
+    yes / no (a lift of its own) / another (`_pick_other`: nearest lifts, search, or a typed
+    name). An answer is stored at once in `saved.inbox.names` = {`LiftMatch.key(typed)`: lift
+    name, "" = its own lift} (`PhoneInbox.name_lift`), the note is read again
+    (`PhoneInbox.reparse`, nothing is fetched) and the sheet is rebuilt in place (`_fill` /
+    `_refill`: ticks and moved dates are kept, the answered row stays put). A row imported as
+    shown is remembered too (`import_entries`), so the same words are asked about once.
+    Settings -> Phone inbox shows the count with a Forget key. A decision never changes an
+    entry's key (keys are made from the typed lines).
+  - `Sheet` (ui/widgets/sheet.gd): the slide-in now goes through `_layout` (`_rise`). Before,
+    a sheet whose wrapped text settled after opening (the review sheet) was left hanging above
+    the bottom edge, and jumped down the first time its content changed.
+  - Tests: `tests/lift_match_test.gd`, more in `tests/quick_log_test.gd`, walkthrough
+    `tests/shots/names.gd` (`new` data).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -258,6 +291,7 @@ godot --headless --path . --script res://tests/quick_log_test.gd
 godot --headless --path . --script res://tests/shot_reader_test.gd
 godot --headless --path . --script res://tests/misc_test.gd
 godot --headless --path . --script res://tests/reading_test.gd
+godot --headless --path . --script res://tests/lift_match_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -273,6 +307,7 @@ godot --path . res://tests/shots.tscn -- res://tests/shots/e2e.gd fresh
 Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, shop, bounty, settings, inbox,
 themes, climb_more (routes and hangboard), pictures (screenshots in the note, `new` data, Windows only),
 misc (the Miscellaneous section and vest walks), reading (pages read, year data),
+names (lift names that are not exact: the review's yes / no / another, `new` data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -285,6 +320,10 @@ the check.
 
 ## Known rough edges
 
+- Lift names are matched when a note is imported, not afterwards: a lift already in the log
+  under words of its own ("Chest Fly Cable", imported before the matching existed) stays under
+  "Your own" in Journey -> Lifts instead of joining the library's Cable Fly. New spellings of
+  it do join it.
 - Editing a day in the phone note after it was imported updates that session only when it
   carries `inboxKey` (imports from 2026-11-15 on); older imports still get the "adds it
   again" warning and are left unticked.

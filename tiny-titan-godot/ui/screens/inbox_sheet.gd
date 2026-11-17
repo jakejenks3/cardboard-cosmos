@@ -5,14 +5,32 @@ extends RefCounted
 ## and, for guessed dates, a day nudge; then the lines it could not read and
 ## the Import button. An entry read from a screenshot shows that picture and
 ## everything else found on it; a picture it could not use gets its own card
-## saying why. Also the "Paste text" sheet and the shared check-then-review
+## saying why. A lift name that was not exactly one of the player's lifts gets
+## a row under its entry: what it was taken as, and yes / no / another (see
+## `_name_row`). Also the "Paste text" sheet and the shared check-then-review
 ## flow used by Settings and the Log picker.
 
-## `result` as emitted by PhoneInbox.checked. `before_import` runs right before importing.
+## `result` as emitted by PhoneInbox.checked.
+## ui: {sheet, button, fresh, answered: {name key: true} (lift names decided in
+## this review: their rows stay, as answered), rows: {name key: its row}}.
 static func open(result: Dictionary) -> void:
 	var sheet = Kit.sheet("From your phone")
+	var ui = {"button": null, "fresh": [], "sheet": sheet, "answered": {}, "rows": {}}
+	_fill(ui, result)
+	sheet.open()
+
+
+## Everything inside the sheet. Runs again when a lift name is decided: the
+## note is read again and the same cards come back with the new name.
+static func _fill(ui: Dictionary, result: Dictionary) -> void:
+	var sheet: Sheet = ui.sheet
+	for old in sheet.box.get_children():
+		sheet.box.remove_child(old)
+		old.queue_free()
 	var fresh = result.get("fresh", [])
-	var ui = {"button": null, "fresh": fresh, "sheet": sheet}
+	ui.fresh = fresh
+	ui.button = null
+	ui.rows = {}
 	if fresh.is_empty():
 		var none = Kit.vbox(8)
 		var ic = Icons.rect("speech", 36)
@@ -52,7 +70,6 @@ static func open(result: Dictionary) -> void:
 		cancel.custom_minimum_size.y = 56
 	row.add_child(cancel)
 	sheet.box.add_child(row)
-	sheet.open()
 
 
 ## A small tag with an icon; the full text, if any, in the tooltip.
@@ -128,8 +145,197 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	Kit.juice(toggle)
 	row.add_child(toggle)
 	c.add(row)
+	# Lift names that were not exactly a lift the player has.
+	for pk in e.get("names", []):
+		if str(pk.kind) != "exact" or ui.answered.has(str(pk.key)):
+			c.add(_name_row(pk, ui))
 	_style_toggle(e, toggle, c)
 	return c
+
+
+## One typed lift name the game was not sure about: what was written, what it
+## is taken as, and up to three small keys: yes (it is that lift), no (it is a
+## lift of its own), another (pick the lift). Once answered it shows the answer
+## and keeps the "another" key. The row is the same height in every state, so
+## answering one never moves the next one under the cursor.
+static func _name_row(pk: Dictionary, ui: Dictionary) -> Control:
+	var key = str(pk.key)
+	var kind = str(pk.kind)
+	var settled = ui.answered.has(key)
+	var closest = str(pk.get("closest", ""))
+	var asks = not settled and (kind == "match" or closest != "")
+	var tone: Color = Pal.GOOD if settled else (Pal.disc("lift") if kind == "match" else Pal.ACCENT)
+	var box = PanelContainer.new()
+	box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	box.add_theme_stylebox_override("panel", PixBox.well(8, 5, tone))
+	ui.rows[key] = box
+	var row = Kit.hbox(8)
+	row.add_child(Kit.vcenter(Icons.rect("check" if settled else ("repeat" if kind == "match" else "sparkle"), 16)))
+	var words = Kit.vbox(0)
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var wrote = "\"%s\"" % str(pk.typed)
+	var says = "= %s" % str(pk.name)
+	if not settled:
+		if kind == "match":
+			says = "= %s?" % str(pk.name)
+		else:
+			wrote += " · new lift"
+			if closest != "":
+				says = "Same as %s?" % closest
+	words.add_child(Kit.clip(wrote, 12, Pal.MUTED))
+	var line = Kit.clip(says, 13, tone if settled or kind == "match" else Pal.TEXT, true)
+	line.tooltip_text = says
+	line.mouse_filter = Control.MOUSE_FILTER_PASS
+	words.add_child(line)
+	row.add_child(words)
+	if asks:
+		var yes_lift = str(pk.name) if kind == "match" else closest
+		row.add_child(Kit.vcenter(Kit.icon_button("check", InboxSheet._answer.bind(ui, pk, yes_lift), "Yes, it is %s" % yes_lift, 28)))
+		row.add_child(Kit.vcenter(Kit.icon_button("close", InboxSheet._answer.bind(ui, pk, ""), "No, it is a lift of its own", 28)))
+	row.add_child(Kit.vcenter(Kit.icon_button("edit", InboxSheet._pick_other.bind(ui, pk), "Pick another lift", 28)))
+	box.add_child(row)
+	return box
+
+
+## The player said what a typed name is (`lift`; "" = a lift of its own): it is
+## remembered, the note is read again, and the row shows the answer.
+static func _answer(ui: Dictionary, pk: Dictionary, lift: String) -> void:
+	Sfx.tick()
+	ui.answered[str(pk.key)] = true
+	App.inbox.name_lift(str(pk.key), lift)
+	_refill(ui, str(pk.key))
+
+
+## Where a name row is on screen (null when it is not there).
+static func _row_top(ui: Dictionary, key: String):
+	var c = ui.rows.get(key)
+	if key == "" or c == null or not is_instance_valid(c) or not c.is_inside_tree():
+		return null
+	return c.get_global_rect().position.y
+
+
+## Read the note again and rebuild the cards in place. Ticks and moved dates
+## stay as they were, and the row that was answered stays where it is.
+static func _refill(ui: Dictionary, anchor: String = "") -> void:
+	var sheet: Sheet = ui.sheet
+	if not is_instance_valid(sheet) or sheet._closing:
+		return
+	var kept = {}
+	for e in ui.fresh:
+		kept[str(e.key)] = {"skip": bool(e.get("skip", false)), "date": str(e.date)}
+	var before = _row_top(ui, anchor)
+	var result = App.inbox.reparse()
+	for e in result.get("fresh", []):
+		var k = kept.get(str(e.key))
+		if k == null:
+			continue
+		if k.skip:
+			e["skip"] = true
+		else:
+			e.erase("skip")
+		if str(k.date) != str(e.date):
+			e.date = k.date
+			e.data["date"] = k.date
+	_fill(ui, result)
+	if before == null:
+		return
+	await sheet.get_tree().process_frame
+	await sheet.get_tree().process_frame
+	if not is_instance_valid(sheet) or sheet._closing:
+		return
+	var after = _row_top(ui, anchor)
+	if after != null:
+		sheet._scroll.scroll_vertical += int(round(float(after) - float(before)))
+
+
+## "Which lift is it?": the nearest lifts first, a search over the player's
+## lifts and the library, a lift of its own, or any name typed into the box.
+static func _pick_other(ui: Dictionary, pk: Dictionary) -> void:
+	Sfx.tap()
+	var s = Kit.sheet("Which lift is it?")
+	s.box.add_child(Kit.para("You wrote \"%s\"." % str(pk.typed), 13, Pal.MUTED))
+	var field = Kit.input("", "Search, or type a new name")
+	field.select_all_on_focus = false
+	s.box.add_child(field)
+	var list = Kit.vbox(6)
+	s.box.add_child(list)
+	var opts = App.inbox.parse_opts()
+	var state = {"rows": LiftLibrary.rows(App.sessions()), "known": opts.exercises, "own": opts.own}
+	field.text_changed.connect(InboxSheet._pick_list.bind(list, ui, pk, s, state))
+	_pick_list("", list, ui, pk, s, state)
+	s.open()
+
+
+## How many lifts the picker lists at once.
+const PICK_SHOWN = 7
+
+
+## The picker's list for what is in its search box (only the list is rebuilt,
+## so typing keeps the box and its cursor).
+static func _pick_list(text: String, list: VBoxContainer, ui: Dictionary, pk: Dictionary, s: Sheet, state: Dictionary) -> void:
+	if not is_instance_valid(list):
+		return
+	for old in list.get_children():
+		list.remove_child(old)
+		old.queue_free()
+	var by_name = {}
+	for r in state.rows:
+		for k in r.keys:
+			by_name[str(k)] = r
+	var q = text.strip_edges()
+	var names = []
+	for c in LiftMatch.find(q if q != "" else str(pk.typed), state.known, PICK_SHOWN if q != "" else 5):
+		if float(c.score) >= 0.3:
+			names.append(str(c.name))
+	if q == "":
+		# Nothing typed yet: after the nearest ones, the lifts done most recently.
+		for n in state.own:
+			if names.size() >= 5:
+				break
+			if not names.has(str(n)):
+				names.append(str(n))
+	else:
+		for r in LiftLibrary.query(state.rows, {"q": q, "sort": "count"}):
+			if names.size() >= PICK_SHOWN:
+				break
+			if not names.has(str(r.name)):
+				names.append(str(r.name))
+	var exact = false
+	for n in names:
+		if Xp.normalize_exercise(n) == Xp.normalize_exercise(q):
+			exact = true
+		list.add_child(_pick_row(n, by_name.get(Xp.normalize_exercise(n)), "", InboxSheet._picked.bind(ui, pk, s, n)))
+	if q == "":
+		list.add_child(_pick_row("Save as \"%s\"" % QuickLog.plain_name(str(pk.typed)), null, "A lift of its own", InboxSheet._picked.bind(ui, pk, s, "")))
+	elif not exact:
+		list.add_child(_pick_row("Name it \"%s\"" % q, null, "A lift of its own, under this name", InboxSheet._picked.bind(ui, pk, s, q)))
+
+
+## One lift in the picker: its name, and what it is (body part and equipment
+## for a library lift, how often it was done for one of the player's).
+static func _pick_row(lift: String, lib, detail: String, on_tap: Callable) -> Card:
+	var c = Kit.card(1, on_tap, 9)
+	c.add(Kit.clip(lift, 14, null, true))
+	var bits = []
+	if detail != "":
+		bits.append(detail)
+	elif lib != null:
+		if bool(lib.get("own", false)):
+			bits.append("Your lift")
+		else:
+			bits.append(LiftLibrary.part_name(str(lib.part)))
+			bits.append(LiftLibrary.equip_name(str(lib.equip)))
+		if lib.get("st") != null:
+			bits.append("done %d time%s" % [int(lib.st.count), "" if int(lib.st.count) == 1 else "s"])
+	if not bits.is_empty():
+		c.add(Kit.clip(" · ".join(PackedStringArray(bits)), 12, Pal.MUTED))
+	return c
+
+
+static func _picked(ui: Dictionary, pk: Dictionary, s: Sheet, lift: String) -> void:
+	s.close()
+	_answer(ui, pk, lift)
 
 
 ## The pictures found under this day, small, in the order they are kept (front, side, back).

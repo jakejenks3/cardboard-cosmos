@@ -11,6 +11,8 @@ var _backdrop: ColorRect
 var _scroll: ScrollContainer
 var _title = ""
 var _closing = false
+## The slide-in: 1 = below the screen, 0 = in place.
+var _rise = 1.0
 
 
 func setup(title: String = "") -> void:
@@ -51,15 +53,22 @@ func open() -> void:
 		push_warning("Sheet.open(): Kit.overlay_root is not set")
 		return
 	Kit.overlay_root.add_child(self)
+	_rise = 1.0
 	_layout()
 	resized.connect(_layout)
 	box.minimum_size_changed.connect(_layout)
 	_backdrop.modulate.a = 0.0
 	var tw = create_tween().set_parallel(true)
 	tw.tween_property(_backdrop, "modulate:a", 1.0, 0.18)
-	var target_y = _panel.position.y
-	_panel.position.y = size.y
-	tw.tween_property(_panel, "position:y", target_y, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	# The slide goes through _layout: wrapped text only knows its height a frame
+	# or two after the sheet opens, and a slide aimed at where the sheet stood
+	# before that left it hanging above the bottom edge.
+	tw.tween_method(_set_rise, 1.0, 0.0, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
+func _set_rise(v: float) -> void:
+	_rise = v
+	_layout()
 
 
 func close() -> void:
@@ -82,7 +91,7 @@ func _layout() -> void:
 	var want = box.get_combined_minimum_size().y + chrome + 8
 	var h = clampf(want, 120.0, max_h)
 	_panel.size = Vector2(size.x, h)
-	_panel.position = Vector2(0, size.y - h)
+	_panel.position = Vector2(0, size.y - h + _rise * h)
 
 
 func _backdrop_input(event: InputEvent) -> void:
