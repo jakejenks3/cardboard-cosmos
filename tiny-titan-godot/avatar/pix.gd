@@ -15,12 +15,20 @@ extends RefCounted
 
 const OUTLINE = "#1a1026"
 
+## Which look the art is drawn in. false: the game's own (parts lit from the
+## top left, outlines tinted by what they surround, the reworked face, the
+## fuller gym). true: the original port, pixel for pixel: only the parity test
+## (tests/parity_art.gd) sets it, to compare against the TypeScript renders.
+static var classic: bool = false
+
 ## Added to a 24-bit 0xBBGGRR value this gives the signed 32-bit int whose
 ## bytes are R, G, B, 255.
 const _OPAQUE = -16777216
 
 static var _raw_cache = {} # "#rrggbb" -> packed int
 static var _hex_cache = {} # packed int -> "#rrggbb"
+static var _shade_cache = {} # factor * 100 -> {packed int -> packed int}
+static var _tint_cache = {} # outline base -> {packed int -> packed int}
 
 var w: int = 0
 var h: int = 0
@@ -189,6 +197,103 @@ func outline(color) -> void:
 		data[i] = v
 
 
+## Light the picture from the top left. Works on the flat colours of a
+## finished drawing, so call it before outline():
+##   - the right-most pixel of every run of three or more of one colour is a
+##     shade darker (what the port's "shade runs" did), and so is the lowest
+##     pixel of a part that hangs over something else (a hem, a chin, a fist);
+##   - the top pixel of a part with nothing above it is a shade lighter.
+func light(right: float = 0.82, under: float = 0.88, top: float = 1.12) -> void:
+	var src: PackedInt32Array = data.duplicate()
+	for y in range(h):
+		var row: int = y * w
+		for x in range(w):
+			var c: int = src[row + x]
+			if c == 0:
+				continue
+			var r: int = src[row + x + 1] if x + 1 < w else 0
+			var l1: int = src[row + x - 1] if x >= 1 else 0
+			var l2: int = src[row + x - 2] if x >= 2 else 0
+			var d: int = src[row + w + x] if y + 1 < h else 0
+			var d2: int = src[row + 2 * w + x] if y + 2 < h else 0
+			var u1: int = src[row - w + x] if y >= 1 else 0
+			var u2: int = src[row - 2 * w + x] if y >= 2 else 0
+			var dark_right: bool = r != c and l1 == c and l2 == c
+			var dark_under: bool = d != c and u1 == c and u2 == c
+			if dark_right and dark_under:
+				data[row + x] = Pix.shade_raw(c, right * under + 0.02)
+			elif dark_right:
+				data[row + x] = Pix.shade_raw(c, right)
+			elif dark_under:
+				data[row + x] = Pix.shade_raw(c, under)
+			elif u1 == 0 and d == c and d2 == c and top > 1.0:
+				data[row + x] = Pix.shade_raw(c, top)
+
+
+## Give a flat sprite (a pet, a monster) some volume, lit from the top left:
+## a pixel on its upper or left rim catches the light, one on its lower or
+## right rim falls in shade. Near-black pixels (eyes, mouths) are left alone.
+## Call it before outline().
+func bevel(dark: float = 0.8, lit: float = 1.16) -> void:
+	var src: PackedInt32Array = data.duplicate()
+	for y in range(h):
+		var row: int = y * w
+		for x in range(w):
+			var c: int = src[row + x]
+			if c == 0:
+				continue
+			var u: int = c - _OPAQUE
+			if 0.2126 * (u & 255) + 0.7152 * ((u >> 8) & 255) + 0.0722 * ((u >> 16) & 255) < 48.0:
+				continue
+			var up_out: bool = y == 0 or src[row - w + x] == 0
+			var left_out: bool = x == 0 or src[row + x - 1] == 0
+			var down_out: bool = y == h - 1 or src[row + w + x] == 0
+			var right_out: bool = x == w - 1 or src[row + x + 1] == 0
+			if (down_out or right_out) and not (up_out or left_out):
+				data[row + x] = Pix.shade_raw(c, dark)
+			elif (up_out or left_out) and not (down_out or right_out):
+				data[row + x] = Pix.shade_raw(c, lit)
+
+
+## A 1px outline whose colour leans towards what it surrounds (dark brown
+## round skin, dark blue round a blue shirt): softer than one flat dark line,
+## and the parts of a figure read as parts.
+func outline_tinted(base, lean: float = 0.42) -> void:
+	var table = _tint_cache.get(str(base) + "|" + str(lean))
+	if table == null:
+		table = {}
+		_tint_cache[str(base) + "|" + str(lean)] = table
+	var at: PackedInt32Array = PackedInt32Array()
+	var col: PackedInt32Array = PackedInt32Array()
+	for y in range(h):
+		var row: int = y * w
+		for x in range(w):
+			var i: int = row + x
+			if data[i] != 0:
+				continue
+			# What the line sits against: the pixel below it first (the top of
+			# a part is what the eye follows), then right, left, above.
+			var n: int = 0
+			if y < h - 1 and data[i + w] != 0:
+				n = data[i + w]
+			elif x < w - 1 and data[i + 1] != 0:
+				n = data[i + 1]
+			elif x > 0 and data[i - 1] != 0:
+				n = data[i - 1]
+			elif y > 0 and data[i - w] != 0:
+				n = data[i - w]
+			if n == 0:
+				continue
+			var v = table.get(n)
+			if v == null:
+				v = Pix.to_raw(Pix.mix(str(base), Pix.shade(Pix.raw_to_hex(n), 0.36), lean))
+				table[n] = v
+			at.append(i)
+			col.append(v)
+	for k in range(at.size()):
+		data[at[k]] = col[k]
+
+
 ## An independent copy of this buffer.
 func clone() -> Pix:
 	var p: Pix = Pix.new(w, h)
@@ -260,6 +365,20 @@ static func mix(a: String, b: String, t: float) -> String:
 	var c1: Array = hex_to_rgb(a)
 	var c2: Array = hex_to_rgb(b)
 	return rgb_to_hex(c1[0] + (c2[0] - c1[0]) * t, c1[1] + (c2[1] - c1[1]) * t, c1[2] + (c2[2] - c1[2]) * t)
+
+
+## A packed (non-empty) pixel made darker (factor < 1) or lighter (> 1), like shade().
+static func shade_raw(v: int, factor: float) -> int:
+	var fk: int = int(round(factor * 100.0))
+	var table = _shade_cache.get(fk)
+	if table == null:
+		table = {}
+		_shade_cache[fk] = table
+	var hit = table.get(v)
+	if hit == null:
+		hit = to_raw(shade(raw_to_hex(v), factor))
+		table[v] = hit
+	return hit
 
 
 ## Packed pixel value for 0-255 channels (see the class comment).

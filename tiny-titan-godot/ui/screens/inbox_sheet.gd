@@ -66,10 +66,21 @@ static func _chip(icon: String, text: String, color: Color, tip: String) -> Pane
 ## dates), the summary as its one line, warnings as chips, and a tick box.
 static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	var c = Kit.card(6, Callable(), 10)
-	var disc = "body" if e.kind == "body" else str(e.data.discipline)
-	c.accent(Pal.disc(disc) if disc != "body" else Pal.SECOND)
+	var disc = "body" if e.kind == "body" else ("read" if e.kind == "reading" else str(e.data.discipline))
+	if disc == "read":
+		c.accent(Pal.READ)
+	else:
+		c.accent(Pal.disc(disc) if disc != "body" else Pal.SECOND)
 	var row = Kit.hbox(10)
-	if disc == "body":
+	if disc == "read":
+		var rb = PanelContainer.new()
+		rb.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		rb.add_theme_stylebox_override("panel", PixBox.make(Pal.READ, {"lip": 1, "lip_color": Pal.READ_DARK, "pad_h": 0, "pad_v": 0}))
+		rb.custom_minimum_size = Vector2(40, 42)
+		rb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		rb.add_child(Kit.center(Icons.rect("book", 32)))
+		row.add_child(rb)
+	elif disc == "body":
 		var bb = PanelContainer.new()
 		bb.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		bb.add_theme_stylebox_override("panel", PixBox.make(Pal.SECOND, {"lip": 1, "lip_color": Pal.SECOND_DARK, "pad_h": 0, "pad_v": 0}))
@@ -96,7 +107,7 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	if e.kind == "body" and not e.data.get("photoRefs", []).is_empty():
 		main.add_child(_thumbs(e.data.photoRefs))
 	if not e.get("shots", []).is_empty():
-		main.add_child(_from_picture(e, Pal.SECOND if disc == "body" else Pal.disc(disc)))
+		main.add_child(_from_picture(e, Pal.SECOND if disc == "body" else (Pal.READ if disc == "read" else Pal.disc(disc))))
 	var warns = e.get("warnings", [])
 	if not warns.is_empty():
 		var wf = Kit.flow(4)

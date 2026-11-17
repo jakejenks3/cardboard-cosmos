@@ -117,6 +117,6 @@ func _init() -> void:
 	var s21 = derive([lift("2026-10-13", {"Squat": [[5, 80]]})])
 	ok(not has(s21, "quirk_friday_13"), "Tuesday the 13th does not count")
 
-	ok(Achievements.all().size() == 171, "171 trophies in the catalog", Achievements.all().size())
+	ok(Achievements.all().size() == 187, "187 trophies in the catalog", Achievements.all().size())
 	print("QUIRKS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

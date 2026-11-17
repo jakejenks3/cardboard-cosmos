@@ -8,7 +8,9 @@ extends RefCounted
 ##
 ## Data shapes (Dictionaries with the TS field names):
 ##   BodyInput: heroLevel, liftLevel, climbLevel, runLevel, rideLevel, skin,
-##              hairStyle, hairColor, pose ("idle" | "flex"), frame, blink, happy
+##              hairStyle, hairColor, pose ("idle" | "flex"), frame, blink, happy,
+##              look? (-1 | 0 | 1: the eyes glance left / ahead / right; the
+##              game's look only, see Pix.classic)
 ##   Pt:        x, y
 ##   Arm:       shoulder (Pt), elbow (Pt), wrist (Pt), upperW, foreW,
 ##              hand {x, y, w, h}, side (-1 | 1)
@@ -21,7 +23,12 @@ extends RefCounted
 ##              armL, armR, legL, legR, legTop, legLen, feetTop, footH,
 ##              footL {x, w}, footR {x, w}, pose, skin, hair
 ##   Visuals:   {slot: item visual Dictionary or null} (every slot optional)
-##   DrawOptions: visuals, optional noOutline
+##   DrawOptions: visuals, optional noOutline, optional flat (no lighting:
+##                for a caller that lights the picture itself)
+##
+## Two looks (Pix.classic): the original port, checked pixel for pixel against
+## the TypeScript renders, and the game's own, which is the same body with a
+## bigger-eyed face, lit hair, shaded parts and tinted outlines.
 
 const HERO_W = 48
 const HERO_H = 60
@@ -103,6 +110,9 @@ static func body_metrics(i: Dictionary) -> Dictionary:
 	var bob: int = 0
 	if pose == "idle":
 		bob = 0 if frame % 4 < 2 else 1
+	elif not Pix.classic:
+		# A flex is held, then pumped: the whole upper body dips every other frame.
+		bob = frame % 2
 
 	var foot_h: int = 3
 	var leg_len: int = 12 + TTUtil.jsround(bulk * 3)
@@ -252,7 +262,77 @@ static func _draw_arm_definition(p: Pix, m: Dictionary) -> void:
 			p.set_px(fx + (0 if a.side < 0 else a.foreW - 1), fy, hi)
 
 
+## The face of the game's look: two-by-two eyes with a catch-light that can
+## glance sideways, brows that get more determined as the hero grows, a small
+## nose, a real smile.
+static func _draw_head_lit(p: Pix, m: Dictionary, i: Dictionary) -> void:
+	var skin: String = m.skin
+	var x: int = m.headLeft
+	var y: int = m.headTop
+	var shade: String = Pix.shade(skin, 0.86)
+	p.round_rect(x, y, m.headW, m.headH, skin, 2)
+	# ears: the far one in shade
+	p.rect(x - 1, y + 5, 1, 2, skin)
+	p.rect(x + m.headW, y + 5, 1, 2, shade)
+	# the far cheek and the jaw under it are turned from the light
+	p.vline(x + m.headW - 1, y + 2, m.headH - 4, shade)
+	p.vline(x + m.headW - 2, y + m.headH - 3, 2, shade)
+	p.hline(m.cx + 1, y + m.headH - 1, 3, shade)
+	# eyes
+	var look: int = int(i.get("look", 0))
+	var eye: String = Pix.OUTLINE
+	var lx: int = m.cx - 4 + look
+	var rx: int = m.cx + 2 + look
+	var ey: int = m.eyeY
+	if i.blink:
+		p.hline(lx, ey + 1, 2, eye)
+		p.hline(rx, ey + 1, 2, eye)
+	else:
+		p.rect(lx, ey, 2, 2, eye)
+		p.rect(rx, ey, 2, 2, eye)
+		var glint: int = 1 if look > 0 else 0
+		p.set_px(lx + glint, ey, "#ffffff")
+		p.set_px(rx + glint, ey, "#ffffff")
+	# brows: the colour of the hair, settled into the skin
+	var brow: String = Pix.mix(Pix.shade(skin, 0.5), m.hair, 0.45)
+	if m.stage == 0:
+		p.set_px(m.cx - 3, ey - 2, brow)
+		p.set_px(m.cx + 2, ey - 2, brow)
+	elif m.stage >= 3:
+		p.set_px(m.cx - 4, ey - 2, brow)
+		p.set_px(m.cx - 3, ey - 1, brow)
+		p.set_px(m.cx + 3, ey - 2, brow)
+		p.set_px(m.cx + 2, ey - 1, brow)
+	else:
+		p.hline(m.cx - 4, ey - 2, 2, brow)
+		p.hline(m.cx + 2, ey - 2, 2, brow)
+	# On dark skin dark eyes need something to sit on: a lighter lid under each.
+	if int(i.skin) % SKIN_TONES.size() >= 3 and not i.blink:
+		var lid: String = Pix.shade(skin, 1.22)
+		p.hline(lx, ey + 2, 2, lid)
+		p.hline(rx, ey + 2, 2, lid)
+	# mouth
+	var mouth: String = Pix.shade(skin, 0.55)
+	var my: int = y + 8
+	if i.happy:
+		p.set_px(m.cx - 2, my, mouth)
+		p.set_px(m.cx + 1, my, mouth)
+		p.hline(m.cx - 1, my + 1, 2, mouth)
+		var blush: String = Pix.mix(skin, "#ff5a6e", 0.42)
+		p.set_px(x + 1, my - 1, blush)
+		p.set_px(x + m.headW - 2, my - 1, blush)
+	elif m.stage == 0:
+		p.hline(m.cx - 1, my + 1, 2, mouth)
+	else:
+		p.hline(m.cx - 1, my + 1, 2, mouth)
+		if m.stage >= 2:
+			p.set_px(m.cx + 1, my, mouth)
+
+
 static func _draw_head(p: Pix, m: Dictionary, i: Dictionary) -> void:
+	if not Pix.classic:
+		_draw_head_lit(p, m, i)
+		return
 	p.round_rect(m.headLeft, m.headTop, m.headW, m.headH, m.skin, 2)
 	# ears
 	p.rect(m.headLeft - 1, m.headTop + 5, 1, 2, m.skin)
@@ -329,6 +409,14 @@ static func _draw_hair(p: Pix, m: Dictionary, i: Dictionary, hat_covers_top: boo
 	# fringe
 	p.set_px(x + 3, y + 3, c)
 	p.set_px(x + 8, y + 3, c)
+	if not Pix.classic and style != 6:
+		# where the light catches the crown, and the far side falling away
+		var hi: String = Pix.shade(c, 1.28)
+		p.hline(x + 2, y, 3, hi)
+		p.set_px(x + 5, y + 1, hi)
+		p.rect(x + m.headW - 2, y, 2, 2, dark)
+		p.set_px(x + m.headW - 1, y + 3, dark)
+		p.set_px(x + m.headW - 1, y + 4, dark)
 	match style:
 		1: # spiky
 			p.set_px(x + 1, y - 2, c)
@@ -420,6 +508,9 @@ static func draw_hero(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
 
 	# neck
 	p.rect(m.cx - int(floor(m.neckW / 2.0)), m.neckTop, m.neckW, m.neckH + 1, m.skin)
+	if not Pix.classic:
+		# the shadow the chin throws on it
+		p.hline(m.cx - int(floor(m.neckW / 2.0)), m.neckTop + (1 if m.stage == 0 else 0), m.neckW, Pix.shade(m.skin, 0.78))
 	if accessory != null:
 		Equipment.draw_accessory_over(p, accessory, m, frame)
 
@@ -433,9 +524,15 @@ static func draw_hero(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
 	if face != null:
 		Equipment.draw_face_item(p, face, m)
 
-	_shade_runs(p)
-	if not opts.get("noOutline", false):
-		p.outline(Pix.OUTLINE)
+	if Pix.classic:
+		_shade_runs(p)
+		if not opts.get("noOutline", false):
+			p.outline(Pix.OUTLINE)
+	else:
+		if not opts.get("flat", false):
+			p.light()
+		if not opts.get("noOutline", false):
+			p.outline_tinted(Pix.OUTLINE)
 	var aura = v.get("aura")
 	if aura != null and aura.kind == "aura":
 		Equipment.draw_aura(p, aura.style, m, frame)

@@ -19,8 +19,8 @@ is the Windows handoff.
 
 ## What exists (all working as of the handoff)
 
-- `game/`    Rules engine: XP, levels, PRs, 24-boss campaign, 171 trophies, 122 items,
-             15 pets, quests, streaks, loot. Everything is derived by replaying the log,
+- `game/`    Rules engine: XP, levels, PRs, 24-boss campaign, 187 trophies, 124 items,
+             16 pets, quests, streaks, loot. Everything is derived by replaying the log,
              never stored. Ported from a TypeScript version and locked to it by fixtures
              in `tests/parity/`. Don't change rules or numbers unless asked; if you do,
              the parity tests fail by design.
@@ -160,6 +160,52 @@ is the Windows handoff.
   logged is used (`opts.lastLoadKg`). Tests: `tests/misc_test.gd`, walkthrough
   `tests/shots/misc.gd` (year data).
 
+- Equipped view and hover cards (added 2026-11-16, evening): the Armory's hero card is a
+  paper doll: the hero on a `Stage` (`ui/widgets/stage.gd`) with a slot tile on each side for
+  the nine gear slots and the companion (`ArmoryScreen._slot_tile`, `DOLL_LEFT` / `DOLL_RIGHT`).
+  A slot shows the item by itself (`Art.item_icon_pix`: the mannequin drawn with and without
+  the item, the difference cropped; back gear is drawn alone, hands with the forearm, an aura
+  round a dark figure). The Armory opens on the "Equipped" tab: one row per slot with where it
+  came from and what it does, and an "Active effects" card (`ArmoryScreen.effect_sources`).
+  `HoverCard.attach(control, builder, ring, beside)` (`ui/widgets/hover_card.gd`) shows a
+  floating card while the mouse is over a control; the builders are `ArmoryDetail.hover_item`
+  / `hover_pet` / `hover_empty`, and `ArmoryDetail.item_origin` / `pet_origin` say how and when
+  something was obtained (from `state.items[id]` = {at, how, sessionId} and `saved.purchases`).
+  Gear tiles of a slot's grid zoom in on that part of the hero (`ArmoryScreen.slot_view`).
+  `PixFit` (`ui/widgets/pix_fit.gd`) shows any texture at the largest whole-number scale that
+  fits a box. Walkthrough: `tests/shots/armory.gd`.
+- Reading (added 2026-11-16, evening): `game/reading.gd` (`Reading`). The log is
+  `saved.reading` = [{id, date, pages, createdAt, inbox?}], ONE entry per day; each is a step
+  of the replay (`Derive._apply_reading`). It is NOT a session: no boss damage, no loot, no
+  workout streak. It pays 2 hero XP a page for the first 100 pages of a day (and coins through
+  `Wallet.tally`, `coins.by.reading`), has its own level (`Reading.level`, in pages), a day
+  streak, and counts days with both reading and a workout. `state.reading` only exists once
+  pages were logged (parity untouched). 16 `read_*` trophies in a new group
+  (`Achievements.MORE_GROUPS`; the UI uses `Achievements.groups()`), the owl companion
+  (`Pets`, pinned for parity with `Pets.restrict_to`), two pieces of gear (`read_glasses`,
+  `read_satchel`). `App.add_reading` / `set_reading` / `import_reading`; unlocks are announced
+  as toasts (`App.announce_unlocks`), there is no results reel. UI: `ui/screens/reading_view.gd`
+  (`ReadingView.card()` on the Hero tab with +1 / +5 / +10 / +25, `ReadingView.open()` the sheet
+  with the bookshelf, the day editor, two weeks of bars and the daily goal
+  `settings.readingGoal`), a key on the Log tab, a card in Journey -> Stats, a tile in the
+  recap. Phone note: `read 20 pages` / `20 pages` (`QuickLog._parse_reading`, entry kind
+  "reading"); an edited line changes the day by the difference (`inbox` map on the day's
+  entry). Tests: `tests/reading_test.gd`, walkthrough `tests/shots/reading.gd` (year data).
+- The look (2026-11-16, evening): `Pix.classic` picks between the original port (true: what
+  `tests/parity_art.gd` sets and compares with the TypeScript renders) and the game's own look
+  (false, the default): the reworked face (`HeroBody._draw_head_lit`), `Pix.light()` (parts lit
+  from the top left), `Pix.bevel()` (pets, bosses), `Pix.outline_tinted()`, the fuller gym
+  (`GymScene._draw_scene_lit`). New drawing code must keep the classic branch pixel-identical.
+  Everything is shown at WHOLE-number scales: `Icons.rect(icon, px)` snaps to 16 / 32 / 48 and
+  never stretches, `PetView` / `BossView` / `HeroView` / `PixFit` floor their scale. Motion:
+  `ui/widgets/fx.gd` (`Fx.shine`, `embers`, `twinkle`, `flicker`), `Kit.floater` ("+20 XP"
+  rising from a key), `Kit.purse_pill` (coins count up), glints on thick bars (`Bar.glint`),
+  the pixel `Ring`, pets that hop, bosses that float over a shadow, the sky's clouds / stars
+  (`Backdrop.SkyFx`), the tab icon bounce and tab fade in `main.gd`.
+- Every walkthrough screenshot is also a layout check: `ShotHelper.snap` prints a CHECK FAIL
+  when anything is wider than the column it scrolls in (a non-clipped long label once pushed
+  the Adventure page off the right edge: use `Kit.clip`, not `Kit.muted`, in a row).
+
 ## Rules that matter in this codebase
 
 - A session's discipline may be "misc": never index a four-key table with
@@ -201,7 +247,11 @@ godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd
 godot --headless --path . --script res://tests/shot_reader_test.gd
 godot --headless --path . --script res://tests/misc_test.gd
+godot --headless --path . --script res://tests/reading_test.gd
 ```
+
+After adding a script with a `class_name`, run the `--import` line first: until then other
+scripts cannot see the new class and every run fails with "Identifier not declared".
 
 Walkthroughs that drive the real UI and save screenshots (set `TINY_TITAN_DATA` and
 `TINY_TITAN_SHOTS` to temp folders first):
@@ -212,7 +262,7 @@ godot --path . res://tests/shots.tscn -- res://tests/shots/e2e.gd fresh
 
 Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, shop, bounty, settings, inbox,
 themes, climb_more (routes and hangboard), pictures (screenshots in the note, `new` data, Windows only),
-misc (the Miscellaneous section and vest walks),
+misc (the Miscellaneous section and vest walks), reading (pages read, year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

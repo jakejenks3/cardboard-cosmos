@@ -11,7 +11,7 @@ const TIER_ICON = {"bronze": "medal", "silver": "medal", "gold": "medal", "plati
 const TROPHY_COLS = 3
 const BOSS_COLS = 4
 
-## Trophy group filter: "all" or an Achievements.ACH_GROUPS id.
+## Trophy group filter: "all" or the id of one of Achievements.groups().
 var _filter: String = "all"
 
 
@@ -81,10 +81,23 @@ func _campaign(state: Dictionary) -> void:
 	zl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	zl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.add(zl)
+	# The boss in its arena: a spotlight, a floor to stand on (or float over).
+	var arena = PanelContainer.new()
+	arena.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	arena.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(Pal.HP).darkened(0.4), {"ring": null, "lip": 0, "inset": true, "pad_h": 4, "pad_v": 4}))
+	var ground = Stage.new()
+	ground.setup(Pal.HP, 4)
+	ground.shadow_px = 0
+	ground.floor_color = Pal.deep(Pal.HP).lightened(0.1)
+	arena.add_child(ground)
 	var bv = BossView.new()
 	bv.setup(boss.id, 150.0, true)
 	bv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	card.add(bv)
+	bv.size_flags_vertical = Control.SIZE_SHRINK_END
+	var stand = Kit.pad(bv, 0, 8, 0, 12)
+	stand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arena.add_child(stand)
+	card.add(arena)
 	var name_up = str(boss.name).to_upper()
 	if PixelFont.measure(name_up).x * 2 <= 370:
 		card.add(Kit.big_number(name_up, Pal.TEXT, 370, 3))
@@ -374,7 +387,7 @@ func _trophies(state: Dictionary) -> void:
 	# --- filter chips -----------------------------------------------------------
 	var chips = Kit.flow(6)
 	chips.add_child(Kit.chip("All", _filter == "all", _set_filter.bind("all")))
-	for g in Achievements.ACH_GROUPS:
+	for g in Achievements.groups():
 		var ch = Kit.chip(g.name, _filter == g.id, _set_filter.bind(g.id))
 		ch.icon = Icons.tex(Icons.for_emoji(g.icon))
 		ch.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -467,13 +480,16 @@ func _trophy_tile(r: Dictionary) -> Control:
 	var tile = Kit.card(5, AdventureScreen.open_trophy.bind(r), 8)
 	if u != null:
 		tile.accent(tc)
+		# The rarest ones catch the light.
+		if Achievements.tier_of(a) == "platinum":
+			Fx.twinkle(tile, tc.lightened(0.5), 1)
 	tile.add(Kit.pad(AdventureScreen.trophy_plate(r, 52), 0, 2, 0, 0))
 	var n = Kit.clip("Secret trophy" if hidden else Icons.strip_emoji(a.name), 12, tc if u != null else Pal.TEXT, true)
 	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tile.add(n)
 	if u == null:
 		if p != null and not hidden:
-			var col = Pal.disc(a.group) if TT.DISCIPLINE_META.has(a.group) else Pal.ACCENT
+			var col = Pal.disc(a.group) if TT.DISCIPLINE_META.has(a.group) else (Pal.READ if a.group == "read" else Pal.ACCENT)
 			tile.add(Kit.bar(r.ratio, col, 5))
 		else:
 			tile.add(Kit.bar(0.0, Pal.ACCENT, 5))

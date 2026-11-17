@@ -6,6 +6,7 @@ extends RefCounted
 ##   var state = Derive.derive({
 ##       "sessions": [...], "claims": [...], "body": [...],   # body is optional
 ##       "purchases": [...],                                  # optional, see Wallet
+##       "reading": [...],                                    # optional, see Reading
 ##       "weeklyGoal": 3,
 ##       "today": Dates.today_key(),   # date key used for the "current" streaks
 ##   })
@@ -456,6 +457,7 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 	s.dateCounts[date] = s.dateCounts.get(date, 0) + 1
 	if s.dateCounts[date] == 1:
 		t.activeDays += 1
+		Reading.note_trained(s, date)
 	b.daySessions = max(b.daySessions, s.dateCounts[date])
 	b.sessionDurationSec = max(b.sessionDurationSec, st.durationSec)
 	b.sessionPrs = max(b.sessionPrs, pr_total)
@@ -645,6 +647,18 @@ static func _apply_claim(s: Dictionary, claim: Dictionary) -> void:
 	_settle(s, claim.date, claim.id)
 
 
+# Pages read on a day (see Reading): hero XP, the reading totals and whatever
+# they unlock. No boss damage, no loot, no workout streak: it is not a session.
+static func _apply_reading(s: Dictionary, entry: Dictionary) -> void:
+	var date: String = str(entry.get("date", ""))
+	if date == "":
+		return
+	_ensure_start(s, date)
+	var xp: int = Reading.record(s, entry, int(s.dateCounts.get(date, 0)) > 0)
+	_add_hero_xp(s, date, xp)
+	_settle(s, date, entry.get("id"))
+
+
 # Something bought in the shop (see Wallet): the item joins the collection.
 static func _apply_purchase(s: Dictionary, buy: Dictionary) -> void:
 	var item = Items.by_id(buy.get("itemId"))
@@ -673,6 +687,8 @@ static func derive(input: Dictionary) -> Dictionary:
 		steps.append({"t": entry.createdAt, "body": entry})
 	for buy in TTUtil.get_or(input, "purchases", []):
 		steps.append({"t": buy.at, "buy": buy})
+	for page_day in TTUtil.get_or(input, "reading", []):
+		steps.append({"t": TTUtil.get_or(page_day, "createdAt", 0), "reading": page_day})
 	# Stable: steps logged at the same instant replay in input order.
 	TTUtil.stable_sort(steps, func(a, b): return a.t < b.t)
 	for step in steps:
@@ -684,6 +700,8 @@ static func derive(input: Dictionary) -> Dictionary:
 			_apply_body(s, step.body)
 		elif step.has("buy"):
 			_apply_purchase(s, step.buy)
+		elif step.has("reading"):
+			_apply_reading(s, step.reading)
 	var now_week: String = Dates.week_key(input.today)
 	s.streak = compute_streak(s.weekCounts, input.weeklyGoal, now_week)
 	s.body.streak = _body_streak(s, now_week).current
@@ -694,6 +712,7 @@ static func derive(input: Dictionary) -> Dictionary:
 	# Added after the port (the parity tests drop both keys): the weekly
 	# bounties, worked out from the replayed log, then the coin count.
 	Bounty.settle(s, TTUtil.get_or(input, "sessions", []), input.today)
+	Reading.settle(s, input.today)
 	Wallet.tally(s, input)
 	return s
 

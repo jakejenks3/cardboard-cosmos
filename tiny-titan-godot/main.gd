@@ -36,6 +36,8 @@ var _shown_tab = ""
 var _onboarding = null
 var _results = null
 var _result_queue = []
+## The tab whose icon bounces the next time the bar is built (the one just tapped).
+var _bounce_tab = ""
 
 
 func _ready() -> void:
@@ -237,6 +239,9 @@ func _refresh() -> void:
 		_screen = _make(SCREENS.get(App.tab, ""), App.tab)
 		_holder.add_child(_screen)
 		_scroll.scroll_vertical = 0
+		# No hard cut between tabs: the new one fades in while its cards rise.
+		_screen.modulate.a = 0.0
+		_screen.create_tween().tween_property(_screen, "modulate:a", 1.0, 0.16)
 	_build_nav()
 
 
@@ -291,7 +296,7 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 	var v = VBoxContainer.new()
 	v.set_anchors_preset(Control.PRESET_FULL_RECT)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.add_theme_constant_override("separation", 2)
+	v.add_theme_constant_override("separation", 0)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(v)
 
@@ -303,6 +308,7 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 		key.custom_minimum_size = Vector2(48, 50)
 		key.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		Fx.shine(key, 7.0, 2.5, 0.35)
 		var plus = Icons.rect("plus", 26, Pal.INK)
 		plus.set_anchors_preset(Control.PRESET_CENTER)
 		plus.position -= Vector2(13, 14)
@@ -316,16 +322,22 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 		v.add_child(lift)
 	else:
 		var holder = Control.new()
-		holder.custom_minimum_size = Vector2(26, 24)
+		holder.custom_minimum_size = Vector2(32, 32)
 		holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var ic = Icons.rect(t.icon, 24, null if active else Pal.MUTED)
-		ic.position = Vector2(1, 0)
-		ic.size = Vector2(24, 24)
+		var ic = Icons.rect(t.icon, 32, null if active else Pal.MUTED)
+		ic.position = Vector2(0, 0)
+		ic.size = Vector2(32, 32)
 		holder.add_child(ic)
+		if active and _bounce_tab == str(t.id):
+			# The tab that was just chosen: its icon drops in with a bounce.
+			_bounce_tab = ""
+			ic.position.y = -8.0
+			var tw = ic.create_tween()
+			tw.tween_property(ic, "position:y", 0.0, 0.32).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 		if badge > 0:
 			var dot = Kit.tag(str(badge), Pal.DANGER, false, 10)
-			dot.position = Vector2(15, -5)
+			dot.position = Vector2(20, -6)
 			holder.add_child(dot)
 		v.add_child(holder)
 	var l = Kit.label(t.label, 11, col, true)
@@ -348,6 +360,8 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 
 func _nav_pressed(id: String) -> void:
 	Sfx.tap()
+	if id != App.tab:
+		_bounce_tab = id
 	if id == "log":
 		App.open_log(null)
 	else:
@@ -410,10 +424,17 @@ func _on_toast(text: String, kind: String, icon: String) -> void:
 	h.add_child(Icons.rect(ic, 20))
 	h.add_child(Kit.para(text, 14, null, true))
 	p.add_child(h)
+	while _toasts.get_child_count() >= 4:
+		var oldest = _toasts.get_child(0)
+		_toasts.remove_child(oldest)
+		oldest.queue_free()
 	_toasts.add_child(p)
 	p.modulate.a = 0.0
+	p.scale = Vector2(0.92, 0.92)
+	p.ready.connect(func(): p.pivot_offset = p.size / 2.0, CONNECT_DEFERRED)
 	var tw = p.create_tween()
 	tw.tween_property(p, "modulate:a", 1.0, 0.15)
+	tw.parallel().tween_property(p, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_interval(3.0)
 	tw.tween_property(p, "modulate:a", 0.0, 0.3)
 	tw.tween_callback(p.queue_free)

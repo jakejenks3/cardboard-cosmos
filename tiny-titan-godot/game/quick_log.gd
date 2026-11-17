@@ -18,7 +18,7 @@ const SHOT_YESTERDAY = "the picture says \"Yesterday\": counted back from the da
 const SHOT_NO_DATE = "no date on the picture: taken as the day the game first saw it"
 
 ## What the app shows as the cheat sheet. Every line here must parse (the unit test checks).
-const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send 3 attempts\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nvest walk 3km 40:00 10kg\nweight 82.4  bf 18"
+const CHEAT_SHEET = "nov 14\nbench 3x5 @ 80\nsquat 5,5,4 @ 100\npull-up 3x8\nv4 flash x2, v5 send 3 attempts\ntr 5.10a flash, 5.11a\nhang 20mm 10s x6\nrun 5.2km 27:30 +80m\nride 40km 1h35\nvest walk 3km 40:00 10kg\nweight 82.4  bf 18\nread 20 pages"
 
 const MONTHS = {
 	"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, "apr": 4, "april": 4,
@@ -79,6 +79,9 @@ const ROPE_WORDS = ["tr", "toprope", "rope", "roped", "route", "routes", "lead",
 const HANG_WORDS = ["hang", "hangs", "hangboard", "hangboarding", "deadhang", "deadhangs", "fingerboard", "fingerboarding"]
 const LIFT_WORDS = ["lift", "lifting", "gym", "weights"]
 const BODY_WORDS = ["weight", "bw", "weighed", "weigh", "wt", "bf", "bodyfat", "bodyweight", "body", "fat"]
+## Pages read (game/reading.gd): "read 20 pages", "reading 15", or just "20 pages".
+const READ_WORDS = ["read", "reading", "pages", "pgs"]
+const READ_HINT = "try read 20 pages"
 ## "progress pics 11/15" dates a block like "11/15" does; a bare "pics" line is a label and is skipped.
 const PHOTO_LABEL = "^(?:progress (?:pics?|photos?|pictures?)|progress|pics?|pix|photos?|pictures?)"
 const TOO_MANY_PHOTOS = "more than three pictures on this day: the first three are kept (front, side, back)"
@@ -212,7 +215,7 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 
 
 static func _new_block(header: String, date: String, note: String) -> Dictionary:
-	return {"header": header, "date": date, "note": note, "lift": null, "climb": null, "body": null,
+	return {"header": header, "date": date, "note": note, "lift": null, "climb": null, "body": null, "read": null,
 		"current": null, "pending": [], "entries": [], "shot_bodies": {}}
 
 
@@ -325,6 +328,20 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 			out.problems.append({"line": orig, "why": "could not read the time (try 70min or 1h10)"})
 			return block
 		_extra(block, {"field": "durationSec", "value": sec, "orig": orig, "norm": t})
+		return block
+
+	# Pages read: the day's lines add up to one reading entry.
+	var rd = _parse_reading(t, first)
+	if rd.is_reading:
+		if not rd.ok:
+			out.problems.append({"line": orig, "why": rd.why})
+			return block
+		if block.read == null:
+			block.read = {"kind": "reading", "disc": "read", "data": {"date": block.date, "pages": 0}, "raw": [], "norm": [], "warnings": []}
+			block.entries.append(block.read)
+		block.read.data.pages = int(block.read.data.pages) + int(rd.pages)
+		block.read.raw.append(orig)
+		block.read.norm.append(t)
 		return block
 
 	# Body check-in.
@@ -458,6 +475,35 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 	le.warnings.append_array(l.warnings)
 	_take(block, le, orig, t)
 	return block
+
+
+## Is the line about pages read, and how many?
+## {"is_reading": bool, "ok": bool, "pages": int, "why": String}
+## A line counts when it opens with a reading word ("read 20 pages", "reading:
+## 15", "pages 30") or is a number of pages ("20 pages", "25p"). The number
+## that carries a pages unit wins ("read chapter 3, 20 pages" is 20 pages).
+static func _parse_reading(t: String, first: String) -> Dictionary:
+	var counted = _rx("^(\\d{1,5}) ?(?:pages?|pgs?|pg|pp|p)\\b").search(t)
+	if not READ_WORDS.has(first) and counted == null:
+		return {"is_reading": false, "ok": false, "pages": 0, "why": ""}
+	var n = -1
+	if counted != null:
+		n = int(counted.get_string(1))
+	else:
+		var unit = _rx("(\\d{1,5}) ?(?:pages?|pgs?|pg|pp|p)\\b").search(t)
+		if unit != null:
+			n = int(unit.get_string(1))
+		else:
+			if _rx("\\d ?(?:min|mins|minutes?|h|hr|hrs|hours?)\\b").search(t) != null or _rx("\\d:\\d").search(t) != null:
+				return {"is_reading": true, "ok": false, "pages": 0, "why": "reading is counted in pages, not time (%s)" % READ_HINT}
+			var bare = _rx("(?:^| )(\\d{1,5})(?: |$)").search(t)
+			if bare != null:
+				n = int(bare.get_string(1))
+	if n < 0:
+		return {"is_reading": true, "ok": false, "pages": 0, "why": "how many pages? (%s)" % READ_HINT}
+	if n == 0 or n > Reading.MAX_PAGES_A_DAY:
+		return {"is_reading": true, "ok": false, "pages": 0, "why": "that number of pages looks wrong (%s)" % READ_HINT}
+	return {"is_reading": true, "ok": true, "pages": n, "why": ""}
 
 
 ## The day's one body check-in (weight, body fat and pictures share it).
@@ -1644,6 +1690,9 @@ static func sets_text(sets: Array, unit: String) -> String:
 
 static func summary(kind: String, data: Dictionary, wu: String, du: String) -> String:
 	var parts = []
+	if kind == "reading":
+		var pages = int(data.get("pages", 0))
+		return "Read %d page%s" % [pages, "" if pages == 1 else "s"]
 	if kind == "body":
 		if data.has("weightKg"):
 			parts.append("Weight " + Fmt.fmt_weight(float(data.weightKg), wu))

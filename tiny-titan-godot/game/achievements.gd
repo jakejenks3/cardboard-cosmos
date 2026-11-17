@@ -20,6 +20,10 @@ const ACH_GROUPS = [
 	{"id": "body", "name": "Body", "icon": "📸"},
 	{"id": "collection", "name": "Collection", "icon": "🎒"},
 ]
+## Groups added after the port (ACH_GROUPS is checked against the original).
+const MORE_GROUPS = [
+	{"id": "read", "name": "Reading", "icon": "📖"},
+]
 
 const TIER_COLOR = {"bronze": "#c98a5a", "silver": "#c9d1d9", "gold": "#ffc83d", "platinum": "#7fe7ff"}
 
@@ -36,6 +40,11 @@ static func restrict_to(ids) -> void:
 	_only = ids
 	_all = null
 	_by_id = null
+
+
+## Every trophy group, in the order the trophy screen shows them.
+static func groups() -> Array:
+	return ACH_GROUPS + MORE_GROUPS
 
 
 ## "bronze" | "silver" | "gold" | "platinum", from the trophy's XP.
@@ -364,4 +373,22 @@ static func _build() -> Array:
 			_g("shop_1", "Retail Therapy", "Buy something in the shop.", "🪙", 100, "collection", func(s): return Wallet.bought_count(s), 1),
 			_g("shop_10", "Fashion Victim", "Buy 10 things in the shop.", "🪙", 400, "collection", func(s): return Wallet.bought_count(s), 10),
 			_g("items_80", "Museum Piece", "Own 80 pieces of gear.", "🏬", 1500, "collection", func(s): return PlayerState.owned_item_count(s), 80),
+
+			# --- reading (see game/reading.gd): outside the parity fixtures -----------
+			_g("read_first", "First Chapter", "Log the first pages you read.", "📖", 50, "read", func(s): return Reading.days(s), 1),
+			_g("read_100", "Page Turner", "Read 100 pages.", "📖", 100, "read", func(s): return Reading.pages(s), 100, "pages"),
+			_g("read_500", "Bookworm", "Read 500 pages.", "📖", 200, "read", func(s): return Reading.pages(s), 500, "pages"),
+			_g("read_1000", "Well Read", "Read 1,000 pages.", "📖", 300, "read", func(s): return Reading.pages(s), 1000, "pages"),
+			_g("read_2500", "Bibliophile", "Read 2,500 pages.", "📖", 500, "read", func(s): return Reading.pages(s), 2500, "pages"),
+			_g("read_5000", "Walking Library", "Read 5,000 pages.", "📖", 800, "read", func(s): return Reading.pages(s), 5000, "pages"),
+			_g("read_10000", "Ten Thousand Pages", "Read 10,000 pages.", "📖", 1200, "read", func(s): return Reading.pages(s), 10000, "pages"),
+			_g("read_streak_3", "Three in a Row", "Read three days in a row.", "🔥", 80, "read", func(s): return Reading.best_streak(s), 3, "days"),
+			_g("read_streak_7", "A Week of Words", "Read seven days in a row.", "🔥", 150, "read", func(s): return Reading.best_streak(s), 7, "days"),
+			_g("read_streak_30", "Thirty Nights", "Read thirty days in a row.", "🔥", 500, "read", func(s): return Reading.best_streak(s), 30, "days"),
+			_g("read_streak_100", "A Hundred Nights", "Read a hundred days in a row.", "🔥", 1000, "read", func(s): return Reading.best_streak(s), 100, "days"),
+			_g("read_day_50", "Could Not Put It Down", "Read 50 pages in one day.", "⭐", 150, "read", func(s): return Reading.best_day(s), 50, "pages"),
+			_g("read_day_100", "Cover to Cover", "Read 100 pages in one day.", "⭐", 300, "read", func(s): return Reading.best_day(s), 100, "pages"),
+			_g("read_days_50", "Library Regular", "Read on 50 different days.", "🗓️", 300, "read", func(s): return Reading.days(s), 50, "days"),
+			_g("read_both_1", "Brains and Brawn", "Read and train on the same day.", "💪", 100, "read", func(s): return Reading.both_days(s), 1),
+			_g("read_both_30", "Scholar Athlete", "Read and train on the same day, thirty times.", "💪", 500, "read", func(s): return Reading.both_days(s), 30, "days"),
 	]

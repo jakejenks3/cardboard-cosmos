@@ -7,6 +7,12 @@ var value: float = 0.0
 var color: Color = Pal.ACCENT
 var _shown: float = 0.0
 var _tween = null
+## Every few seconds a glint runs along the filled part (set by Kit.bar on thick bars).
+var glint: bool = false
+var _glint_wait: float = 2.0
+var _glint_age: float = -1.0
+const GLINT_EVERY = 4.2
+const GLINT_TIME = 0.5
 
 
 func _init(v: float = 0.0, c = null, h: int = 10) -> void:
@@ -21,12 +27,29 @@ func _init(v: float = 0.0, c = null, h: int = 10) -> void:
 
 
 func _ready() -> void:
+	# Only a bar with a glint has anything to do between redraws.
+	set_process(glint)
 	if Kit.intro() and value > 0.0:
 		var target = value
 		_shown = 0.0
 		_tween = create_tween()
 		_tween.tween_interval(Kit.intro_delay() + 0.08)
 		_tween.tween_method(_set_shown, 0.0, target, 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
+func _process(delta: float) -> void:
+	if not glint or not is_visible_in_tree() or _shown < 0.08:
+		return
+	if _glint_age < 0.0:
+		_glint_wait -= delta
+		if _glint_wait <= 0.0:
+			_glint_wait = GLINT_EVERY
+			_glint_age = 0.0
+		return
+	_glint_age += delta
+	if _glint_age >= GLINT_TIME:
+		_glint_age = -1.0
+	queue_redraw()
 
 
 ## Change the value; animates by default.
@@ -76,3 +99,14 @@ func _draw() -> void:
 	# A bright leading edge, like a gauge needle.
 	if fw < inner.size.x and fw > 2.0 * s:
 		draw_rect(Rect2(inner.position + Vector2(fw - s, 0), Vector2(s, inner.size.y)), color.lightened(0.5))
+	if _glint_age >= 0.0:
+		# A slanted glint crossing the filled part.
+		var gw = s * 3.0
+		var gx = floor((-gw + (fw + gw) * (_glint_age / GLINT_TIME)) / s) * s
+		var row = 0.0
+		while row < inner.size.y:
+			var x0 = clampf(gx + (inner.size.y - row), 0.0, fw)
+			var x1 = clampf(gx + (inner.size.y - row) + gw, 0.0, fw)
+			if x1 > x0:
+				draw_rect(Rect2(inner.position + Vector2(x0, row), Vector2(x1 - x0, s)), Color(1, 1, 1, 0.38))
+			row += s

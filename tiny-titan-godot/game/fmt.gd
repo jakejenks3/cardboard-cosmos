@@ -174,6 +174,8 @@ static func fmt_goal_value(n: float, unit: String, settings: Dictionary) -> Stri
 			return fmt_duration_short(n * 60.0)
 		"ratio":
 			return "%s×" % to_fixed(n, 2)
+		"pages":
+			return "%s pages" % fmt_num(floor(n))
 	return fmt_num(floor(n))
 
 

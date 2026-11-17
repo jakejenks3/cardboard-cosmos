@@ -602,7 +602,7 @@ func _boss_card(ev: Dictionary, animate: bool) -> Control:
 	var boss = Campaign.boss_at(int(ev.index))
 	var c = _rcard(Pal.HP, true)
 	var bv = BossView.new()
-	bv.setup(boss.id, 64.0, false)
+	bv.setup(boss.id, 72.0, false)
 	bv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var kick_row = Kit.hbox(6)
 	kick_row.add_child(_kicker("BOSS FIGHT", Pal.HP))
@@ -645,7 +645,7 @@ func _bounty_card(ev: Dictionary, animate: bool) -> Control:
 	var won = ev.defeated or ev.crushed
 	var c = _rcard(Pal.BOUNTY, true)
 	var bv = BossView.new()
-	bv.setup(ev.monster, 64.0, false)
+	bv.setup(ev.monster, 72.0, false)
 	bv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var kick_row = Kit.hbox(6)
 	kick_row.add_child(Kit.tag("WEEKLY BOUNTY", Pal.BOUNTY, false, 10))
@@ -773,7 +773,8 @@ func _item_card(ev: Dictionary):
 	var perks = Items.perk_summary(it.get("perk"))
 	if not perks.is_empty():
 		c.main.add_child(_perk_l(" · ".join(PackedStringArray(perks))))
-	var art = PixelRect.make(Art.item_texture(it.id), 1.0)
+	# The piece of gear by itself, as big as fits the plate in whole pixels.
+	var art = PixFit.make(Art.item_icon_texture(it.id), Vector2(48, 48), 3)
 	var card = _finish(c, _plate(art, rc, 56))
 	var b = Kit.button("Equip", "secondary", Callable(), "sm")
 	b.pressed.connect(_on_equip.bind(it, b))

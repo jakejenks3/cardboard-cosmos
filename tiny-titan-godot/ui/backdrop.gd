@@ -4,6 +4,10 @@ extends TextureRect
 ## code and matched to the time of day (the same hours as the gym window).
 ## It fills the whole window, so a wide or maximised window shows a landscape
 ## on both sides of the app column instead of a flat colour.
+##
+## The sky is alive: a few clouds drift across by day, stars twinkle at night
+## and now and then one falls. All of it moves in whole steps of the picture's
+## own pixels (see SkyFx below), and stays faint enough to sit behind text.
 
 ## One art pixel is at least this many screen pixels; wide windows use bigger
 ## pixels so the picture never costs more than about 30,000 pixels to draw.
@@ -14,6 +18,7 @@ const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 
 var _hour = -1
 var _pending = false
+var _fx = null
 
 
 func _ready() -> void:
@@ -28,6 +33,8 @@ func _ready() -> void:
 	t.timeout.connect(_tick)
 	add_child(t)
 	t.start()
+	_fx = SkyFx.new()
+	add_child(_fx)
 	_render()
 
 
@@ -138,6 +145,16 @@ func _render() -> void:
 					# A crescent for the moon, a full disc for the sun.
 					if not pal.moon or Vector2(float(x), float(y)).distance_to(orb + Vector2(-orb_r * 0.45, -orb_r * 0.25)) > orb_r * 0.95:
 						c = pal.orb
+						# the lower right of the disc is a shade deeper
+						if not pal.moon and (float(x) - orb.x) + (float(y) - orb.y) > orb_r * 0.75:
+							c = pal.orb.darkened(0.12)
+				elif d <= orb_r + 2.5:
+					# A soft ring round it: every other pixel, fading out.
+					if (x + y) % 2 == 0:
+						c = c.lerp(pal.orb, 0.34 if d <= orb_r + 1.5 else 0.16)
+				elif not pal.moon and d <= orb_r + 5.5 and d >= orb_r + 3.5 and (absi(x - int(round(orb.x))) <= 0 or absi(y - int(round(orb.y))) <= 0 or absi(absi(x - int(round(orb.x))) - absi(y - int(round(orb.y)))) <= 0):
+					# Eight short rays.
+					c = c.lerp(pal.orb, 0.3)
 				elif pal.stars > 0.0 and y < horizon - 6:
 					var hsh = (x * 73856093) ^ (y * 19349663)
 					if posmod(hsh, 173) == 0:
@@ -149,3 +166,93 @@ func _render() -> void:
 			bytes[i + 3] = 255
 			i += 4
 	texture = ImageTexture.create_from_image(Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, bytes))
+	if _fx != null:
+		_fx.setup(px, w, horizon, pal, narrow)
+
+
+## What moves in the sky. Drawn over the still picture, on its pixel grid.
+class SkyFx:
+	extends Control
+
+	var _px: int = 4
+	var _w: int = 100
+	var _horizon: int = 50
+	var _pal: Dictionary = {}
+	var _narrow: bool = true
+	var _t: float = 0.0
+	var _step: int = -1
+	var _clouds: Array = []
+	var _stars: Array = []
+	var _fall_at: float = 9.0
+	var _fall = null
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	func setup(px: int, w: int, horizon: int, pal: Dictionary, narrow: bool) -> void:
+		_px = px
+		_w = w
+		_horizon = horizon
+		_pal = pal
+		_narrow = narrow
+		var rng = RandomNumberGenerator.new()
+		rng.seed = 4242
+		_clouds = []
+		var n_clouds = 0 if float(pal.stars) >= 1.0 else (3 if narrow else 6)
+		for i in range(n_clouds):
+			_clouds.append({"x": rng.randf() * float(w + 30), "y": 3 + rng.randi_range(0, maxi(2, int(horizon * 0.45))), "w": rng.randi_range(9, 16), "speed": rng.randf_range(0.5, 1.4)})
+		_stars = []
+		if float(pal.stars) > 0.0:
+			for i in range(10 if narrow else 22):
+				_stars.append({"x": rng.randi_range(1, maxi(2, w - 2)), "y": rng.randi_range(1, maxi(2, horizon - 8)), "phase": rng.randf() * TAU, "speed": rng.randf_range(0.8, 2.2)})
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		if _pal.is_empty() or not is_visible_in_tree():
+			return
+		_t += delta
+		if _fall == null and float(_pal.stars) >= 1.0:
+			_fall_at -= delta
+			if _fall_at <= 0.0:
+				_fall_at = 14.0 + fmod(_t * 7.0, 20.0)
+				_fall = {"x": float(_w) * (0.2 + fmod(_t, 0.6)), "y": 2.0, "age": 0.0}
+		if _fall != null:
+			_fall.age += delta
+			_fall.x += delta * 34.0
+			_fall.y += delta * 16.0
+			if _fall.age > 0.9:
+				_fall = null
+		# Eight steps a second are enough: nothing here moves faster than a pixel a step.
+		var step = int(_t * 8.0)
+		if step != _step:
+			_step = step
+			queue_redraw()
+
+	func _cell(x: int, y: int, cw: int, ch: int, c: Color) -> void:
+		draw_rect(Rect2(x * _px, y * _px, cw * _px, ch * _px), c)
+
+	func _draw() -> void:
+		if _pal.is_empty():
+			return
+		# clouds: a low, wide shape a little lighter than the sky behind it
+		var tint: Color = _pal.low.lerp(Color.WHITE, 0.5)
+		for c in _clouds:
+			var span = float(_w + 40)
+			var x = int(fposmod(float(c.x) + _t * float(c.speed), span)) - 20
+			var y = int(c.y)
+			var cw = int(c.w)
+			var a = 0.16 if _narrow else 0.3
+			_cell(x + 2, y, cw - 5, 1, Pal.with_alpha(tint, a))
+			_cell(x + 1, y + 1, cw - 2, 1, Pal.with_alpha(tint, a))
+			_cell(x, y + 2, cw, 1, Pal.with_alpha(tint, a * 0.8))
+		# stars that brighten and fade
+		for s in _stars:
+			var k = 0.5 + 0.5 * sin(_t * float(s.speed) + float(s.phase))
+			if k > 0.55:
+				_cell(int(s.x), int(s.y), 1, 1, Color(0.93, 0.95, 1.0, (k - 0.55) * 1.6 * float(_pal.stars)))
+		# a falling star: a bright head and a tail that thins out
+		if _fall != null:
+			var fa = clampf(1.0 - float(_fall.age) / 0.9, 0.0, 1.0)
+			for i in range(5):
+				_cell(int(float(_fall.x) - float(i) * 2.0), int(float(_fall.y) - float(i)), 1, 1, Color(1.0, 1.0, 0.92, fa * (1.0 - float(i) * 0.2)))

@@ -17,6 +17,13 @@ static func snap(tree: SceneTree, shot_name: String) -> String:
 	var path = dir.path_join(shot_name + ".png")
 	img.save_png(path)
 	print("SHOT ", path)
+	# Every screenshot is also a layout check: nothing may be wider than the
+	# column it scrolls in (a too-long line would push the screen off the right edge).
+	for n in walk(tree.root):
+		if n is ScrollContainer and n.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and n.get_child_count() > 0:
+			for c in n.get_children():
+				if c is Control and not (c is ScrollBar) and c.get_combined_minimum_size().x > n.size.x + 0.5:
+					print("CHECK FAIL  %s: the content is wider than its column (%d > %d)" % [shot_name, int(c.get_combined_minimum_size().x), int(n.size.x)])
 	return path
 
 

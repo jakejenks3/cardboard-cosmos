@@ -24,6 +24,9 @@ func _init() -> void:
 		quit(1)
 		return
 	var cases: Array = doc.cases
+	# The fixtures are the original look: the game's own (lit parts, the new
+	# face, the fuller gym) is drawn on top of the same shapes.
+	Pix.classic = true
 	var passed: int = 0
 	var t0: int = Time.get_ticks_msec()
 	for c in cases:

@@ -41,7 +41,7 @@ static func card(big: bool = false) -> Control:
 	var row = Kit.hbox(12)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bv = BossView.new()
-	bv.setup(cur.monster, 84.0 if big else 56.0, not cur.defeated)
+	bv.setup(cur.monster, 90.0 if big else 54.0, not cur.defeated)
 	bv.set_dim(cur.defeated)
 	row.add_child(Kit.vcenter(bv))
 	var main = Kit.vbox(5)
@@ -76,7 +76,8 @@ static func card(big: bool = false) -> Control:
 		if int(w.streak) >= 1:
 			foot.add_child(Kit.icon_chip("flame", "%d in a row" % int(w.streak), Pal.ACCENT2, "Bounties won in a row: each adds %d coins, up to %d" % [Bounty.COINS_STREAK_STEP, Bounty.COINS_STREAK_MAX], Color.WHITE))
 		if big:
-			foot.add_child(Kit.vcenter(Kit.muted(mon.epithet, 11)))
+			# Clipped, so a long line can never make the card wider than the screen.
+			foot.add_child(Kit.vcenter(Kit.clip(mon.epithet, 11, Pal.MUTED)))
 		main.add_child(foot)
 	row.add_child(main)
 	row.add_child(Kit.vcenter(Icons.rect("chevron_right", 18)))
@@ -209,7 +210,7 @@ static func _past_tile(r: Dictionary) -> Control:
 	elif r.defeated:
 		t.accent(Pal.GOOD)
 	var bv = BossView.new()
-	bv.setup(r.monster, 44.0, false)
+	bv.setup(r.monster, 54.0, false)
 	bv.set_dim(not r.defeated)
 	bv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	t.add(bv)

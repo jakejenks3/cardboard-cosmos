@@ -3,21 +3,26 @@ extends Control
 ## A boss portrait (port of BossPortrait.tsx).
 ##
 ##   var boss = BossView.new()
-##   boss.setup("iron_golem", 58.0, true)   # animated idle bob
+##   boss.setup("iron_golem", 58.0, true)   # animated idle
 ##   boss.hit()                             # flash + shake when it takes damage
 ##
 ## The boss is fitted into a `px` x `px` square (the web's `size` prop),
-## centred in the control, with two art pixels of headroom for the bob:
-## animated bosses hop up one art pixel every 420 ms, hovering ones every
-## 260 ms (off one shared clock, so all portraits on screen bob in step, as
-## on the web). hit() replays the web's 0.45 s "bosshit" animation: a white
-## flash that fades while the sprite shakes sideways.
+## centred in the control, at the largest WHOLE-number scale that fits (every
+## pixel of it the same size on screen), with two art pixels of headroom.
+## Animated bosses move off one shared clock, so all portraits on screen move
+## in step: a boss on the ground hops one art pixel, a hovering one floats up
+## and down through three, and both stand over a shadow that shrinks as they
+## rise. hit() replays the web's 0.45 s "bosshit" animation: a white flash
+## that fades while the sprite shakes sideways.
 
-## Rows of headroom above the sprite (the bob moves into it).
+## Rows of headroom above the sprite (the idle motion moves into it).
 const PAD = 2
 const BOB_MS = 420.0
 const HOVER_BOB_MS = 260.0
 const HIT_MS = 450.0
+## A hovering boss's float: this many steps a second, over these heights (art pixels).
+const FLOAT_STEP_MS = 150.0
+const FLOAT_PATH = [0, 1, 2, 2, 2, 1, 0, 0]
 
 var _boss_id: String = ""
 var _px: float = 58.0
@@ -46,7 +51,7 @@ func _sync_processing() -> void:
 
 
 ## `px` is the on-screen square the portrait is fitted into. `animate` turns
-## the idle bob on, `silhouette` draws an undiscovered boss as a dark shape.
+## the idle motion on, `silhouette` draws an undiscovered boss as a dark shape.
 func setup(boss_id: String, px: float = 58.0, animate: bool = false, silhouette: bool = false) -> void:
 	_boss_id = boss_id
 	_px = px
@@ -72,11 +77,14 @@ func set_dim(dim: bool) -> void:
 	queue_redraw()
 
 
-## 0 or 1: the web's `floor(t / period) % 2` on the page clock.
+## How many art pixels the boss is off the ground right now. The classic
+## look: 0 or 1, the web's `floor(t / period) % 2` on the page clock.
 func _bob_phase() -> int:
 	if not _animate:
 		return 0
-	return int(floor(Time.get_ticks_msec() / (HOVER_BOB_MS if _hover else BOB_MS))) % 2
+	if Pix.classic or not _hover:
+		return int(floor(Time.get_ticks_msec() / (HOVER_BOB_MS if _hover else BOB_MS))) % 2
+	return FLOAT_PATH[int(floor(Time.get_ticks_msec() / FLOAT_STEP_MS)) % FLOAT_PATH.size()]
 
 
 func _process(delta: float) -> void:
@@ -94,6 +102,12 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
+## The whole-number scale the boss is drawn at.
+func art_scale() -> int:
+	var sz: Vector2i = Art.boss_size(_boss_id)
+	return maxi(1, int(floor(_px / maxf(1.0, maxf(sz.x, sz.y + PAD)))))
+
+
 func _draw() -> void:
 	if _boss_id == "":
 		return
@@ -103,14 +117,23 @@ func _draw() -> void:
 	# The web canvas is bw x (bh + PAD) art pixels, shown with
 	# `object-fit: contain` in a px x px box.
 	var k: float = _px / maxf(bw, bh + PAD)
+	if not Pix.classic:
+		k = float(art_scale())
 	var box: Vector2 = Vector2(bw, bh + PAD) * k
-	var origin: Vector2 = (size - box) / 2.0
+	var origin: Vector2 = ((size - box) / 2.0).floor() if not Pix.classic else (size - box) / 2.0
 	var shake: float = 0.0
 	var glow: float = 1.0
 	if _hit_ms >= 0.0:
 		var t: float = clampf(_hit_ms / HIT_MS, 0.0, 1.0)
 		shake = _hit_shake(t)
 		glow = _hit_brightness(t)
+	if _animate and not _silhouette and not Pix.classic:
+		# Its shadow on the ground: narrower the higher it is.
+		var sw: float = maxf(4.0, bw - 4.0 - float(_phase) * 2.0 - (2.0 if _hover else 0.0))
+		var sx: float = origin.x + floor((bw - sw) / 2.0) * k
+		var sy: float = origin.y + (bh + PAD - 1.0) * k
+		draw_rect(Rect2(sx + k, sy - k, (sw - 2.0) * k, k), Color(0, 0, 0, 0.25))
+		draw_rect(Rect2(sx, sy, sw * k, k), Color(0, 0, 0, 0.25))
 	var pos: Vector2 = origin + Vector2(shake, (PAD - _phase) * k)
 	draw_texture_rect(tex, Rect2(pos, Vector2(bw, bh) * k), false, Color(glow, glow, glow, 1.0))
 

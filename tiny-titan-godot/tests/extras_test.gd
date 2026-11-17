@@ -101,6 +101,6 @@ func _init() -> void:
 	ok(moment != null, "diff_body reports One month on", ev)
 	ok(Diff.diff_body(after, derive([], [first, second, photos("2026-02-20", 1)]), second).filter(func(e): return e.type == "pr").is_empty(), "no second One month on once passed")
 
-	ok(Achievements.all().size() == 171, "171 trophies in the catalog", Achievements.all().size())
+	ok(Achievements.all().size() == 187, "187 trophies in the catalog", Achievements.all().size())
 	print("EXTRAS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

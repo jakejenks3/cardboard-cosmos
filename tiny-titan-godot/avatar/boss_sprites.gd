@@ -294,5 +294,10 @@ static func boss_buffer(id: String, opts: Dictionary = {}) -> Pix:
 		for k in look.palette:
 			palette[k] = "#0d0a1a"
 	buf.sprite(1, 1, rows, palette)
-	buf.outline("#241c40" if silhouette else Pix.OUTLINE)
+	if Pix.classic or silhouette:
+		buf.outline("#241c40" if silhouette else Pix.OUTLINE)
+		return buf
+	# The game's look: the flat body gets a lit rim and a shaded underside.
+	buf.bevel()
+	buf.outline_tinted(Pix.OUTLINE)
 	return buf

@@ -184,7 +184,7 @@ func _init() -> void:
 		if ids.has(it.id):
 			dupes.append(it.id)
 		ids[it.id] = true
-	ok(Items.all().size() == 122 and dupes.is_empty(), "122 items, no id twice", [Items.all().size(), dupes])
+	ok(Items.all().size() == 124 and dupes.is_empty(), "124 items, no id twice", [Items.all().size(), dupes])
 	# Every item added after the port draws something on the mannequin.
 	var blank = []
 	for it in Items.all():
@@ -218,13 +218,13 @@ func _init() -> void:
 		if not looks.has(m.id) or not BossSprites.BASE.has(looks[m.id].sprite) or BossSprites.boss_buffer(m.id) == null:
 			no_look.append(m.id)
 	ok(no_look.is_empty(), "every bounty monster has a sprite", no_look)
-	ok(Achievements.all().size() == 171, "171 trophies in the catalog", Achievements.all().size())
+	ok(Achievements.all().size() == 187, "187 trophies in the catalog", Achievements.all().size())
 
 	# --- the parity pin ---------------------------------------------------------------------------
 	Items.restrict_to(["tee_grey", "shorts_navy", "trainers_worn"])
 	ok(Items.all().size() == 3 and Items.by_id("shop_halo") == null and Wallet.shop_items().is_empty() and Wallet.deal_id(wk) == "", "restrict_to pins the catalog (and empties the shop)")
 	Items.restrict_to(null)
-	ok(Items.all().size() == 122 and Wallet.shop_items().size() == shop.size(), "and null restores it")
+	ok(Items.all().size() == 124 and Wallet.shop_items().size() == shop.size(), "and null restores it")
 
 	print("BOUNTY: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

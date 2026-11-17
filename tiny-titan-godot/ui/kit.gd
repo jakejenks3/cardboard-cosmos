@@ -160,6 +160,26 @@ static func burst(at: Control, color = null, count: int = 16) -> void:
 	b.start(at.get_global_rect().get_center() - overlay_root.global_position, Pal.ACCENT if color == null else color, count)
 
 
+## A short pixel caption that rises from a control and fades ("+20 XP"): what a
+## quick action just paid, without a toast to read and wait out.
+static func floater(at: Control, text: String, color = null, delay: float = 0.0, px_scale: int = 2) -> void:
+	if overlay_root == null or not is_instance_valid(at) or not at.is_inside_tree():
+		return
+	var r = PixelFont.rect(text, px_scale, Pal.ACCENT if color == null else color)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay_root.add_child(r)
+	var start = (at.get_global_rect().get_center() - overlay_root.global_position - r.custom_minimum_size / 2.0 + Vector2(0, -16)).floor()
+	r.position = start
+	r.modulate.a = 0.0
+	var tw = r.create_tween()
+	if delay > 0.0:
+		tw.tween_interval(delay)
+	tw.tween_property(r, "modulate:a", 1.0, 0.07)
+	tw.parallel().tween_property(r, "position:y", start.y - 38.0, 0.75).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(r, "modulate:a", 0.0, 0.22)
+	tw.tween_callback(r.queue_free)
+
+
 # ---------------------------------------------------------------------------
 # Text
 # ---------------------------------------------------------------------------
@@ -454,12 +474,14 @@ static func icon_button(icon: String, on_press: Callable = Callable(), tip: Stri
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.custom_minimum_size = Vector2(px, px)
 	b.tooltip_text = tip
-	b.icon = Icons.tex(icon)
+	# The icon at a whole-number size (never stretched to the button): twice
+	# its size on a big button, its own size on a small one.
+	b.icon = Icons.tex(icon, null, 2 if px >= 40 else 1)
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	b.expand_icon = true
+	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var pad_px = int(max(4, (px - 26) / 2.0))
-	var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), pad_px, pad_px - 1, 1, Pal.BORDER)
+	var pad_px = 2
+	var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), pad_px, pad_px, 1, Pal.BORDER)
 	for k in looks:
 		b.add_theme_stylebox_override(k, looks[k])
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -597,6 +619,26 @@ static func coin_pill(amount, tip: String = "", font_px: int = 12) -> PanelConta
 	return pill("coin", Xp.fmt_int(amount), Pal.ACCENT, tip, null, font_px)
 
 
+## The coins the player has, as a gold pill that counts up (or down) from what
+## it last showed whenever the amount changed, with a little pop.
+static var _purse_shown: int = -1
+
+
+static func purse_pill(amount: int, tip: String = "", font_px: int = 13) -> PanelContainer:
+	var p = coin_pill(amount, tip, font_px)
+	var from = _purse_shown
+	_purse_shown = amount
+	if from >= 0 and from != amount and not intro():
+		var labels = p.find_children("*", "Label", true, false)
+		if not labels.is_empty():
+			var l: Label = labels[0]
+			l.text = Xp.fmt_int(from)
+			var tw = p.create_tween()
+			tw.tween_method(func(v): l.text = Xp.fmt_int(int(round(v))), float(from), float(amount), 0.5).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			p.ready.connect(pop.bind(p, 1.15, 0.3), CONNECT_DEFERRED)
+	return p
+
+
 ## A pixel-font caption that is as big as fits in `width` (scale `max_scale` down to 1).
 static func big_number(text: String, color: Color, width: int, max_scale: int = 4) -> TextureRect:
 	var w = PixelFont.measure(text).x
@@ -668,8 +710,12 @@ static func field(label_text: String, control: Control, hint: String = "") -> VB
 
 
 ## A progress bar, value 0..1. Call `bar.set_value(v)` to animate it later.
+## A thick bar (12 px and up) gets a glint that runs along it now and then.
 static func bar(value: float, color = null, height: int = 10) -> Bar:
-	return Bar.new(value, color, height)
+	var b = Bar.new(value, color, height)
+	b.glint = height >= 12
+	b.set_process(b.glint)
+	return b
 
 
 ## A section heading in the pixel font and the current tab's colour, with a rule

@@ -231,6 +231,8 @@ static func poster(r: Dictionary) -> Control:
 	if float(r.get("miscM", 0.0)) > 0.0 and extra.size() < 4:
 		var walked = JourneyScreen.split_unit(Fmt.fmt_distance(r.miscM, du))
 		extra.append([walked[0], ("%s WALKED" % walked[1]).to_upper(), Pal.MISC])
+	if int(r.get("pages", 0)) > 0 and extra.size() < 4:
+		extra.append([Xp.fmt_int(int(r.pages)), "PAGES READ", Pal.READ])
 	card.add(tiles)
 	# One tile per discipline trained, in its colour (up to four across).
 	if not extra.is_empty():

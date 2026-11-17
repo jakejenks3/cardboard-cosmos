@@ -21,7 +21,7 @@ func build() -> void:
 	who.add_child(Kit.clip(profile.name, 22, null, true))
 	who.add_child(Kit.clip(s.title, 13, Pal.ACCENT, true))
 	top.add_child(who)
-	var purse = Kit.coin_pill(App.coins(), "Coins. Tap to open the shop.", 13)
+	var purse = Kit.purse_pill(App.coins(), "Coins. Tap to open the shop.", 13)
 	purse.gui_input.connect(_purse_input)
 	purse.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	top.add_child(Kit.vcenter(purse))
@@ -85,6 +85,7 @@ func build() -> void:
 	badge.add_theme_stylebox_override("panel", PixBox.make(Pal.ACCENT, {"lip": 1, "lip_color": Pal.ACCENT_DARK, "pad_h": 9, "pad_v": 6}))
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.add_child(PixelFont.rect("LV %d" % int(lv.level), 3, Pal.INK, false))
+	Fx.shine(badge, 5.0, 1.4)
 	lrow.add_child(badge)
 	var lmain = Kit.vbox(4)
 	lmain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -118,7 +119,7 @@ func build() -> void:
 	var srow = Kit.hbox(10)
 	if pet != null:
 		var pv = PetView.new()
-		pv.setup(pet.id, 34.0, true)
+		pv.setup(pet.id, 40.0, true)
 		srow.add_child(Kit.vcenter(pv))
 	else:
 		srow.add_child(Kit.vcenter(Icons.rect("speech", 28)))
@@ -135,7 +136,7 @@ func build() -> void:
 	boss_card.accent(Pal.HP, true)
 	var brow = Kit.hbox(12)
 	var bv = BossView.new()
-	bv.setup(boss.id, 64.0, true)
+	bv.setup(boss.id, 72.0, true)
 	brow.add_child(Kit.vcenter(bv))
 	var bmain = Kit.vbox(5)
 	bmain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -181,7 +182,11 @@ func build() -> void:
 	sc.tooltip_text = "Hit your weekly goal to keep the streak. Best: %d weeks." % int(streak.best)
 	sc.mouse_filter = Control.MOUSE_FILTER_STOP
 	var strow = Kit.hbox(10)
-	strow.add_child(Kit.vcenter(Icons.rect("flame" if int(streak.current) > 0 else "ember", 34)))
+	var flame = Icons.rect("flame" if int(streak.current) > 0 else "ember", 34)
+	if int(streak.current) > 0:
+		Fx.flicker(flame)
+		Fx.embers(flame, Pal.ACCENT2, 3)
+	strow.add_child(Kit.vcenter(flame))
 	strow.add_child(Kit.vcenter(PixelFont.rect(str(int(streak.current)), 4, Pal.ACCENT2 if int(streak.current) > 0 else Pal.MUTED)))
 	var st = Kit.label("week streak" if int(streak.current) != 1 else "week streak", 14, null, true)
 	st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -202,6 +207,9 @@ func build() -> void:
 	strow.add_child(dots)
 	sc.add(strow)
 	add_child(sc)
+
+	# --- reading: today's pages, one tap to add more ---------------------------
+	add_child(ReadingView.card())
 
 	# --- this week in numbers, against last week -----------------------------
 	add_child(_week_card(s))
@@ -284,6 +292,9 @@ func _week_card(s: Dictionary) -> Control:
 			chips.add_child(Kit.icon_chip(d, str(n), Pal.disc(d), "%d %s session%s" % [n, TT.DISCIPLINE_META[d].name.to_lower(), "" if n == 1 else "s"], Color.WHITE))
 	if now.prs > 0:
 		chips.add_child(Kit.icon_chip("medal", "%d PR%s" % [now.prs, "" if now.prs == 1 else "s"], Pal.ACCENT, "Records set this week", Color.WHITE))
+	var read_pages = Reading.pages_between(s, wk, Dates.add_days(wk, 6))
+	if read_pages > 0:
+		chips.add_child(Kit.icon_chip("book", "%s page%s" % [Xp.fmt_int(read_pages), "" if read_pages == 1 else "s"], Pal.READ, "Pages read this week"))
 	if now.sessions == 0:
 		chips.add_child(Kit.vcenter(Kit.muted("nothing logged yet: the week is young", 12)))
 	c.add(chips)

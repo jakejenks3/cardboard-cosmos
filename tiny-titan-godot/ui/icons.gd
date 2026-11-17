@@ -6,6 +6,10 @@ extends RefCounted
 ##
 ## Each icon is 16 rows of 16 characters plus a palette: "." is transparent,
 ## "o" is the dark outline, every other letter is a colour from its palette.
+##
+## An icon is only ever shown at one, two or three times its size, so each of
+## its pixels is a whole number of screen pixels: `rect(icon, px)` picks the
+## size nearest to `px` (16, 32 or 48) and never stretches it.
 
 const SIZE = 16
 const OUTLINE = Color("1a1026")
@@ -22,12 +26,29 @@ static func has_icon(icon) -> bool:
 	return icon is String and DATA.has(icon)
 
 
+## The whole-number scale an icon asked for at `px` pixels is shown at.
+static func scale_for(px: float) -> int:
+	if px < 23.0:
+		return 1
+	if px < 41.0:
+		return 2
+	return 3
+
+
 ## The icon as a texture (cached). An unknown name gives the star.
 ## With `tint` (a Color) the icon is recoloured to shades of that colour.
-static func tex(icon: String, tint = null) -> ImageTexture:
+## `px_scale` (1, 2, 3...) gives it that many times as big, pixel for pixel.
+static func tex(icon: String, tint = null, px_scale: int = 1) -> ImageTexture:
 	var key = icon
 	if tint != null:
 		key = icon + "|" + tint.to_html()
+	if px_scale > 1:
+		var big_key = "%s|x%d" % [key, px_scale]
+		if not _cache.has(big_key):
+			var img_big = tex(icon, tint, 1).get_image()
+			img_big.resize(SIZE * px_scale, SIZE * px_scale, Image.INTERPOLATE_NEAREST)
+			_cache[big_key] = ImageTexture.create_from_image(img_big)
+		return _cache[big_key]
 	if _cache.has(key):
 		return _cache[key]
 	var d = DATA.get(icon, DATA["star"])
@@ -57,14 +78,17 @@ static func tex(icon: String, tint = null) -> ImageTexture:
 	return t
 
 
-## A crisp TextureRect showing the icon at `px` × `px`.
+## A crisp TextureRect showing the icon at about `px` pixels: at 16, 32 or 48,
+## whichever is nearest (see scale_for), and never stretched, whatever room the
+## layout gives it.
 static func rect(icon: String, px: float = 20.0, tint = null) -> TextureRect:
 	var r = TextureRect.new()
-	r.texture = tex(icon, tint)
+	var k = scale_for(px)
+	r.texture = tex(icon, tint, k)
 	r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	r.custom_minimum_size = Vector2(px, px)
+	r.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	r.custom_minimum_size = Vector2(SIZE * k, SIZE * k)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	r.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1986,44 +2010,44 @@ const DATA = {
 		],
 	},
 	"misc": {
-		"pal": {"a": "#f272b8", "b": "#ffb6dc", "c": "#c4508f"},
+		"pal": {"a": "#f272b8", "b": "#ffb6dc", "c": "#c4508f", "w": "#ffffff"},
 		"rows": [
 			"................",
-			".oooooo..oooooo.",
-			".obbbbo..obbbbo.",
-			".obaaao..obaaao.",
-			".obaaao..obaaao.",
-			".oaaaco..oaaaco.",
-			".oooooo..oooooo.",
-			"................",
-			"................",
-			".oooooo..oooooo.",
-			".obbbbo..obbbbo.",
-			".obaaao..obaaao.",
-			".obaaao..obaaao.",
-			".oaaaco..oaaaco.",
-			".oooooo..oooooo.",
-			"................",
+			".....oooooo.....",
+			"...oobbbbbboo...",
+			"..obbaaaaaaaao..",
+			".obaaaawwaaaaao.",
+			".obaaaawwaaaaco.",
+			"obaawwawwawwaaco",
+			"obaaawwwwwwaaaco",
+			"obaaaawwwwaaaaco",
+			"obaaawwwwwwaaaco",
+			"obaawwawwawwaaco",
+			".oaaaaawwaaaaco.",
+			".oaaaaawwaaacco.",
+			"..oaaaaaaaaaco..",
+			"...ooccccccoo...",
+			".....oooooo.....",
 		],
 	},
 	"vest": {
-		"pal": {"a": "#f272b8", "b": "#ffe1f0", "c": "#c4508f", "d": "#8f3468"},
+		"pal": {"a": "#f272b8", "b": "#ffd3ea", "c": "#c4508f", "d": "#7d2c5a"},
 		"rows": [
 			"................",
-			"...oooo..oooo...",
-			"..oaaao..oaaao..",
-			"..oaaao..oaaao..",
-			"..oaaaaooaaaao..",
-			"..oaaaaaaaaaao..",
-			"..oabbabbabbao..",
-			"..oabcabcabcao..",
-			"..oaaaaaaaaaao..",
-			"..oabbabbabbao..",
-			"..oabcabcabcao..",
-			"..oaaaaaaaaaao..",
-			"..oddddddddddo..",
-			"...oooooooooo...",
-			"................",
+			"...ooo....ooo...",
+			"..obao....oabo..",
+			"..obao....oaao..",
+			"..obaaooooaaao..",
+			".obaaaaaaaaaaao.",
+			".obaaaaaaaaaaco.",
+			".oaddaaddaaddco.",
+			".oaddaaddaaddco.",
+			".oaaaaaaaaaaaco.",
+			".oaddaaddaaddco.",
+			".oaddaaddaaddco.",
+			".oaaaaaaaaaacco.",
+			".occcccccccccco.",
+			"..oooooooooooo..",
 			"................",
 		],
 	},

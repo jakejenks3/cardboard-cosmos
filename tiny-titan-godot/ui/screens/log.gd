@@ -123,6 +123,8 @@ func _build_picker() -> void:
 	for k in Misc.ORDER:
 		misc.add_child(_misc_tile(k))
 	add_child(misc)
+	# Reading is not a workout: its key opens the reading sheet (game/reading.gd).
+	add_child(_reading_tile())
 	# Workouts jotted on the phone (app/inbox.gd).
 	var imp = Kit.button("Import from phone", "ghost", InboxSheet.check_and_review.bind(Callable()), "sm", "speech")
 	imp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -180,6 +182,23 @@ func _misc_tile(kind: String) -> Button:
 	b.custom_minimum_size.y = 64
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.tooltip_text = str(m.tip)
+	return b
+
+
+## The reading key, in the colour of a page: the book, and today's pages.
+func _reading_tile() -> Button:
+	var h = Kit.hbox(12)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_child(Icons.rect("book", 32))
+	var t = Kit.label("Reading", 18, Pal.INK, true)
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(t)
+	var n = Reading.pages_on(App.state, App.today)
+	h.add_child(Kit.vcenter(Kit.tag("%d page%s today" % [n, "" if n == 1 else "s"], Pal.READ_DARK, false, 12)))
+	var b = LogWidgets.key("Reading", Pal.READ, h, ReadingView.open, 12, 10, 2, Pal.READ.lightened(0.3))
+	b.custom_minimum_size.y = 64
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = "Pages read: a little XP, a level of its own and a streak"
 	return b
 
 

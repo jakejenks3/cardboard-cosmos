@@ -50,10 +50,36 @@ func _set_shown(v: float) -> void:
 	queue_redraw()
 
 
+## The ring is built from the same chunky pixels as the boxes: an outlined
+## band, filled clockwise from the top as far as the value goes, lit along its
+## outer edge.
 func _draw() -> void:
-	var c = size / 2.0
-	var r = _px / 2.0 - _thick / 2.0 - 1.0
-	draw_arc(c, r, 0.0, TAU, 48, Pal.OUTLINE, _thick + 4.0, false)
-	draw_arc(c, r, 0.0, TAU, 48, Pal.WELL, _thick, false)
-	if _shown > 0.001:
-		draw_arc(c, r, -PI / 2.0, -PI / 2.0 + TAU * _shown, 48, color, _thick, false)
+	var s = float(PixBox.S)
+	var n = int(floor(_px / s))
+	var mid = Vector2(n, n) / 2.0
+	var r_out = float(n) / 2.0 - 1.0
+	var r_in = r_out - maxf(2.0, round(_thick / s))
+	var origin = ((size - Vector2(n, n) * s) / 2.0).floor()
+	for cy in range(n):
+		var run_from = -1
+		var run_col = Color(0, 0, 0, 0)
+		for cx in range(n + 1):
+			var col = Color(0, 0, 0, 0)
+			if cx < n:
+				var p = Vector2(float(cx) + 0.5, float(cy) + 0.5) - mid
+				var d = p.length()
+				if d <= r_out + 1.0 and d >= r_in - 1.0:
+					if d > r_out or d < r_in:
+						col = Pal.OUTLINE
+					else:
+						var turn = fposmod(atan2(p.y, p.x) + PI / 2.0, TAU) / TAU
+						if _shown > 0.001 and (turn <= _shown or _shown >= 0.999):
+							col = color.lightened(0.3) if d > r_out - 1.0 else (color.darkened(0.18) if d < r_in + 1.0 else color)
+						else:
+							col = Pal.WELL.darkened(0.3) if d > r_out - 1.0 else Pal.WELL
+			# Pixels of one colour in a row are drawn as one rectangle.
+			if col != run_col:
+				if run_from >= 0 and run_col.a > 0.0:
+					draw_rect(Rect2(origin + Vector2(run_from, cy) * s, Vector2(float(cx - run_from) * s, s)), run_col)
+				run_from = cx
+				run_col = col

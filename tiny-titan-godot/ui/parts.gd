@@ -73,6 +73,7 @@ static func quest_list(quests: Array, compact: bool = false) -> Control:
 		elif q.done:
 			var claim = Kit.button("Claim +%s" % Xp.fmt_int(q.xp), "good", Callable(), "sm")
 			claim.pressed.connect(_claim.bind(q, claim))
+			Fx.shine(claim, 2.6, 0.5, 0.45)
 			row.add_child(Kit.vcenter(claim))
 		else:
 			row.add_child(Kit.vcenter(xp_chip(q.xp)))

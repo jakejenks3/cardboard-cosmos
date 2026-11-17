@@ -53,6 +53,10 @@ func _init() -> void:
 		for it in core.catalog.items:
 			fixture_items.append(it.id)
 		Items.restrict_to(fixture_items)
+		var fixture_pets: Array = []
+		for pet in core.catalog.pets:
+			fixture_pets.append(pet.id)
+		Pets.restrict_to(fixture_pets)
 	_run_group("quests", _data.quests, _quests_case)
 	_run_group("diff", _data.diff, _diff_case)
 	_run_group("totals", _data.totals, _totals_case)

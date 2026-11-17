@@ -10,6 +10,16 @@ extends RefCounted
 
 static var _all = null
 static var _by_id = null
+## When set (an Array of ids), `all()` returns only those pets, in catalog
+## order. The parity tests use it to replay with the companions the TypeScript
+## engine had (see Achievements.restrict_to).
+static var _only = null
+
+
+static func restrict_to(ids) -> void:
+	_only = ids
+	_all = null
+	_by_id = null
 
 
 static func _p(id: String, pet_name: String, species: String, rarity: String, flavor: String, perk: Dictionary, hint: String, getter: Callable, target, unit: String = "count", discipline = null) -> Dictionary:
@@ -23,7 +33,11 @@ static func _p(id: String, pet_name: String, species: String, rarity: String, fl
 ## Every pet, in catalog order (do not mutate).
 static func all() -> Array:
 	if _all == null:
-		_all = _build()
+		var list: Array = _build()
+		if _only != null:
+			var keep: Array = _only
+			list = list.filter(func(p): return keep.has(p.id))
+		_all = list
 	return _all
 
 
@@ -54,4 +68,6 @@ static func _build() -> Array:
 			_p("cat", "Deload", "Cat", "rare", "Knocks loot off the shelf. Into your bag.", {"luck": 0.08}, "Log 50 sessions", func(s): return s.totals.sessions, 50),
 			_p("phoenix", "Ember", "Phoenix", "epic", "Half a year of fire, reborn weekly.", {"xp": {"all": 0.06}}, "Keep a 26-week streak", func(s): return s.streak.best, 26, "weeks"),
 			_p("dragon", "Titan Jr.", "Baby Dragon", "legendary", "Tiny now. Give it a few hundred sessions.", {"xp": {"all": 0.08}}, "Reach hero level 30", func(s): return s.levels.hero.level, 30, "level"),
+			# Added after the port (see game/reading.gd).
+			_p("owl", "Page", "Owl", "uncommon", "Reads over your shoulder. Never loses your place.", {"xp": {"all": 0.02}}, "Read 300 pages", func(s): return Reading.pages(s), 300, "pages"),
 	]

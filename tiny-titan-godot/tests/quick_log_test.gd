@@ -239,7 +239,32 @@ heel raise x10 195")))
 
 	# --- the cheat sheet the app shows parses cleanly ---------------------------------------------
 	var cs = p(QuickLog.CHEAT_SHEET)
-	ok(cs.problems.is_empty() and cs.entries.size() == 6, "cheat sheet: 6 entries, no problems", [cs.entries.size(), cs.problems])
+	ok(cs.problems.is_empty() and cs.entries.size() == 7, "cheat sheet: 7 entries, no problems", [cs.entries.size(), cs.problems])
+
+	# --- pages read (game/reading.gd) -----------------------------------------------------------
+	var rd_one = one("nov 14\nread 20 pages")
+	ok(not rd_one.is_empty() and rd_one.kind == "reading" and int(rd_one.data.pages) == 20 and rd_one.date == "2026-11-14" and rd_one.summary == "Read 20 pages", "read 20 pages", rd_one)
+	for rd_line in ["reading 20", "read: 20", "20 pages", "20 pages read", "20p", "read 20p", "pages 20", "read 20 pgs", "Read 20 Pages of the big book", "read chapter 3, 20 pages", "reading - 20 pages before bed"]:
+		var rd_e = one(rd_line)
+		ok(not rd_e.is_empty() and rd_e.kind == "reading" and int(rd_e.data.pages) == 20, "'%s' is 20 pages" % rd_line, rd_e)
+	ok(one("read 1 page").summary == "Read 1 page", "one page is singular", one("read 1 page").get("summary"))
+	var rd_two = one("read 12 pages\nbench 3x5 @ 80\nread 8 pages\nrun 5km").is_empty()
+	var rd_day = p("11/14\nread 12 pages\nbench 3x5 @ 80\nread 8 pages")
+	ok(rd_two and rd_day.entries.size() == 2 and rd_day.problems.is_empty(), "reading and a lift on one day are two entries", rd_day)
+	var rd_pages = null
+	for rd_e in rd_day.entries:
+		if rd_e.kind == "reading":
+			rd_pages = rd_e
+	ok(rd_pages != null and int(rd_pages.data.pages) == 20 and rd_pages.raw.size() == 2, "two reading lines on a day add up", rd_pages)
+	var rd_inline = one("11/14: read 25 pages")
+	ok(not rd_inline.is_empty() and rd_inline.kind == "reading" and rd_inline.date == "2026-11-14" and int(rd_inline.data.pages) == 25, "a date, a colon, then the pages", rd_inline)
+	for rd_bad in ["read 30 min", "reading 1h", "read", "read a lot", "read 0 pages", "read 99999 pages"]:
+		var rd_r = p(rd_bad)
+		ok(rd_r.entries.is_empty() and rd_r.problems.size() == 1 and str(rd_r.problems[0].why).contains("read 20 pages"), "'%s' is a problem line with a hint" % rd_bad, rd_r)
+	ok(one("reverse fly 3x12 @ 10").kind == "session" and one("pull-up 3x8").kind == "session", "lifts are still lifts")
+	var rd_ka = one("nov 14\nread 20 pages")
+	var rd_kb = one("nov 14\nread 35 pages")
+	ok(rd_ka.key != rd_kb.key and QuickLog.key_prefix(rd_ka.key) == QuickLog.key_prefix(rd_kb.key) and str(rd_ka.key).begins_with("read-"), "an edited reading line keeps the key prefix of its day", [rd_ka.key, rd_kb.key])
 
 	# --- keys ---------------------------------------------------------------------------------
 	var k1 = p("yesterday\nbench 3x5 @ 80\nrun 5km")

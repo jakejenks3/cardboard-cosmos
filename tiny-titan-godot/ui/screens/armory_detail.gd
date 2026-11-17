@@ -6,6 +6,165 @@ extends RefCounted
 ## and a button to buy it.
 
 
+const DATE_FMT = {"month": "short", "day": "numeric", "year": "numeric"}
+
+
+# ---------------------------------------------------------------------------
+# How and when something was obtained
+# ---------------------------------------------------------------------------
+
+## Where an owned item came from: {"icon", "title", "sub"}.
+## `owned` is its record in state.items ({at, how, sessionId?}).
+static func item_origin(it: Dictionary, owned) -> Dictionary:
+	var how = str(owned.get("how", "")) if owned is Dictionary else ""
+	var at = str(owned.get("at", "")) if owned is Dictionary else ""
+	var day = Dates.format_date(at, DATE_FMT) if at != "" else ""
+	match how:
+		"start":
+			return {"icon": "home", "title": "Starter kit", "sub": "Yours from day one"}
+		"drop":
+			var sub = day
+			var sess = App.session_by_id(owned.get("sessionId"))
+			if sess != null:
+				var what = Misc.title(sess).to_lower() if Misc.is_misc(sess) else "%s session" % str(TT.DISCIPLINE_META.get(str(sess.discipline), {"name": "training"}).name).to_lower()
+				sub = "%s, after a %s" % [day, what]
+			return {"icon": "gift", "title": "Found as loot", "sub": sub}
+		"shop":
+			var cost = 0
+			for b in App.purchases():
+				if str(b.get("itemId", "")) == str(it.id):
+					cost = int(b.get("cost", 0))
+			var sub = day
+			if cost > 0:
+				sub = "%s, for %s coins" % [day, Xp.fmt_int(cost)]
+			return {"icon": "coin", "title": "Bought in the shop", "sub": sub}
+		"unlock":
+			return {"icon": "trophy", "title": "Earned: %s" % Icons.strip_emoji(str(it.unlock.get("hint", "a goal"))), "sub": day}
+	return {"icon": "chest", "title": "In your collection", "sub": day}
+
+
+## Where an owned companion came from: {"icon", "title", "sub"}.
+static func pet_origin(p: Dictionary, owned) -> Dictionary:
+	var at = str(owned.get("at", "")) if owned is Dictionary else ""
+	return {"icon": "paw", "title": "Joined you: %s" % Icons.strip_emoji(str(p.hint)), "sub": Dates.format_date(at, DATE_FMT) if at != "" else ""}
+
+
+## "[icon] Found as loot / Nov 14, 2026, after a climbing session".
+static func origin_row(o: Dictionary) -> Control:
+	var row = Kit.hbox(8)
+	var ic = Icons.rect(str(o.icon), 16)
+	ic.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.add_child(ic)
+	var v = Kit.vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(Kit.para(str(o.title), 12, null, true))
+	if str(o.sub) != "":
+		v.add_child(Kit.muted_para(str(o.sub), 11))
+	row.add_child(v)
+	return row
+
+
+## What a perk does as chips, or one quiet line when it does nothing.
+static func effect_block(perk, none_text: String = "No bonus: worn for the look") -> Control:
+	var lines = Items.perk_summary(perk)
+	if lines.is_empty():
+		return Kit.muted(none_text, 11)
+	var f = Kit.flow(4)
+	for line in lines:
+		f.add_child(Kit.pill("bolt", line, Pal.GOOD, "", null, 11))
+	return f
+
+
+# ---------------------------------------------------------------------------
+# Hover cards (HoverCard.attach(control, ArmoryDetail.hover_item.bind(it)))
+# ---------------------------------------------------------------------------
+
+static func _hover_head(pic: Control, title: String, rc: Color, sub: String) -> Control:
+	var head = Kit.hbox(10)
+	var plate = PanelContainer.new()
+	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	plate.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": rc, "lip": 0, "inset": true, "pad_h": 3, "pad_v": 3}))
+	plate.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	plate.add_child(pic)
+	head.add_child(plate)
+	var names = Kit.vbox(1)
+	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	names.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	names.add_child(Kit.para(title, 14, rc.lightened(0.15), true))
+	names.add_child(Kit.muted(sub, 11))
+	head.add_child(names)
+	return head
+
+
+## The hover card of an item: what it is, how and when it was obtained (or how
+## to get it), and what it does. `hint` is a last quiet line ("Click to change").
+static func hover_item(it: Dictionary, hint: String = "") -> Control:
+	var state = App.state
+	var owned = state.items.get(it.id)
+	var rc = Pal.rarity(it.rarity)
+	var known = owned != null or Wallet.is_shop(it)
+	var v = Kit.vbox(7)
+	var pic = PixFit.make(Art.item_icon_texture(it.id, not known), Vector2(40, 40), 4)
+	v.add_child(_hover_head(pic, it.name if known else "Locked item", rc, "%s · %s" % [str(it.rarity).capitalize(), TT.SLOT_NAMES[it.slot]]))
+	v.add_child(Kit.divider())
+	if owned != null:
+		v.add_child(origin_row(item_origin(it, owned)))
+	elif Wallet.is_shop(it):
+		var wk = Dates.week_key(App.today)
+		var check = Wallet.can_buy(state, it, wk)
+		var need = "Costs %s coins" % Xp.fmt_int(check.price)
+		if check.why == "level":
+			need = "Sold from hero level %d" % Wallet.min_level(it)
+		elif check.why == "coins":
+			need = "%s coins: %s more to go" % [Xp.fmt_int(check.price), Xp.fmt_int(int(check.price) - App.coins())]
+		v.add_child(origin_row({"icon": "bag", "title": "For sale in the shop", "sub": need}))
+	else:
+		v.add_child(origin_row({"icon": "lock", "title": "Not found yet", "sub": Icons.strip_emoji(Items.unlock_hint(it))}))
+		var prog = Items.unlock_progress(it, state)
+		if prog != null:
+			v.add_child(Parts.progress_line(prog, rc))
+	v.add_child(effect_block(it.get("perk"), "No bonus: worn for the look" if owned != null else "No bonus: just for the look"))
+	if known and str(it.get("flavor", "")) != "":
+		v.add_child(Kit.muted_para("\"%s\"" % Icons.strip_emoji(str(it.flavor)), 11))
+	if hint != "":
+		v.add_child(Kit.label(hint, 10, Pal.with_alpha(Pal.MUTED, 0.7)))
+	return v
+
+
+## The hover card of a companion.
+static func hover_pet(p: Dictionary, hint: String = "") -> Control:
+	var state = App.state
+	var owned = state.pets.has(p.id)
+	var rc = Pal.rarity(p.rarity)
+	var v = Kit.vbox(7)
+	var pv = PetView.new()
+	pv.setup(p.id, 40.0, false)
+	pv.set_locked(not owned)
+	v.add_child(_hover_head(pv, "%s the %s" % [p.name, p.species] if owned else "Unknown companion", rc, "%s · Companion" % str(p.rarity).capitalize()))
+	v.add_child(Kit.divider())
+	if owned:
+		v.add_child(origin_row(pet_origin(p, state.pets.get(p.id))))
+	else:
+		v.add_child(origin_row({"icon": "lock", "title": "Not met yet", "sub": Icons.strip_emoji(str(p.hint))}))
+		if p.has("progress"):
+			v.add_child(Parts.progress_line(p.progress.call(state), rc))
+	v.add_child(effect_block(p.get("perk"), "No bonus"))
+	if owned and str(p.get("flavor", "")) != "":
+		v.add_child(Kit.muted_para("\"%s\"" % Icons.strip_emoji(str(p.flavor)), 11))
+	if hint != "":
+		v.add_child(Kit.label(hint, 10, Pal.with_alpha(Pal.MUTED, 0.7)))
+	return v
+
+
+## An empty slot of the paper doll.
+static func hover_empty(slot_name: String, hint: String) -> Control:
+	var v = Kit.vbox(4)
+	v.add_child(Kit.label(slot_name, 14, null, true))
+	v.add_child(Kit.muted_para("Nothing here yet.", 12))
+	v.add_child(Kit.label(hint, 10, Pal.with_alpha(Pal.MUTED, 0.7)))
+	return v
+
+
 ## Rarity, where it goes and its perks as a row of chips.
 static func _chips(rarity: String, extra: Array, perk) -> Control:
 	var f = Kit.flow(6)
@@ -64,13 +223,7 @@ static func open_item(it: Dictionary) -> void:
 		if prog != null:
 			info.add_child(Parts.progress_line(prog, rc))
 	else:
-		var how = str(owned.get("how", ""))
-		var at = str(owned.get("at", ""))
-		if how == "start":
-			info.add_child(Kit.muted("Starter gear", 11))
-		elif at != "":
-			var verb = "Found " if how == "drop" else ("Bought " if how == "shop" else "Earned ")
-			info.add_child(Kit.muted(verb + Dates.format_date(at, {"month": "short", "day": "numeric", "year": "numeric"}), 11))
+		info.add_child(origin_row(item_origin(it, owned)))
 	row.add_child(info)
 	sheet.box.add_child(row)
 
@@ -167,6 +320,8 @@ static func open_pet(p: Dictionary) -> void:
 	info.add_child(Kit.muted_para(Icons.strip_emoji(p.flavor if owned else "Unlock: %s" % p.hint), 14))
 	if not owned and p.has("progress"):
 		info.add_child(Parts.progress_line(p.progress.call(state), rc))
+	elif owned:
+		info.add_child(origin_row(pet_origin(p, state.pets.get(p.id))))
 	row.add_child(info)
 	sheet.box.add_child(row)
 

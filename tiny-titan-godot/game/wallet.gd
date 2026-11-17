@@ -9,7 +9,8 @@ extends RefCounted
 ## item into `state.items` with how = "shop".
 ##
 ## state.coins: {earned, spent, balance,
-##               by: {sessions, checkins, quests, bosses, bounties, trophies}}
+##               by: {sessions, checkins, quests, bosses, bounties, trophies,
+##                    reading (only once pages were logged)}}
 ## Earning: 1 coin per 10 XP of a session, check-in or claimed quest; a campaign
 ## boss 40 (zone boss 150, endless echo 60); a weekly bounty 100+ (see Bounty);
 ## a trophy 10 / 25 / 50 / 100 by tier.
@@ -61,6 +62,11 @@ static func tally(s: Dictionary, input: Dictionary) -> void:
 		var a = Achievements.by_id(id)
 		if a != null:
 			by.trophies += trophy_coins(a)
+	var read = s.get("reading")
+	if read is Dictionary:
+		by["reading"] = 0
+		for day in read.xpByDate:
+			by.reading += xp_coins(read.xpByDate[day])
 	var earned: int = 0
 	for k in by:
 		earned += int(by[k])

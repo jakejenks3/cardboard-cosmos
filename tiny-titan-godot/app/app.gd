@@ -26,7 +26,7 @@ const KEEP_BACKUPS = 14
 const PHOTO_MAX_SIDE = 1280
 const DEFAULT_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
 
-## Source of truth: {profile, settings, sessions, claims, body, purchases, loadout, activePet, strava, updatedAt}
+## Source of truth: {profile, settings, sessions, claims, body, purchases, reading, loadout, activePet, strava, updatedAt}
 var saved: Dictionary = {}
 ## Derived PlayerState (see game/player_state.gd).
 var state: Dictionary = {}
@@ -121,6 +121,12 @@ func body() -> Array:
 ## What has been bought in the shop: [{id, itemId, cost, at, date}].
 func purchases() -> Array:
 	return saved.purchases
+
+
+## Pages read: [{id, date, pages, createdAt}], one entry per day (see Reading).
+func reading() -> Array:
+	var r = saved.get("reading")
+	return r if r is Array else []
 
 
 ## Coins to spend (see Wallet).
@@ -362,12 +368,79 @@ func buy_item(id: String) -> String:
 	var before = state
 	saved.purchases.append({"id": Rng.uid("b"), "itemId": id, "cost": int(check.price), "at": now_ms(), "date": today})
 	_commit()
+	announce_unlocks(before)
+	return ""
+
+
+## Toasts for what the state has now and `before` did not: trophies, gear,
+## companions and levels. For changes that have no results reel of their own
+## (the shop, reading).
+func announce_unlocks(before: Dictionary) -> void:
 	for ach_id in state.achievements:
 		if not before.achievements.has(ach_id):
 			var a = Achievements.by_id(ach_id)
 			if a != null:
 				toast("Trophy: %s (+%s XP)" % [a.name, Xp.fmt_int(a.xp)], "good", "trophy")
-	return ""
+	for item_id in state.items:
+		if not before.items.has(item_id) and str(state.items[item_id].get("how", "")) != "shop":
+			var it = Items.by_id(item_id)
+			if it != null:
+				toast("New gear: %s" % it.name, "good", "chest")
+	for pet_id in state.pets:
+		if not before.pets.has(pet_id):
+			var p = Pets.by_id(pet_id)
+			if p != null:
+				toast("%s the %s joined you" % [p.name, p.species], "good", "paw")
+	if int(state.levels.hero.level) > int(before.levels.hero.level):
+		toast("Hero level %d!" % int(state.levels.hero.level), "good", "star")
+	var read_lv = int(Reading.level_of(state).level)
+	if read_lv > int(Reading.level_of(before).level):
+		toast("Reading level %d!" % read_lv, "good", "book")
+
+
+## Add `pages` to what was read on `date` ("" = today); a negative number takes
+## pages back. Returns the day's new number of pages.
+func add_reading(pages: int, date: String = "") -> int:
+	var day = today if date == "" else date
+	var e = Reading.entry_on(reading(), day)
+	var cur = int(e.pages) if e != null else 0
+	return set_reading(day, cur + pages)
+
+
+## Pages read that came from the phone note: added to the day, and remembered
+## under the note entry's `key`. With `replaces_key` (the key of the same line
+## before it was edited) the day changes by the difference.
+func import_reading(date: String, pages: int, key: String, replaces_key: String = "") -> void:
+	var log = reading()
+	var day = date
+	var e = Reading.entry_on(log, day)
+	var old_pages = 0
+	if replaces_key != "":
+		var was = Reading.entry_with_key(log, replaces_key)
+		if was != null and str(was.date) == day:
+			old_pages = int(was.inbox.get(replaces_key, 0))
+	var cur = int(e.pages) if e != null else 0
+	var record = e.inbox.duplicate() if (e != null and e.get("inbox") is Dictionary) else {}
+	record.erase(replaces_key)
+	record[key] = int(record.get(key, 0)) + pages
+	var before = state
+	saved["reading"] = Reading.with_day(log, day, maxi(1, cur - old_pages + pages), Rng.uid("r"), now_ms(), record)
+	_commit()
+	announce_unlocks(before)
+
+
+## Set the pages read on a day (0 takes the day out of the log). Returns the
+## day's pages. Unlocks are announced as toasts: reading has no results reel.
+func set_reading(date: String, pages: int) -> int:
+	var want = Reading.clamp_pages(pages)
+	var e = Reading.entry_on(reading(), date)
+	if (int(e.pages) if e != null else 0) == want:
+		return want
+	var before = state
+	saved["reading"] = Reading.with_day(reading(), date, want, Rng.uid("r"), now_ms())
+	_commit()
+	announce_unlocks(before)
+	return want
 
 
 func equip(slot: String, id) -> void:
@@ -642,6 +715,7 @@ static func empty_saved() -> Dictionary:
 		"claims": [],
 		"body": [],
 		"purchases": [],
+		"reading": [],
 		"loadout": DEFAULT_LOADOUT.duplicate(true),
 		"activePet": null,
 		"strava": {"lastSyncAt": null, "athleteName": null},
@@ -675,6 +749,7 @@ static func parse_saved(raw):
 		for p in o.purchases:
 			if p is Dictionary and p.get("itemId") is String and (p.get("at") is int or p.get("at") is float) and (p.get("cost") is int or p.get("cost") is float):
 				out.purchases.append({"id": str(p.get("id", "")), "itemId": p.itemId, "cost": int(p.cost), "at": int(p.at), "date": str(p.get("date", ""))})
+	out.reading = Reading.parse_log(o.get("reading"))
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)
 	if o.get("activePet") is String:
@@ -765,6 +840,7 @@ func _recompute() -> void:
 		"claims": saved.claims,
 		"body": saved.body,
 		"purchases": saved.get("purchases", []),
+		"reading": reading(),
 		"weeklyGoal": saved.settings.weeklyGoal,
 		"today": today,
 	})

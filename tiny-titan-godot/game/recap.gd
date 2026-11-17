@@ -173,6 +173,8 @@ static func build(kind: String, key: String, state: Dictionary, sessions: Array,
 	r["title"] = title_of(kind, key)
 	r["range"] = range_text(from, to)
 	r["running"] = today >= from and today <= to
+	# Pages read in the period (game/reading.gd): 0 when reading is not used.
+	r["pages"] = Reading.pages_between(state, from, to)
 
 	var hero_xp: int = 0
 	for d in state.xpByDate:

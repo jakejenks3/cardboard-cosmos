@@ -443,6 +443,9 @@ func _build_stats() -> void:
 		var mt = Misc.totals(s, k)
 		if mt != null and int(mt.sessions) > 0:
 			add_child(_misc_card(k, mt, du))
+	# Reading (game/reading.gd), once any page was logged.
+	if Reading.pages(s) > 0:
+		add_child(_reading_card(s))
 
 
 ## "1.2 blue whales" -> ["1.2", "blue whales"].
@@ -511,6 +514,42 @@ func _misc_card(kind: String, mt: Dictionary, du: String) -> Card:
 		chips.append(value_chip("Climbed", Fmt.fmt_elevation(float(mt.elevationM), du), Pal.MISC))
 	chips.append(value_chip("XP earned", Xp.fmt_int(int(mt.xp)), Pal.MISC, "Hero XP from this activity"))
 	c.add(_tiles(chips, 2))
+	return c
+
+
+## Pages read: the totals, and the sheet with the bookshelf behind a tap.
+func _reading_card(s: Dictionary) -> Card:
+	var c = Kit.card(10, ReadingView.open)
+	c.accent(Pal.READ)
+	c.set_meta("reading_card", true)
+	var h = Kit.hbox(10)
+	var badge = PanelContainer.new()
+	badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	badge.add_theme_stylebox_override("panel", PixBox.make(Pal.READ, {"lip": 1, "lip_color": Pal.READ_DARK, "pad_h": 0, "pad_v": 0}))
+	badge.custom_minimum_size = Vector2(34, 36)
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.add_child(Kit.center(Icons.rect("book", 16)))
+	h.add_child(badge)
+	h.add_child(Kit.vcenter(PixelFont.rect("Reading", 2, Pal.READ)))
+	h.add_child(Kit.spacer())
+	h.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
+	c.add(h)
+	var pages = Xp.fmt_int(Reading.pages(s))
+	var days = Xp.fmt_int(Reading.days(s))
+	var lv = str(int(Reading.level_of(s).level))
+	var sc = fit_scale([pages, days, lv], 96, 3)
+	c.add(_tiles([
+		well_tile(pages, "pages", Pal.READ, sc),
+		well_tile(days, "day" if Reading.days(s) == 1 else "days", Pal.TEXT, sc),
+		well_tile(lv, "level", Pal.TEXT, sc),
+	]))
+	c.add(_tiles([
+		value_chip("Streak", "%d day%s" % [Reading.streak(s), "" if Reading.streak(s) == 1 else "s"], Pal.READ),
+		value_chip("Best streak", "%d day%s" % [Reading.best_streak(s), "" if Reading.best_streak(s) == 1 else "s"], Pal.READ),
+		value_chip("Most in a day", "%s pages" % Xp.fmt_int(Reading.best_day(s)), Pal.READ),
+		value_chip("XP earned", Xp.fmt_int(int(s.reading.xp)), Pal.READ, "Hero XP from reading"),
+	], 2))
+	Kit.passthrough(c.box)
 	return c
 
 

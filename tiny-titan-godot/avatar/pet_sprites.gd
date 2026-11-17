@@ -9,6 +9,38 @@ extends RefCounted
 const EYE = "#1a1026" # = Pix.OUTLINE
 
 const PET_SPRITES = {
+	# Added after the port: the reading companion.
+	"owl": {
+		"palette": {"b": "#9a7653", "d": "#5f4630", "w": "#f6e7c6", "y": "#ffd54f", "e": EYE, "o": "#ff9800"},
+		"frames": [
+			[
+				".d......d.",
+				".bb....bb.",
+				".bbbbbbbb.",
+				"bbwwbbwwbb",
+				"bwyewwyewb",
+				"bwwwoowwwb",
+				"bbwwwwwwbb",
+				"dbwwbwwwbd",
+				"dbbwwwwbbd",
+				".bbbbbbbb.",
+				"..oo..oo..",
+			],
+			[
+				".d......d.",
+				".bb....bb.",
+				".bbbbbbbb.",
+				"bbwwbbwwbb",
+				"bwddwwddwb",
+				"bwwwoowwwb",
+				"bbwwwwwwbb",
+				"dbwwwbwwbd",
+				"dbbwwwwbbd",
+				".bbbbbbbb.",
+				"..oo..oo..",
+			],
+		],
+	},
 	"slime": {
 		"palette": {"g": "#6fe36f", "d": "#2f7a3a", "e": EYE, "h": "#d4ffd4", "m": "#2f7a3a"},
 		"frames": [
@@ -439,8 +471,15 @@ static func pet_buffer(id: String, frame: int = 0, outline: bool = true):
 		pw = maxi(pw, r.length())
 	var buf: Pix = Pix.new(pw + 2, ph + 2)
 	buf.sprite(1, 1, rows, sp.palette)
+	if Pix.classic:
+		if outline:
+			buf.outline(Pix.OUTLINE)
+		return buf
+	# The game's look: a lit rim and a shaded underside, and an outline that
+	# takes after the fur.
+	buf.bevel()
 	if outline:
-		buf.outline(Pix.OUTLINE)
+		buf.outline_tinted(Pix.OUTLINE)
 	return buf
 
 

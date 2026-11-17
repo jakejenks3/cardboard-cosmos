@@ -35,6 +35,10 @@ const PET_X = 70
 const PREVIEW_PROFILE = {"name": "Preview", "skin": 1, "hairStyle": 0, "hairColor": 1, "createdAt": 0}
 const STARTER_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
 const MANNEQUIN_LEVELS = {"hero": 25, "lift": 15, "climb": 15, "run": 15, "ride": 15}
+# The mannequin item_icon_pix() draws gear on: a buzz cut, so no hair sticks out
+# from under a hat. An aura is drawn around its dark shape.
+const ICON_PROFILE = {"name": "Icon", "skin": 1, "hairStyle": 5, "hairColor": 0, "createdAt": 0}
+const AURA_ICON_SHAPE = "#3a4470"
 
 ## CSS brightness of the greyed-out looks (`grayscale(1) brightness(x)`).
 const LOCKED_BRIGHTNESS = 0.4
@@ -165,6 +169,20 @@ static func item_tryon_texture(item_id: String, state: Dictionary, profile: Dict
 	return hero_texture(tryon_state(state, item_id), profile, worn, "idle", 0, false)
 
 
+## The item by itself, cropped and outlined (see item_icon_pix): what a slot
+## of the Armory's paper doll shows. `locked` greys it out.
+static func item_icon_texture(item_id: String, locked: bool = false) -> ImageTexture:
+	var key: String = "icon|" + item_id + "|" + str(locked)
+	var tex = _tex_cache.get(key)
+	if tex == null:
+		var p: Pix = item_icon_pix(item_id)
+		if locked:
+			p = p.dimmed(LOCKED_BRIGHTNESS)
+		tex = p.to_texture()
+		_cache_put(_tex_cache, key, tex, _TEX_CACHE_MAX)
+	return tex
+
+
 ## Drop every cached texture (they are rebuilt on demand).
 static func clear_cache() -> void:
 	_tex_cache.clear()
@@ -206,7 +224,22 @@ static func body_input(state: Dictionary, profile: Dictionary, pose: String = "i
 		# very first render (frame 0) has the eyes open.
 		"blink": frame > 0 and frame % BLINK_EVERY == 0,
 		"happy": happy or pose == "flex",
+		"look": look_for(pose, frame),
 	}
+
+
+## Where the eyes glance on a frame: -1 left, 0 ahead, 1 right. Now and then
+## the idle hero looks to one side for about a second (never in the classic look).
+static func look_for(pose: String, frame: int) -> int:
+	if Pix.classic or pose != "idle" or frame <= 0:
+		return 0
+	var a: int = frame % 61
+	if a >= 40 and a < 46:
+		return -1
+	var b: int = frame % 97
+	if b >= 70 and b < 77:
+		return 1
+	return 0
 
 
 static func hero_pix(state: Dictionary, profile: Dictionary, loadout: Dictionary, pose: String = "idle", frame: int = 0, happy: bool = false) -> Pix:
@@ -232,10 +265,31 @@ static func scene_pix(state: Dictionary, profile: Dictionary, loadout: Dictionar
 		"hour": hour,
 		"frame": frame,
 	})
+	if not Pix.classic:
+		# The shadows of the hero and of a pet that stands on the floor.
+		var feet: Array = _feet_span(hero)
+		if feet[1] >= feet[0]:
+			GymScene.shadow_under(buf, GymScene.HERO_X + feet[0], GymScene.HERO_X + feet[1])
+		if _pet_shown(active_pet, state):
+			var sp = PetSprites.PET_SPRITES.get(active_pet)
+			if sp != null and not sp.get("fly", false):
+				GymScene.shadow_under(buf, PET_X, PET_X + int(PetSprites.sprite_size(active_pet, frame).w) - 1)
 	buf.blit(hero, GymScene.HERO_X, GymScene.HERO_Y)
 	if _pet_shown(active_pet, state):
 		PetSprites.draw_pet(buf, active_pet, PET_X, GymScene.FLOOR_Y, frame)
 	return buf
+
+
+# The columns the hero's feet cover in its buffer: [first, last] ([0, -1] when empty).
+static func _feet_span(hero: Pix) -> Array:
+	var x0: int = hero.w
+	var x1: int = -1
+	for y in range(hero.h - 7, hero.h - 2):
+		for x in range(hero.w):
+			if hero.data[y * hero.w + x] != 0:
+				x0 = mini(x0, x)
+				x1 = maxi(x1, x)
+	return [x0, x1] if x1 >= x0 else [0, -1]
 
 
 static func pet_pix(pet_id: String, frame: int = 0) -> Pix:
@@ -261,6 +315,126 @@ static func item_pix(item_id: String) -> Pix:
 	for track in MANNEQUIN_LEVELS:
 		levels[track] = {"level": MANNEQUIN_LEVELS[track]}
 	return hero_pix({"levels": levels, "items": owned}, PREVIEW_PROFILE, loadout, "idle", 0, false)
+
+
+## A piece of gear on its own: the mannequin is drawn with and without it and
+## only what the item changed is kept, cropped to its size and outlined. An
+## aura is shown around the dark shape of the mannequin, so it reads as "around
+## the hero". An unknown id gives a 1x1 empty buffer.
+static func item_icon_pix(item_id: String) -> Pix:
+	var item = Items.by_id(item_id)
+	if item == null:
+		return Pix.new(1, 1)
+	var levels: Dictionary = {}
+	for track in MANNEQUIN_LEVELS:
+		levels[track] = {"level": MANNEQUIN_LEVELS[track]}
+	var input: Dictionary = body_input({"levels": levels}, ICON_PROFILE, "idle", 0, false)
+	var base_v: Dictionary = {}
+	for slot in STARTER_LOADOUT:
+		if slot != item.slot:
+			base_v[slot] = Items.by_id(STARTER_LOADOUT[slot]).visual
+	var with_v: Dictionary = base_v.duplicate()
+	with_v[item.slot] = item.visual
+	var a: Pix = Pix.new(HERO_W, HERO_H)
+	HeroBody.draw_hero(a, input, {"visuals": base_v, "noOutline": true, "flat": true})
+	var b: Pix = Pix.new(HERO_W, HERO_H)
+	HeroBody.draw_hero(b, input, {"visuals": with_v, "noOutline": true, "flat": true})
+	# Colours of the bare mannequin: a pixel that only changed to one of these
+	# is skin showing through (hair under a hat, an ankle), not part of the item.
+	var bare: Pix = Pix.new(HERO_W, HERO_H)
+	HeroBody.draw_hero(bare, input, {"visuals": {}, "noOutline": true, "flat": true})
+	var skin: Dictionary = {}
+	for v in bare.data:
+		if v != 0:
+			skin[v] = true
+	# The eyes are not skin: white or near-black gear must stay.
+	skin.erase(Pix.to_raw("#ffffff"))
+	skin.erase(Pix.to_raw(Pix.OUTLINE))
+	var is_aura: bool = item.slot == "aura"
+	var out: Pix = Pix.new(HERO_W, HERO_H)
+	if item.slot == "back":
+		# Mostly hidden behind the body when worn: drawn alone, the whole of it shows.
+		Equipment.draw_back_item(out, item.visual, HeroBody.body_metrics(input), 0)
+		return _crop_icon(out, 0, HERO_W - 1)
+	var x0: int = HERO_W
+	var y0: int = HERO_H
+	var x1: int = -1
+	var y1: int = -1
+	for y in range(HERO_H):
+		for x in range(HERO_W):
+			var i: int = y * HERO_W + x
+			var v: int = b.data[i]
+			if v == 0:
+				continue
+			if v == a.data[i] or skin.has(v):
+				if is_aura:
+					out.data[i] = Pix.to_raw(AURA_ICON_SHAPE)
+				else:
+					continue
+			else:
+				out.data[i] = v
+			x0 = mini(x0, x)
+			y0 = mini(y0, y)
+			x1 = maxi(x1, x)
+			y1 = maxi(y1, y)
+	if x1 < x0:
+		return Pix.new(1, 1)
+	if is_aura:
+		# The upper half of the figure is enough to say "aura", and fits a slot.
+		return _crop_icon(out, 0, HERO_W - 1, y0 + 33)
+	if item.slot == "hands":
+		# Two small things a body apart: one hand reads better, and with the
+		# forearm it is on, it is clear what it is.
+		var half: int = int(HERO_W / 2.0) - 1
+		var hx0: int = HERO_W
+		var hx1: int = -1
+		var hy0: int = HERO_H
+		var hy1: int = -1
+		for y in range(HERO_H):
+			for x in range(half + 1):
+				if out.data[y * HERO_W + x] != 0:
+					hx0 = mini(hx0, x)
+					hx1 = maxi(hx1, x)
+					hy0 = mini(hy0, y)
+					hy1 = maxi(hy1, y)
+		if hx1 >= hx0:
+			for y in range(maxi(0, hy0 - 6), mini(HERO_H, hy1 + 2)):
+				for x in range(maxi(0, hx0 - 1), mini(half + 1, hx1 + 2)):
+					var i: int = y * HERO_W + x
+					if out.data[i] == 0 and b.data[i] != 0:
+						out.data[i] = b.data[i]
+		return _crop_icon(out, 0, half)
+	return _crop_icon(out, 0, HERO_W - 1)
+
+
+# The filled part of `src` between the columns x_from..x_to (and above y_max),
+# with a one pixel margin and an outline.
+static func _crop_icon(src: Pix, x_from: int, x_to: int, y_max: int = 9999) -> Pix:
+	var x0: int = src.w
+	var y0: int = src.h
+	var x1: int = -1
+	var y1: int = -1
+	for y in range(mini(src.h, y_max + 1)):
+		for x in range(maxi(0, x_from), mini(src.w, x_to + 1)):
+			if src.data[y * src.w + x] != 0:
+				x0 = mini(x0, x)
+				y0 = mini(y0, y)
+				x1 = maxi(x1, x)
+				y1 = maxi(y1, y)
+	if x1 < x0:
+		return Pix.new(1, 1)
+	var icon: Pix = Pix.new(x1 - x0 + 3, y1 - y0 + 3)
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			var v: int = src.data[y * src.w + x]
+			if v != 0:
+				icon.data[(y - y0 + 1) * icon.w + (x - x0 + 1)] = v
+	if Pix.classic:
+		icon.outline(Pix.OUTLINE)
+	else:
+		icon.light()
+		icon.outline_tinted(Pix.OUTLINE)
+	return icon
 
 
 ## A copy of `state` whose levels are replaced by `levels`
@@ -352,10 +526,10 @@ static func _hero_sig(state: Dictionary, profile: Dictionary, loadout: Dictionar
 	# with the raw frame number.
 	var frame_key: int = frame if has_aura else frame % 8
 	var blink: bool = frame > 0 and frame % BLINK_EVERY == 0
-	return "%d.%d.%d.%d.%d|%d.%d.%d|%s|%d|%s|%s|%s" % [
+	return "%d.%d.%d.%d.%d|%d.%d.%d|%s|%d|%s|%s|%d|%s" % [
 		int(lv.hero.level), int(lv.lift.level), int(lv.climb.level), int(lv.run.level), int(lv.ride.level),
 		int(profile.skin), int(profile.hairStyle), int(profile.hairColor),
-		pose, frame_key, str(blink), str(happy or pose == "flex"), gear,
+		pose, frame_key, str(blink), str(happy or pose == "flex"), look_for(pose, frame), gear,
 	]
 
 
@@ -370,7 +544,12 @@ static func _scene_sig(state: Dictionary, active_pet, frame: int, hour: int) -> 
 	if _pet_shown(active_pet, state):
 		pet = active_pet + ":" + str(frame % 4)
 	var sky: Dictionary = GymScene.sky_colors(hour)
-	return "%d|%d|%s|%s|%d|%d|%s" % [stage, state.achievements.size(), str(int(state.totals.sessions) >= 5), sky.sky, lights, treadmill, pet]
+	var sig: String = "%d|%d|%s|%s|%d|%d|%s" % [stage, state.achievements.size(), str(int(state.totals.sessions) >= 5), sky.sky, lights, treadmill, pet]
+	if not Pix.classic:
+		# The lit scene moves a little more: clouds and stars in the window, the
+		# plant, a lamp on the treadmill.
+		sig += "|" + GymScene.lit_motion(stage, hour, frame) + "|%d.%d" % [int(frame / 6.0) % 4, frame % 4]
+	return sig
 
 
 static func _cache_put(cache: Dictionary, key: String, tex: ImageTexture, cap: int) -> void:

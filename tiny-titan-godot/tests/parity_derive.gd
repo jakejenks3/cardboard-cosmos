@@ -60,6 +60,11 @@ func _run() -> bool:
 	for it in core.catalog.items:
 		fixture_items.append(it.id)
 	Items.restrict_to(fixture_items)
+	# And for companions (the owl came with reading).
+	var fixture_pets: Array = []
+	for pet in core.catalog.pets:
+		fixture_pets.append(pet.id)
+	Pets.restrict_to(fixture_pets)
 
 	var derive_passed: int = 0
 	var started: int = Time.get_ticks_msec()

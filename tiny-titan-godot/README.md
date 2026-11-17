@@ -71,6 +71,7 @@ run 5.2km 27:30 +80m
 ride 40km 1h35
 vest walk 3km 40:00 10kg
 weight 82.4  bf 18
+read 20 pages
 ```
 
 Weights are in your weight unit unless you write `kg` / `lb`; distances in your distance unit unless
@@ -89,6 +90,10 @@ the Log tab); `v4 5 attempts` is five tries and no send; `v3 2 sends 3 attempts`
 `v3 send, 3 attempts` work too. `v3 3rd go` (or `v3 send in 3`) says which go it went on: one send
 and two tries, and `1st go` is a flash. `v4 x3 no send` is three tries. A climb the game cannot
 tell apart is shown as a line it could not read, never guessed.
+
+`read 20 pages` (or `reading 20`, or just `20 pages`) adds to the pages you read that day; two
+such lines on a day add up. If you change the number after importing it, the day changes by the
+difference instead of counting the line twice.
 
 **Miscellaneous** (Log tab, under the four disciplines): activities that are not lifting,
 climbing, running or cycling. For now there is one, the **weighted vest walk**: distance, time,
@@ -149,8 +154,18 @@ to workout notes.
 - **Coins and a shop.** Every 10 XP is a coin; bounties, bosses, trophies and quests pay extra.
   Armory → Shop sells 33 pieces of gear (hats, masks, wings, a greatsword, auras…). Each tile
   shows your own hero trying the piece on, and one item is 30% off every week.
-- **171 trophies, 122 pieces of gear, 15 companions**, daily and weekly quests, weekly streaks, PRs,
+- **187 trophies, 124 pieces of gear, 16 companions**, daily and weekly quests, weekly streaks, PRs,
   mastery ranks per discipline, and an "Almost there" list of the goals you are closest to.
+- **See what you are wearing.** The Armory opens on your hero standing on a stage with a slot on
+  each side for everything worn (head, face, body, hands, legs, feet, back, extra, aura) and for
+  your companion. Hover a slot (or any piece of gear) for a card that says how and when you got
+  it (found after which session, bought for how many coins, earned for what) and what it does.
+  The **Equipped** tab lists the same as rows, with every active bonus and where it comes from.
+- **Reading.** A card on the Hero tab counts the pages you read: tap +1, +5, +10 or +25. A page
+  is worth 2 XP (for the first 100 pages of a day) and a few coins, reading has a level of its
+  own and a day streak, every hundred pages puts a book on your shelf, and there are trophies,
+  an owl and reading glasses to earn. Tap the card for the bookshelf, other days and your daily
+  goal. In the phone note, write `read 20 pages`.
 - **Fast logging.** Pick an exercise and last time's sets come up already filled in; − / + (hold to
   repeat) on every number; one tap to repeat a previous workout.
 - **Looking back.** Then-vs-now, a dated story of every milestone, weekly XP, training heatmap,
@@ -197,6 +212,12 @@ its script in `ui/screens/`.
 
 The interface is pixel art drawn in code, like the rest of the game: panels, raised buttons that sink
 when pressed, bars and inputs come from `ui/pix_box.gd`, and every colour comes from `ui/pal.gd`.
+Everything is drawn at whole-number scales (an icon is 16, 32 or 48 pixels, never in between), so
+no pixel is wider than its neighbour. The hero, companions and monsters are lit from the top left
+and outlined in a darker shade of their own colours; the home gym has a window with the real time
+of day in it. Things move: the hero breathes, blinks and glances about, companions hop, flying
+monsters float over their shadows, clouds and stars drift behind the screen, bars glint, rare
+gear twinkles, and what a quick tap just earned rises from the button.
 **Settings → Theme** switches between Arcade, Ember, Forest and Slate; to add your own, add an entry
 to `Pal.THEMES`.
 
@@ -209,6 +230,8 @@ fit short ones; resize or maximise the window freely (the column stays centred a
 
 The rules and the pixel art were ported from a TypeScript version and are checked against it:
 `tests/parity/*.json` hold inputs and the original engine's outputs, and these scripts replay them.
+(The art has since been reworked; the original look is still in the code as `Pix.classic`, and
+that is what the art test compares.)
 
 ```
 godot --headless --path . --import
@@ -218,6 +241,7 @@ godot --headless --path . --script res://tests/parity_art.gd
 godot --headless --path . --script res://tests/quick_log_test.gd   # the phone-inbox parser
 godot --headless --path . --script res://tests/shot_reader_test.gd # reading screenshots
 godot --headless --path . --script res://tests/misc_test.gd        # misc activities (vest walks)
+godot --headless --path . --script res://tests/reading_test.gd     # pages read
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```
 

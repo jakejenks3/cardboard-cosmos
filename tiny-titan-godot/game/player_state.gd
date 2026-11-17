@@ -51,6 +51,8 @@ extends RefCounted
 ##          Bounty.of(s) / Bounty.wins(s).
 ## coins:   {earned, spent, balance, by: {...}} (added after the port, set by Wallet.tally,
 ##          dropped by the parity tests). Read with Wallet.balance(s).
+## reading: pages read (added after the port; the key only exists once pages were
+##          logged, see game/reading.gd). Read with Reading.of(s) / Reading.pages(s).
 ## streak:  {current, best, thisWeek, goal}
 ## chronicle: [{date, kind, icon, title, detail?, val?: {n, unit}, discipline?, ref?}]
 ##           kind: "start"|"level"|"stage"|"rank"|"achievement"|"item"|"pet"|"boss"|"pr"|"body"

@@ -53,6 +53,12 @@ var _frame: int = 0
 var _since_frame_ms: float = 0.0
 var _flex_until_ms: int = 0
 var _last_tap_ms: int = -100000
+## A tap also makes a hero that stands alone (no gym round it) jump: time into
+## the jump in ms (< 0 = on the ground) and how many art pixels it is up.
+const HOP_MS = 340.0
+const HOP_PX = 4.0
+var _hop_ms: float = -1.0
+var _lift: int = 0
 
 
 func _init() -> void:
@@ -98,9 +104,27 @@ func _update_min_size() -> void:
 	custom_minimum_size = Vector2(art_size()) * min_scale
 
 
+## One jump, now.
+func hop() -> void:
+	if _show_scene or Pix.classic:
+		return
+	_hop_ms = 0.0
+	queue_redraw()
+
+
 func _process(delta: float) -> void:
 	if _state == null or not is_visible_in_tree():
 		return
+	if _hop_ms >= 0.0:
+		_hop_ms += delta * 1000.0
+		var ht: float = clampf(_hop_ms / HOP_MS, 0.0, 1.0)
+		var lift: int = int(round(4.0 * ht * (1.0 - ht) * HOP_PX))
+		if _hop_ms >= HOP_MS:
+			_hop_ms = -1.0
+			lift = 0
+		if lift != _lift:
+			_lift = lift
+			queue_redraw()
 	if animate:
 		_since_frame_ms += delta * 1000.0
 		if _since_frame_ms >= Art.FRAME_MS:
@@ -128,6 +152,7 @@ func _draw() -> void:
 	var k: float = maxf(1.0, floor(minf(size.x / art.x, size.y / art.y)))
 	var draw_size: Vector2 = art * k
 	var pos: Vector2 = ((size - draw_size) / 2.0).floor()
+	pos.y -= float(_lift) * k
 	draw_texture_rect(tex, Rect2(pos, draw_size), false)
 
 
@@ -147,4 +172,5 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	_last_tap_ms = now
 	flex()
+	hop()
 	tapped.emit()

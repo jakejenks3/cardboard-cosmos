@@ -76,6 +76,9 @@ static var RUN = Color("3d9bff")
 static var RIDE = Color("ffb21f")
 ## Misc activities (vest walks...): pink, apart from the four disciplines.
 static var MISC = Color("f272b8")
+## Reading: the colour of a page, apart from everything that is training.
+static var READ = Color("f1dfae")
+static var READ_DARK = Color("a8894f")
 
 static var HP = Color("ff4d6d")
 ## The weekly bounty: violet, so it never reads as the campaign boss.

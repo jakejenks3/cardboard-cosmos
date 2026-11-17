@@ -453,10 +453,14 @@ func _resolve_updates(fresh: Array) -> void:
 		if not e.has("replaces_key"):
 			continue
 		var found = null
-		var pool = app.sessions() if e.kind == "session" else app.body()
-		for x in pool:
-			if str(x.get("inboxKey", "")) == str(e.replaces_key):
-				found = x
+		if e.kind == "reading":
+			# A reading line edited after it was imported: the day changes by the difference.
+			found = Reading.entry_with_key(app.reading(), str(e.replaces_key))
+		else:
+			var pool = app.sessions() if e.kind == "session" else app.body()
+			for x in pool:
+				if str(x.get("inboxKey", "")) == str(e.replaces_key):
+					found = x
 		if found == null:
 			continue
 		if str(found.get("date", "")) != str(e.date):
@@ -517,8 +521,22 @@ func import_entries(entries: Array) -> void:
 				imported.erase(k)
 	var updates = []
 	var body_updates = []
+	var read_new = 0
+	var read_up = 0
 	var i = 0
 	for e in entries:
+		if e.kind == "reading":
+			# Pages read: no session and no reel, they join that day's reading.
+			var same_day = e.has("replaces")
+			app.import_reading(str(e.date), int(e.data.get("pages", 0)), str(e.key), str(e.replaces_key) if same_day else "")
+			if e.has("replaces_key"):
+				imported.erase(e.replaces_key)
+			imported[e.key] = int(imported.get(e.key, 0)) + 1
+			if same_day:
+				read_up += 1
+			else:
+				read_new += 1
+			continue
 		var d = e.data.duplicate(true)
 		d["date"] = e.date
 		d["createdAt"] = now + i
@@ -571,8 +589,11 @@ func import_entries(entries: Array) -> void:
 		app.commit_sessions(sessions, "Imported from your phone")
 	for b in bodies:
 		app.commit_body(b)
-	var n_up = updates.size() + body_updates.size()
+	var n_up = updates.size() + body_updates.size() + read_up
 	var n_new = entries.size() - n_up
+	# Pages have no results reel: say that they arrived (an update has its own line below).
+	if read_new > 0 and sessions.is_empty() and bodies.is_empty():
+		app.toast("Reading from your phone is in", "good", "book")
 	var bits = []
 	if n_new > 0:
 		bits.append("imported %d entr%s" % [n_new, "y" if n_new == 1 else "ies"])
