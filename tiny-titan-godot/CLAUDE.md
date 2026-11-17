@@ -140,6 +140,16 @@ is the Windows handoff.
 - Also 2026-11-16: a vest walk may be written as a sentence (`2.5 mile walk with 30 lb vest`).
   `QuickLog._misc_kind` accepts a misc activity's words anywhere in a line that has a distance
   and no `NxM` sets, so `weighted vest walking lunge 3x10` stays a lift.
+- Also 2026-11-17, two things the phone note could not read:
+  - A decimal typed without its zero (`.75 mile walk 15lb vest`, `@ .5`): `QuickLog.lead_zeros`,
+    applied in `_line` BELOW the title / note lines, so a note keeps its words and an entry
+    imported earlier keeps its key (the key is made from the normalised lines).
+  - A number inside an exercise name (`neck 4 way - 3x20@10`, `1 arm row 3x10 @ 40`). A lifting
+    line is still cut at its first number; only when that does not read, `_later_cut` tries a
+    later start, and takes it only when the words before it are clearly a name: an exercise
+    already logged (`_knows_exercise`), a name cut off by a dash or a colon, or a number followed
+    by a word from `NAME_NUMBER_WORDS` ("way", "arm", "degree"...). Amounts (`AMOUNT_WORDS`:
+    `bench 3 sets of 5 at 80`, `bench 80 - 3x5`) stay problem lines, with the same message.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

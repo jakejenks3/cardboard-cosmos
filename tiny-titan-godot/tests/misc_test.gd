@@ -192,6 +192,16 @@ func _init() -> void:
 	ok(said_e.get("summary") == "Vest walk 2.5 mi · 30 lb vest", "its line in the review", said_e.get("summary"))
 	var said2 = p("walked 2 miles in 38:30 with the vest", mi_lb.merged({"lastLoadKg": {"vest_walk": 20.0 * LB}})).entries
 	ok(said2.size() == 1 and said2[0].data.get("kind") == "vest_walk" and near(said2[0].data.distanceM, 2.0 * MI, 0.6) and said2[0].data.get("durationSec") == 2310 and near(said2[0].data.loadKg, 20.0 * LB), "'walked 2 miles in 38:30 with the vest': the last vest weight is used", said2)
+	# A distance typed without its zero.
+	var dot = p("11/14:\n .75 mile walk 15lb vest", mi_lb)
+	var dot_e = dot.entries[0] if dot.entries.size() == 1 else {"data": {}}
+	ok(dot.problems.is_empty() and dot_e.data.get("kind") == "vest_walk" and near(dot_e.data.get("distanceM", 0.0), 0.75 * MI, 0.6) and near(dot_e.data.get("loadKg", 0.0), 15.0 * LB) and dot_e.get("summary") == "Vest walk 0.75 mi · 15 lb vest", "'.75 mile walk 15lb vest' is three quarters of a mile", dot)
+	var dot2 = p("vest walk .5km 6:00 10kg").entries
+	ok(dot2.size() == 1 and near(dot2[0].data.get("distanceM", 0.0), 500.0, 0.2) and dot2[0].data.get("durationSec") == 360, "'vest walk .5km' is half a kilometre", dot2)
+	var two_walks = p("11/14: 2 mile walk with 15 lb vest\n11/14:\n.5 mile walk 15lb vest", mi_lb)
+	ok(two_walks.entries.size() == 2 and two_walks.entries[0].key != two_walks.entries[1].key and QuickLog.key_prefix(two_walks.entries[0].key) == QuickLog.key_prefix(two_walks.entries[1].key), "a second walk under the same date is its own entry", two_walks)
+	var kept = PhoneInbox.split_entries(two_walks.entries, {two_walks.entries[0].key: 1} if two_walks.entries.size() == 2 else {})
+	ok(kept.already == 1 and kept.fresh.size() == 1 and not kept.fresh[0].has("replaces_key") and not kept.fresh[0].has("skip"), "and it is new, not an edit of the walk imported before it", kept)
 	for lift_line in ["weighted vest walking lunges 3x10 @ 20", "walking lunge 3x10"]:
 		var ll = p(lift_line, mi_lb)
 		ok(ll.entries.size() == 1 and ll.entries[0].data.get("discipline") == "lift", "a lift with those words stays a lift: " + lift_line, ll)

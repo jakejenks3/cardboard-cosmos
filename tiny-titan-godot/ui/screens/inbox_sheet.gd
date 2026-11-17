@@ -29,13 +29,12 @@ static func open(result: Dictionary) -> void:
 			sheet.box.add_child(_picture_card(pr))
 		else:
 			problems.append(pr)
+	if not problems.is_empty():
+		sheet.box.add_child(_unread_card(problems))
 	var already = int(result.get("already", 0))
-	if not problems.is_empty() or already > 0:
+	if already > 0:
 		var info = Kit.flow(6)
-		if already > 0:
-			info.add_child(_chip("check", "%d already imported" % already, Pal.PANEL2, ""))
-		for pr in problems:
-			info.add_child(_chip("warning", "\"%s\"" % str(pr.line), Pal.deep(Pal.DANGER), "Could not read: %s" % str(pr.why)))
+		info.add_child(_chip("check", "%d already imported" % already, Pal.PANEL2, ""))
 		sheet.box.add_child(info)
 
 	var row = Kit.hbox(8)
@@ -212,6 +211,33 @@ static func _picture_card(pr: Dictionary) -> Card:
 	main.add_child(Kit.para(why.substr(0, 1).to_upper() + why.substr(1) + ".", 13, Pal.MUTED))
 	row.add_child(main)
 	c.add(row)
+	return c
+
+
+## How many unread lines the review shows before it says "and N more".
+const UNREAD_SHOWN = 6
+
+
+## The typed lines the game could not read, each with the reason in words and
+## how to write it (the reason used to sit in a tooltip, so a line was just
+## "not read" with no way to tell why).
+static func _unread_card(problems: Array) -> Card:
+	var c = Kit.card(8, Callable(), 10)
+	c.accent(Pal.DANGER)
+	var head = Kit.hbox(8)
+	head.add_child(Kit.vcenter(Icons.rect("warning", 16)))
+	head.add_child(Kit.label("1 line not read" if problems.size() == 1 else "%d lines not read" % problems.size(), 14, null, true))
+	c.add(head)
+	for i in range(mini(problems.size(), UNREAD_SHOWN)):
+		var pr: Dictionary = problems[i]
+		var why = str(pr.get("why", "")).strip_edges()
+		var one = Kit.vbox(1)
+		one.add_child(Kit.clip("\"%s\"" % str(pr.get("line", "")), 13, Pal.TEXT, true))
+		if why != "":
+			one.add_child(Kit.para(why.substr(0, 1).to_upper() + why.substr(1) + ".", 12, Pal.MUTED))
+		c.add(one)
+	if problems.size() > UNREAD_SHOWN:
+		c.add(Kit.label("and %d more" % (problems.size() - UNREAD_SHOWN), 12, Pal.MUTED))
 	return c
 
 

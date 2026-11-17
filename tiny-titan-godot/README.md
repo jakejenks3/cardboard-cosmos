@@ -80,6 +80,9 @@ same exercise, sets add up). V grades are boulders; `5.xx` grades (`5.10a`, `tr 
 are roped routes; `hang 20mm 10s x6` logs dead hangs (edge, seconds, how many; add `one arm`,
 `+10` for added weight or `-20` for assistance, `jug` for a bar). `title: Push day`, `note: felt strong` and `duration 70min` attach to the
 session above them; `---` starts a second session on the same day; `#` starts a comment.
+An exercise name may hold a number of its own (`neck 4 way - 3x20@10`, `1 arm row 3x10 @ 40`): put
+a dash or a colon between such a name and its sets the first time; once it is in your log the game
+knows it. A decimal may be typed without its zero (`.5 mile`).
 `vest walk 3km 40:00 10kg` logs a weighted vest walk (see Miscellaneous below); leave the weight
 out and the last vest you logged is used, or put `vest 10kg` on the line under it. Written as a
 sentence it works too: `2.5 mile walk with 30 lb vest`.

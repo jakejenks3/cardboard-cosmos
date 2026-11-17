@@ -128,6 +128,28 @@ heel raise x10 195")))
 	ok(ex_name("zercher squat 3x5 @ 60") == "Zercher Squat", "new exercise in Title Case")
 	ok(ex_name("bench: 3x5 @ 80") == "Bench Press", "colon after the name")
 	ok(ex_name("my move 3x5 @ 60") == "My Move" and QuickLog.parse("my move 3x5 @ 60", {"today": TODAY, "exercises": ["My Move"]}).entries[0].data.exercises[0].name == "My Move", "custom known exercise")
+	# A number that belongs to the name: taken when the name is cut off by a dash
+	# or a colon, is a shape names have ("4 way", "1 arm"), or is one already logged.
+	ok(ex_name("neck 4 way - 3x20@10") == "Neck 4 Way" and sets_of(one("neck 4 way - 3x20@10")) == [[20, 10.0], [20, 10.0], [20, 10.0]], "a number inside the name, a dash before the sets", one("neck 4 way - 3x20@10"))
+	ok(ex_name("Neck 4 way 3x20 @ 10") == "Neck 4 Way" and ex_name("hip 3-way 2x15") == "Hip 3-way", "'4 way' / '3-way' with no dash", [ex_name("Neck 4 way 3x20 @ 10"), ex_name("hip 3-way 2x15")])
+	ok(ex_name("1 arm row 3x10 @ 40") == "1 Arm Row" and ex_name("45 degree back extension 3x12") == "45 Degree Back Extension", "a name that starts with a number")
+	ok(ex_name("21s - 3x21 @ 20") == "21s" and ex_name("90/90 hip switch: 3x10") == "90/90 Hip Switch" and ex_name("4 way hip - 2x15") == "4 Way Hip", "after a dash or a colon any name goes")
+	var nn_big5 = QuickLog.parse("big 5 complex 3x5 @ 40", {"today": TODAY, "exercises": ["Big 5 Complex"]})
+	ok(nn_big5.problems.is_empty() and nn_big5.entries.size() == 1 and nn_big5.entries[0].data.exercises[0].name == "Big 5 Complex" and p("big 5 complex 3x5 @ 40").entries.is_empty(), "an exercise already logged keeps its number; an unknown one like it is not guessed", nn_big5)
+	var nn_day3 = one("11/14\nneck 4 way - 3x20@10\nbench 3x5 @ 80")
+	ok(not nn_day3.is_empty() and nn_day3.data.exercises.size() == 2 and nn_day3.data.exercises[0].name == "Neck 4 Way" and nn_day3.data.exercises[1].name == "Bench Press", "it joins the day's lift like any other line", nn_day3)
+	for nn_line in ["bench 3 sets of 5 at 80", "bench 3 sets of 5 - 5 @ 80", "deadlift 1 rep max 180", "squat 100 for 5", "bench 5 heavy 3x5 @ 80", "bench 80 - 3x5", "row 1 arm 40 3x10", "3 sets bench 5 @ 80", "curl 3 x 10 each arm 25"]:
+		var nn_al = p(nn_line)
+		ok(nn_al.entries.is_empty() and nn_al.problems.size() == 1, "an amount is never taken for a name: " + nn_line, nn_al)
+	ok(str(p("bench 3 sets of 5 at 80").problems[0].why).contains("3 sets of 5"), "and the problem still quotes the line from its first number", p("bench 3 sets of 5 at 80").problems)
+	# A decimal typed without its zero.
+	ok(sets_of(one("bench 3x5 @ .5")) == [[5, 0.5], [5, 0.5], [5, 0.5]] and sets_of(one("curl 2x10 @.5kg")) == [[10, 0.5], [10, 0.5]], "'@ .5' is 0.5", [one("bench 3x5 @ .5"), one("curl 2x10 @.5kg")])
+	var nz_half = one("run .5km 3:00")
+	ok(not nz_half.is_empty() and int(nz_half.data.distanceM) == 500 and nz_half.data.get("durationSec") == 180 and nz_half.summary == "Run 0.5 km · 3:00", "'run .5km' is half a kilometre", nz_half)
+	ok(QuickLog.lead_zeros(".5 mi, x .25 @.5 (.75)") == "0.5 mi, x 0.25 @0.5 (0.75)" and QuickLog.lead_zeros("5.10a v4.5 a.5 ...5 1.5") == "5.10a v4.5 a.5 ...5 1.5", "only a dot that opens a number gets a zero", QuickLog.lead_zeros(".5 mi, x .25 @.5 (.75)"))
+	ok(one("tr 5.10a flash").data.get("discipline") == "climb" and one("tr 5.10a flash").data.climbs[0].get("yds") == "5.10a", "a route grade is not touched", one("tr 5.10a flash"))
+	var nz_noted = one("bench 3x5 @ 80\nnote: walked .5 km to warm up")
+	ok(not nz_noted.is_empty() and nz_noted.data.get("notes") == "walked .5 km to warm up" and nz_noted.key == QuickLog.entry_key("lift", "", ["bench 3x5 @ 80", "note: walked .5 km to warm up"]), "a note keeps its words, and its entry the key it had", nz_noted)
 
 	# --- climbing ---------------------------------------------------------------------
 	var cl = one("v4 flash x2, v5 send, v6 attempt x3")

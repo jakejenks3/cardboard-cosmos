@@ -100,6 +100,8 @@ func run(m: Node, t: SceneTree) -> void:
 	check(int(App.inbox.settings().lastChecked) > 0, "lastChecked stored")
 	InboxSheet.open(r1)
 	await ShotHelper.wait(tree, 0.5)
+	var said = ShotHelper.all_text(_sheet())
+	check(said.contains("1 line not read") and said.contains("feeling great!!") and said.contains("Not a date, workout or check-in I know."), "the review says which line was not read, and why")
 	await ShotHelper.snap(tree, "inbox_review")
 	_sheet()._scroll.scroll_vertical = 4000
 	await ShotHelper.frames(tree, 3)

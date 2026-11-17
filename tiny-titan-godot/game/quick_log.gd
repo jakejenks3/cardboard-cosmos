@@ -187,6 +187,12 @@ static func normalize_line(raw: String) -> String:
 	return t.strip_edges()
 
 
+## A decimal typed without its zero gets it: ".5 mile" -> "0.5 mile", "@ .5" ->
+## "@ 0.5". A dot after a letter or a digit is left alone ("5.10a", "v4.").
+static func lead_zeros(t: String) -> String:
+	return _rx("(?<![a-z0-9.])\\.(?=\\d)").sub(t, "0.", true)
+
+
 # ---------------------------------------------------------------------------
 # Blocks: a date line starts one; the entries after it get its date
 # ---------------------------------------------------------------------------
@@ -322,6 +328,11 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 			return block
 		_extra(block, {"field": "title" if first == "title" else "notes", "value": value, "orig": orig, "norm": t})
 		return block
+	# ".5 mile" is 0.5 mile. (Below the title and note lines: their words stay as typed.)
+	if t.contains("."):
+		t = lead_zeros(t)
+		toks = t.split(" ", false)
+		first = toks[0].trim_suffix(":")
 	if first == "duration" or first == "time":
 		var sec = parse_duration(t.substr(t.find(" ") + 1) if t.contains(" ") else "")
 		if sec <= 0:
@@ -1000,26 +1011,38 @@ static func timestamp_date(cell: String) -> String:
 # Lifting
 # ---------------------------------------------------------------------------
 
+## How the sets of a lifting line open: a number, "@", "+", or "x5".
+const SETS_OPEN = "^(?:[\\d@+]|x\\d)"
+## Words that make a number an amount, never part of a name ("bench 3 sets of 5 at 80").
+const AMOUNT_WORDS = ["x", "set", "sets", "rep", "reps", "of", "at", "for", "each", "per", "time", "times", "total",
+	"kg", "kgs", "lb", "lbs", "bw", "round", "rounds", "s", "sec", "secs", "second", "seconds", "min", "mins", "minute", "minutes"]
+## What follows a number inside an exercise name ("neck 4 way", "1 arm row", "45 degree back extension").
+const NAME_NUMBER_WORDS = ["way", "ways", "arm", "arms", "armed", "hand", "hands", "handed", "leg", "legs", "legged",
+	"finger", "fingers", "point", "points", "pt", "degree", "degrees", "deg", "board", "boards", "count", "part", "position", "kb", "db"]
+
+
 static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
-	var toks = t.split(" ", false)
+	var toks = Array(t.split(" ", false))
 	var i = 0
-	while i < toks.size() and _rx("^(?:[\\d@+]|x\\d)").search(toks[i]) == null:
+	while i < toks.size() and _rx(SETS_OPEN).search(toks[i]) == null:
 		i += 1
-	var words = []
-	for w in toks.slice(0, i):
-		var c = w.trim_suffix(":").trim_suffix("-")
-		if c != "" and c != "-" and c != "=":
-			words.append(c)
-	var typed = " ".join(PackedStringArray(words))
+	var typed = _lift_name(toks, i)
+	var p = {"ok": false, "why": ""}
 	if i >= toks.size():
-		return {"ok": false, "why": "not a date, workout or check-in I know"}
-	if _rx("[a-z]").search(typed) == null:
-		return {"ok": false, "why": "no exercise name before the sets"}
-	var name = resolve_exercise(typed, ctx)
-	var spec = " ".join(toks.slice(i))
-	var p = parse_sets(spec, ctx.wu)
+		p.why = "not a date, workout or check-in I know"
+	elif _rx("[a-z]").search(typed) == null:
+		p.why = "no exercise name before the sets"
+	else:
+		p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
 	if not p.ok:
-		return {"ok": false, "why": p.why}
+		# The first number may belong to the name ("neck 4 way - 3x20@10").
+		var later = _later_cut(toks, i, ctx)
+		if later < 0:
+			return {"ok": false, "why": p.why}
+		i = later
+		typed = _lift_name(toks, i)
+		p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
+	var name = resolve_exercise(typed, ctx)
 	var warnings = []
 	var sets = []
 	if p.bare:
@@ -1042,6 +1065,89 @@ static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
 	if sets.size() > 40:
 		return {"ok": false, "why": "too many sets"}
 	return {"ok": true, "name": name, "sets": sets, "warnings": warnings}
+
+
+## The exercise name typed before token `cut` of a lifting line (dashes and colons dropped).
+static func _lift_name(toks: Array, cut: int) -> String:
+	var words = []
+	for w in toks.slice(0, cut):
+		var c = str(w).trim_suffix(":").trim_suffix("-")
+		if c != "" and c != "-" and c != "=":
+			words.append(c)
+	return " ".join(PackedStringArray(words))
+
+
+## The sets of a lifting line normally start at its first number ("bench 3x5 @
+## 80"). A name can hold a number of its own ("neck 4 way - 3x20@10", "1 arm row
+## 3x10 @ 40", "21s - 3x7 @ 20"): when the line does not read from the first
+## number on, this looks for a later start. It is taken only when the words
+## before it are clearly a name: one the player has logged, one cut off from
+## the sets by a dash or a colon, or a number followed by a word names use
+## ("3 way", "1 arm", "45 degree"). Anything else stays a problem line.
+## Returns the token index where the sets start, or -1.
+static func _later_cut(toks: Array, first: int, ctx: Dictionary) -> int:
+	for j in range(first + 1, toks.size()):
+		if _rx(SETS_OPEN).search(toks[j]) == null:
+			continue
+		var typed = _lift_name(toks, j)
+		if _rx("[a-z]").search(typed) == null:
+			continue
+		if not parse_sets(" ".join(PackedStringArray(toks.slice(j))), ctx.wu).ok:
+			continue
+		var before: String = str(toks[j - 1])
+		var cut_off = before == "-" or before == "=" or before.ends_with(":") or before.ends_with("-")
+		if _knows_exercise(typed, ctx) or _name_tail(toks.slice(first, j), not cut_off):
+			return j
+	return -1
+
+
+## Is this exactly an exercise the player has (or a short name for one)?
+static func _knows_exercise(typed: String, ctx: Dictionary) -> bool:
+	var n = Xp.normalize_exercise(typed)
+	if ctx.known_norm.has(n):
+		return true
+	var c = _compact(n)
+	if ALIASES.has(c):
+		return true
+	for k in ctx.known_norm:
+		if _compact(k) == c:
+			return true
+	return false
+
+
+## Can these words (from the first number of a lifting line up to where its
+## sets start) be the rest of an exercise name? Never when they talk about
+## amounts ("3 sets of", "80kg", "3x5"), and a number must have a word after
+## it ("bench 80 - 3x5" is a weight, not a name). `strict`: nothing cuts the
+## name off from the sets, so only a number followed by a word names use counts.
+static func _name_tail(tail: Array, strict: bool) -> bool:
+	for k in range(tail.size()):
+		var w: String = str(tail[k]).trim_suffix(":")
+		if w == "" or w == "-" or w == "=":
+			continue
+		if AMOUNT_WORDS.has(w) or w.contains("@") or w.contains(",") or w.contains("+"):
+			return false
+		if _rx("^(?:\\d+x\\d*|x\\d+|\\d+(?:\\.\\d+)?(?:kg|kgs|lb|lbs))$").search(w) != null:
+			return false
+		if _rx("\\d").search(w) == null:
+			continue
+		var joined = _rx("^\\d+-([a-z]+)$").search(w)
+		if joined != null:
+			# "3-way", "1-arm".
+			if strict and not NAME_NUMBER_WORDS.has(joined.get_string(1)):
+				return false
+			continue
+		if _rx("^\\d+(?:\\.\\d+)?$").search(w) == null:
+			# "21s", "90/90": fine after a dash or colon, a guess without one.
+			if strict:
+				return false
+			continue
+		var nxt: String = str(tail[k + 1]).trim_suffix(":") if k + 1 < tail.size() else ""
+		if strict and not NAME_NUMBER_WORDS.has(nxt):
+			return false
+		if _rx("^[a-z]").search(nxt) == null or AMOUNT_WORDS.has(nxt):
+			return false
+	return true
 
 
 ## The sets part of a lifting line. Returns {"ok", "why", "sets": [{reps, weightKg}],
