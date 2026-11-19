@@ -79,6 +79,9 @@ static var MISC = Color("f272b8")
 ## Reading: the colour of a page, apart from everything that is training.
 static var READ = Color("f1dfae")
 static var READ_DARK = Color("a8894f")
+## Physical therapy (game/pt.gd): a fresh green-yellow, apart from the training colours.
+static var PT = Color("b9e769")
+static var PT_DARK = Color("6c9a2b")
 
 static var HP = Color("ff4d6d")
 ## The weekly bounty: violet, so it never reads as the campaign boss.

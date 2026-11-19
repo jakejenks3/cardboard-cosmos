@@ -95,7 +95,7 @@ func run(m: Node, t: SceneTree) -> void:
 	var r1 = await _review("%s\nseated row - cable, 1UE 3x10 @ 40\nchest fly - cable 3x12 @ 20\nsquat 3x5 @ 185" % d1)
 	var said = ShotHelper.all_text(_sheet())
 	check(r1.fresh.size() == 1 and r1.fresh[0].get("names", []).size() == 2, "day 1: two names to ask about, squat is exact (%s)" % str(r1.fresh[0].get("names")))
-	check(said.contains("\"seated row cable, 1ue\" · new lift") and said.contains("Same as Seated Cable Row?") and said.contains("= Cable Fly?"), "the review asks: a new lift with its closest, and the library lift with the same words")
+	check(said.contains("New lift · \"seated row cable, 1ue\"") and said.contains("Same as Seated Cable Row?") and said.contains("= Cable Fly?"), "the review asks: a new lift with its closest, and the library lift with the same words")
 	check(_keys("Yes, it is").size() == 2 and _keys("No, it is a lift of its own").size() == 2 and _keys("Pick another lift").size() == 2, "each has yes, no and another")
 	ShotHelper.press(_keys("No, it is a lift of its own")[0])
 	await ShotHelper.frames(tree, 4)
@@ -114,7 +114,7 @@ func run(m: Node, t: SceneTree) -> void:
 	said = ShotHelper.all_text(_sheet())
 	check(r2.fresh.size() == 1 and r2.fresh[0].get("names", []).size() == 4, "day 2: four names to ask about (%s)" % str(r2.fresh[0].get("names")))
 	check(said.contains("= Seated Row Cable, 1UE?") and said.contains("= Chest Fly Cable?"), "other words for their own lifts are taken as those lifts")
-	check(said.contains("Same as Incline Dumbbell Curl?") and said.contains("\"neck 4 way\" · new lift") and said.contains("= Neck 4 Way"), "one more word is a new lift with its closest; nothing like it is just new")
+	check(said.contains("Same as Incline Dumbbell Curl?") and said.contains("New lift · \"neck 4 way\"") and said.contains("= Neck 4 Way"), "one more word is a new lift with its closest; nothing like it is just new")
 	check(_keys("Yes, it is").size() == 3 and _keys("Pick another lift").size() == 4, "three questions, and 'another' on all four")
 	await ShotHelper.snap(tree, "names_1_review")
 	# Yes on the first: the next key must not move.
@@ -163,7 +163,7 @@ func run(m: Node, t: SceneTree) -> void:
 
 	# --- the same words again: nothing to ask ----------------------------------------------
 	var r3 = await _review(note2 % d3)
-	check(r3.fresh.size() == 1 and _keys("Pick another lift").is_empty() and not ShotHelper.all_text(_sheet()).contains("new lift"), "the same words on another day: no questions")
+	check(r3.fresh.size() == 1 and _keys("Pick another lift").is_empty() and not ShotHelper.all_text(_sheet()).contains("New lift"), "the same words on another day: no questions")
 	await ShotHelper.snap(tree, "names_4_no_questions")
 	await _import()
 	check(_lift_names(d3) == _lift_names(d2), "and the same lifts (%s)" % str(_lift_names(d3)))

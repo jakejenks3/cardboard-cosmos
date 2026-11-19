@@ -119,7 +119,19 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 		top.add_child(Kit.vcenter(Kit.icon_button("chevron_left", InboxSheet._nudge.bind(e, -1, date_label), "Day before", 28)))
 		top.add_child(Kit.vcenter(Kit.icon_button("chevron_right", InboxSheet._nudge.bind(e, 1, date_label), "Day after", 28)))
 	main.add_child(top)
-	main.add_child(Kit.para(str(e.summary), 13, Pal.TEXT))
+	var is_lift = e.kind == "session" and disc == "lift"
+	if is_lift:
+		# Its exercises are rows of their own, under this header.
+		var n_ex = 0
+		var n_sets = 0
+		for ex in e.data.get("exercises", []):
+			var done = SessionView.done_sets(ex).size()
+			if done > 0:
+				n_ex += 1
+				n_sets += done
+		main.add_child(Kit.clip("%d exercise%s · %d set%s" % [n_ex, "" if n_ex == 1 else "s", n_sets, "" if n_sets == 1 else "s"], 13, Pal.MUTED))
+	else:
+		main.add_child(Kit.para(str(e.summary), 13, Pal.TEXT))
 	if e.kind == "body" and not e.data.get("photoRefs", []).is_empty():
 		main.add_child(_thumbs(e.data.photoRefs))
 	if not e.get("shots", []).is_empty():
@@ -145,6 +157,8 @@ static func _entry_card(e: Dictionary, ui: Dictionary) -> Card:
 	Kit.juice(toggle)
 	row.add_child(toggle)
 	c.add(row)
+	if is_lift:
+		c.add(SessionView.lift_rows(e.data, {"pending": true, "skip_id": e.get("replaces")}))
 	# Lift names that were not exactly a lift the player has.
 	for pk in e.get("names", []):
 		if str(pk.kind) != "exact" or ui.answered.has(str(pk.key)):
@@ -180,7 +194,7 @@ static func _name_row(pk: Dictionary, ui: Dictionary) -> Control:
 		if kind == "match":
 			says = "= %s?" % str(pk.name)
 		else:
-			wrote += " · new lift"
+			wrote = "New lift · " + wrote
 			if closest != "":
 				says = "Same as %s?" % closest
 	words.add_child(Kit.clip(wrote, 12, Pal.MUTED))

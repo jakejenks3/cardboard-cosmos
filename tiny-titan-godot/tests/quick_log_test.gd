@@ -170,6 +170,31 @@ heel raise x10 195")))
 	var lm_two = one("seated row single arm, home pulley 3x10 @ 40\nseated row - cable, 1ue 2x8 @ 45", lm)
 	ok(not lm_two.is_empty() and lm_two.data.exercises.size() == 1 and lm_two.data.exercises[0].sets.size() == 5 and lm_two.names.size() == 1, "two spellings of one lift on a day are one exercise", lm_two)
 	ok(str(one("muscle up 3x5", {"loaded": ["muscle up"]}).data.exercises[0].name) == "Muscle-up", "the library's spelling does not lose what the log knows about the lift")
+	# "(PT)" in front of an exercise: a physical therapy lift (game/pt.gd).
+	var pt_new = one("(PT) neck 4 way - 3x20@10")
+	ok(not pt_new.is_empty() and pt_new.data.exercises[0].name == "Neck 4 Way" and pt_new.data.exercises[0].get("pt") == true and pt_new.names[0].typed == "(PT) neck 4 way" and pt_new.names[0].kind == "new" and pt_new.names[0].pt, "the tag comes off the name and the exercise is marked", pt_new)
+	var pt_ctx = {"own": ["Squat"], "exercises": Summary.DEFAULT_EXERCISES}
+	var pt_own = one("(PT) squat 3x10", pt_ctx)
+	ok(not pt_own.is_empty() and pt_own.data.exercises[0].name == "Squat" and pt_own.data.exercises[0].get("pt") == true and pt_own.names[0].kind == "match" and pt_own.names[0].key == "ptsquat", "a lift they already do, tagged for the first time: that lift, and the review asks", pt_own)
+	var pt_known = one("(PT) squat 3x10", pt_ctx.merged({"pt": {"squat": {"name": "Squat", "perWeek": 3}}}))
+	ok(not pt_known.is_empty() and pt_known.data.exercises[0].name == "Squat" and not pt_known.has("names"), "once it is a PT lift there is nothing to ask", pt_known)
+	var pt_apart = one("(PT) squat 3x10", pt_ctx.merged({"names": {"ptsquat": ""}}))
+	ok(not pt_apart.is_empty() and pt_apart.data.exercises[0].name == "PT Squat" and pt_apart.data.exercises[0].get("pt") == true, "'no': the PT one is kept apart under its own name", pt_apart)
+	var pt_plain = one("squat 3x5 @ 100", pt_ctx.merged({"names": {"ptsquat": ""}}))
+	ok(not pt_plain.is_empty() and pt_plain.data.exercises[0].name == "Squat" and not pt_plain.data.exercises[0].has("pt") and not pt_plain.has("names"), "and the untagged line is still the plain lift", pt_plain)
+	var pt_forms = p("11/14
+calf raise (PT) 3x15
+pt: clamshells 2x20
+[pt] glute bridge 3x12
+3 pt row 3x8 @ 40")
+	var pt_flags = []
+	for ex in pt_forms.entries[0].data.exercises if pt_forms.entries.size() == 1 else []:
+		pt_flags.append("%s=%s" % [str(ex.name), str(ex.get("pt", false))])
+	ok(pt_forms.problems.is_empty() and pt_flags == ["Calf Raise=true", "Clamshells=true", "Glute Bridge=true", "3 Pt Row=false"], "the tag after the name, 'pt:' and '[pt]' count; the bare letters do not", [pt_flags, pt_forms.problems])
+	var pt_two = one("(PT) neck 4 way - 3x20@10
+neck 4 way 2x20@10")
+	ok(not pt_two.is_empty() and pt_two.data.exercises.size() == 1 and pt_two.data.exercises[0].sets.size() == 5 and pt_two.data.exercises[0].get("pt") == true, "tagged and untagged lines of one lift on a day are one exercise, marked", pt_two)
+	ok(pt_new.key != one("neck 4 way - 3x20@10").key and one("(PT) neck 4 way - 3x20@10").key == pt_new.key, "the tag is part of the typed line, so adding it later reads as an edit of that day")
 	# A decimal typed without its zero.
 	ok(sets_of(one("bench 3x5 @ .5")) == [[5, 0.5], [5, 0.5], [5, 0.5]] and sets_of(one("curl 2x10 @.5kg")) == [[10, 0.5], [10, 0.5]], "'@ .5' is 0.5", [one("bench 3x5 @ .5"), one("curl 2x10 @.5kg")])
 	var nz_half = one("run .5km 3:00")

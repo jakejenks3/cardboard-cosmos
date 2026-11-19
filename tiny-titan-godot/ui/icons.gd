@@ -1106,6 +1106,27 @@ const DATA = {
 			"................",
 		],
 	},
+	"pt": {
+		"pal": {"a": "#b9e769", "b": "#6c9a2b", "w": "#ffffff"},
+		"rows": [
+			"................",
+			"..oooooooooooo..",
+			".oaaaaaaaaaaaao.",
+			".oaaaaawwaaaaao.",
+			".oaaaaawwaaaaao.",
+			".oaaaaawwaaaaao.",
+			".oaawwwwwwwwaao.",
+			".oaawwwwwwwwaao.",
+			".oaaaaawwaaaaao.",
+			".oaaaaawwaaaaao.",
+			".oaaaaawwaaaaao.",
+			".oaaaaaaaaaaaao.",
+			".obbbbbbbbbbbbo.",
+			"..oooooooooooo..",
+			"................",
+			"................",
+		],
+	},
 	"star": {
 		"pal": {"a": "#ffc83d", "b": "#fff0a8", "c": "#d08a1c"},
 		"rows": [

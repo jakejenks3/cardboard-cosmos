@@ -123,6 +123,53 @@ func purchases() -> Array:
 	return saved.purchases
 
 
+## Physical therapy lifts (game/pt.gd): {normalized lift name: {"name", "perWeek"}}.
+func pt() -> Dictionary:
+	return saved.pt
+
+
+## Mark a lift as a physical therapy exercise, or take the mark off.
+func set_pt(lift_name: String, on: bool) -> void:
+	var at = Pt.mark_of(saved.pt, lift_name)
+	if on and at == "" and Pt.key(lift_name) != "":
+		saved.pt[Pt.key(lift_name)] = {"name": lift_name.strip_edges(), "perWeek": Pt.DEFAULT_PER_WEEK}
+	elif not on and at != "":
+		saved.pt.erase(at)
+	else:
+		return
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## Days a week to aim for with a PT lift.
+func set_pt_goal(lift_name: String, per_week: int) -> void:
+	var at = Pt.mark_of(saved.pt, lift_name)
+	if at == "":
+		return
+	saved.pt[at]["perWeek"] = clampi(per_week, 1, Pt.MAX_PER_WEEK)
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## "(PT)" in front of an exercise name (typed in the Log tab), or the mark the
+## phone note left on an exercise, makes that lift a PT lift: the tag comes off
+## the name and the lift goes into saved.pt. Called for every session that is saved.
+func absorb_pt(session: Dictionary) -> void:
+	if str(session.get("discipline", "")) != "lift":
+		return
+	for ex in session.get("exercises", []):
+		var tag = Pt.untag(str(ex.get("name", "")))
+		var on = bool(tag.pt) or bool(ex.get("pt", false))
+		ex.erase("pt")
+		if not on or str(tag.name) == "":
+			continue
+		ex["name"] = str(tag.name)
+		if Pt.mark_of(saved.pt, str(tag.name)) == "":
+			saved.pt[Pt.key(str(tag.name))] = {"name": str(tag.name), "perWeek": Pt.DEFAULT_PER_WEEK}
+
+
 ## Pages read: [{id, date, pages, createdAt}], one entry per day (see Reading).
 func reading() -> Array:
 	var r = saved.get("reading")
@@ -274,6 +321,7 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	var fresh = []
 	for s in new_sessions:
 		if not known.has(s.id):
+			absorb_pt(s)
 			fresh.append(s)
 			saved.sessions.append(s)
 	if fresh.is_empty():
@@ -292,6 +340,7 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 
 
 func update_session(session: Dictionary) -> void:
+	absorb_pt(session)
 	for i in range(saved.sessions.size()):
 		if saved.sessions[i].id == session.id:
 			saved.sessions[i] = session
@@ -721,6 +770,7 @@ static func empty_saved() -> Dictionary:
 		"strava": {"lastSyncAt": null, "athleteName": null},
 		"updatedAt": 0,
 		"inbox": {"source": "", "imported": {}, "lastChecked": 0, "auto": true, "names": {}},
+		"pt": {},
 	}
 
 
@@ -768,11 +818,19 @@ static func parse_saved(raw):
 			out.inbox.lastChecked = int(ib.lastChecked)
 		if ib.get("auto") is bool:
 			out.inbox.auto = ib.auto
+		# (physical therapy lifts are read below, after the inbox)
 		# What the player decided a typed lift name means ("" = a lift of its own).
 		if ib.get("names") is Dictionary:
 			for k in ib.names:
 				if ib.names[k] is String:
 					out.inbox.names[str(k)] = ib.names[k]
+	# Physical therapy lifts: {normalized name: {"name", "perWeek"}}.
+	var marks = o.get("pt")
+	if marks is Dictionary:
+		for k in marks:
+			if marks[k] is Dictionary and str(k) != "":
+				var per = marks[k].get("perWeek", Pt.DEFAULT_PER_WEEK)
+				out.pt[str(k)] = {"name": str(marks[k].get("name", k)), "perWeek": clampi(int(per) if (per is int or per is float) else Pt.DEFAULT_PER_WEEK, 1, Pt.MAX_PER_WEEK)}
 	return out
 
 

@@ -122,8 +122,25 @@ recaps.
 **Lift library** (Journey → Lifts): about 170 lifts grouped by body part, with equipment
 chips (barbell, dumbbell, cable, machine…), a search box and sorting by name, most done,
 heaviest or most recent. Tap a lift for form notes, your best set, estimated 1RM, rep
-records, a trend line, every session you did it in, variations to try and a button that
+records, its trends, every session you did it in, variations to try and a button that
 adds it to today's workout. "New to me" shows what you have never done.
+
+**What you did, and how it is going.** The review of a phone note lists every exercise of a
+lift as its own row: the sets, and a tag that compares them with the last time (NEW, PR,
++2.5 lb, -4 reps, same). A session in your log opens the same list (Journey → Log, or the
+recent ones on the Hero tab), with the XP it earned and an Edit key. Click any exercise for
+the lift's page: **Trends** has Weight (the heaviest set of each day), Reps, Volume and How
+often (days done in each of the last eight weeks), with how much it changed since the first
+day, and under it the history, day by day.
+
+**Physical therapy.** Write `(PT)` in front of an exercise (`(PT) neck 4 way - 3x20@10`), in
+the phone note or in the Log tab, and that lift becomes a physical therapy exercise; the
+tag is not part of its name. The switch on a lift's page does the same. The Hero tab then
+shows a Physical therapy card: for each of them the days of this week, done or not, against
+the days a week you aim for (3 to start with; − / + changes it). The sheet behind it shows
+eight weeks of bars against that goal, when you last did it, and how many weeks in a row
+you kept it up. A lift you tag for the first time is asked about once in the review ("is it
+the lift you already do?"); say no and it is kept apart as "PT ...".
 
 Edited a day after importing it? The game notices, shows "Updates the one already imported"
 on the review sheet, and replaces that session instead of adding a copy. Once everything in
@@ -256,6 +273,7 @@ godot --headless --path . --script res://tests/shot_reader_test.gd # reading scr
 godot --headless --path . --script res://tests/misc_test.gd        # misc activities (vest walks)
 godot --headless --path . --script res://tests/reading_test.gd     # pages read
 godot --headless --path . --script res://tests/lift_match_test.gd  # which lift a typed name means
+godot --headless --path . --script res://tests/lift_trend_test.gd  # a lift over time; physical therapy
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```
 

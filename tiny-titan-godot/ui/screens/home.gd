@@ -167,6 +167,11 @@ func build() -> void:
 
 	# --- this week's bounty ----------------------------------------------------
 	add_child(BountyView.card(false))
+	# Physical therapy (game/pt.gd): only when a lift is marked, and high up,
+	# because keeping up with it is the point.
+	var pt_card = PtView.card()
+	if pt_card != null:
+		add_child(pt_card)
 
 	# --- the four disciplines: one bright tile each ---------------------------
 	var tiles = Kit.grid(4, 8)

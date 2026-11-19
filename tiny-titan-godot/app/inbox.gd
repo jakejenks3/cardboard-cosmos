@@ -139,7 +139,7 @@ func parse_opts() -> Dictionary:
 	for k in Misc.ORDER:
 		last_load[k] = Misc.last_load_kg(app.sessions(), k)
 	return {"today": app.today, "weightUnit": app.weight_unit(), "distanceUnit": app.distance_unit(),
-		"exercises": names, "own": own, "names": settings().get("names", {}),
+		"exercises": names, "own": own, "names": settings().get("names", {}), "pt": app.pt(),
 		"loaded": loaded.keys(), "shots": _readings, "lastLoadKg": last_load}
 
 

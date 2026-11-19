@@ -218,6 +218,8 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 		"own": own,
 		"own_norm": own_norm,
 		"names": opts.get("names", {}) if opts.get("names", {}) is Dictionary else {},
+		# The player's physical therapy lifts (saved.pt, see game/pt.gd).
+		"pt": opts.get("pt", {}) if opts.get("pt", {}) is Dictionary else {},
 		"picks": {},
 		"today": today,
 		"wu": str(opts.get("weightUnit", "kg")),
@@ -492,6 +494,8 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 	if target == null:
 		target = {"name": l.name, "sets": []}
 		le.data.exercises.append(target)
+	if l.pt:
+		target["pt"] = true
 	target.sets.append_array(l.sets)
 	le.warnings.append_array(l.warnings)
 	# A name that was not exactly a lift the player has: the review asks about it.
@@ -1038,7 +1042,11 @@ const NAME_NUMBER_WORDS = ["way", "ways", "arm", "arms", "armed", "hand", "hands
 	"finger", "fingers", "point", "points", "pt", "degree", "degrees", "deg", "board", "boards", "count", "part", "position", "kb", "db"]
 
 
-static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
+static func _parse_lift(line: String, ctx: Dictionary) -> Dictionary:
+	# "(PT) neck 4 way - 3x20@10": a physical therapy exercise. The tag comes off
+	# the name and the exercise carries "pt" (see game/pt.gd).
+	var tag = Pt.untag(line)
+	var t: String = str(tag.name)
 	var toks = Array(t.split(" ", false))
 	var i = 0
 	while i < toks.size() and _rx(SETS_OPEN).search(toks[i]) == null:
@@ -1059,7 +1067,7 @@ static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
 		i = later
 		typed = _lift_name(toks, i)
 		p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
-	var pick = pick_exercise(typed, ctx)
+	var pick = pick_exercise(typed, ctx, bool(tag.pt))
 	var name: String = str(pick.name)
 	var warnings = []
 	var sets = []
@@ -1082,7 +1090,7 @@ static func _parse_lift(t: String, ctx: Dictionary) -> Dictionary:
 			return {"ok": false, "why": "that weight looks wrong"}
 	if sets.size() > 40:
 		return {"ok": false, "why": "too many sets"}
-	return {"ok": true, "name": name, "sets": sets, "warnings": warnings, "pick": pick}
+	return {"ok": true, "name": name, "sets": sets, "warnings": warnings, "pick": pick, "pt": bool(tag.pt)}
 
 
 ## The exercise name typed before token `cut` of a lifting line (dashes and colons dropped).
@@ -1303,27 +1311,33 @@ static func resolve_exercise(typed: String, ctx: Dictionary) -> String:
 ##                 ask about.
 ## The player's own lift wins over the library's name for the same lift, so a
 ## new spelling joins the history they already have.
-static func pick_exercise(typed: String, ctx: Dictionary) -> Dictionary:
-	var key = LiftMatch.key(typed)
+##
+## `pt`: the line was tagged "(PT)". The tag is no part of the name, but it is
+## part of the key, so "(PT) squat" can be decided apart from "squat". A lift
+## the player already does, tagged PT for the first time, is a "match": the
+## review asks whether it is that lift (it then counts as PT, history and all).
+static func pick_exercise(typed: String, ctx: Dictionary, pt: bool = false) -> Dictionary:
+	var key = LiftMatch.key(("pt " if pt else "") + typed)
 	if ctx.picks.has(key):
 		return ctx.picks[key]
-	var pick = {"key": key, "typed": typed, "name": "", "kind": "exact", "closest": ""}
+	var pick = {"key": key, "typed": ("(PT) " if pt else "") + typed, "name": "", "kind": "exact", "closest": "", "pt": pt}
 	var decided = ctx.names.get(key)
 	var known = _exact_known(typed, ctx)
 	if decided is String:
 		pick.name = decided
 		if decided == "":
-			pick.name = known if known != "" else plain_name(typed)
+			pick.name = _apart_name(typed, known, pt, ctx)
 		pick["decided"] = true
 	else:
 		if known == "":
 			known = LiftMatch.library_name(typed)
 		if known != "":
 			var mine = ""
-			if not ctx.own_norm.has(Xp.normalize_exercise(known)):
+			var theirs = ctx.own_norm.has(Xp.normalize_exercise(known))
+			if not theirs:
 				mine = LiftMatch.same_lift(known, ctx.own)
 			pick.name = known if mine == "" else mine
-			if mine != "":
+			if mine != "" or (pt and theirs and not Pt.is_pt(ctx.pt, known)):
 				pick.kind = "match"
 		else:
 			var start = _unique_prefix(typed, ctx)
@@ -1344,6 +1358,16 @@ static func pick_exercise(typed: String, ctx: Dictionary) -> Dictionary:
 					pick.closest = str(best.name)
 	ctx.picks[key] = pick
 	return pick
+
+
+## The name of a lift kept apart (the review's "no"): the lift it exactly is, the
+## library's name, or the typed one. For a PT line that would land on a lift the
+## player already does, "PT " goes in front, so the two stay two lifts.
+static func _apart_name(typed: String, known: String, pt: bool, ctx: Dictionary) -> String:
+	var plain = known if known != "" else plain_name(typed)
+	if pt and ctx.own_norm.has(Xp.normalize_exercise(plain)) and not Pt.is_pt(ctx.pt, plain):
+		return "PT " + plain
+	return plain
 
 
 ## A name the reader knows for certain: one of the known lifts as typed, a

@@ -197,10 +197,12 @@ static func stat_tile(d: String, level: Dictionary) -> Control:
 	return b
 
 
-## One logged session: discipline badge, title, summary, XP. Tap to edit it.
+## One logged session: discipline badge, title, summary, XP. A tap opens
+## everything that was done in it (SessionView.open), with an Edit key there.
 static func session_row(session: Dictionary, xp) -> Control:
 	var d = session.discipline
-	var card = Kit.card(4, App.open_log.bind(d, session.id), 8)
+	var card = Kit.card(4, SessionView.open.bind(session), 8)
+	card.tooltip_text = "Everything you did"
 	var row = Kit.hbox(10)
 	row.add_child(session_badge(session, 38))
 	var main = Kit.vbox(1)

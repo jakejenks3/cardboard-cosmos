@@ -30,7 +30,7 @@ is the Windows handoff.
              `sfx.gd` (synthesized sounds), `inbox.gd` (phone inbox).
 - `ui/`      `pal.gd` (colours as theme variables: Arcade, Ember, Forest, Slate),
              `pix_box.gd` (pixel-art 9-patch panels/buttons), `kit.gd` (toolkit),
-             `widgets/`, `parts.gd` (shared rows/tiles), `icons.gd` (85 pixel icons, no
+             `widgets/`, `parts.gd` (shared rows/tiles), `icons.gd` (86 pixel icons, no
              emoji anywhere), `pixel_font.gd`, `backdrop.gd` (pixel sky),
              `ui_screen.gd` (base class), `screens/` (one script per screen).
 - `main.gd`  The shell: column, tab bar, overlays, theme switching.
@@ -183,6 +183,38 @@ is the Windows handoff.
     the bottom edge, and jumped down the first time its content changed.
   - Tests: `tests/lift_match_test.gd`, more in `tests/quick_log_test.gd`, walkthrough
     `tests/shots/names.gd` (`new` data).
+- What you did, trends, physical therapy (added 2026-11-19):
+  - `ui/screens/session_view.gd` (`SessionView`). `lift_rows(data, opts)` lists a lift session
+    exercise by exercise: name, sets, and a tag from `LiftTrend.compare` (NEW, PR, +2.5 lb,
+    -4 reps, same); a row opens the lift's page. The phone note's review uses it for a lift
+    entry (no longer one paragraph; `opts.pending`, `opts.skip_id` for an edited day), and so
+    does `SessionView.open(session)`: the detail sheet a session row now opens
+    (`Parts.session_row`; the Edit key is inside the sheet).
+  - `game/lift_trend.gd` (`LiftTrend`, pure): `day`, `by_day`, `series(history, "weight" |
+    "reps" | "volume" | "e1rm")`, `per_week`, `weekly_rate`, `compare`, `change`. The lift page
+    (`JourneyLifts.open_detail`, or `open_named(name, opts)` from any list of exercises) has a
+    Trends picker (Weight, Reps, Volume, How often; only the chart is rebuilt, the choice is
+    kept in `_metric`) where the single one-rep-max line was, and with `opts.pending` shows the
+    note's sets on top against the last time. `ui/charts/week_bars.gd` (`WeekBars`, and
+    `WeekBars.Dots` for one week) draws days done per week.
+  - Physical therapy: `game/pt.gd` (`Pt`). Which lifts are PT is STORED, not derived:
+    `saved.pt` = {normalized lift name: {name, perWeek}} (`App.pt()`, `set_pt`, `set_pt_goal`).
+    A lift gets there by "(PT)" in front of an exercise in the phone note (`Pt.untag` in
+    `QuickLog._parse_lift`; the exercise carries a transient `pt: true`) or typed in the Log
+    tab, both through `App.absorb_pt` (called by `commit_sessions` / `update_session`: the tag
+    comes off the name, the lift is marked, the flag is dropped), or by the switch on the
+    lift's page. Names: the tag is part of the decision's key (`pick_exercise(typed, ctx, pt)`:
+    "ptsquat"), a lift the player already does and tags for the first time is a "match" (the
+    review asks once), and "no" keeps it apart as "PT <name>" (`_apart_name`).
+    `Pt.status(sessions, marks, today)` gives a row per PT lift: this week's days (Monday
+    first), days left, state done / on / behind, eight weeks against the goal, the run of
+    weeks on target; a mark on another name of a library lift covers the lift (`Pt.mark_of`).
+    UI: `ui/screens/pt_view.gd` (`PtView.card()` on the Hero tab under the bounty, only when a
+    lift is marked; `PtView.open()` the sheet with a goal per lift, 3 days a week to start
+    with), PT badges in exercise rows and the lift library, colour `Pal.PT`, icon `pt`.
+    Being PT changes no XP and no rule, so parity is untouched.
+  - Tests: `tests/lift_trend_test.gd` (trends and `Pt`), more in `tests/quick_log_test.gd`,
+    walkthrough `tests/shots/detail.gd` (year data).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -292,6 +324,7 @@ godot --headless --path . --script res://tests/shot_reader_test.gd
 godot --headless --path . --script res://tests/misc_test.gd
 godot --headless --path . --script res://tests/reading_test.gd
 godot --headless --path . --script res://tests/lift_match_test.gd
+godot --headless --path . --script res://tests/lift_trend_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -308,6 +341,7 @@ Scenarios: e2e, anchor, home, log, adventure, results, journey, armory, shop, bo
 themes, climb_more (routes and hangboard), pictures (screenshots in the note, `new` data, Windows only),
 misc (the Miscellaneous section and vest walks), reading (pages read, year data),
 names (lift names that are not exact: the review's yes / no / another, `new` data),
+detail (a session's detail, a lift's trends, physical therapy, year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -320,6 +354,10 @@ the check.
 
 ## Known rough edges
 
+- A physical therapy exercise is a lift: sets of reps, with or without weight. A hold written
+  in seconds (`(PT) plank 3x30s`) is not read (lifts have no timed sets); the review says so.
+- Switching "Physical therapy" on a lift's page does not redraw the Trends chart under it
+  (the goal line of "How often" shows the next time the page opens).
 - Lift names are matched when a note is imported, not afterwards: a lift already in the log
   under words of its own ("Chest Fly Cable", imported before the matching existed) stays under
   "Your own" in Journey -> Lifts instead of joining the library's Cable Fly. New spellings of
