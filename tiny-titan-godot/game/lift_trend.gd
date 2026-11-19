@@ -15,16 +15,56 @@ extends RefCounted
 ## Pure logic, no scene and no autoload: tests/lift_trend_test.gd.
 
 ## What can be charted. "often" is per_week, the rest are `series`.
-const METRICS = ["weight", "reps", "volume", "often"]
+const METRICS = ["weight", "hold", "reps", "volume", "often"]
+
+
+## A stretch or any other hold: a set with "holdSec" (seconds each rep is held)
+## instead of a weight. `30"` in the phone note.
+static func is_hold(one: Dictionary) -> bool:
+	return int(one.get("holdSec", 0)) > 0
+
+
+## Sets that are holds, in words: "3 x 30 s hold", "30 s, 45 s hold". "" when
+## no set is a hold (then LiftHistory.describe_sets says it the usual way).
+static func hold_text(sets: Array) -> String:
+	var secs = []
+	for one in sets:
+		if is_hold(one) and int(one.get("reps", 0)) > 0:
+			for k in range(int(one.reps)):
+				secs.append(int(one.holdSec))
+	if secs.is_empty():
+		return ""
+	var same = true
+	for v in secs:
+		if v != secs[0]:
+			same = false
+	if same:
+		return "%d s hold" % secs[0] if secs.size() == 1 else "%d × %d s hold" % [secs.size(), secs[0]]
+	if secs.size() > 6:
+		return "%d holds, longest %d s" % [secs.size(), secs.max()]
+	var words = []
+	for v in secs:
+		words.append("%d s" % v)
+	return ", ".join(PackedStringArray(words)) + " hold"
+
+
+## Is any of it a hold?
+static func held(history: Array) -> bool:
+	for h in history:
+		for one in h.get("sets", []):
+			if is_hold(one) and int(one.get("reps", 0)) > 0:
+				return true
+	return false
 
 
 ## One session of a lift in numbers:
 ## {sets, reps (all of them), topKg (the heaviest set), topReps (its reps),
-##  bestReps (most reps in one set), volumeKg, e1rm}.
+##  bestReps (most reps in one set), volumeKg, e1rm, holdSec (the longest hold),
+##  holdTotal (seconds held in all)}.
 ## A set without reps does not count. With no weight anywhere topKg is 0 and
 ## topReps is the most reps in a set.
 static func day(sets: Array) -> Dictionary:
-	var out = {"sets": 0, "reps": 0, "topKg": 0.0, "topReps": 0, "bestReps": 0, "volumeKg": 0.0, "e1rm": 0.0}
+	var out = {"sets": 0, "reps": 0, "topKg": 0.0, "topReps": 0, "bestReps": 0, "volumeKg": 0.0, "e1rm": 0.0, "holdSec": 0, "holdTotal": 0}
 	for one in sets:
 		var r = int(one.get("reps", 0))
 		var w = maxf(0.0, float(one.get("weightKg", 0)))
@@ -32,6 +72,9 @@ static func day(sets: Array) -> Dictionary:
 			continue
 		out.sets += 1
 		out.reps += r
+		if is_hold(one):
+			out.holdSec = maxi(int(out.holdSec), int(one.holdSec))
+			out.holdTotal += r * int(one.holdSec)
 		out.bestReps = maxi(int(out.bestReps), r)
 		out.volumeKg += r * w
 		if w > float(out.topKg) + 1e-9 or (absf(w - float(out.topKg)) <= 1e-9 and r > int(out.topReps)):
@@ -79,6 +122,7 @@ static func weighted(history: Array) -> bool:
 ##   "reps":   every rep of the day
 ##   "volume": weight x reps of the day, in kg
 ##   "e1rm":   the best estimated one-rep max of the day, in kg
+##   "hold":   the longest hold of the day, in seconds
 static func series(history: Array, metric: String) -> Array:
 	var out = []
 	for row in by_day(history):
@@ -86,6 +130,8 @@ static func series(history: Array, metric: String) -> Array:
 		match metric:
 			"weight":
 				y = float(row.topKg)
+			"hold":
+				y = float(row.holdSec)
 			"volume":
 				y = float(row.volumeKg)
 			"e1rm":
@@ -140,15 +186,29 @@ static func weekly_rate(weeks: Array) -> float:
 ## `sets`: the session's sets; `before`: the lift's history before it, newest first.
 ## {"kind": "none" (no real set) | "first" | "up" | "down" | "same",
 ##  "kg": change of the heaviest set, "reps": change of all reps when the
-##  weight is the same, "pr": heavier than ever before (or, without weight,
-##  more reps in a set than ever), "last": date of the session before}
+##  weight is the same, "sec": change of the longest hold (holds are compared
+##  by that), "pr": heavier than ever before (without weight: more reps in a
+##  set than ever; a hold: longer than ever), "last": date of the session before}
 static func compare(sets: Array, before: Array) -> Dictionary:
 	var cur = day(sets)
 	if int(cur.sets) == 0:
-		return {"kind": "none", "kg": 0.0, "reps": 0, "pr": false, "last": ""}
+		return {"kind": "none", "kg": 0.0, "reps": 0, "sec": 0, "pr": false, "last": ""}
 	if before.is_empty():
-		return {"kind": "first", "kg": 0.0, "reps": 0, "pr": false, "last": ""}
+		return {"kind": "first", "kg": 0.0, "reps": 0, "sec": 0, "pr": false, "last": ""}
 	var prev = day(before[0].get("sets", []))
+	if int(cur.holdSec) > 0 or int(prev.holdSec) > 0:
+		var longest = 0
+		for h in before:
+			longest = maxi(longest, int(day(h.get("sets", [])).holdSec))
+		var dsec = int(cur.holdSec) - int(prev.holdSec)
+		var more = int(cur.reps) - int(prev.reps)
+		var how = "same"
+		if dsec != 0:
+			how = "up" if dsec > 0 else "down"
+			more = 0
+		elif more != 0:
+			how = "up" if more > 0 else "down"
+		return {"kind": how, "kg": 0.0, "reps": more, "sec": dsec, "pr": int(cur.holdSec) > longest, "last": str(before[0].get("date", ""))}
 	var best_kg = 0.0
 	var best_reps = 0
 	for h in before:
@@ -166,7 +226,7 @@ static func compare(sets: Array, before: Array) -> Dictionary:
 		dreps = 0
 	elif dreps != 0:
 		kind = "up" if dreps > 0 else "down"
-	return {"kind": kind, "kg": dkg if absf(dkg) > 1e-6 else 0.0, "reps": dreps, "pr": pr, "last": str(before[0].get("date", ""))}
+	return {"kind": kind, "kg": dkg if absf(dkg) > 1e-6 else 0.0, "reps": dreps, "sec": 0, "pr": pr, "last": str(before[0].get("date", ""))}
 
 
 ## First against last of a series: {"from", "to", "delta", "days", "n"}, or {}

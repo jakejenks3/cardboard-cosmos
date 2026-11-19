@@ -178,7 +178,7 @@ static func normalize_line(raw: String) -> String:
 		t = t.replace(c, " ")
 	for c in ["–", "—", "−"]:
 		t = t.replace(c, "-")
-	t = t.replace("‘", "'").replace("’", "'").replace("“", "\"").replace("”", "\"")
+	t = t.replace("‘", "'").replace("’", "'").replace("“", "\"").replace("”", "\"").replace("″", "\"").replace("′′", "\"")
 	t = t.strip_edges()
 	# List bullets and numbering from notes apps: "- bench …", "* bench …", "• bench …", "1. bench …".
 	t = _rx("^(?:[-*\\x{2022}\\x{00B7}>]+|\\d+[.)])\\s+(?=\\S)").sub(t, "")
@@ -221,6 +221,8 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 		# The player's physical therapy lifts (saved.pt, see game/pt.gd).
 		"pt": opts.get("pt", {}) if opts.get("pt", {}) is Dictionary else {},
 		"picks": {},
+		# What the columns of the table being read hold (see _table_line); null outside one.
+		"table": null,
 		"today": today,
 		"wu": str(opts.get("weightUnit", "kg")),
 		"du": str(opts.get("distanceUnit", "km")),
@@ -245,11 +247,161 @@ static func _run(lines: Array, ctx: Dictionary, out: Dictionary, fixed) -> void:
 		block = _new_block(fixed.header, fixed.date, fixed.note)
 	for raw in lines:
 		var orig = str(raw).replace("﻿", "").strip_edges()
+		if orig.begins_with("|"):
+			block = _table_line(block, orig, ctx, out)
+			continue
 		var t = normalize_line(orig)
 		if t == "" or t.begins_with("#") or t.begins_with("//"):
 			continue
 		block = _line(block, orig, t, ctx, out)
 	_close(block, ctx, out)
+
+
+# ---------------------------------------------------------------------------
+# Tables: "| Exercise | Variation | Weight | Reps |" and the rows under it
+# ---------------------------------------------------------------------------
+
+## What a column holds, by the words of its header cell: "date", "exercise",
+## "variation", "pt", "weight", "hold", "sets", "reps", "set" (one set: "Set 1",
+## "1"), "note"; "" for a column the reader has no use for.
+static func table_role(head: String) -> String:
+	var h = _rx("[^a-z0-9# ]+").sub(head.to_lower(), " ", true)
+	h = _rx("\\s+").sub(h, " ", true).strip_edges()
+	if h == "":
+		return ""
+	if _rx("^(?:set ?|s)?#? ?\\d{1,2}$").search(h) != null:
+		return "set"
+	var roles = [
+		["date", ["date", "day", "when"]],
+		["pt", ["pt", "physical therapy", "therapy", "rehab"]],
+		["variation", ["variation", "variant", "equipment", "type", "version", "kind", "style", "how"]],
+		["weight", ["weight", "load", "lb", "lbs", "kg", "resistance"]],
+		["hold", ["hold", "seconds", "secs", "sec", "time"]],
+		["reps", ["reps", "rep", "repetitions"]],
+		["sets", ["sets", "set"]],
+		["note", ["notes", "note", "comment", "comments"]],
+		["exercise", ["exercise", "exercises", "lift", "movement", "name", "what"]],
+	]
+	var words = h.split(" ", false)
+	for pair in roles:
+		for w in pair[1]:
+			if h == w or words.has(w):
+				return str(pair[0])
+	return ""
+
+
+## The first cell of a row that is in a column with this role and has something in it.
+static func _cell(cells: Array, roles: Array, role: String) -> String:
+	for i in range(mini(cells.size(), roles.size())):
+		if str(roles[i]) == role and str(cells[i]) != "":
+			return str(cells[i])
+	return ""
+
+
+## One row of a table as the lines it stands for, by what its columns hold:
+## {"lines": [...], "why": ""} ("why" says what is missing when it cannot be read).
+##   | 11/14 | Seated row | cable, 1 arm | 70 | 12, 10, 9 |
+## is a date line "11/14" and "seated row - cable, 1 arm - 12, 10, 9 @ 70".
+## A weight written 30" (or a Hold column) is seconds held; a PT column with
+## anything in it puts "(PT)" in front; columns "Set 1", "Set 2"... hold one
+## set each ("13", or "13@80").
+static func table_row(cells: Array, roles: Array) -> Dictionary:
+	var lines = []
+	var date = _cell(cells, roles, "date")
+	var lift = _cell(cells, roles, "exercise")
+	var variation = _cell(cells, roles, "variation")
+	var weight = _cell(cells, roles, "weight")
+	var hold = _cell(cells, roles, "hold")
+	var n_sets = _cell(cells, roles, "sets")
+	var reps = _cell(cells, roles, "reps")
+	var note = _cell(cells, roles, "note")
+	var pt = _cell(cells, roles, "pt").to_lower()
+	var each = []
+	for i in range(mini(cells.size(), roles.size())):
+		if str(roles[i]) == "set" and str(cells[i]) != "":
+			each.append(str(cells[i]))
+	if date != "":
+		lines.append(date)
+	var numbers = weight + hold + n_sets + reps + "".join(PackedStringArray(each))
+	if lift == "":
+		if numbers != "":
+			return {"lines": lines, "why": "this row has numbers but no exercise"}
+		if note != "":
+			lines.append("note: " + note)
+		return {"lines": lines, "why": ""}
+	var title = lift if variation == "" else "%s - %s" % [lift, variation]
+	if pt != "" and not ["no", "n", "-", "0", "false", "x no"].has(pt) and not Pt.untag(title).pt:
+		title = "(PT) " + title
+	var spec = ""
+	if not each.is_empty():
+		spec = ", ".join(PackedStringArray(each))
+	elif reps != "" and n_sets != "" and _rx("^\\d+$").search(reps) != null and _rx("^\\d+$").search(n_sets) != null:
+		spec = "%sx%s" % [n_sets, reps]
+	elif reps != "":
+		spec = reps
+	elif n_sets != "":
+		spec = n_sets
+	var load = weight
+	if hold != "":
+		# The Hold column is seconds, with or without the mark.
+		load = hold if _rx("[\"'a-z]").search(hold.to_lower()) != null else hold + "\""
+	if spec == "" and load != "" and _rx("^\\d+ ?(?:\"|''|s|sec|secs|seconds?)$").search(load.to_lower()) != null:
+		# Only a hold is written: one hold of that long.
+		spec = load
+		load = ""
+	if spec == "":
+		return {"lines": lines, "why": "no sets or reps in this row"}
+	var line = "%s - %s" % [title, spec]
+	if load != "" and not spec.contains("@"):
+		line += " @ " + load
+	lines.append(line)
+	if note != "":
+		lines.append("note: " + note)
+	return {"lines": lines, "why": ""}
+
+
+## A line that is a table row ("| a | b | c |", as the inbox makes of a Google
+## Doc's table, or typed like that). A row naming its columns ("Exercise",
+## "Weight", "Reps"...) is a header: the rows after it are read by it
+## (`table_row`). Without a header the cells of a row are read as one line.
+static func _table_line(block: Dictionary, orig: String, ctx: Dictionary, out: Dictionary) -> Dictionary:
+	var inner = orig.trim_prefix("|")
+	if inner.ends_with("|"):
+		inner = inner.substr(0, inner.length() - 1)
+	var cells = []
+	var filled = []
+	for c in inner.split("|"):
+		var cell = str(c).strip_edges()
+		cells.append(cell)
+		if cell != "" and _rx("^:?-{2,}:?$").search(cell) == null:
+			filled.append(cell)
+	if filled.is_empty():
+		return block
+	var roles = []
+	var named = 0
+	for c in cells:
+		var role = table_role(str(c))
+		roles.append(role)
+		if role != "":
+			named += 1
+	if roles.has("exercise") and named >= 2 and named >= filled.size() - 1:
+		ctx.table = roles
+		return block
+	var shown = " | ".join(PackedStringArray(filled))
+	var made = {"lines": [" ".join(PackedStringArray(filled))], "why": ""}
+	# A row with one thing in it is that thing typed as a line: a date ("11/14")
+	# that starts a day, "read 20 pages", a note. Anything else goes by the header.
+	if ctx.table != null and filled.size() > 1:
+		made = table_row(cells, ctx.table)
+	for ln in made.lines:
+		var t = normalize_line(str(ln))
+		if t != "":
+			# A note keeps its own words (they are read from the line as typed); the
+			# other lines are shown as the row they came from.
+			block = _line(block, str(ln) if str(ln).begins_with("note: ") else shown, t, ctx, out)
+	if str(made.why) != "":
+		out.problems.append({"line": shown, "why": str(made.why)})
+	return block
 
 
 static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, out: Dictionary) -> Dictionary:
@@ -1088,6 +1240,8 @@ static func _parse_lift(line: String, ctx: Dictionary) -> Dictionary:
 			return {"ok": false, "why": "%d reps looks wrong" % int(st.reps)}
 		if float(st.weightKg) > 600.0:
 			return {"ok": false, "why": "that weight looks wrong"}
+		if int(st.get("holdSec", 0)) > 3600:
+			return {"ok": false, "why": "that hold looks wrong (seconds are written 30\")"}
 	if sets.size() > 40:
 		return {"ok": false, "why": "too many sets"}
 	return {"ok": true, "name": name, "sets": sets, "warnings": warnings, "pick": pick, "pt": bool(tag.pt)}
@@ -1183,6 +1337,9 @@ static func _name_tail(tail: Array, strict: bool) -> bool:
 ## "bare": true when no weight was written anywhere, "reps": [...] then, "ab": [A, B] for a lone AxB}.
 static func parse_sets(spec: String, wu: String) -> Dictionary:
 	var s = " " + spec + " "
+	# Seconds of a hold (a stretch): 30", 30'', 30s, 30 sec. One token, "30sec".
+	s = _rx("(\\d)\\s*(?:\"|'')").sub(s, "$1sec", true)
+	s = _rx("(\\d)\\s*(?:seconds|second|secs|sec|s)\\b").sub(s, "$1sec", true)
 	s = _rx("\\bat\\s+(?=[+\\d]|bw\\b)").sub(s, "@ ", true)
 	# "@ 82,5" is 82.5, but "5 @ 100, 5 @ 105" / "@ 100,5,5" keep their commas.
 	s = _rx("@\\s*(\\+?\\d+),(\\d{1,2})(?![\\d.,])(?!\\s*(?:@|x))").sub(s, "@ $1.$2", true)
@@ -1190,22 +1347,36 @@ static func parse_sets(spec: String, wu: String) -> Dictionary:
 	s = _rx("\\s*,\\s*").sub(s, ",", true)
 	s = _rx("(\\d)\\s+(kg|lbs|lb)\\b").sub(s, "$1$2", true)
 	s = _rx("(\\d)\\s*x\\s*(?=\\d)").sub(s, "$1x", true)
-	s = _rx("(kg|lbs|lb)x(?=\\d)").sub(s, "$1 x", true)
+	s = _rx("(kg|lbs|lb|sec)x(?=\\d)").sub(s, "$1 x", true)
 	s = _rx("(?<![\\d.a-z])x\\s+(?=\\d)").sub(s, "x", true)
 	var items = []
 	for g in s.strip_edges().split(",", false):
 		var toks = Array(g.strip_edges().split(" ", false))
 		if toks.is_empty():
 			continue
-		var item = {"reps": [], "w": null, "ab": []}
+		var item = {"reps": [], "w": null, "ab": [], "hold": 0}
 		var left = toks
 		var at = toks.find("@")
+		var held = _hold_item(toks) if at < 0 else {}
+		if not held.is_empty():
+			# "3x30sec", "30sec", "30sec x3": that many holds of that many seconds.
+			item.hold = int(held.sec)
+			item.w = 0.0
+			for k in range(int(held.n)):
+				item.reps.append(1)
+			items.append(item)
+			continue
 		if at >= 0:
 			left = toks.slice(0, at)
 			var right = toks.slice(at + 1)
-			if right.size() != 1 or weight_token(right[0], wu, true) < 0.0:
+			if right.size() == 1 and hold_token(str(right[0])) > 0:
+				# "3 @ 30sec": where a weight would be, seconds held; no weight.
+				item.hold = hold_token(str(right[0]))
+				item.w = 0.0
+			elif right.size() != 1 or weight_token(right[0], wu, true) < 0.0:
 				return {"ok": false, "why": "could not read the weight in \"%s\"" % g.strip_edges()}
-			item.w = weight_token(right[0], wu, true)
+			else:
+				item.w = weight_token(right[0], wu, true)
 		elif weight_token(toks[0], wu, false) >= 0.0:
 			# Weight first: "80kg x5" (5 reps), "80kg x5 x3" (5 reps, 3 sets), "100kg 3x5".
 			item.w = weight_token(toks[0], wu, false)
@@ -1263,7 +1434,10 @@ static func parse_sets(spec: String, wu: String) -> Dictionary:
 			pending.append_array(it.reps)
 		else:
 			for r in pending + it.reps:
-				sets.append({"reps": int(r), "weightKg": it.w})
+				var one = {"reps": int(r), "weightKg": it.w}
+				if int(it.hold) > 0:
+					one["holdSec"] = int(it.hold)
+				sets.append(one)
 			pending = []
 			last_w = it.w
 	if last_w == null:
@@ -1272,6 +1446,29 @@ static func parse_sets(spec: String, wu: String) -> Dictionary:
 	for r in pending:
 		sets.append({"reps": int(r), "weightKg": last_w})
 	return {"ok": true, "bare": false, "reps": [], "ab": [], "sets": sets}
+
+
+## "30sec" (what parse_sets makes of 30", 30s, 30 sec) -> 30; 0 when it is not seconds.
+static func hold_token(tok: String) -> int:
+	var m = _rx("^(\\d+)sec$").search(tok)
+	return int(m.get_string(1)) if m != null else 0
+
+
+## The tokens of one item when they are holds and nothing else: "3x30sec",
+## "30sec", "30sec x3", "3 30sec" -> {"n": how many, "sec": seconds}; {} otherwise.
+static func _hold_item(toks: Array) -> Dictionary:
+	var joined = "".join(PackedStringArray(toks))
+	var m = _rx("^(\\d+)x(\\d+)sec$").search(joined)
+	if m != null:
+		return {"n": int(m.get_string(1)), "sec": int(m.get_string(2))}
+	m = _rx("^(\\d+)secx(\\d+)$").search(joined)
+	if m != null:
+		return {"n": int(m.get_string(2)), "sec": int(m.get_string(1))}
+	if toks.size() == 1 and hold_token(str(toks[0])) > 0:
+		return {"n": 1, "sec": hold_token(str(toks[0]))}
+	if toks.size() == 2 and _rx("^\\d+$").search(str(toks[0])) != null and hold_token(str(toks[1])) > 0:
+		return {"n": int(str(toks[0])), "sec": hold_token(str(toks[1]))}
+	return {}
 
 
 ## "80", "+10", "82.5kg", "181lb", "bw" -> kg; -1 when it is not a weight (or has no unit and one is required).
@@ -1907,6 +2104,10 @@ static func _w(kg: float, unit: String) -> String:
 
 
 static func sets_text(sets: Array, unit: String) -> String:
+	# A stretch or other hold: "3 x 30 s hold".
+	var held = LiftTrend.hold_text(sets)
+	if held != "":
+		return held
 	var groups = []
 	for st in sets:
 		var w = float(st.weightKg)

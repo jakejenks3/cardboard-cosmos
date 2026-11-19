@@ -215,6 +215,26 @@ is the Windows handoff.
     Being PT changes no XP and no rule, so parity is untouched.
   - Tests: `tests/lift_trend_test.gd` (trends and `Pt`), more in `tests/quick_log_test.gd`,
     walkthrough `tests/shots/detail.gd` (year data).
+- Holds and tables in the phone note (added 2026-11-19):
+  - A hold (a stretch): a set with `holdSec` (seconds each rep is held) and no weight:
+    `{reps, weightKg: 0, holdSec}`. In the note seconds are written `30"` (also `30''`, `30s`,
+    `30 sec`), where a weight would be or as the set itself: `3x1@30"`, `3@30"`, `3x30"`,
+    `30" x3` (`QuickLog.parse_sets` turns them into a `30sec` token: `hold_token`,
+    `_hold_item`). The rules engine does not know holds: a hold counts as the rep it is
+    stored as, so no XP number changed and parity is untouched. What does know them:
+    `LiftTrend` (`is_hold`, `hold_text`, `held`, `day().holdSec` / `holdTotal`, series
+    "hold", `compare().sec`), `LiftHistory.describe_sets` ("3 x 30 s hold"),
+    `LiftLibrary.stats` (keeps `holdSec`), the lift page (a Hold trend and "s longest hold"
+    where the weight would be) and `LogLiftEditor.draft_from_sets` / `sets_from_draft`, which
+    carry the seconds through an edit (the editor has no field for them yet).
+  - A table: `PhoneInbox.html_to_text` turns every table of the Google Doc into one line per
+    row, `| cell | cell |` (`_tables_to_rows`). `QuickLog._table_line` reads those: a row
+    naming its columns is a header (`table_role`: date, exercise, variation, pt, weight, hold,
+    sets, reps, "Set 1"..., note), the rows under it become ordinary lines (`table_row`:
+    `<exercise> - <variation> - <reps> @ <weight>`, a date cell as a date line, a PT cell
+    as "(PT)", a note cell as `note:`), so names, PT and holds work as in typed lines. Rows
+    that are empty are skipped; a row that cannot be read is a problem with its reason; a
+    table without a header is read row by row as a line. Typed `| a | b |` lines work too.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -354,8 +374,10 @@ the check.
 
 ## Known rough edges
 
-- A physical therapy exercise is a lift: sets of reps, with or without weight. A hold written
-  in seconds (`(PT) plank 3x30s`) is not read (lifts have no timed sets); the review says so.
+- A hold's seconds cannot be typed in the Log tab's lift editor: a hold made in the phone
+  note shows there as reps without weight (its seconds are kept when the session is saved).
+- A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules
+  have no timed sets.
 - Switching "Physical therapy" on a lift's page does not redraw the Trends chart under it
   (the goal line of "How often" shows the next time the page opens).
 - Lift names are matched when a note is imported, not afterwards: a lift already in the log

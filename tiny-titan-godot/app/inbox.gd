@@ -392,6 +392,7 @@ static func html_to_text(html: String) -> String:
 	var h = html
 	for tag in ["head", "style", "script"]:
 		h = RegEx.create_from_string("(?is)<%s\\b.*?</%s>" % [tag, tag]).sub(h, "", true)
+	h = _tables_to_rows(h)
 	h = RegEx.create_from_string("(?is)<img\\b[^>]*\\bsrc=\"([^\"]+)\"[^>]*>").sub(h, "\nphoto $1\n", true)
 	h = RegEx.create_from_string("(?is)<br\\s*/?>|</(?:p|div|li|tr|h[1-6]|table)>").sub(h, "\n", true)
 	h = RegEx.create_from_string("(?is)</t[dh]>").sub(h, " ", true)
@@ -401,6 +402,30 @@ static func html_to_text(html: String) -> String:
 	for hit in m.search_all(h):
 		h = h.replace(hit.get_string(0), char(int(hit.get_string(1))))
 	return h
+
+
+## Every table of the HTML as lines of text, one per row, the cells between
+## bars: "| Exercise | Variation | Weight | Reps |". The parser reads those as a
+## table (QuickLog._table_line). A bar typed inside a cell becomes a slash.
+static func _tables_to_rows(html: String) -> String:
+	var table_rx = RegEx.create_from_string("(?is)<table\\b.*?</table>")
+	var row_rx = RegEx.create_from_string("(?is)<tr\\b.*?</tr>")
+	var cell_rx = RegEx.create_from_string("(?is)<t[dh]\\b[^>]*>(.*?)</t[dh]>")
+	var tag_rx = RegEx.create_from_string("(?s)<[^>]+>")
+	var space_rx = RegEx.create_from_string("\\s+")
+	var out = ""
+	var pos = 0
+	for tm in table_rx.search_all(html):
+		out += html.substr(pos, tm.get_start() - pos) + "\n"
+		for rm in row_rx.search_all(tm.get_string(0)):
+			var cells = PackedStringArray()
+			for cm in cell_rx.search_all(rm.get_string(0)):
+				var txt = tag_rx.sub(cm.get_string(1).replace("|", "/"), " ", true).replace("&nbsp;", " ")
+				cells.append(space_rx.sub(txt, " ", true).strip_edges())
+			if not cells.is_empty():
+				out += "| " + " | ".join(cells) + " |\n"
+		pos = tm.get_end()
+	return out + html.substr(pos)
 
 
 ## A picture found in the note, small, for the review sheet (null when unknown).

@@ -244,7 +244,39 @@ func run(m: Node, t: SceneTree) -> void:
 	App.set_pt(other, false)
 	await ShotHelper.frames(tree, 4)
 	check(not Pt.is_pt(App.pt(), other) and App.pt().size() == 3, "switched off again: no longer a PT lift, its sessions untouched")
+	# --- a table in the note, and a stretch held for seconds -------------------------------
+	var yesterday = Dates.add_days(today, -1)
+	var table = "| Date | Exercise | Variation | Weight | Reps |
+| %s | (PT) Calf stretch | wall | 30\" | 3 |
+| | Goblet squat | kettlebell | 35 | 12, 12, 10 |
+| | | | | |" % yesterday
+	var rt = App.inbox.check_text(table)
+	InboxSheet.open(rt)
+	await ShotHelper.wait(tree, 0.7)
+	said = ShotHelper.all_text(_sheet())
+	check(rt.problems.is_empty() and rt.fresh.size() == 1 and str(rt.fresh[0].date) == yesterday and _by_tip("Trends and history of").size() == 2, "a table in the note reads as one lift entry with a row per exercise (%s)" % str(rt.problems))
+	check(said.contains("3 × 30 s hold") and said.contains("12, 12, 10 @ 35 lb"), "30\" in the weight column is a hold of 30 seconds, not a weight")
+	await ShotHelper.snap(tree, "detail_10_table_and_hold")
+	ShotHelper.press(ShotHelper.find_button(_sheet(), "Import"))
+	await ShotHelper.frames(tree, 4)
+	await _dismiss_reels()
+	var stretch = null
+	for s in App.sessions():
+		if s.discipline == "lift" and s.date == yesterday:
+			for ex in s.exercises:
+				if str(ex.name).to_lower().contains("calf stretch"):
+					stretch = ex
+	check(stretch != null and stretch.sets.size() == 1 and int(stretch.sets[0].reps) == 3 and int(stretch.sets[0].get("holdSec", 0)) == 30 and float(stretch.sets[0].weightKg) == 0.0 and Pt.is_pt(App.pt(), str(stretch.name)), "imported: three holds of 30 seconds, no weight, and a PT lift")
+	if stretch != null:
+		JourneyLifts.open_named(str(stretch.name))
+		await ShotHelper.wait(tree, 0.7)
+		check(ShotHelper.find_button(_sheet(), "Hold") != null and ShotHelper.find_button(_sheet(), "Weight") == null and ShotHelper.find_text(_sheet(), "s longest hold") != null and ShotHelper.find_text(_sheet(), "3 × 30 s hold") != null, "its page counts seconds: the longest hold, a Hold trend, no Weight")
+		await ShotHelper.snap(tree, "detail_11_hold_page")
+		await _close_sheets()
+		var draft = LogLiftEditor.draft_from_sets("x", stretch.sets, "lb")
+		var round_trip = LogLiftEditor.sets_from_draft(draft, "lb")
+		check(round_trip.size() == 1 and int(round_trip[0].get("holdSec", 0)) == 30 and int(round_trip[0].reps) == 3, "editing the session in the Log tab keeps the seconds")
 	var text = FileAccess.get_file_as_string(App.SAVE_PATH)
 	var back = App.parse_saved(JSON.parse_string(text))
-	check(back != null and back.pt.size() == 3 and int(back.pt[Pt.key(lift_name)].perWeek) == 3, "the PT lifts are in the save file and read back")
+	check(back != null and back.pt.size() == 4 and int(back.pt[Pt.key(lift_name)].perWeek) == 3, "the PT lifts are in the save file and read back")
 	print("DETAIL DONE, failures: %d" % fails)

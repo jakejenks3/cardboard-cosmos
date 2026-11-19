@@ -167,6 +167,10 @@ static func describe_sets(sets: Array, fmt_w: Callable) -> String:
 	var valid: Array = _done_sets(sets)
 	if valid.is_empty():
 		return ""
+	# A stretch or other hold ("holdSec" on its sets): "3 x 30 s hold".
+	var held: String = LiftTrend.hold_text(valid)
+	if held != "":
+		return held
 	var w0 = valid[0].weightKg
 	var r0 = valid[0].reps
 	var same_w: bool = true

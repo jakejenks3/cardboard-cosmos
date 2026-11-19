@@ -84,6 +84,25 @@ An exercise name may hold a number of its own (`neck 4 way - 3x20@10`, `1 arm ro
 a dash or a colon between such a name and its sets the first time; once it is in your log the game
 knows it. A decimal may be typed without its zero (`.5 mile`).
 
+A stretch or any other hold is written with its seconds, marked `"`, where the weight would
+be: `(PT) calf stretch 3x1@30"` is three holds of 30 seconds, and so are `3@30"`, `3x30"`
+and `30" x3` (`30s` and `30 sec` work too). The game then counts seconds, not weight: the
+lift's page shows the longest hold and a Hold trend.
+
+A table works as well as typed lines. Give its first row the names of the columns and the
+game reads the rows under it:
+
+```
+| Date  | Exercise     | Variation    | Weight | Reps       |
+| 11/14 | Seated row   | cable, 1 arm | 70     | 12, 10, 9  |
+|       | Calf stretch | wall         | 30"    | 3          |
+```
+
+The columns it knows: Date, Exercise, Variation (it joins the name: "Seated row - cable,
+1 arm"), PT (anything in the cell marks it), Weight (or `30"` for a hold), Hold, Sets, Reps
+("3x10", or "12, 10, 9"), a column per set ("Set 1", "Set 2"...) and Notes. A date is only
+needed in the first row of a day; empty rows are skipped.
+
 A lift name does not have to be exact. The game compares the words, not the letters: another
 order, dashes and commas, plurals, short forms (`db`, `1UE`, `pulley`) and a small typo all read as
 the same lift, and one of your own lifts wins over the library's name for it, so your history

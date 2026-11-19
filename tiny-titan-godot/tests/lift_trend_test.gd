@@ -93,6 +93,24 @@ func _init() -> void:
 	var c_bw = LiftTrend.compare(sets([[12, 0]]), bw_before)
 	ok(c_bw.kind == "down" and c_bw.reps == -6 and c_bw.pr and not LiftTrend.compare(sets([[9, 0], [9, 0]]), bw_before).pr and LiftTrend.compare(sets([[9, 0], [9, 0]]), bw_before).kind == "same", "bodyweight: compared by all reps; a record is more reps in one set than ever", c_bw)
 
+	# --- holds (a stretch: seconds, not weight) -------------------------------------------
+	var hold_sets = [{"reps": 1, "weightKg": 0.0, "holdSec": 30}, {"reps": 1, "weightKg": 0.0, "holdSec": 30}, {"reps": 1, "weightKg": 0.0, "holdSec": 30}]
+	var hold_day = LiftTrend.day(hold_sets)
+	ok(hold_day.holdSec == 30 and hold_day.holdTotal == 90 and hold_day.reps == 3 and near(hold_day.topKg, 0.0), "a day of holds: the longest, and the seconds in all", hold_day)
+	ok(LiftTrend.hold_text(hold_sets) == "3 × 30 s hold" and LiftTrend.hold_text([{"reps": 3, "weightKg": 0.0, "holdSec": 30}]) == "3 × 30 s hold" and LiftTrend.hold_text([{"reps": 1, "weightKg": 0.0, "holdSec": 60}]) == "60 s hold", "holds in words", LiftTrend.hold_text(hold_sets))
+	ok(LiftTrend.hold_text([{"reps": 1, "weightKg": 0.0, "holdSec": 30}, {"reps": 1, "weightKg": 0.0, "holdSec": 45}]) == "30 s, 45 s hold" and LiftTrend.hold_text(sets([[5, 60]])) == "" and LiftTrend.day(sets([[5, 60]])).holdSec == 0, "different lengths are listed; a plain set is no hold")
+	var fmt_kg = func(kg): return "%s kg" % TTUtil.num_str(kg)
+	ok(LiftHistory.describe_sets(hold_sets, fmt_kg) == "3 × 30 s hold" and LiftHistory.describe_sets(sets([[5, 60], [5, 60]]), fmt_kg) == "2×5 @ 60 kg", "the usual sets text says a hold as a hold", LiftHistory.describe_sets(hold_sets, fmt_kg))
+	var hold_hist = [{"date": "2026-11-17", "id": "h2", "sets": [{"reps": 2, "weightKg": 0.0, "holdSec": 40}]}, {"date": "2026-11-10", "id": "h1", "sets": hold_sets}]
+	ok(LiftTrend.held(hold_hist) and not LiftTrend.held(hist) and LiftTrend.series(hold_hist, "hold").size() == 2 and near(LiftTrend.series(hold_hist, "hold")[1].y, 40.0) and LiftTrend.series(hist, "hold").is_empty(), "the longest hold of each day can be charted")
+	var c_hold = LiftTrend.compare([{"reps": 3, "weightKg": 0.0, "holdSec": 45}], hold_hist)
+	ok(c_hold.kind == "up" and c_hold.sec == 5 and c_hold.pr and near(c_hold.kg, 0.0), "a longer hold than last time, and than ever", c_hold)
+	var c_hold2 = LiftTrend.compare([{"reps": 3, "weightKg": 0.0, "holdSec": 40}], hold_hist)
+	ok(c_hold2.kind == "up" and c_hold2.sec == 0 and c_hold2.reps == 1 and not c_hold2.pr, "as long, one more of them", c_hold2)
+	var held_log = [{"id": "s1", "discipline": "lift", "date": "2026-11-17", "createdAt": 1, "exercises": [{"name": "Calf Stretch", "sets": hold_sets}]}]
+	var kept_sets = LiftLibrary.stats(held_log).get("calf stretch", {"history": [{"sets": []}]}).history[0].sets
+	ok(kept_sets.size() == 3 and int(kept_sets[0].get("holdSec", 0)) == 30, "the lift library keeps a hold's seconds", kept_sets)
+
 	# --- the PT tag ----------------------------------------------------------------------
 	ok(Pt.untag("(PT) wrist curls") == {"pt": true, "name": "wrist curls"} and Pt.untag("(pt)neck 4 way - 3x20@10") == {"pt": true, "name": "neck 4 way - 3x20@10"} and Pt.untag("[PT] bridges") == {"pt": true, "name": "bridges"}, "the tag at the start, any case", [Pt.untag("(PT) wrist curls"), Pt.untag("(pt)neck 4 way - 3x20@10")])
 	ok(Pt.untag("PT: band pull apart") == {"pt": true, "name": "band pull apart"} and Pt.untag("(PT) - clamshells") == {"pt": true, "name": "clamshells"} and Pt.untag("calf raise (PT) 3x15") == {"pt": true, "name": "calf raise 3x15"}, "'pt:', a dash after it, and the tag after the name", [Pt.untag("PT: band pull apart"), Pt.untag("calf raise (PT) 3x15")])

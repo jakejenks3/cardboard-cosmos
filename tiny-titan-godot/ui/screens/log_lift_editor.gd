@@ -50,7 +50,11 @@ static func draft_from_sets(ex_name: String, sets: Array, unit: String) -> Dicti
 			bw = false
 	var rows = []
 	for s in sets:
-		rows.append({"reps": str(int(s.reps)), "weight": LogWidgets.trim_num(Fmt.kg_to_unit(float(s.weightKg), unit)) if float(s.weightKg) > 0.0 else ""})
+		var row = {"reps": str(int(s.reps)), "weight": LogWidgets.trim_num(Fmt.kg_to_unit(float(s.weightKg), unit)) if float(s.weightKg) > 0.0 else ""}
+		# A hold (a stretch, written 30" in the phone note): its seconds ride along.
+		if int(s.get("holdSec", 0)) > 0:
+			row["hold"] = int(s.holdSec)
+		rows.append(row)
 	if rows.is_empty():
 		rows.append({"reps": "", "weight": ""})
 	return {"name": ex_name, "bodyweight": bw, "sets": rows}
@@ -63,7 +67,10 @@ static func sets_from_draft(e: Dictionary, unit: String) -> Array:
 		var reps = maxi(0, TTUtil.jsround(LogWidgets.num(s.reps)))
 		var kg = 0.0 if e.bodyweight else maxf(0.0, Fmt.unit_to_kg(LogWidgets.num(s.weight), unit))
 		if reps > 0:
-			out.append({"reps": reps, "weightKg": kg})
+			var one = {"reps": reps, "weightKg": kg}
+			if int(s.get("hold", 0)) > 0:
+				one["holdSec"] = int(s.hold)
+			out.append(one)
 	return out
 
 

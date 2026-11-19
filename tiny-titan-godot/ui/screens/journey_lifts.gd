@@ -169,7 +169,17 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 static func best_text(st: Dictionary, wu: String) -> String:
 	if float(st.bestKg) > 0.0:
 		return "%s × %d" % [Fmt.fmt_weight(float(st.bestKg), wu), int(st.bestReps)]
+	if LiftTrend.held(st.history):
+		return "%d s hold" % longest_hold(st.history)
 	return "%d reps" % int(st.bwReps)
+
+
+## The longest hold in a lift's history, in seconds (0 when it has none).
+static func longest_hold(history: Array) -> int:
+	var out = 0
+	for h in history:
+		out = maxi(out, int(LiftTrend.day(h.get("sets", [])).holdSec))
+	return out
 
 
 ## Is this lift one of the player's physical therapy exercises (under any of its names)?
@@ -211,6 +221,8 @@ static func trend_options(history: Array) -> Array:
 	var loaded = LiftTrend.weighted(history)
 	if loaded:
 		out.append({"value": "weight", "label": "Weight"})
+	if LiftTrend.held(history):
+		out.append({"value": "hold", "label": "Hold"})
 	out.append({"value": "reps", "label": "Reps"})
 	if loaded:
 		out.append({"value": "volume", "label": "Volume"})
@@ -225,6 +237,8 @@ static func trend_text(metric: String, v: float, wu: String) -> String:
 			return "%s %s" % [TTUtil.num_str(snappedf(v, 0.1)), wu]
 		"volume":
 			return "%s %s" % [Charts.fmt_k(v), wu]
+		"hold":
+			return "%d s" % TTUtil.jsround(v)
 	return str(TTUtil.jsround(v))
 
 
@@ -265,8 +279,8 @@ static func _show_trend(metric, holder: Control, st: Dictionary, wu: String, goa
 		return
 	var points = []
 	for p in LiftTrend.series(st.history, _metric):
-		points.append({"x": p.x, "y": float(p.y) if _metric == "reps" else Fmt.kg_to_unit(float(p.y), wu)})
-	var what = {"weight": "The heaviest set of each day", "reps": "Every rep of each day", "volume": "Weight x reps of each day"}[_metric]
+		points.append({"x": p.x, "y": float(p.y) if (_metric == "reps" or _metric == "hold") else Fmt.kg_to_unit(float(p.y), wu)})
+	var what = {"weight": "The heaviest set of each day", "reps": "Every rep of each day", "volume": "Weight x reps of each day", "hold": "The longest hold of each day"}[_metric]
 	if points.size() < 2:
 		var only = Kit.hbox(8)
 		if points.size() == 1:
@@ -420,6 +434,10 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 			var e1 = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.e1rm), wu, 0))
 			vals = [bw[0], e1[0], str(int(st.count))]
 			caps = ["%s × %d best" % [bw[1], int(st.bestReps)], "%s est. 1RM" % e1[1], "Sessions"]
+		elif LiftTrend.held(st.history):
+			# A stretch or other hold: seconds are what counts.
+			vals = [str(longest_hold(st.history)), Xp.fmt_int(st.reps), str(int(st.count))]
+			caps = ["s longest hold", "Holds in all", "Sessions"]
 		else:
 			vals = [str(int(st.bwReps)), Xp.fmt_int(st.reps), str(int(st.count))]
 			caps = ["Best set", "Reps in all", "Sessions"]
@@ -435,7 +453,9 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 
 		var marks = LiftLibrary.rep_bests(st)
 		if not marks.is_empty():
-			var mf = Kit.flow(6)
+			# Three to a row: six in one row cut their weights short ("52.5 l").
+			var mf = Kit.grid(mini(3, marks.size()), 6)
+			mf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			for m in marks:
 				mf.add_child(JourneyScreen.value_chip("1 rep" if int(m.reps) == 1 else "%d+ reps" % int(m.reps), Fmt.fmt_weight(float(m.kg), wu), Pal.LIFT, "Heaviest set of at least %d rep%s" % [int(m.reps), "" if int(m.reps) == 1 else "s"]))
 			box.add_child(mf)

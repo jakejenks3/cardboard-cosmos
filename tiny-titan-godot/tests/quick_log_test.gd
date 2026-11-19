@@ -134,7 +134,7 @@ heel raise x10 195")))
 	ok(ex_name("Neck 4 way 3x20 @ 10") == "Neck 4 Way" and ex_name("hip 3-way 2x15") == "Hip 3-way", "'4 way' / '3-way' with no dash", [ex_name("Neck 4 way 3x20 @ 10"), ex_name("hip 3-way 2x15")])
 	ok(ex_name("1 arm rope climb 3x2") == "1 Arm Rope Climb" and ex_name("45 degree back extension 3x12") == "45 Degree Back Extension", "a name that starts with a number", [ex_name("1 arm rope climb 3x2"), ex_name("45 degree back extension 3x12")])
 	ok(ex_name("1 arm row 3x10 @ 40") == "Dumbbell Row", "and '1 arm row' is the library's one arm row", ex_name("1 arm row 3x10 @ 40"))
-	ok(ex_name("face pull - cable, 1UE 3x15 @ 30") == "Face Pull Cable, 1UE" and ex_name("ghd sit-ups - 3x6") == "GHD Sit-ups" and ex_name("db shrug 3x10 @ 60") == "Dumbbell Shrug", "a short form in a name ('1UE') is part of it, and short forms keep their capitals", [ex_name("face pull - cable, 1UE 3x15 @ 30"), ex_name("ghd sit-ups - 3x6"), ex_name("db shrug 3x10 @ 60")])
+	ok(ex_name("face pull - cable, 1UE 3x15 @ 30") == "Face Pull Cable, 1UE" and ex_name("ghd back raise - 2x12") == "GHD Back Raise" and ex_name("db shrug 3x10 @ 60") == "Dumbbell Shrug", "a short form in a name ('1UE') is part of it, and short forms keep their capitals", [ex_name("face pull - cable, 1UE 3x15 @ 30"), ex_name("ghd back raise - 2x12"), ex_name("db shrug 3x10 @ 60")])
 	ok(ex_name("21s - 3x21 @ 20") == "21s" and ex_name("90/90 hip switch: 3x10") == "90/90 Hip Switch" and ex_name("4 way hip - 2x15") == "4 Way Hip", "after a dash or a colon any name goes")
 	var nn_big5 = QuickLog.parse("big 5 complex 3x5 @ 40", {"today": TODAY, "exercises": ["Big 5 Complex"]})
 	ok(nn_big5.problems.is_empty() and nn_big5.entries.size() == 1 and nn_big5.entries[0].data.exercises[0].name == "Big 5 Complex" and p("big 5 complex 3x5 @ 40").entries.is_empty(), "an exercise already logged keeps its number; an unknown one like it is not guessed", nn_big5)
@@ -195,6 +195,72 @@ pt: clamshells 2x20
 neck 4 way 2x20@10")
 	ok(not pt_two.is_empty() and pt_two.data.exercises.size() == 1 and pt_two.data.exercises[0].sets.size() == 5 and pt_two.data.exercises[0].get("pt") == true, "tagged and untagged lines of one lift on a day are one exercise, marked", pt_two)
 	ok(pt_new.key != one("neck 4 way - 3x20@10").key and one("(PT) neck 4 way - 3x20@10").key == pt_new.key, "the tag is part of the typed line, so adding it later reads as an edit of that day")
+	# A hold (a stretch): seconds, written 30" where a weight would be.
+	var hd = one("(PT) calf stretch - 3x1@30\"")
+	var hd_sets = hd.data.exercises[0].sets if not hd.is_empty() else []
+	ok(hd_sets.size() == 3 and int(hd_sets[0].reps) == 1 and int(hd_sets[0].get("holdSec", 0)) == 30 and float(hd_sets[0].weightKg) == 0.0 and hd.data.exercises[0].get("pt") == true and hd.warnings.is_empty(), "3x1@30\": three holds of 30 seconds, no weight, and no 'no weight' warning", hd)
+	ok(not hd.is_empty() and str(hd.summary) == "Calf Stretch 3 × 30 s hold", "its line in the review says seconds", hd.get("summary"))
+	var hd2 = one("hamstring stretch 3@30\"")
+	ok(not hd2.is_empty() and hd2.data.exercises[0].sets.size() == 1 and int(hd2.data.exercises[0].sets[0].reps) == 3 and int(hd2.data.exercises[0].sets[0].holdSec) == 30, "3@30\": one set of three holds", hd2)
+	var hd_forms = {"pec stretch 2x45\"": [2, 45], "couch stretch 60\"": [1, 60], "quad stretch 2x30”": [2, 30], "pigeon stretch 2x30''": [2, 30], "plank 3x30s": [3, 30], "plank 3 x 30 sec": [3, 30], "side plank 45 sec x2": [2, 45], "wall sit 2 60 seconds": [2, 60]}
+	for hd_line in hd_forms:
+		var hd_e = one(hd_line)
+		var hd_n = 0
+		var hd_s = 0
+		for hd_one in (hd_e.data.exercises[0].sets if not hd_e.is_empty() else []):
+			hd_n += int(hd_one.reps)
+			hd_s = int(hd_one.get("holdSec", 0))
+		ok(hd_n == hd_forms[hd_line][0] and hd_s == hd_forms[hd_line][1], "a hold: " + hd_line, hd_e)
+	var hd_mix = one("calf stretch 30\", 45\"")
+	ok(not hd_mix.is_empty() and hd_mix.data.exercises[0].sets.size() == 2 and int(hd_mix.data.exercises[0].sets[1].holdSec) == 45 and str(hd_mix.summary).ends_with("30 s, 45 s hold"), "two holds of different lengths", hd_mix)
+	ok(not one("bench 3x5 @ 80").data.exercises[0].sets[0].has("holdSec") and not one("pull-up 3x8").data.exercises[0].sets[0].has("holdSec"), "a plain set has no hold")
+	ok(p("calf stretch 3x4000\"").entries.is_empty() and p("calf stretch 3x4000\"").problems.size() == 1, "an hour-long hold is a mistake, not an entry")
+	ok(not one("hang 20mm 10s x6").is_empty() and one("hang 20mm 10s x6").data.get("discipline") == "climb", "a hangboard hang is still a hang")
+
+	# A table (what the inbox makes of a Google Doc's table): one "| a | b |" line per row.
+	var lb = {"weightUnit": "lb", "distanceUnit": "mi"}
+	var tb = p("| Date | Exercise | Variation | Weight | Reps |\n| 11/14 | Seated row | cable, 1 arm | 70 | 12, 10, 9 |\n| | Bench press | | 80 | 3x5 |\n| | (PT) Neck 4 way | | 10 | 3x20 |\n| | Calf stretch | wall | 30\" | 3 |\n| | | | | |", lb)
+	var tb_ex = tb.entries[0].data.exercises if tb.entries.size() == 1 else []
+	var tb_names = []
+	for tb_one in tb_ex:
+		tb_names.append(str(tb_one.name))
+	ok(tb.problems.is_empty() and tb.entries.size() == 1 and tb.entries[0].date == "2026-11-14" and tb_names == ["Seated Row Cable, 1 Arm", "Bench Press", "Neck 4 Way", "Calf Stretch Wall"], "a table: its date, and a row per exercise (the variation joins the name)", [tb_names, tb.problems])
+	ok(tb_ex.size() == 4 and tb_ex[0].sets.size() == 3 and int(tb_ex[0].sets[1].reps) == 10 and absf(float(tb_ex[0].sets[0].weightKg) - 70.0 * 0.45359237) < 0.01 and tb_ex[1].sets.size() == 3 and int(tb_ex[1].sets[0].reps) == 5, "the weight column and the reps column", tb_ex)
+	ok(tb_ex.size() == 4 and tb_ex[2].get("pt") == true and tb_ex[2].sets.size() == 3 and int(tb_ex[3].sets[0].reps) == 3 and int(tb_ex[3].sets[0].get("holdSec", 0)) == 30 and float(tb_ex[3].sets[0].weightKg) == 0.0, "(PT) in the exercise cell, and 30\" in the weight column is a hold", tb_ex)
+	var tb2 = p("11/14\n| Exercise | Type | Sets | Reps | Weight (lb) | Notes |\n|---|---|---|---|---|---|\n| Squat | barbell | 3 | 5 | 185 | felt good |", lb)
+	var tb2_ex = tb2.entries[0].data.exercises if tb2.entries.size() == 1 else []
+	ok(tb2.problems.is_empty() and tb2_ex.size() == 1 and tb2_ex[0].name == "Squat" and tb2_ex[0].sets.size() == 3 and int(tb2_ex[0].sets[2].reps) == 5 and absf(float(tb2_ex[0].sets[0].weightKg) - 185.0 * 0.45359237) < 0.01 and tb2.entries[0].data.get("notes") == "felt good", "Sets and Reps as two columns, other words in the header, a note, a ruler row", tb2)
+	var tb3 = p("| Exercise | PT | Weight | Set 1 | Set 2 | Set 3 |\n| Deadlift | | 135 | 5 | 5 | 3 |\n| Clamshell | x | | 15 | 15 | |\n| Romanian deadlift | | | 5@135 | 5@185 | |", lb)
+	var tb3_ex = tb3.entries[0].data.exercises if tb3.entries.size() == 1 else []
+	ok(tb3.problems.is_empty() and tb3_ex.size() == 3 and tb3_ex[0].sets.size() == 3 and int(tb3_ex[0].sets[2].reps) == 3 and tb3_ex[1].get("pt") == true and tb3_ex[1].sets.size() == 2 and float(tb3_ex[1].sets[0].weightKg) == 0.0 and tb3_ex[2].sets.size() == 2 and absf(float(tb3_ex[2].sets[1].weightKg) - 185.0 * 0.45359237) < 0.01, "a column per set, a PT column, and a weight inside a set's cell", tb3)
+	var tb4 = p("| Exercise | Hold | Reps |\n| Pigeon stretch | 45 | 2 |\n| Couch stretch | 60 | |", lb)
+	var tb4_ex = tb4.entries[0].data.exercises if tb4.entries.size() == 1 else []
+	ok(tb4.problems.is_empty() and tb4_ex.size() == 2 and int(tb4_ex[0].sets[0].reps) == 2 and int(tb4_ex[0].sets[0].holdSec) == 45 and tb4_ex[1].sets.size() == 1 and int(tb4_ex[1].sets[0].holdSec) == 60, "a Hold column is seconds; with no reps it is one hold", tb4)
+	var tb5 = p("| Exercise | Variation | Weight | Reps |
+| | | 80 | 3x5 |
+| Curl | cable | | |
+| Bench press | | 80 | 3x5 |", lb)
+	ok(tb5.entries.size() == 1 and tb5.problems.size() == 2 and str(tb5.problems[0].why).contains("no exercise") and str(tb5.problems[1].why).contains("no sets or reps") and str(tb5.problems[1].line) == "Curl | cable", "a row that cannot be read is a problem with its reason; the rest still counts", tb5.problems)
+	var tb8 = p("| Exercise | Variation | Weight | Set 1 | Set 2 | Set 3 |
+| 11/13 | | | | | |
+| Push-up | | | 20 | 20 | 18 |
+| 11/14 | | | | | |
+| Push-up | | | 22 | 20 | |
+| read 12 pages | | | | | |", lb)
+	ok(tb8.problems.is_empty() and tb8.entries.size() == 3 and tb8.entries[0].date == "2026-11-13" and tb8.entries[0].data.exercises[0].sets.size() == 3 and tb8.entries[1].date == "2026-11-14" and tb8.entries[1].data.exercises[0].sets.size() == 2 and tb8.entries[2].kind == "reading", "a row with one thing in it is that line: a date that starts a day, pages read", tb8)
+	var tb6 = p("| bench | 3x5 | @ 80 |\n| run | 5.2km | 27:30 |")
+	ok(tb6.problems.is_empty() and tb6.entries.size() == 2 and tb6.entries[1].data.get("discipline") == "run", "a table without a header: each row is read as a line", tb6)
+	var tb7 = p("| Date | Exercise | Reps |\n| 11/13 | Push-up | 3x20 |\n| 11/14 | Push-up | 3x22 |")
+	ok(tb7.entries.size() == 2 and tb7.entries[0].date == "2026-11-13" and tb7.entries[1].date == "2026-11-14" and tb7.entries[0].key != tb7.entries[1].key and tb7.entries[0].key == p("| Date | Exercise | Reps |\n| 11/13 | Push-up | 3x20 |").entries[0].key, "a date in a row starts a new day; a row keeps its key", tb7)
+	ok(QuickLog.table_role("Weight (lb)") == "weight" and QuickLog.table_role("Reps (each set)") == "reps" and QuickLog.table_role("Set 2") == "set" and QuickLog.table_role("PT?") == "pt" and QuickLog.table_role("Weight or hold") == "weight" and QuickLog.table_role("Felt") == "", "what a column holds, from its header")
+	var doc = "<html><head><style>td{x}</style></head><body><p><span>11/14</span></p><table><tbody><tr><td colspan=\"1\"><p><span>Exercise</span></p></td><td><p><span>Variation</span></p></td><td><p><span>Weight</span></p></td><td><p><span>Reps</span></p></td></tr><tr><td><p><span>Seated row</span></p></td><td><p><span>cable</span></p></td><td><p><span>70</span></p></td><td><p><span>12, </span><span>10, 9</span></p></td></tr><tr><td><p><span></span></p></td><td><p><span></span></p></td><td><p></p></td><td><p></p></td></tr></tbody></table><p><span>read 20&nbsp;pages</span></p></body></html>"
+	var doc_lines = []
+	for doc_ln in PhoneInbox.html_to_text(doc).split("\n"):
+		if doc_ln.strip_edges() != "":
+			doc_lines.append(doc_ln.strip_edges())
+	ok(doc_lines == ["11/14", "| Exercise | Variation | Weight | Reps |", "| Seated row | cable | 70 | 12, 10, 9 |", "|  |  |  |  |", "read 20 pages"], "a Google Doc's table comes through as one line per row", doc_lines)
+	var doc_parsed = p(PhoneInbox.html_to_text(doc), lb)
+	ok(doc_parsed.problems.is_empty() and doc_parsed.entries.size() == 2 and doc_parsed.entries[0].data.exercises[0].sets.size() == 3, "and reads as a lift and the pages under it", doc_parsed)
 	# A decimal typed without its zero.
 	ok(sets_of(one("bench 3x5 @ .5")) == [[5, 0.5], [5, 0.5], [5, 0.5]] and sets_of(one("curl 2x10 @.5kg")) == [[10, 0.5], [10, 0.5]], "'@ .5' is 0.5", [one("bench 3x5 @ .5"), one("curl 2x10 @.5kg")])
 	var nz_half = one("run .5km 3:00")

@@ -36,6 +36,8 @@ static func _before(data: Dictionary, skip_id = null) -> Array:
 static func delta_text(cmp: Dictionary, wu: String) -> String:
 	if absf(float(cmp.get("kg", 0.0))) > 1e-6:
 		return "%s%s" % ["+" if float(cmp.kg) > 0.0 else "-", Fmt.fmt_weight(absf(float(cmp.kg)), wu)]
+	if int(cmp.get("sec", 0)) != 0:
+		return "%s%d s" % ["+" if int(cmp.sec) > 0 else "-", absi(int(cmp.sec))]
 	var r = int(cmp.get("reps", 0))
 	if r != 0:
 		return "%s%d rep%s" % ["+" if r > 0 else "-", absi(r), "" if absi(r) == 1 else "s"]
@@ -68,7 +70,10 @@ static func done_sets(ex: Dictionary) -> Array:
 	var out = []
 	for one in ex.get("sets", []):
 		if int(one.get("reps", 0)) > 0:
-			out.append({"reps": int(one.reps), "weightKg": float(one.get("weightKg", 0))})
+			var kept = {"reps": int(one.reps), "weightKg": float(one.get("weightKg", 0))}
+			if int(one.get("holdSec", 0)) > 0:
+				kept["holdSec"] = int(one.holdSec)
+			out.append(kept)
 	return out
 
 

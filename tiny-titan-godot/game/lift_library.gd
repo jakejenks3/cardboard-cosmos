@@ -278,7 +278,10 @@ static func stats(sessions: Array) -> Dictionary:
 			var done = []
 			for one in ex.get("sets", []):
 				if int(one.get("reps", 0)) > 0:
-					done.append({"reps": int(one.reps), "weightKg": float(one.get("weightKg", 0))})
+					var kept = {"reps": int(one.reps), "weightKg": float(one.get("weightKg", 0))}
+					if int(one.get("holdSec", 0)) > 0:
+						kept["holdSec"] = int(one.holdSec)
+					done.append(kept)
 			if key == "" or done.is_empty():
 				continue
 			if not out.has(key):
