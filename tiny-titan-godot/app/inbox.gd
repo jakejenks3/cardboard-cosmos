@@ -26,6 +26,7 @@ const TIMEOUT_SEC = 30.0
 const NOT_SHARED = "That link is not shared. In Google Docs: Share → General access → Anyone with the link."
 const CHANGED_DAY = "this day changed after you imported it; importing adds it again (left out unless you tick it)"
 const UPDATES = "this day changed after you imported it; importing updates that entry"
+const SECOND_LIFT = "A second lift on this day (the one already in your log stays; check the date if it should be another day)"
 const PAGES_FILE = "inbox_pictures.json"
 const COULD_NOT_READ = "the Windows text reader did not answer, so the pictures are kept as photos"
 
@@ -558,10 +559,47 @@ func _resolve_updates(fresh: Array) -> void:
 			e.warnings.erase(CHANGED_DAY)
 			e.erase("skip")
 			continue
+		# Another workout of that day, written under the same date after the note
+		# was cleared, is a second session: never an edit that replaces the first.
+		if e.kind == "session" and str(e.data.get("discipline", "")) == "lift" and str(found.get("discipline", "")) == "lift" and not PhoneInbox.same_workout(found, e.data):
+			e.erase("replaces_key")
+			e.warnings.erase(CHANGED_DAY)
+			e.erase("skip")
+			continue
 		e["replaces"] = found.id
 		e.warnings.erase(CHANGED_DAY)
 		e.warnings.append(UPDATES)
 		e.erase("skip")
+	# A new lift on a day that already has one in the log: said, so a wrong date shows.
+	for e in fresh:
+		if e.kind != "session" or str(e.data.get("discipline", "")) != "lift" or e.has("replaces"):
+			continue
+		for x in app.sessions():
+			if str(x.get("discipline", "")) == "lift" and str(x.get("date", "")) == str(e.date):
+				e.warnings.append(SECOND_LIFT)
+				break
+
+
+## Is a lift entry a change to the session imported earlier for the same day,
+## or another workout of that day? The note is often cleared between visits and
+## the same date written again for the next workout: that must be a new
+## session, never an edit that would replace the first. An edit keeps the
+## exercises, adds to them or drops some; another workout shares few (a daily
+## PT exercise at most). Names are compared by LiftMatch.key.
+static func same_workout(old: Dictionary, new_data: Dictionary) -> bool:
+	var a = {}
+	for ex in old.get("exercises", []):
+		a[LiftMatch.key(str(ex.get("name", "")))] = true
+	var b = {}
+	for ex in new_data.get("exercises", []):
+		b[LiftMatch.key(str(ex.get("name", "")))] = true
+	if a.is_empty() or b.is_empty():
+		return true
+	var shared = 0
+	for k in b:
+		if a.has(k):
+			shared += 1
+	return shared == a.size() or shared == b.size() or shared * 2 >= maxi(a.size(), b.size())
 
 
 ## How many entries the note holds when everything in it is already imported

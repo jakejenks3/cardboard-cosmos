@@ -276,6 +276,18 @@ func run(m: Node, t: SceneTree) -> void:
 		var draft = LogLiftEditor.draft_from_sets("x", stretch.sets, "lb")
 		var round_trip = LogLiftEditor.sets_from_draft(draft, "lb")
 		check(round_trip.size() == 1 and int(round_trip[0].get("holdSec", 0)) == 30 and int(round_trip[0].reps) == 3, "editing the session in the Log tab keeps the seconds")
+	# --- the same date written again for another workout: a second session --------------
+	var again = "| Date | Exercise | Variation | Weight | Reps |\n| %s | Deadlift | | 225 | 5, 5 |" % yesterday
+	var ra = App.inbox.check_text(again)
+	var ra_e = ra.fresh[0] if ra.fresh.size() == 1 else {"warnings": []}
+	check(ra.fresh.size() == 1 and not ra_e.has("replaces") and not ra_e.has("skip") and ra_e.warnings.has(PhoneInbox.SECOND_LIFT), "another workout under a date already imported is a second session, said so (%s)" % str(ra_e.get("warnings")))
+	InboxSheet.open(ra)
+	await ShotHelper.wait(tree, 0.6)
+	check(ShotHelper.find_text(_sheet(), "A second lift on this day") != null and ShotHelper.find_text(_sheet(), "Updates the one") == null, "the review says it is a second lift, not an update")
+	await ShotHelper.snap(tree, "detail_12_second_lift")
+	await _close_sheets()
+	var re = App.inbox.check_text(table.replace("12, 12, 10", "12, 12, 12"))
+	check(re.fresh.size() == 1 and re.fresh[0].has("replaces"), "the same workout with a number changed is still an edit of it")
 	var text = FileAccess.get_file_as_string(App.SAVE_PATH)
 	var back = App.parse_saved(JSON.parse_string(text))
 	check(back != null and back.pt.size() == 4 and int(back.pt[Pt.key(lift_name)].perWeek) == 3, "the PT lifts are in the save file and read back")

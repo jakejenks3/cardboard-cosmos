@@ -223,6 +223,8 @@ static func _ctx(opts: Dictionary) -> Dictionary:
 		"picks": {},
 		# What the columns of the table being read hold (see _table_line); null outside one.
 		"table": null,
+		# The exercise the last table row was about (a row with no name goes on with it).
+		"table_last": null,
 		"today": today,
 		"wu": str(opts.get("weightUnit", "kg")),
 		"du": str(opts.get("distanceUnit", "km")),
@@ -298,39 +300,69 @@ static func _cell(cells: Array, roles: Array, role: String) -> String:
 	return ""
 
 
+## Where a table row's exercise name ends and its sets begin (table_row writes
+## "name ¦ sets"): a number in the name or the variation ("1 arm") is never
+## taken for a set, and the row is always read as a lift.
+const TABLE_MARK = "¦"
+## Words in a Weight cell that mean no weight at all.
+const NO_WEIGHT = ["bw", "bodyweight", "body weight", "-", "none", "no weight"]
+
+
+static func _quotes(text: String) -> String:
+	return text.replace("”", "\"").replace("“", "\"").replace("″", "\"")
+
+
 ## One row of a table as the lines it stands for, by what its columns hold:
-## {"lines": [...], "why": ""} ("why" says what is missing when it cannot be read).
+## {"lines": [...], "why": "" (what is missing when it cannot be read),
+##  "lift": {lift, variation, pt} the row was about (for the row under it), or null}.
 ##   | 11/14 | Seated row | cable, 1 arm | 70 | 12, 10, 9 |
-## is a date line "11/14" and "seated row - cable, 1 arm - 12, 10, 9 @ 70".
-## A weight written 30" (or a Hold column) is seconds held; a PT column with
-## anything in it puts "(PT)" in front; columns "Set 1", "Set 2"... hold one
-## set each ("13", or "13@80").
-static func table_row(cells: Array, roles: Array) -> Dictionary:
+## is a date line "11/14" and "seated row - cable, 1 arm ¦ 12, 10, 9 @ 70".
+## A row with numbers but no exercise goes on with the exercise of the row
+## above (`last`): a second weight of it. A weight written 30" (or a Hold
+## column) is seconds held. Words in the Weight column ("blue band") are
+## the resistance: they join the variation, and the sets carry no weight. A PT
+## column with anything in it puts "(PT)" in front; columns "Set 1", "Set 2"...
+## hold one set each ("13", or "13@80").
+static func table_row(cells: Array, roles: Array, last = null) -> Dictionary:
 	var lines = []
 	var date = _cell(cells, roles, "date")
 	var lift = _cell(cells, roles, "exercise")
 	var variation = _cell(cells, roles, "variation")
-	var weight = _cell(cells, roles, "weight")
-	var hold = _cell(cells, roles, "hold")
+	var weight = _quotes(_cell(cells, roles, "weight"))
+	var hold = _quotes(_cell(cells, roles, "hold"))
 	var n_sets = _cell(cells, roles, "sets")
 	var reps = _cell(cells, roles, "reps")
 	var note = _cell(cells, roles, "note")
-	var pt = _cell(cells, roles, "pt").to_lower()
+	var pt_cell = _cell(cells, roles, "pt").to_lower()
+	var pt = pt_cell != "" and not ["no", "n", "-", "0", "false", "x no"].has(pt_cell)
 	var each = []
 	for i in range(mini(cells.size(), roles.size())):
 		if str(roles[i]) == "set" and str(cells[i]) != "":
-			each.append(str(cells[i]))
+			each.append(_quotes(str(cells[i])))
 	if date != "":
 		lines.append(date)
 	var numbers = weight + hold + n_sets + reps + "".join(PackedStringArray(each))
+	if lift == "" and numbers != "" and last is Dictionary:
+		# No exercise but numbers: more sets of the exercise above (a second weight).
+		lift = str(last.lift)
+		if variation == "":
+			variation = str(last.variation)
+		pt = pt or bool(last.get("pt", false))
 	if lift == "":
 		if numbers != "":
-			return {"lines": lines, "why": "this row has numbers but no exercise"}
+			return {"lines": lines, "why": "this row has numbers but no exercise", "lift": null}
 		if note != "":
 			lines.append("note: " + note)
-		return {"lines": lines, "why": ""}
+		return {"lines": lines, "why": "", "lift": null}
+	var about = {"lift": lift, "variation": variation, "pt": pt}
+	var load = weight
+	if load != "" and _rx("\\d").search(load) == null:
+		# Words, no number: what the resistance is (a band); the sets carry no weight.
+		if not NO_WEIGHT.has(load.to_lower().strip_edges()):
+			variation = load if variation == "" else "%s, %s" % [variation, load]
+		load = "bw"
 	var title = lift if variation == "" else "%s - %s" % [lift, variation]
-	if pt != "" and not ["no", "n", "-", "0", "false", "x no"].has(pt) and not Pt.untag(title).pt:
+	if pt and not Pt.untag(title).pt:
 		title = "(PT) " + title
 	var spec = ""
 	if not each.is_empty():
@@ -341,7 +373,6 @@ static func table_row(cells: Array, roles: Array) -> Dictionary:
 		spec = reps
 	elif n_sets != "":
 		spec = n_sets
-	var load = weight
 	if hold != "":
 		# The Hold column is seconds, with or without the mark.
 		load = hold if _rx("[\"'a-z]").search(hold.to_lower()) != null else hold + "\""
@@ -350,14 +381,30 @@ static func table_row(cells: Array, roles: Array) -> Dictionary:
 		spec = load
 		load = ""
 	if spec == "":
-		return {"lines": lines, "why": "no sets or reps in this row"}
-	var line = "%s - %s" % [title, spec]
+		return {"lines": lines, "why": "no sets or reps in this row", "lift": about}
+	var line = "%s %s %s" % [title, TABLE_MARK, spec]
 	if load != "" and not spec.contains("@"):
 		line += " @ " + load
 	lines.append(line)
 	if note != "":
 		lines.append("note: " + note)
-	return {"lines": lines, "why": ""}
+	return {"lines": lines, "why": "", "lift": about}
+
+
+## A row whose only filled cell is in the Exercise column and is just words
+## ("band pull-apart", before its sets are written): read as an exercise row, so the
+## review says it has no sets yet. A date, "read 20 pages" or a note in that
+## column is still a line typed in a cell.
+static func _lone_exercise(cells: Array, roles: Array) -> bool:
+	for i in range(mini(cells.size(), roles.size())):
+		var c = str(cells[i]).strip_edges()
+		if c == "":
+			continue
+		if str(roles[i]) != "exercise":
+			return false
+		var low = c.to_lower()
+		return _rx("\\d").search(low) == null and _rx("^(?:#|//|notes?\\b|title\\b|duration\\b|time\\b|photo\\b|read\\b|reading\\b|pages\\b|lift\\b|gym\\b|climb\\b|-{3,})").search(low) == null
+	return false
 
 
 ## A line that is a table row ("| a | b | c |", as the inbox makes of a Google
@@ -386,13 +433,17 @@ static func _table_line(block: Dictionary, orig: String, ctx: Dictionary, out: D
 			named += 1
 	if roles.has("exercise") and named >= 2 and named >= filled.size() - 1:
 		ctx.table = roles
+		ctx.table_last = null
 		return block
 	var shown = " | ".join(PackedStringArray(filled))
-	var made = {"lines": [" ".join(PackedStringArray(filled))], "why": ""}
+	var made = {"lines": [" ".join(PackedStringArray(filled))], "why": "", "lift": null}
 	# A row with one thing in it is that thing typed as a line: a date ("11/14")
-	# that starts a day, "read 20 pages", a note. Anything else goes by the header.
-	if ctx.table != null and filled.size() > 1:
-		made = table_row(cells, ctx.table)
+	# that starts a day, "read 20 pages", a note. Anything else goes by the
+	# header, an exercise with nothing written beside it yet among them.
+	if ctx.table != null and (filled.size() > 1 or _lone_exercise(cells, ctx.table)):
+		made = table_row(cells, ctx.table, ctx.table_last)
+	# The exercise a row with no name goes on with; a date row ends it.
+	ctx.table_last = made.get("lift")
 	for ln in made.lines:
 		var t = normalize_line(str(ln))
 		if t != "":
@@ -405,6 +456,11 @@ static func _table_line(block: Dictionary, orig: String, ctx: Dictionary, out: D
 
 
 static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, out: Dictionary) -> Dictionary:
+	# A table's exercise row ("name ¦ sets", see table_row) is always a lift:
+	# "rope pushdown" or "dead hang" in the Exercise column is not a climb or a hang.
+	if t.contains(TABLE_MARK):
+		return _lift_line(block, orig, lead_zeros(t) if t.contains(".") else t, ctx, out)
+
 	# Separators: "---" starts new lift / climb sessions for the same day; a bare
 	# "lift" / "gym" starts a new lift session, a bare "climb" a new climb session.
 	if _rx("^(?:-{3,}|={3,}|_{3,})$").search(t) != null:
@@ -632,6 +688,11 @@ static func _line(block: Dictionary, orig: String, t: String, ctx: Dictionary, o
 		return block
 
 	# Lifting.
+	return _lift_line(block, orig, t, ctx, out)
+
+
+## A lifting line: its exercise joins the day's lift session (made by the first one).
+static func _lift_line(block: Dictionary, orig: String, t: String, ctx: Dictionary, out: Dictionary) -> Dictionary:
 	var l = _parse_lift(t, ctx)
 	if not l.ok:
 		out.problems.append({"line": orig, "why": l.why})
@@ -1199,26 +1260,38 @@ static func _parse_lift(line: String, ctx: Dictionary) -> Dictionary:
 	# the name and the exercise carries "pt" (see game/pt.gd).
 	var tag = Pt.untag(line)
 	var t: String = str(tag.name)
-	var toks = Array(t.split(" ", false))
-	var i = 0
-	while i < toks.size() and _rx(SETS_OPEN).search(toks[i]) == null:
-		i += 1
-	var typed = _lift_name(toks, i)
+	var typed = ""
 	var p = {"ok": false, "why": ""}
-	if i >= toks.size():
-		p.why = "not a date, workout or check-in I know"
-	elif _rx("[a-z]").search(typed) == null:
-		p.why = "no exercise name before the sets"
-	else:
-		p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
-	if not p.ok:
-		# The first number may belong to the name ("neck 4 way - 3x20@10").
-		var later = _later_cut(toks, i, ctx)
-		if later < 0:
+	var cut = t.find(TABLE_MARK)
+	if cut >= 0:
+		# A table row: the name is everything before the mark.
+		var head = Array(t.substr(0, cut).split(" ", false))
+		typed = _lift_name(head, head.size())
+		if _rx("[a-z]").search(typed) == null:
+			return {"ok": false, "why": "no exercise name before the sets"}
+		p = parse_sets(t.substr(cut + TABLE_MARK.length()).strip_edges(), ctx.wu)
+		if not p.ok:
 			return {"ok": false, "why": p.why}
-		i = later
+	else:
+		var toks = Array(t.split(" ", false))
+		var i = 0
+		while i < toks.size() and _rx(SETS_OPEN).search(toks[i]) == null:
+			i += 1
 		typed = _lift_name(toks, i)
-		p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
+		if i >= toks.size():
+			p.why = "not a date, workout or check-in I know"
+		elif _rx("[a-z]").search(typed) == null:
+			p.why = "no exercise name before the sets"
+		else:
+			p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
+		if not p.ok:
+			# The first number may belong to the name ("neck 4 way - 3x20@10").
+			var later = _later_cut(toks, i, ctx)
+			if later < 0:
+				return {"ok": false, "why": p.why}
+			i = later
+			typed = _lift_name(toks, i)
+			p = parse_sets(" ".join(PackedStringArray(toks.slice(i))), ctx.wu)
 	var pick = pick_exercise(typed, ctx, bool(tag.pt))
 	var name: String = str(pick.name)
 	var warnings = []

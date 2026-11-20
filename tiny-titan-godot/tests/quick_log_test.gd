@@ -261,6 +261,49 @@ neck 4 way 2x20@10")
 	ok(doc_lines == ["11/14", "| Exercise | Variation | Weight | Reps |", "| Seated row | cable | 70 | 12, 10, 9 |", "|  |  |  |  |", "read 20 pages"], "a Google Doc's table comes through as one line per row", doc_lines)
 	var doc_parsed = p(PhoneInbox.html_to_text(doc), lb)
 	ok(doc_parsed.problems.is_empty() and doc_parsed.entries.size() == 2 and doc_parsed.entries[0].data.exercises[0].sets.size() == 3, "and reads as a lift and the pages under it", doc_parsed)
+	# Table rows the way they get filled in mid-workout.
+	var tw = p("| Exercise | Variation | Weight | Set 1 | Set 2 | Set 3 |\n| 11/14 | | | | | |\n| Goblet squat | kettlebell | 35 | 12 | | |\n| | | 53 | 8 | 8 | |\n| Face pull | | blue band | 15 | 12 | |\n| | | black band | 10 | | |\n| Lat pulldown | 1 arm, cable | 60 | 10 | 8 | |\n| Rope pushdown | | 50 | 12 | 10 | |\n| Pull-up | | bw | 8 | 6 | |\n| Clamshell | | | | | |", lb)
+	var tw_ex = tw.entries[0].data.exercises if tw.entries.size() == 1 else []
+	var tw_by = {}
+	for tw_one in tw_ex:
+		tw_by[str(tw_one.name)] = tw_one
+	ok(tw.entries.size() == 1 and tw.entries[0].date == "2026-11-14" and tw_ex.size() == 6, "one lift for the day, six exercises", tw_by.keys())
+	var tw_row = {"sets": []}
+	for tw_name in tw_by:
+		if str(tw_name).begins_with("Goblet Squat"):
+			tw_row = tw_by[tw_name]
+	ok(tw_row.sets.size() == 3 and int(tw_row.sets[0].reps) == 12 and absf(float(tw_row.sets[0].weightKg) - 35.0 * 0.45359237) < 0.01 and int(tw_row.sets[2].reps) == 8 and absf(float(tw_row.sets[2].weightKg) - 53.0 * 0.45359237) < 0.01, "a row with no exercise goes on with the one above: a second weight of it", tw_by.keys())
+	var tw_blue = tw_by.get("Face Pull Blue Band", {"sets": []})
+	var tw_black = tw_by.get("Face Pull Black Band", {"sets": []})
+	ok(tw_blue.sets.size() == 2 and float(tw_blue.sets[0].weightKg) == 0.0 and tw_black.sets.size() == 1 and int(tw_black.sets[0].reps) == 10, "a band in the Weight column is the resistance: part of the name, no weight", tw_by.keys())
+	var tw_warned = false
+	for tw_w in tw.entries[0].warnings if tw.entries.size() == 1 else []:
+		if str(tw_w).contains("no weight given"):
+			tw_warned = true
+	ok(not tw_warned, "and no 'no weight given' warning, since the band was given", tw.entries[0].warnings if tw.entries.size() == 1 else [])
+	var tw_lat = tw_by.get("Lat Pulldown 1 Arm, Cable", {"sets": []})
+	ok(tw_lat.sets.size() == 2 and int(tw_lat.sets[0].reps) == 10, "a number in the variation ('1 arm') is part of the name, not a set", tw_by.keys())
+	var tw_rope = tw_by.get("Rope Pushdown", {"sets": []})
+	ok(tw_rope.sets.size() == 2 and int(tw_rope.sets[1].reps) == 10, "'rope pushdown' in the Exercise column is a lift, not a climb", tw_by.keys())
+	var tw_pull = tw_by.get("Pull-up", {"sets": []})
+	ok(tw_pull.sets.size() == 2 and float(tw_pull.sets[0].weightKg) == 0.0, "'bw' in the Weight column is bodyweight", tw_pull)
+	ok(tw.problems.size() == 1 and str(tw.problems[0].line) == "Clamshell" and str(tw.problems[0].why).contains("no sets or reps"), "an exercise with nothing beside it yet says it has no sets", tw.problems)
+	var tw2 = p("| Exercise | Weight | Set 1 |\n| 11/13 | | |\n| Squat | 100 | 5 |\n| 11/14 | | |\n| | 120 | 5 |")
+	ok(tw2.entries.size() == 1 and tw2.problems.size() == 1 and str(tw2.problems[0].why).contains("no exercise"), "a date row ends the exercise a nameless row would go on with", tw2)
+	var tw3 = p("| Exercise | PT | Weight | Set 1 | Set 2 |\n| Calf raise | x | | 15 | 15 |\n| | | 10 | 12 | |", lb)
+	var tw3_ex = tw3.entries[0].data.exercises if tw3.entries.size() == 1 else []
+	ok(tw3.problems.is_empty() and tw3_ex.size() == 1 and tw3_ex[0].get("pt") == true and tw3_ex[0].sets.size() == 3, "the row under a PT exercise stays PT", tw3)
+
+	# Another workout under a date already imported is a second session, not an edit of the first.
+	var sw_old = {"exercises": [{"name": "Bench Press"}, {"name": "Deadlift"}, {"name": "Neck 4 Way"}, {"name": "Dip"}]}
+	ok(not PhoneInbox.same_workout(sw_old, {"exercises": [{"name": "Pull-up"}, {"name": "Neck 4 Way"}, {"name": "Hip Thrust"}]}), "another workout that shares one exercise is not an edit")
+	ok(PhoneInbox.same_workout(sw_old, {"exercises": [{"name": "Bench Press"}, {"name": "Deadlift"}, {"name": "Neck 4 Way"}, {"name": "Dip"}, {"name": "Plank"}]}), "one exercise added is an edit")
+	ok(PhoneInbox.same_workout(sw_old, {"exercises": [{"name": "Bench Press"}, {"name": "Deadlift"}]}), "two dropped is an edit")
+	ok(PhoneInbox.same_workout({"exercises": [{"name": "Lunge"}]}, {"exercises": [{"name": "Lunge"}, {"name": "Dip"}, {"name": "Plank"}]}), "the old lines kept and more added is an edit")
+	ok(PhoneInbox.same_workout(sw_old, {"exercises": [{"name": "Bench Press"}, {"name": "Deadlift"}, {"name": "Neck 4 Way"}, {"name": "Dipp"}]}), "a typo fixed in one of four is an edit")
+	ok(PhoneInbox.same_workout({"exercises": [{"name": "Neck 4 Way"}, {"name": "Clamshell"}]}, {"exercises": [{"name": "Pull-up"}, {"name": "Neck 4 Way"}, {"name": "Lunge"}, {"name": "Hip Thrust"}, {"name": "Plank"}]}) == false, "a short PT session and a later workout sharing one exercise are two sessions")
+	ok(LiftMatch.tokens("hip abduction, home gym machine") == LiftMatch.tokens("hip abduction, machine"), "'home gym' says where, not which lift", LiftMatch.tokens("hip abduction, home gym machine"))
+
 	# Google's export writes some characters as codes: the curly quote of 30” comes as &rdquo;.
 	var ent_in = "3x30&rdquo; &ldquo;a&rdquo; b&amp;c &#8221; &#x201d; 5&nbsp;lb &lt;3 x&rsquo;s &amp;quot;"
 	ok(PhoneInbox.decode_entities(ent_in) == "3x30” “a” b&c ” ” 5 lb <3 x’s &quot;", "the codes of an exported doc become their characters", PhoneInbox.decode_entities(ent_in))

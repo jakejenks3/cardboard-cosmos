@@ -246,7 +246,17 @@ is the Windows handoff.
     as "(PT)", a note cell as `note:`), so names, PT and holds work as in typed lines. Rows
     that are empty are skipped; a row that cannot be read is a problem with its reason; a
     table without a header is read row by row as a line. Typed `| a | b |` lines work too.
-    A row with one filled cell is that cell typed as a line (a date that starts a day).
+    A row with one filled cell is that cell typed as a line (a date that starts a day),
+    unless it is just words in the Exercise column (`_lone_exercise`: an exercise with no
+    sets yet, reported as "no sets or reps in this row").
+  - Table rows as they get filled in mid-workout (2026-11-20): a row with numbers and no
+    exercise goes on with the exercise of the row above (`ctx.table_last`; a date row or a
+    header ends it), so a second weight is its own row; words in the Weight cell ("blue
+    band") are the resistance: they join the variation and the sets get `@ bw`, so no
+    "no weight given" warning. `table_row` writes `name ¦ sets` (`TABLE_MARK`): the lift
+    parser cuts the name there instead of at the first number (a "1 arm" variation is
+    safe), and `_line` sends such a line straight to the lift parser (`_lift_line`), so
+    "rope pushdown" or "dead hang" in the Exercise column is never read as a climb or a hang.
     Verified 2026-11-19 on the real doc: it now begins with a `#` hint line (skipped, like
     every `#` line) and a table headed Exercise, Variation, Weight, Set 1 to Set 4 with empty
     rows; the typed lines under it read exactly as before (same entries, same keys).
@@ -399,6 +409,15 @@ the check.
   under words of its own ("Chest Fly Cable", imported before the matching existed) stays under
   "Your own" in Journey -> Lifts instead of joining the library's Cable Fly. New spellings of
   it do join it.
+- A note line whose date header was used before is checked against what was imported under
+  it (`PhoneInbox.split_entries` / `_resolve_updates`): the same day changed is an edit that
+  REPLACES the session it came from. The user clears the note between visits and may write
+  the same date again for another workout, so for lifts `PhoneInbox.same_workout` decides:
+  an edit keeps the exercises, adds to them or drops some (by `LiftMatch.key`); a workout
+  sharing few is a second session, and the review says "A second lift on this day"
+  (`SECOND_LIFT`, also shown for any new lift on a day that already has one). Found
+  2026-11-20 on a copy of the real save, before it happened: a new table under 11/19 would
+  have replaced that day's earlier lift. Climbs under a reused date still count as an edit.
 - Editing a day in the phone note after it was imported updates that session only when it
   carries `inboxKey` (imports from 2026-11-15 on); older imports still get the "adds it
   again" warning and are left unticked.

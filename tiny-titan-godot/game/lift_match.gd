@@ -52,7 +52,7 @@ const PAIRS = {
 	"dead lift": "deadlift", "skull crusher": "skullcrusher", "kick back": "kickback", "t bar": "tbar",
 	"ez bar": "ez", "over head": "overhead", "up right": "upright", "good morning": "goodmorning",
 	"body weight": "bodyweight", "dumb bell": "dumbbell", "bar bell": "barbell", "kettle bell": "kettlebell",
-	"pull through": "pullthrough",
+	"pull through": "pullthrough", "home gym": "home",
 }
 ## "push up" is "pushup", "pull down" is "pulldown", "bent over" is "bentover", "roll out" is "rollout".
 const TAILS = ["up", "down", "over", "out"]

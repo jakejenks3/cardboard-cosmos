@@ -101,7 +101,13 @@ game reads the rows under it:
 The columns it knows: Date, Exercise, Variation (it joins the name: "Seated row - cable,
 1 arm"), PT (anything in the cell marks it), Weight (or `30"` for a hold), Hold, Sets, Reps
 ("3x10", or "12, 10, 9"), a column per set ("Set 1", "Set 2"...) and Notes. A date is only
-needed in the first row of a day; empty rows are skipped.
+needed in the first row of a day; empty rows are skipped. Leave Exercise empty on the next
+row to log another weight of the same exercise. A band can go in Weight ("blue band"): it
+becomes part of the exercise's name and the sets have no weight.
+
+Writing the same date again later for another workout adds a second session for that day; it
+never replaces the one you imported earlier (the review says "A second lift on this day").
+Changing the numbers of a day you already imported still updates it.
 
 A lift name does not have to be exact. The game compares the words, not the letters: another
 order, dashes and commas, plurals, short forms (`db`, `1UE`, `pulley`) and a small typo all read as
