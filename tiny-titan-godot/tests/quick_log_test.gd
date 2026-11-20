@@ -261,6 +261,12 @@ neck 4 way 2x20@10")
 	ok(doc_lines == ["11/14", "| Exercise | Variation | Weight | Reps |", "| Seated row | cable | 70 | 12, 10, 9 |", "|  |  |  |  |", "read 20 pages"], "a Google Doc's table comes through as one line per row", doc_lines)
 	var doc_parsed = p(PhoneInbox.html_to_text(doc), lb)
 	ok(doc_parsed.problems.is_empty() and doc_parsed.entries.size() == 2 and doc_parsed.entries[0].data.exercises[0].sets.size() == 3, "and reads as a lift and the pages under it", doc_parsed)
+	# Google's export writes some characters as codes: the curly quote of 30” comes as &rdquo;.
+	var ent_in = "3x30&rdquo; &ldquo;a&rdquo; b&amp;c &#8221; &#x201d; 5&nbsp;lb &lt;3 x&rsquo;s &amp;quot;"
+	ok(PhoneInbox.decode_entities(ent_in) == "3x30” “a” b&c ” ” 5 lb <3 x’s &quot;", "the codes of an exported doc become their characters", PhoneInbox.decode_entities(ent_in))
+	var ent = p(PhoneInbox.html_to_text("<html><body><p><span>11/14</span></p><p><span>(PT) hip flexor stretch - 3x30&rdquo;</span></p><p><span>(PT) toe stretch - 2x45&quot;</span></p><p><span>goblet squat 3x8 @ 40</span></p></body></html>"))
+	var ent_ex = ent.entries[0].data.exercises if ent.entries.size() == 1 else []
+	ok(ent.problems.is_empty() and ent_ex.size() == 3 and ent_ex[0].sets.size() == 3 and int(ent_ex[0].sets[0].get("holdSec", 0)) == 30 and int(ent_ex[1].sets[1].get("holdSec", 0)) == 45 and not ent_ex[2].sets[0].has("holdSec"), "a stretch typed with a curly quote in a Google Doc is a hold", [ent.problems, ent_ex])
 	# A decimal typed without its zero.
 	ok(sets_of(one("bench 3x5 @ .5")) == [[5, 0.5], [5, 0.5], [5, 0.5]] and sets_of(one("curl 2x10 @.5kg")) == [[10, 0.5], [10, 0.5]], "'@ .5' is 0.5", [one("bench 3x5 @ .5"), one("curl 2x10 @.5kg")])
 	var nz_half = one("run .5km 3:00")

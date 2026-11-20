@@ -148,9 +148,10 @@ adds it to today's workout. "New to me" shows what you have never done.
 lift as its own row: the sets, and a tag that compares them with the last time (NEW, PR,
 +2.5 lb, -4 reps, same). A session in your log opens the same list (Journey → Log, or the
 recent ones on the Hero tab), with the XP it earned and an Edit key. Click any exercise for
-the lift's page: **Trends** has Weight (the heaviest set of each day), Reps, Volume and How
-often (days done in each of the last eight weeks), with how much it changed since the first
-day, and under it the history, day by day.
+the lift's page. It reads from the top: your newest session in big numbers with the change
+since the time before; one line graph of the lift over time (Weight to start with; Reps,
+Volume and How often are one tap away), with how much it changed since the first day; then
+the history as a list, one row per day with that day's change; then your records.
 
 **Physical therapy.** Write `(PT)` in front of an exercise (`(PT) neck 4 way - 3x20@10`), in
 the phone note or in the Log tab, and that lift becomes a physical therapy exercise; the

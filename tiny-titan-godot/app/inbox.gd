@@ -397,11 +397,35 @@ static func html_to_text(html: String) -> String:
 	h = RegEx.create_from_string("(?is)<br\\s*/?>|</(?:p|div|li|tr|h[1-6]|table)>").sub(h, "\n", true)
 	h = RegEx.create_from_string("(?is)</t[dh]>").sub(h, " ", true)
 	h = RegEx.create_from_string("(?s)<[^>]+>").sub(h, "", true)
-	h = h.replace("&nbsp;", " ").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
-	var m = RegEx.create_from_string("&#(\\d+);")
-	for hit in m.search_all(h):
-		h = h.replace(hit.get_string(0), char(int(hit.get_string(1))))
-	return h
+	return decode_entities(h)
+
+
+## What Google's export writes in place of some characters, and the character.
+## The curly quotes matter most: 30" (thirty seconds held) arrives as 30&rdquo;.
+const ENTITIES = {
+	"nbsp": " ", "quot": "\"", "apos": "'", "lt": "<", "gt": ">",
+	"ldquo": "“", "rdquo": "”", "lsquo": "‘", "rsquo": "’", "sbquo": "‚", "bdquo": "„",
+	"prime": "′", "Prime": "″", "ndash": "–", "mdash": "—", "minus": "−", "times": "×", "divide": "÷",
+	"deg": "°", "hellip": "…", "middot": "·", "bull": "•", "frac12": "½", "frac14": "¼", "frac34": "¾",
+	"plusmn": "±", "laquo": "«", "raquo": "»", "ensp": " ", "emsp": " ", "thinsp": " ", "shy": "",
+}
+
+
+## "&rdquo;" -> ”, "&#8221;" -> ”, "&#x201d;" -> ”. "&amp;" goes last, so the
+## text "&amp;quot;" stays the text "&quot;".
+static func decode_entities(text: String) -> String:
+	var out = text
+	if not out.contains("&"):
+		return out
+	for hit in RegEx.create_from_string("&([A-Za-z][A-Za-z0-9]{1,7});").search_all(out):
+		var word = hit.get_string(1)
+		if ENTITIES.has(word):
+			out = out.replace(hit.get_string(0), str(ENTITIES[word]))
+	for hit in RegEx.create_from_string("&#(\\d{1,7});").search_all(out):
+		out = out.replace(hit.get_string(0), char(int(hit.get_string(1))))
+	for hit in RegEx.create_from_string("&#[xX]([0-9A-Fa-f]{1,6});").search_all(out):
+		out = out.replace(hit.get_string(0), char(hit.get_string(1).hex_to_int()))
+	return out.replace("&amp;", "&")
 
 
 ## Every table of the HTML as lines of text, one per row, the cells between

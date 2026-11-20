@@ -191,12 +191,19 @@ is the Windows handoff.
     does `SessionView.open(session)`: the detail sheet a session row now opens
     (`Parts.session_row`; the Edit key is inside the sheet).
   - `game/lift_trend.gd` (`LiftTrend`, pure): `day`, `by_day`, `series(history, "weight" |
-    "reps" | "volume" | "e1rm")`, `per_week`, `weekly_rate`, `compare`, `change`. The lift page
-    (`JourneyLifts.open_detail`, or `open_named(name, opts)` from any list of exercises) has a
-    Trends picker (Weight, Reps, Volume, How often; only the chart is rebuilt, the choice is
-    kept in `_metric`) where the single one-rep-max line was, and with `opts.pending` shows the
-    note's sets on top against the last time. `ui/charts/week_bars.gd` (`WeekBars`, and
-    `WeekBars.Dots` for one week) draws days done per week.
+    "reps" | "volume" | "e1rm" | "hold")`, `per_week`, `weekly_rate`, `compare`, `change`.
+    `ui/charts/week_bars.gd` (`WeekBars`, and `WeekBars.Dots` for one week) draws days done
+    per week.
+  - The lift page (`JourneyLifts.open_detail`, or `open_named(name, opts)` from any list of
+    exercises), top to bottom, one thing to look at per block (reorganised 2026-11-19 after
+    "hard to tell where the eyes need to look"): `_now_card` (the newest session big: the
+    number the lift is about, its sets, the change against the time before; with
+    `opts.pending` that is the note's sets, "In your note"), `_trend_card` (ONE line chart
+    with a picker: it opens on `main_metric`, the note's sets are its last point; only the
+    chart is rebuilt), `_history_list` (a row per day: date, sets, the change of that day),
+    `_records` (tiles; the rep-best chips only when they differ), the physical therapy
+    card, then "How to do it" and the variations. Keep that order: new things go below the
+    chart, not above it.
   - Physical therapy: `game/pt.gd` (`Pt`). Which lifts are PT is STORED, not derived:
     `saved.pt` = {normalized lift name: {name, perWeek}} (`App.pt()`, `set_pt`, `set_pt_goal`).
     A lift gets there by "(PT)" in front of an exercise in the phone note (`Pt.untag` in
@@ -227,6 +234,10 @@ is the Windows handoff.
     `LiftLibrary.stats` (keeps `holdSec`), the lift page (a Hold trend and "s longest hold"
     where the weight would be) and `LogLiftEditor.draft_from_sets` / `sets_from_draft`, which
     carry the seconds through an edit (the editor has no field for them yet).
+  - Google's export writes some characters as codes (`3x30&rdquo;` for the curly quote a
+    phone types after 30): `PhoneInbox.decode_entities` (named, decimal and hex codes) runs at
+    the end of `html_to_text`. An undecoded code is why a line can look fine in the doc and
+    still be "not read": print `App.inbox.last_text` (the `realdoc` walkthrough does).
   - A table: `PhoneInbox.html_to_text` turns every table of the Google Doc into one line per
     row, `| cell | cell |` (`_tables_to_rows`). `QuickLog._table_line` reads those: a row
     naming its columns is a header (`table_role`: date, exercise, variation, pt, weight, hold,
@@ -378,8 +389,8 @@ the check.
   note shows there as reps without weight (its seconds are kept when the session is saved).
 - A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules
   have no timed sets.
-- Switching "Physical therapy" on a lift's page does not redraw the Trends chart under it
-  (the goal line of "How often" shows the next time the page opens).
+- Switching "Physical therapy" on a lift's page does not redraw the chart above it (the
+  goal line of "How often" shows the next time the page opens).
 - Lift names are matched when a note is imported, not afterwards: a lift already in the log
   under words of its own ("Chest Fly Cable", imported before the matching existed) stays under
   "Your own" in Journey -> Lifts instead of joining the library's Cable Fly. New spellings of

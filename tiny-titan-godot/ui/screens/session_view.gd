@@ -46,22 +46,22 @@ static func delta_text(cmp: Dictionary, wu: String) -> String:
 
 ## How a session's sets compare with the time before (LiftTrend.compare), as a
 ## small coloured tag: NEW, PR, +2.5 lb, -4 reps, same. Null when there is
-## nothing to say.
-static func compare_tag(cmp: Dictionary, wu: String):
+## nothing to say. `size`: the font size (the top of a lift's page uses 12).
+static func compare_tag(cmp: Dictionary, wu: String, size: int = 10):
 	var change = delta_text(cmp, wu)
 	match str(cmp.get("kind", "none")):
 		"first":
-			return Kit.tag("NEW", Pal.SECOND, false, 10)
+			return Kit.tag("NEW", Pal.SECOND, false, size)
 		"up":
 			if bool(cmp.get("pr", false)):
-				return Kit.tag(("PR " + change).strip_edges(), Pal.ACCENT, true, 10)
-			return Kit.tag(change, Pal.GOOD, true, 10)
+				return Kit.tag(("PR " + change).strip_edges(), Pal.ACCENT, true, size)
+			return Kit.tag(change, Pal.GOOD, true, size)
 		"down":
 			if bool(cmp.get("pr", false)):
-				return Kit.tag("PR", Pal.ACCENT, true, 10)
-			return Kit.tag(change, Pal.ACCENT2, true, 10)
+				return Kit.tag("PR", Pal.ACCENT, true, size)
+			return Kit.tag(change, Pal.ACCENT2, true, size)
 		"same":
-			return Kit.tag("same", Pal.PANEL2, false, 10)
+			return Kit.tag("same as last time" if size > 10 else "same", Pal.PANEL2, false, size)
 	return null
 
 

@@ -211,10 +211,6 @@ static func open_named(lift_name: String, opts: Dictionary = {}) -> void:
 	open_detail(found, rows, opts)
 
 
-## The trend looked at last, kept from one lift to the next.
-static var _metric = ""
-
-
 ## The numbers of a lift that can be charted, as the picker's options.
 static func trend_options(history: Array) -> Array:
 	var out = []
@@ -230,7 +226,15 @@ static func trend_options(history: Array) -> Array:
 	return out
 
 
-## A number of a trend with its unit: "52.5 lb", "3.4k lb", "68".
+## The number a lift is about: the seconds when it is held, the weight when it
+## carries one, else the reps. The page opens on its chart.
+static func main_metric(history: Array) -> String:
+	if LiftTrend.held(history):
+		return "hold"
+	return "weight" if LiftTrend.weighted(history) else "reps"
+
+
+## A number of a trend with its unit: "52.5 lb", "3.4k lb", "30 s", "68".
 static func trend_text(metric: String, v: float, wu: String) -> String:
 	match metric:
 		"weight":
@@ -242,67 +246,71 @@ static func trend_text(metric: String, v: float, wu: String) -> String:
 	return str(TTUtil.jsround(v))
 
 
-## "Trends": a picker (weight, reps, volume, how often) and the chart it picks.
-## Only the chart is rebuilt when another one is picked.
-static func _trend_block(box: Control, st: Dictionary, wu: String, goal: int) -> void:
-	box.add_child(Kit.section_title("Trends"))
-	var options = trend_options(st.history)
-	var current = str(options[0].value)
-	for o in options:
-		if str(o.value) == _metric:
-			current = _metric
+## The trend: one chart in a card, with a picker for what it shows. It opens on
+## the number the lift is about. `history` is every session of the lift, the
+## note's sets among them when the page was opened from the phone note. Only
+## the chart is rebuilt when another number is picked.
+static func _trend_card(box: Control, history: Array, wu: String, goal: int) -> void:
+	var current = main_metric(history)
 	var holder = Kit.vbox(6)
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(Kit.segmented(options, current, JourneyLifts._show_trend.bind(holder, st, wu, goal), Pal.LIFT))
-	box.add_child(holder)
-	_show_trend(current, holder, st, wu, goal)
+	var c = Kit.card(8, Callable(), 10)
+	c.add(Kit.segmented(trend_options(history), current, JourneyLifts._show_trend.bind(holder, history, wu, goal), Pal.LIFT))
+	c.add(holder)
+	box.add_child(c)
+	_show_trend(current, holder, history, wu, goal)
 
 
-static func _show_trend(metric, holder: Control, st: Dictionary, wu: String, goal: int) -> void:
+static func _show_trend(metric, holder: Control, history: Array, wu: String, goal: int) -> void:
 	if not is_instance_valid(holder):
 		return
-	_metric = str(metric)
+	var which = str(metric)
 	for old in holder.get_children():
 		holder.remove_child(old)
 		old.queue_free()
-	if _metric == "often":
-		var weeks = LiftTrend.per_week(st.history, App.today, 8)
-		var chips = Kit.flow(6)
-		chips.add_child(JourneyScreen.value_chip("A week", Fmt.to_fixed(LiftTrend.weekly_rate(weeks), 1), Pal.LIFT, "Days a week on average, counted from the first of these weeks it was done in"))
-		chips.add_child(JourneyScreen.value_chip("Last", Dates.relative_day(st.last, App.today), Pal.LIFT, "The last day it was done"))
-		chips.add_child(JourneyScreen.value_chip("Days in all", str(LiftTrend.days_done(st.history).size()), Pal.LIFT, "Days it was done on, ever"))
-		holder.add_child(chips)
+	if which == "often":
+		var weeks = LiftTrend.per_week(history, App.today, 8)
 		var bars = WeekBars.new()
 		bars.setup(weeks, Pal.PT if goal > 0 else Pal.LIFT, goal)
 		holder.add_child(bars)
-		holder.add_child(Kit.muted("Days done in each of the last 8 weeks" + (" (the line is your %d a week)" % goal if goal > 0 else ""), 11))
+		var last_day = ""
+		for d in LiftTrend.days_done(history):
+			if str(d) > last_day:
+				last_day = str(d)
+		var said = Kit.hbox(8)
+		said.add_child(Kit.vcenter(Kit.tag("%s a week" % Fmt.to_fixed(LiftTrend.weekly_rate(weeks), 1), Pal.LIFT, true, 12)))
+		var last_text = Dates.relative_day(last_day, App.today)
+		if Dates.days_between(last_day, App.today) <= 1:
+			last_text = last_text.to_lower()
+		var rest = "%d days in all · last %s" % [LiftTrend.days_done(history).size(), last_text]
+		if goal > 0:
+			rest += " · the line is your %d a week" % goal
+		said.add_child(Kit.vcenter(Kit.clip(rest, 12, Pal.MUTED)))
+		holder.add_child(said)
 		return
 	var points = []
-	for p in LiftTrend.series(st.history, _metric):
-		points.append({"x": p.x, "y": float(p.y) if (_metric == "reps" or _metric == "hold") else Fmt.kg_to_unit(float(p.y), wu)})
-	var what = {"weight": "The heaviest set of each day", "reps": "Every rep of each day", "volume": "Weight x reps of each day", "hold": "The longest hold of each day"}[_metric]
-	if points.size() < 2:
-		var only = Kit.hbox(8)
-		if points.size() == 1:
-			only.add_child(JourneyScreen.value_chip(Dates.format_date(points[0].x), trend_text(_metric, float(points[0].y), wu), Pal.LIFT, what))
-		only.add_child(Kit.para("One day so far. The next one starts the line.", 12, Pal.MUTED))
-		holder.add_child(only)
+	for p in LiftTrend.series(history, which):
+		points.append({"x": p.x, "y": float(p.y) if (which == "reps" or which == "hold") else Fmt.kg_to_unit(float(p.y), wu)})
+	var what = {"weight": "The heaviest set of each day", "reps": "Every rep of each day", "volume": "Weight x reps of each day", "hold": "The longest hold of each day"}[which]
+	if points.is_empty():
+		holder.add_child(Kit.para("Nothing to chart here yet.", 12, Pal.MUTED))
 		return
-	var ch = LiftTrend.change(points)
-	var delta = float(ch.delta)
-	var since = "since %s" % Dates.format_date(points[0].x)
-	var head = Kit.hbox(8)
-	if absf(delta) < 0.05:
-		head.add_child(Kit.vcenter(Kit.tag("Level", Pal.PANEL2, false, 12)))
-	else:
-		head.add_child(Kit.vcenter(Kit.tag("%s%s" % ["+" if delta > 0.0 else "-", trend_text(_metric, absf(delta), wu)], Pal.GOOD if delta > 0.0 else Pal.ACCENT2, true, 12)))
-	head.add_child(Kit.vcenter(Kit.clip("%s · %d sessions" % [since, int(ch.n)], 12, Pal.MUTED)))
-	holder.add_child(head)
-	var metric_now = _metric
-	var ln = Charts.line(points, Pal.LIFT, func(val): return JourneyLifts.trend_text(metric_now, float(val), wu))
+	var ln = Charts.line(points, Pal.LIFT, func(val): return JourneyLifts.trend_text(which, float(val), wu))
 	ln.tooltip_text = what
 	holder.add_child(ln)
-	holder.add_child(Kit.muted(what, 11))
+	var said = Kit.hbox(8)
+	if points.size() < 2:
+		said.add_child(Kit.vcenter(Kit.tag("First day", Pal.SECOND, false, 12)))
+		said.add_child(Kit.vcenter(Kit.clip("The line starts with the next one", 12, Pal.MUTED)))
+	else:
+		var ch = LiftTrend.change(points)
+		var delta = float(ch.delta)
+		if absf(delta) < 0.05:
+			said.add_child(Kit.vcenter(Kit.tag("Level", Pal.PANEL2, false, 12)))
+		else:
+			said.add_child(Kit.vcenter(Kit.tag("%s%s" % ["+" if delta > 0.0 else "-", trend_text(which, absf(delta), wu)], Pal.GOOD if delta > 0.0 else Pal.ACCENT2, true, 12)))
+		said.add_child(Kit.vcenter(Kit.clip("since %s · %d sessions" % [Dates.format_date(points[0].x), int(ch.n)], 12, Pal.MUTED)))
+	holder.add_child(said)
 
 
 ## The physical therapy card of a lift: a switch, and when it is on, this
@@ -362,9 +370,137 @@ static func _set_goal(holder: Control, lift: String, per_week: int) -> void:
 	_pt_block(holder, lift)
 
 
-## The detail sheet of one lift. opts:
+## The top of a lift's page: its newest session, big. From the phone note that
+## is the note's sets, else the last time it was done. The number the lift is
+## about on the left; the sets and how they compare with the time before on
+## the right. `cur` is a history row, `before` the rows older than it.
+static func _now_card(cur: Dictionary, before: Array, wu: String) -> Card:
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	var from_note = bool(cur.get("note", false))
+	var day = LiftTrend.day(cur.sets)
+	var c = Kit.card(8, Callable(), 12)
+	c.accent(Pal.GOOD if from_note else Pal.LIFT)
+	var kicker = Kit.hbox(6)
+	kicker.add_child(Kit.vcenter(Icons.rect("speech" if from_note else "calendar", 16)))
+	var when = Dates.format_date(str(cur.date), {"weekday": "short", "month": "short", "day": "numeric"})
+	kicker.add_child(Kit.vcenter(Kit.clip(("In your note · %s" if from_note else "Last time · %s") % when, 12, Pal.MUTED, true)))
+	c.add(kicker)
+	var num = str(int(day.bestReps))
+	var unit = "reps, best set"
+	if int(day.holdSec) > 0:
+		num = str(int(day.holdSec))
+		unit = "seconds held"
+	elif float(day.topKg) > 0.0:
+		var parts = JourneyScreen.split_unit(Fmt.fmt_weight(float(day.topKg), wu))
+		num = str(parts[0])
+		unit = "%s, top set" % str(parts[1])
+	var row = Kit.hbox(14)
+	var big = Kit.vbox(2)
+	big.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var digits = PixelFont.rect(num, 4 if num.length() <= 5 else 3, Pal.ACCENT)
+	digits.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	big.add_child(digits)
+	big.add_child(Kit.label(unit, 11, Pal.MUTED, true))
+	row.add_child(big)
+	var words = Kit.vbox(6)
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	words.add_child(Kit.para(LiftHistory.describe_sets(cur.sets, fmt_w), 15, null, true))
+	var tag = SessionView.compare_tag(LiftTrend.compare(cur.sets, before), wu, 12)
+	if tag != null:
+		words.add_child(tag)
+	row.add_child(words)
+	c.add(row)
+	if not before.is_empty():
+		var prev_day = Dates.relative_day(before[0].date, App.today)
+		if Dates.days_between(str(before[0].date), App.today) <= 1:
+			prev_day = prev_day.to_lower()
+		c.add(Kit.clip("Before that (%s): %s" % [prev_day, LiftHistory.describe_sets(before[0].sets, fmt_w)], 12, Pal.MUTED))
+	return c
+
+
+## The history as a list, newest first: the day, what was done, and how it
+## compares with the day before it. A day opens its session.
+static func _history_list(box: Control, sheet: Sheet, history: Array, wu: String) -> void:
+	box.add_child(Kit.section_title("History"))
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	var this_year = App.today.substr(0, 4)
+	var shown = mini(8, history.size())
+	for i in range(shown):
+		var hs = history[i]
+		var from_note = bool(hs.get("note", false))
+		var hc = Kit.card(0, Callable() if from_note else JourneyLifts._open_session.bind(sheet, hs.id), 7)
+		if from_note:
+			hc.accent(Pal.GOOD)
+		else:
+			hc.tooltip_text = "Everything you did that day"
+		var hr = _ig(Kit.hbox(8))
+		var day_text = Dates.format_date(str(hs.date)) if str(hs.date).substr(0, 4) == this_year else Dates.format_date(str(hs.date), {"month": "short", "day": "numeric", "year": "numeric"})
+		var d = Kit.label(day_text, 12, Pal.GOOD if from_note else Pal.MUTED, true)
+		d.custom_minimum_size.x = 52
+		hr.add_child(Kit.vcenter(d))
+		var what = Kit.clip(LiftHistory.describe_sets(hs.sets, fmt_w), 13, null, true)
+		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hr.add_child(Kit.vcenter(what))
+		var tag = SessionView.compare_tag(LiftTrend.compare(hs.sets, history.slice(i + 1)), wu)
+		if tag != null:
+			hr.add_child(Kit.vcenter(tag))
+		hc.add(hr)
+		box.add_child(hc)
+	if history.size() > shown:
+		box.add_child(Kit.muted("and %d earlier session%s" % [history.size() - shown, "" if history.size() - shown == 1 else "s"], 11))
+
+
+## The lift's bests, from the log: three tiles, the heaviest set for each rep
+## count when they differ, and one line of totals.
+static func _records(box: Control, st: Dictionary, wu: String) -> void:
+	box.add_child(Kit.section_title("Records"))
+	var vals
+	var caps
+	if float(st.bestKg) > 0.0:
+		var bw = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.bestKg), wu))
+		var e1 = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.e1rm), wu, 0))
+		vals = [bw[0], e1[0], str(int(st.count))]
+		caps = ["%s × %d best" % [bw[1], int(st.bestReps)], "%s est. 1RM" % e1[1], "Sessions"]
+	elif LiftTrend.held(st.history):
+		# A stretch or other hold: seconds are what counts.
+		vals = [str(longest_hold(st.history)), Xp.fmt_int(st.reps), str(int(st.count))]
+		caps = ["s longest hold", "Holds in all", "Sessions"]
+	else:
+		vals = [str(int(st.bwReps)), Xp.fmt_int(st.reps), str(int(st.count))]
+		caps = ["Best set", "Reps in all", "Sessions"]
+	var sc = JourneyScreen.fit_scale(vals, 96, 3)
+	var g = Kit.grid(3, 8)
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var cols = [Pal.ACCENT, Pal.LIFT, Pal.TEXT]
+	for i in range(3):
+		var t = JourneyScreen.well_tile(vals[i], caps[i], cols[i], sc)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		g.add_child(t)
+	box.add_child(g)
+	# The heaviest set of at least 1, 3, 5... reps: worth showing only when they differ.
+	var marks = LiftLibrary.rep_bests(st)
+	var different = {}
+	for m in marks:
+		different[snappedf(float(m.kg), 0.01)] = true
+	if different.size() >= 2:
+		var mf = Kit.grid(mini(3, marks.size()), 6)
+		mf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for m in marks:
+			mf.add_child(JourneyScreen.value_chip("1 rep" if int(m.reps) == 1 else "%d+ reps" % int(m.reps), Fmt.fmt_weight(float(m.kg), wu), Pal.LIFT, "Heaviest set of at least %d rep%s" % [int(m.reps), "" if int(m.reps) == 1 else "s"]))
+		box.add_child(mf)
+	var facts = "Last done %s" % Dates.relative_day(st.last, App.today)
+	if float(st.volumeKg) > 0.0:
+		facts += " · %s lifted in all" % Fmt.fmt_big_kg(float(st.volumeKg), wu)
+	box.add_child(Kit.muted(facts, 12))
+
+
+## The page of one lift, top to bottom: its newest session big, the trend
+## chart, the history as a list, then the records, the physical therapy switch
+## and the notes. opts:
 ##   "pending": {"date", "sets"}  sets from the phone note that are not in the
-##                                log yet: shown on top, compared with the last time
+##                                log yet: they are the newest session, and a
+##                                point on the chart
 ##   "skip_id": a session to leave out of the history (the one such a note replaces)
 static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> void:
 	Sfx.tap()
@@ -381,44 +517,32 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 			if kept.is_empty():
 				st = null
 	var lift = str(st.name) if st != null else str(e.name)
-	var fmt_sets = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	# Every session of the lift, newest first, the note's sets among them.
+	var history = []
+	if st != null:
+		history = st.history.duplicate()
+	var pending = opts.get("pending")
+	var cur = null
+	if pending is Dictionary:
+		cur = {"date": str(pending.date), "id": "", "sets": pending.sets, "note": true}
+		history.append(cur)
+		TTUtil.stable_sort(history, func(a, b):
+			if str(a.date) != str(b.date):
+				return str(a.date) > str(b.date)
+			return bool(a.get("note", false)) and not bool(b.get("note", false)))
+	elif not history.is_empty():
+		cur = history[0]
+
 	var tags = Kit.flow(6)
 	tags.add_child(Kit.tag(LiftLibrary.part_name(e.part), part_color(e.part), true, 12))
 	if not e.own:
 		tags.add_child(Kit.tag(LiftLibrary.equip_name(e.equip), Pal.PANEL2, false, 12))
 		tags.add_child(Kit.tag(str(e.family), Pal.PANEL2, false, 12))
+	if Pt.is_pt(App.pt(), lift) or (pending is Dictionary and bool(pending.get("pt", false))):
+		tags.add_child(SessionView.pt_tag(12))
 	box.add_child(tags)
 
-	var pending = opts.get("pending")
-	if pending is Dictionary:
-		var before = []
-		if st != null:
-			before = st.history.filter(func(hh): return str(hh.date) <= str(pending.date))
-		var pc = Kit.card(4, Callable(), 10)
-		pc.accent(Pal.GOOD)
-		var ptop = Kit.hbox(6)
-		ptop.add_child(Kit.vcenter(Icons.rect("speech", 16)))
-		ptop.add_child(Kit.vcenter(Kit.clip("In your note · %s" % Dates.format_date(str(pending.date), {"weekday": "short", "month": "short", "day": "numeric"}), 12, Pal.MUTED, true)))
-		pc.add(ptop)
-		var pline = Kit.hbox(8)
-		pline.add_child(Kit.vcenter(Kit.clip(LiftHistory.describe_sets(pending.sets, fmt_sets), 15, null, true)))
-		var ptag = SessionView.compare_tag(LiftTrend.compare(pending.sets, before), wu)
-		if ptag != null:
-			pline.add_child(Kit.vcenter(ptag))
-		pc.add(pline)
-		if not before.is_empty():
-			pc.add(Kit.clip("Last time (%s): %s" % [Dates.relative_day(before[0].date, App.today), LiftHistory.describe_sets(before[0].sets, fmt_sets)], 12, Pal.MUTED))
-		box.add_child(pc)
-
-	box.add_child(Kit.para(e.tip, 14))
-	if str(e.also) != "":
-		box.add_child(Kit.muted_para("Also works: " + str(e.also), 12))
-	var pt_holder = Kit.vbox(0)
-	pt_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_child(pt_holder)
-	_pt_block(pt_holder, lift)
-
-	if st == null:
+	if cur == null:
 		var nc = Kit.card(4, Callable(), 10)
 		nc.accent(Pal.SECOND)
 		var nr = Kit.hbox(8)
@@ -427,65 +551,22 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		nc.add(nr)
 		box.add_child(nc)
 	else:
-		var vals
-		var caps
-		if float(st.bestKg) > 0.0:
-			var bw = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.bestKg), wu))
-			var e1 = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.e1rm), wu, 0))
-			vals = [bw[0], e1[0], str(int(st.count))]
-			caps = ["%s × %d best" % [bw[1], int(st.bestReps)], "%s est. 1RM" % e1[1], "Sessions"]
-		elif LiftTrend.held(st.history):
-			# A stretch or other hold: seconds are what counts.
-			vals = [str(longest_hold(st.history)), Xp.fmt_int(st.reps), str(int(st.count))]
-			caps = ["s longest hold", "Holds in all", "Sessions"]
-		else:
-			vals = [str(int(st.bwReps)), Xp.fmt_int(st.reps), str(int(st.count))]
-			caps = ["Best set", "Reps in all", "Sessions"]
-		var sc = JourneyScreen.fit_scale(vals, 96, 3)
-		var g = Kit.grid(3, 8)
-		g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var cols = [Pal.ACCENT, Pal.LIFT, Pal.TEXT]
-		for i in range(3):
-			var t = JourneyScreen.well_tile(vals[i], caps[i], cols[i], sc)
-			t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			g.add_child(t)
-		box.add_child(g)
+		box.add_child(_now_card(cur, history.slice(history.find(cur) + 1), wu))
+		_trend_card(box, history, wu, Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0)
+		_history_list(box, sheet, history, wu)
+	if st != null:
+		_records(box, st, wu)
 
-		var marks = LiftLibrary.rep_bests(st)
-		if not marks.is_empty():
-			# Three to a row: six in one row cut their weights short ("52.5 l").
-			var mf = Kit.grid(mini(3, marks.size()), 6)
-			mf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			for m in marks:
-				mf.add_child(JourneyScreen.value_chip("1 rep" if int(m.reps) == 1 else "%d+ reps" % int(m.reps), Fmt.fmt_weight(float(m.kg), wu), Pal.LIFT, "Heaviest set of at least %d rep%s" % [int(m.reps), "" if int(m.reps) == 1 else "s"]))
-			box.add_child(mf)
+	var pt_holder = Kit.vbox(0)
+	pt_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(pt_holder)
+	_pt_block(pt_holder, lift)
 
-		var facts = "Last done %s" % Dates.relative_day(st.last, App.today)
-		if float(st.volumeKg) > 0.0:
-			facts += " · %s lifted in all" % Fmt.fmt_big_kg(float(st.volumeKg), wu)
-		box.add_child(Kit.muted(facts, 12))
-
-		_trend_block(box, st, wu, Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0)
-
-		box.add_child(Kit.section_title("History"))
-		var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-		var shown = mini(8, st.history.size())
-		for i in range(shown):
-			var hs = st.history[i]
-			var hc = Kit.card(0, JourneyLifts._open_session.bind(sheet, hs.id), 8)
-			hc.tooltip_text = "Everything you did that day"
-			var hr = _ig(Kit.hbox(8))
-			var d = Kit.label(Dates.format_date(hs.date, {"month": "short", "day": "numeric", "year": "numeric"}), 12, Pal.MUTED, true)
-			d.custom_minimum_size.x = 96
-			hr.add_child(Kit.vcenter(d))
-			var what = Kit.clip(LiftHistory.describe_sets(hs.sets, fmt_w), 13, null, true)
-			what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			hr.add_child(Kit.vcenter(what))
-			hc.add(hr)
-			box.add_child(hc)
-		if st.history.size() > shown:
-			box.add_child(Kit.muted("and %d earlier session%s" % [st.history.size() - shown, "" if st.history.size() - shown == 1 else "s"], 11))
-
+	if not e.own:
+		box.add_child(Kit.section_title("How to do it"))
+		box.add_child(Kit.para(e.tip, 14))
+		if str(e.also) != "":
+			box.add_child(Kit.muted_para("Also works: " + str(e.also), 12))
 	var vars = LiftLibrary.variations(e, rows)
 	if not vars.is_empty():
 		box.add_child(Kit.section_title("Variations to try"))
@@ -496,7 +577,7 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 			vf.add_child(chip)
 		box.add_child(vf)
 
-	var add = Kit.button("Add to today's workout", "primary", JourneyLifts._add.bind(sheet, str(st.name) if st != null else str(e.name)), "lg", "plus")
+	var add = Kit.button("Add to today's workout", "primary", JourneyLifts._add.bind(sheet, lift), "lg", "plus")
 	add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(add)
 	sheet.open()
