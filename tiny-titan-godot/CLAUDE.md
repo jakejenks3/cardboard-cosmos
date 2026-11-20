@@ -246,6 +246,10 @@ is the Windows handoff.
     as "(PT)", a note cell as `note:`), so names, PT and holds work as in typed lines. Rows
     that are empty are skipped; a row that cannot be read is a problem with its reason; a
     table without a header is read row by row as a line. Typed `| a | b |` lines work too.
+    A row with one filled cell is that cell typed as a line (a date that starts a day).
+    Verified 2026-11-19 on the real doc: it now begins with a `#` hint line (skipped, like
+    every `#` line) and a table headed Exercise, Variation, Weight, Set 1 to Set 4 with empty
+    rows; the typed lines under it read exactly as before (same entries, same keys).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
