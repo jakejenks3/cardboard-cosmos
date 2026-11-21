@@ -43,6 +43,8 @@ var _xp_color: Color = Pal.ACCENT
 var _xp_scale: int = 4
 var _footer_btn: Button
 var _confetti: Confetti
+var _shake_tw: Tween = null
+var _shake_rest = Vector2.ZERO
 var _disc_bar = null
 var _hero_bar = null
 var _count_tween = null
@@ -315,7 +317,11 @@ func _reveal(i: int, animate: bool) -> void:
 			"pet":
 				Sfx.pet()
 			"pr":
+				# A record is the big moment: a fanfare, confetti and a shake.
 				Sfx.pr()
+				Sfx.level_up()
+				_confetti.burst(1.0)
+				_shake()
 			"boss":
 				if ev.defeated:
 					Sfx.boss_down()
@@ -350,6 +356,33 @@ func _reveal(i: int, animate: bool) -> void:
 			var tw = card.create_tween()
 			tw.tween_interval(0.3)
 			tw.tween_callback(func(): Kit.burst(card, col, 20))
+		if ev.type == "pr":
+			_fireworks(card)
+
+
+## A record's fireworks: bursts of gold, green and blue over its card, then a
+## gold sweep and twinkles that stay on it.
+func _fireworks(card: Control) -> void:
+	var tw = card.create_tween()
+	for k in range(3):
+		var col = [Pal.ACCENT, Pal.GOOD, Pal.SECOND][k]
+		tw.tween_interval(0.25)
+		tw.tween_callback(func(): Kit.burst(card, col, 26))
+	Fx.shine(card, 2.2, 0.6, 0.55)
+	Fx.twinkle(card, Pal.ACCENT, 4)
+
+
+## A short shake of the whole reel (a record). A shake still running is
+## stopped first, so records in a row never leave the reel off its place.
+func _shake() -> void:
+	if _shake_tw != null and _shake_tw.is_valid():
+		_shake_tw.kill()
+		position = _shake_rest
+	_shake_rest = position
+	_shake_tw = create_tween()
+	for off in [Vector2(-6, 2), Vector2(5, -3), Vector2(-4, 3), Vector2(3, -2), Vector2(-2, 1)]:
+		_shake_tw.tween_property(self, "position", _shake_rest + off, 0.035)
+	_shake_tw.tween_property(self, "position", _shake_rest, 0.05)
 
 
 func _skip() -> void:

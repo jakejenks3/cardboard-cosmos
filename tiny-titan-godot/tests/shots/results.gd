@@ -46,6 +46,11 @@ func _wait_done(ov, tree: SceneTree, limit: float = 40.0) -> void:
 		await ShotHelper.wait(tree, 0.25)
 		t += 0.25
 	print("REEL done after ~%.1fs" % t)
+	if is_instance_valid(ov):
+		# Records shake the reel: wait out the last shake, then it is back in place.
+		await ShotHelper.wait(tree, 0.5)
+		var placed = ov.position.is_equal_approx(ov._shake_rest)
+		print("CHECK %s the reel is back in its place after the record shakes (%s, rest %s)" % ["ok  " if placed else "FAIL", str(ov.position), str(ov._shake_rest)])
 
 
 func _close_and_check(main: Node, tree: SceneTree, ov, expect: int, tag: String) -> void:
