@@ -65,7 +65,7 @@ func _run() -> void:
 		print("MORNING plan in the note: %s" % JSON.stringify(wrote))
 		if wrote.ok and int(wrote.get("planned", 0)) > 0:
 			msg.text += "\nToday's plan is in your note: type the reps."
-	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved), MorningAlert.logger_link(saved))
+	var res = await MorningAlert.send(root, msg.title, msg.text + "\nHow do you feel? Tap below.", m.topic, m.server, MorningAlert.note_link(saved), MorningAlert.logger_link(saved), MorningAlert.feel_link(saved))
 	print("MORNING sent: %s" % JSON.stringify(res))
 	quit(0 if res.ok else 1)
 

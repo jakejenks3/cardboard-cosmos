@@ -495,6 +495,16 @@ is the Windows handoff.
   The rest waits for the review. The note is read again every RECHECK_SEC (10 min) while
   the game is open (with Auto-check). The inbox walkthrough turns it off for the review
   and checks it at the end.
+- How you feel (2026-11-21): `settings.feels` = {date: 1 tired, 2 okay, 3 strong}. Set by the
+  morning push's three ntfy "http" buttons (`MorningAlert.send(..., feel)`: `feel_link` =
+  the script link with the token; the script's `?feel=` keeps it in its properties), the
+  phone logger's buttons (`apiFeel`) or the Today card's Feeling row (`TodayView._feel_row`).
+  `PhoneInbox.fetch_feels` (after each check) merges the script's into settings (a ping
+  returns `feels`). `Missions.easy_day` (tired, or `settings.deloadUntil` = a lighter week):
+  the Beat it missions become "Easy day" (`easy_sets`: about EASY_SHARE 0.9 of last time)
+  and are done by doing the lift any way; strong aims one `next_target` further.
+  `lighter_week_due` (tired 2 of the last 3 days): a card offers 7 lighter days. The
+  logger starts 10% lighter on a tired day. Mission ids do not change.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

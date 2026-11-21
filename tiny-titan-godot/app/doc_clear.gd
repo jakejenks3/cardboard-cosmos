@@ -345,7 +345,8 @@ static func send(node: Node, url: String, token: String, rows: Array, ping: bool
 	if not bool(data.get("ok", false)):
 		return {"ok": false, "error": "The script said: %s" % str(data.get("error", "no"))}
 	return {"ok": true, "cleared": int(data.get("cleared", 0)), "skipped": int(data.get("skipped", 0)), "tables": int(data.get("tables", 0)),
-		"version": int(data.get("version", 1)), "planned": int(data.get("planned", 0)), "already": bool(data.get("already", false)), "error": ""}
+		"version": int(data.get("version", 1)), "planned": int(data.get("planned", 0)), "already": bool(data.get("already", false)),
+		"feels": data.get("feels", {}) if data.get("feels") is Dictionary else {}, "error": ""}
 
 
 ## Write a day's plan into the note's table (plan_rows). Awaitable, as send.

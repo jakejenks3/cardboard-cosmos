@@ -33,6 +33,9 @@ static func card() -> Control:
 	if not plan.cycle.is_empty():
 		c.add(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
 		c.add(_split_row(plan))
+	c.add(_feel_row())
+	if Missions.lighter_week_due(App.settings(), App.today):
+		c.add(_lighter_week_row())
 	if App.sessions().any(func(s): return str(s.get("discipline", "")) == "lift"):
 		c.add(RecoveryView.row())
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
@@ -91,6 +94,52 @@ static func _open_chest(m: Dictionary, chest: Control, card: Control) -> void:
 	Kit.floater(card, "+%s XP" % Xp.fmt_int(int(m.xp)), Pal.GOOD, 0.35, 2)
 	Sfx.level_up()
 	App.claim_quest(m)
+
+
+## How do you feel today? Tired makes the Beat it missions an easy day,
+## Strong aims one step further (Missions.feel_of).
+static func _feel_row() -> Control:
+	var h = Kit.hbox(6)
+	var f = Missions.feel_of(App.settings(), App.today)
+	var easy_week = str(App.settings().get("deloadUntil", "")) >= App.today
+	var l = Kit.label("Lighter week" if easy_week else "Feeling", 12, Pal.MUTED, true)
+	l.custom_minimum_size = Vector2(64, 0)
+	h.add_child(Kit.vcenter(l))
+	for pair in [[1, "Tired", Pal.SECOND], [2, "Okay", Pal.PANEL2], [3, "Strong", Pal.GOOD]]:
+		var b = Kit.chip(str(pair[1]), f == int(pair[0]), _set_feel.bind(int(pair[0])), pair[2], 12)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(b)
+	return h
+
+
+static func _set_feel(v: int) -> void:
+	Sfx.tick()
+	var feels = App.settings().get("feels", {})
+	var m = feels.duplicate() if feels is Dictionary else {}
+	m[App.today] = v
+	App.update_settings({"feels": m})
+	App.toast(["", "Easy day: lighter targets, any way counts", "As planned", "Feeling strong: aiming a step further"][v], "info", "muscle")
+
+
+## Tired two of the last three days: a lighter week, one tap.
+static func _lighter_week_row() -> Control:
+	var c = Kit.card(0, Callable(), 8)
+	c.accent(Pal.SECOND)
+	var h = Kit.hbox(8)
+	var v = Kit.vbox(1)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(Kit.label("TIRED A LOT LATELY", 10, Pal.SECOND, true))
+	v.add_child(Kit.clip("A lighter week? Targets 10% down for 7 days", 12, Pal.TEXT, true))
+	h.add_child(v)
+	h.add_child(Kit.vcenter(Kit.button("Lighter week", "secondary", _start_lighter_week, "sm")))
+	c.add(h)
+	return c
+
+
+static func _start_lighter_week() -> void:
+	Sfx.tick()
+	App.update_settings({"deloadUntil": Dates.add_days(App.today, 6)})
+	App.toast("Lighter week until %s" % Dates.format_date(Dates.add_days(App.today, 6), {"weekday": "short", "month": "short", "day": "numeric"}), "good", "check")
 
 
 ## The training split: a chip per kind of the cycle (today's lit). Tapping

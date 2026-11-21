@@ -65,6 +65,48 @@ const SPLITS = [
 ]
 ## A lift done under this share of its usual gap ago rests (see the top).
 const REST = 0.5
+## How the player feels (settings.feels = {date: 1 tired, 2 okay, 3 strong};
+## from the morning push's buttons, the phone logger or the Today card).
+## A tired day, or a day of a lighter week (settings.deloadUntil), makes the
+## Beat it missions easy days: about EASY_SHARE of last time's weight, and
+## any way of the lift done counts. A strong day aims one step further.
+const EASY_SHARE = 0.9
+
+
+static func feel_of(settings: Dictionary, date: String) -> int:
+	var f = settings.get("feels", {})
+	return int(f.get(date, 0)) if f is Dictionary else 0
+
+
+## Is `date` an easy day (tired, or in a lighter week)?
+static func easy_day(settings: Dictionary, date: String) -> bool:
+	return feel_of(settings, date) == 1 or str(settings.get("deloadUntil", "")) >= date
+
+
+## Tired on two of the last three days (up to `date`): offer a lighter week.
+static func lighter_week_due(settings: Dictionary, date: String) -> bool:
+	if str(settings.get("deloadUntil", "")) >= date:
+		return false
+	var n = 0
+	for k in range(3):
+		if feel_of(settings, Dates.add_days(date, -k)) == 1:
+			n += 1
+	return n >= 2
+
+
+## Last time's sets about EASY_SHARE lighter (rounded to the step); a set
+## without weight keeps its reps.
+static func easy_sets(sets: Array, step_kg: float) -> Array:
+	var out = []
+	for one in LiftTrend.real_sets(sets):
+		var s = one.duplicate()
+		var w = float(one.get("weightKg", 0.0))
+		if w > 0.0:
+			s["weightKg"] = maxf(step_kg, roundf(w * EASY_SHARE / step_kg) * step_kg)
+		out.append(s)
+	return out
+
+
 ## What a perfect day pays (every box of the Today card ticked).
 const PERFECT_XP = 300
 ## Ways shown to do one planned lift (its variations and one other movement).
@@ -703,19 +745,28 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 		# any variation of the movement (the id stays the planned lift's).
 		var main = l.options[0]
 		var aim = LiftTrend.next_target(main.last, _step_kg(wu))
+		var easy = easy_day(settings, today)
+		var strong = feel_of(settings, today) == 3
+		if easy:
+			aim = {"sets": easy_sets(main.last, _step_kg(wu))}
+		elif strong:
+			aim = LiftTrend.next_target(aim.sets, _step_kg(wu))
 		var desc = ""
 		if bool(main.new):
 			desc = "New: %s. Find a weight you can do for 8 to 12 good reps." % short_name(str(main.name))
+		elif easy:
+			desc = "Easy day: %s (about 10%% lighter). Doing it any way counts." % LiftHistory.describe_sets(aim.sets, fmt_w)
 		else:
-			desc = "Last time %s. Aim for %s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
+			desc = "Last time %s. Aim for %s%s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w), " (feeling strong: one step more)" if strong else ""]
 		var alts = []
 		for o in l.options.slice(1):
 			alts.append(short_name(str(o.name)))
 		if not alts.is_empty():
 			desc += " Or: %s." % ", ".join(PackedStringArray(alts))
 		var ways = l.options.map(func(o): return str(o.name))
-		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "Beat it: %s" % str(main.move), desc, "sword", "lift",
-			1, 1 if beat_any(sessions, ways, str(LiftNames.split(str(l.name)).move), today, same_of(str(l.name), plan)) else 0, "", 200, claims,
+		var did = done_of(sessions, ways, today, str(LiftNames.split(str(l.name)).move), same_of(str(l.name), plan)) != "" if easy else beat_any(sessions, ways, str(LiftNames.split(str(l.name)).move), today, same_of(str(l.name), plan))
+		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, ("Easy day: %s" if easy else "Beat it: %s") % str(main.move), desc, "sword", "lift",
+			1, 1 if did else 0, "", 200, claims,
 			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "planned": str(l.name)}))
 		beats += 1
 

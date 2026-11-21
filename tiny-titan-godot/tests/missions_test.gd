@@ -202,6 +202,19 @@ func _init() -> void:
 	ok(MorningAlert.recap_due({"morning": {"on": true, "topic": "t", "recapSent": "2026-11-09"}}, split_log, sat) == "" and MorningAlert.recap_due({"morning": {"on": false, "topic": "t"}}, split_log, sat) == ""
 		and MorningAlert.recap_due({"morning": {"on": true, "topic": "t", "recap": false}}, split_log, sat) == "" and MorningAlert.recap_due(rs, [], sat) == "", "sent already, off, switched off or an empty week: nothing")
 
+	# --- how you feel ---------------------------------------------------------------------------------
+	var tired = {"weightUnit": "kg", "split": "pull_push_legs", "feels": {sat: 1}}
+	var tday = Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": tired, "reading": []}, state, [])
+	var tm = tday.filter(func(m): return str(m.id).contains(":beat:"))[0]
+	ok(str(tm.title).begins_with("Easy day: ") and str(tm.desc).contains("lighter") and float(tm.aim[0].weightKg) < float(sp.lifts[0].last.sets[0].weightKg), "tired: an easy day, lighter than last time", [tm.title, tm.desc])
+	var light_log = split_log + [lift(sat, {str(sp.lifts[0].name): [[8, 10]]})]
+	var tm2 = Missions.daily(sat, {"sessions": light_log, "pt": {}, "settings": tired, "reading": []}, state, []).filter(func(m): return m.id == tm.id)[0]
+	ok(tm2.done and str(tm.id) == str(find(sday, ":beat:" + Xp.normalize_exercise(str(sp.lifts[0].name))).id), "an easy day is done by doing it any way; the mission keeps its id", tm2)
+	var strong = Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs", "feels": {sat: 3}}, "reading": []}, state, []).filter(func(m): return str(m.id).contains(":beat:"))[0]
+	ok(str(strong.desc).contains("feeling strong") and str(strong.title).begins_with("Beat it"), "strong: one step further", strong.desc)
+	ok(Missions.lighter_week_due({"feels": {sat: 1, "2026-11-20": 1}}, sat) and not Missions.lighter_week_due({"feels": {sat: 1}}, sat) and not Missions.lighter_week_due({"feels": {sat: 1, "2026-11-20": 1}, "deloadUntil": "2026-11-25"}, sat), "tired twice in three days: a lighter week is offered (not during one)")
+	ok(Missions.easy_day({"deloadUntil": "2026-11-25"}, sat) and not Missions.easy_day({"deloadUntil": "2026-11-20"}, sat), "a lighter week makes every day easy until it ends")
+
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
 	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}

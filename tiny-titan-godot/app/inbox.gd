@@ -662,6 +662,8 @@ func _finish(result: Dictionary, silent: bool) -> void:
 	if result.ok and not result.fresh.is_empty():
 		_auto_import.call_deferred()
 		_app().changed.emit()  # the Home card appears
+	if result.ok:
+		fetch_feels.call_deferred()
 
 
 ## Is the note's day over for importing on its own: from an earlier day, or
@@ -894,6 +896,26 @@ func write_plan_now() -> Dictionary:
 	if res.ok:
 		check(true)
 	return res
+
+
+## How the player said they feel (the morning push's buttons and the phone
+## logger keep it in the note's script): into settings.feels. Awaitable.
+func fetch_feels() -> void:
+	if not can_clear():
+		return
+	var c = clear_settings()
+	var res = await DocClear.send(self, str(c.url), str(c.token), [], true)
+	if not res.ok or res.feels.is_empty():
+		return
+	var mine = _app().settings().get("feels", {})
+	var merged = mine.duplicate() if mine is Dictionary else {}
+	var changed = false
+	for d in res.feels:
+		if int(merged.get(str(d), 0)) != int(res.feels[d]):
+			merged[str(d)] = int(res.feels[d])
+			changed = true
+	if changed:
+		_app().update_settings({"feels": merged})
 
 
 ## After an import: empty what came in, when switched on.

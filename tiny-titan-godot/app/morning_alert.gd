@@ -39,6 +39,15 @@ static func settings(saved_settings: Dictionary) -> Dictionary:
 
 ## The phone logger's link (the note's script serves it), or "" when the
 ## note's script is not set up.
+## The note script's link for the feel buttons (?token=...), or "".
+static func feel_link(saved: Dictionary) -> String:
+	var c = saved.get("inbox", {}).get("clear", {}) if saved.get("inbox") is Dictionary else {}
+	if not (c is Dictionary) or not DocClear.looks_right(str(c.get("url", ""))) or str(c.get("token", "")) == "":
+		return ""
+	var u = str(c.url).strip_edges()
+	return u + ("&" if u.contains("?") else "?") + "token=" + str(c.token).uri_encode()
+
+
 static func logger_link(saved: Dictionary) -> String:
 	var c = saved.get("inbox", {}).get("clear", {}) if saved.get("inbox") is Dictionary else {}
 	if not (c is Dictionary) or not DocClear.looks_right(str(c.get("url", ""))) or str(c.get("token", "")) == "":
@@ -155,7 +164,7 @@ static func message(saved: Dictionary, today: String) -> Dictionary:
 
 ## Post a notification to the ntfy topic. Awaitable: {"ok", "code", "error"}.
 ## `node`: anything in the scene tree (the request is a child of it while it runs).
-static func send(node: Node, title: String, text: String, topic: String, server: String = SERVER, click: String = "", logger: String = "") -> Dictionary:
+static func send(node: Node, title: String, text: String, topic: String, server: String = SERVER, click: String = "", logger: String = "", feel: String = "") -> Dictionary:
 	if topic.strip_edges() == "":
 		return {"ok": false, "code": 0, "error": "No topic"}
 	var http = HTTPRequest.new()
@@ -164,10 +173,19 @@ static func send(node: Node, title: String, text: String, topic: String, server:
 	# Header values must be plain ASCII: the title is kept to letters, digits and dashes.
 	var headers = ["Title: %s" % title.to_ascii_buffer().get_string_from_ascii(), "Tags: muscle", "Content-Type: text/plain; charset=utf-8"]
 	var actions = []
-	if logger.begins_with("https://") or logger.begins_with("http://127.0.0.1"):
+	if feel != "":
+		# How do you feel? Three buttons (ntfy shows three at most); a tap tells the note's script.
+		for pair in [[1, "Tired"], [2, "Okay"], [3, "Strong"]]:
+			actions.append("http, %s, %s&feel=%d, method=GET, clear=true" % [pair[1], feel, pair[0]])
+		# A tap on the push itself opens the logger (else the note).
+		if logger != "":
+			headers.append("Click: %s" % logger)
+		elif click.begins_with("https://"):
+			headers.append("Click: %s" % click)
+	elif logger.begins_with("https://") or logger.begins_with("http://127.0.0.1"):
 		# The logger first: a tap logs the workout.
 		actions.append("view, Log workout, %s" % logger)
-	if click.begins_with("https://"):
+	if click.begins_with("https://") and feel == "":
 		# A tap opens the phone note (or the logger when there is one).
 		headers.append("Click: %s" % (logger if not actions.is_empty() else click))
 		actions.append("view, Open note, %s" % click)
