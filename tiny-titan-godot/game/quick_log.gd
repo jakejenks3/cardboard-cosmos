@@ -1597,6 +1597,17 @@ static func pick_exercise(typed: String, ctx: Dictionary, pt: bool = false) -> D
 		return ctx.picks[key]
 	var pick = {"key": key, "typed": ("(PT) " if pt else "") + typed, "name": "", "kind": "exact", "closest": "", "pt": pt}
 	var decided = ctx.names.get(key)
+	# A decision from before a place said in the name counted ("home gym
+	# cable" was filed as plain "Cable"): when it is just what the words come
+	# to without the place, it is worked out again, place and all. A different
+	# lift picked on purpose stays.
+	if decided is String and decided != "":
+		var said = LiftMatch.words(typed)
+		var kept = LiftMatch.words(decided)
+		if LiftNames.PLACE_WORDS.any(func(w): return said.has(w) and not kept.has(w)):
+			var bare = " ".join(PackedStringArray(said.filter(func(w): return not LiftNames.PLACE_WORDS.has(w))))
+			if Xp.normalize_exercise(str(LiftNames.resolve(bare, ctx.own).name)) == Xp.normalize_exercise(decided):
+				decided = null
 	if decided is String:
 		pick.name = decided
 		if decided == "":

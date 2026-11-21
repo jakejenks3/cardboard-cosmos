@@ -61,6 +61,8 @@ func run(m: Node, t: SceneTree) -> void:
 	for wk in [14, 7]:
 		habit.append({"id": "habit%d" % wk, "discipline": "lift", "date": Dates.add_days(App.today, -wk), "createdAt": App.now_ms() - wk * 86400000, "source": "manual",
 			"exercises": [{"name": "Bench Press - Barbell", "sets": [{"reps": 5, "weightKg": 60.0}, {"reps": 5, "weightKg": 60.0}]}]})
+	habit.append({"id": "habit10", "discipline": "lift", "date": Dates.add_days(App.today, -10), "createdAt": App.now_ms() - 10 * 86400000, "source": "manual",
+		"exercises": [{"name": "Bench Press - Dumbbell", "sets": [{"reps": 10, "weightKg": 22.0}, {"reps": 10, "weightKg": 22.0}]}]})
 	App.commit_sessions(habit, "Workout logged!")
 	await _dismiss_reels()
 	# A physical therapy lift done twice this week, so the plan has PT in it.
@@ -81,6 +83,24 @@ func run(m: Node, t: SceneTree) -> void:
 	check(not beats.is_empty() and q.daily.all(func(x): return str(x.unit) != "min") and q.weekly.all(func(x): return str(x.unit) != "min"), "missions to beat a lift, and none about minutes (%s)" % str(q.daily.map(func(x): return x.title)))
 	check(said.contains("Beat it: "), "the missions are on the Hero tab")
 	await ShotHelper.snap(tree, "today_1_hero")
+
+	# The bench was done two ways (barbell, and dumbbells ten days ago): one row,
+	# the other way as a chip that opens it.
+	await _home()
+	var bp = App.plan().lifts.filter(func(l): return str(LiftNames.split(str(l.name)).move) == "Bench Press")
+	check(bp.size() == 1 and bp[0].options.map(func(o): return str(o.name)).has("Bench Press - Dumbbell"), "one bench row, its dumbbell way among the options (%s)" % str(bp[0].options.map(func(o): return o.name) if not bp.is_empty() else []))
+	var db_chip = ShotHelper.find_button(main, "Dumbbell")
+	check(db_chip != null and ShotHelper.find_text(main, "OR") != null, "the other way is a chip under the row")
+	check(ShotHelper.find_button(main, "Home") == null and ShotHelper.find_button(main, "Gym") == null, "no Gym / Home keys")
+	if db_chip != null:
+		ShotHelper.reveal(db_chip)
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.snap(tree, "today_7_ways")
+		await ShotHelper.click(tree, db_chip)
+		await ShotHelper.wait(tree, 0.7)
+		check(_sheet() != null and ShotHelper.all_text(_sheet()).contains("Dumbbell"), "the chip opens that way's page")
+		await _close_sheets()
+
 
 	# A likely lift opens its page on Compare.
 	var row = null
@@ -186,48 +206,6 @@ func run(m: Node, t: SceneTree) -> void:
 			await ShotHelper.click(tree, back)
 			await ShotHelper.wait(tree, 0.8)
 		check(App.plan().kind == sp.kind and not App.plan().picked and (App.settings().get("dayPick", {}) as Dictionary).is_empty(), "tapping the split's own day drops the pick")
-
-	# At home: the lifts are shown the way they can be done with dumbbells, with other ways under them.
-	await _home()
-	var home_chip = ShotHelper.find_button(main, "Home")
-	check(home_chip != null and App.plan().place == "gym", "Gym / Home on the Today card, the gym to start with")
-	if home_chip != null:
-		ShotHelper.reveal(home_chip)
-		await ShotHelper.frames(tree, 3)
-		var hy = home_chip.get_global_rect().position.y
-		await ShotHelper.click(tree, home_chip)
-		await ShotHelper.wait(tree, 0.8)
-		var hp = App.plan()
-		print("HOME PLAN ", hp.lifts.map(func(l): return "%s -> %s" % [l.name, l.options.map(func(o): return o.name)]))
-		check(hp.place == "home" and not hp.lifts.is_empty() and hp.lifts.all(func(l): return bool(l.pt) or Missions.can_do(str(l.options[0].name), ["dumbbell"])), "at home every lift is shown with dumbbells or bodyweight")
-		var hchip = ShotHelper.find_button(main, "Home")
-		check(hchip != null and absf(hchip.get_global_rect().position.y - hy) < 1.0, "the Home chip stays under the cursor")
-		check(ShotHelper.find_text(main, "OR") != null, "other ways under a lift")
-		var hq = App.quests().daily.filter(func(x): return str(x.id).contains(":beat:"))
-		check(not hq.is_empty() and Missions.can_do(str(hq[0].lift), ["dumbbell"]) and hq[0].has("ways") and hq[0].ways.size() >= 2, "the Beat it mission at home: %s (%s)" % [hq[0].title if not hq.is_empty() else "-", hq[0].desc if not hq.is_empty() else "-"])
-		await ShotHelper.snap(tree, "today_7_home")
-		var gym_chip = ShotHelper.find_button(main, "Gym")
-		if gym_chip != null:
-			await ShotHelper.click(tree, gym_chip)
-			await ShotHelper.wait(tree, 0.8)
-		check(App.plan().place == "gym" and (App.settings().get("placePick", {}) as Dictionary).is_empty(), "back to the gym")
-	# Settings: what the home gym has.
-	SettingsSheet.open()
-	await ShotHelper.wait(tree, 0.6)
-	var band = ShotHelper.find_button(_sheet(), "Band")
-	check(band != null and Missions.gear_at(App.settings(), "home") == ["dumbbell"], "Settings has Home gym: dumbbells to start with")
-	if band != null:
-		ShotHelper.reveal(band)
-		await ShotHelper.frames(tree, 3)
-		await ShotHelper.click(tree, band)
-		await ShotHelper.wait(tree, 0.6)
-		check(Missions.gear_at(App.settings(), "home").has("band"), "a tap adds bands")
-		for n in ShotHelper.walk(_sheet()):
-			if n.has_meta("home_gear_section"):
-				ShotHelper.reveal(n)
-		await ShotHelper.frames(tree, 4)
-		await ShotHelper.snap(tree, "today_8_home_gear")
-	await _close_sheets()
 
 	# Settings: the morning goals card (nothing is sent here).
 	SettingsSheet.open()

@@ -162,49 +162,46 @@ func _init() -> void:
 	ok(sday.filter(func(m): return str(m.id).contains(":beat:")).all(func(m): return push.has(str(m.lift))), "the beat-it missions follow the split", sday.map(func(m): return m.id))
 	ok(Missions.morning_text(sp, sday, "kg").begins_with("Push day. Yesterday was a pull day."), "the morning message names the split's day", Missions.morning_text(sp, sday, "kg"))
 
-	# --- the gym or home: ways to do each lift ---------------------------------------------------
-	ok(Missions.needs("Lateral Raise - Cable") == ["cable"] and Missions.needs("Lat Pulldown - Single arm") == ["cable"] and Missions.needs("Squat - Front") == ["barbell"]
-		and Missions.needs("Face Pull - Green band") == ["band"] and Missions.needs("Bicep Curl - Reclined").is_empty(), "the equipment a lift needs",
-		[Missions.needs("Lateral Raise - Cable"), Missions.needs("Lat Pulldown - Single arm"), Missions.needs("Squat - Front"), Missions.needs("Face Pull - Green band")])
-	var dbs = ["dumbbell"]
-	ok(Missions.can_do("Lateral Raise - Dumbbell", dbs) and not Missions.can_do("Lateral Raise - Cable", dbs) and Missions.can_do("Push-up", dbs) and Missions.can_do("Bench Press - Barbell", null), "what can be done with dumbbells only")
-	var at_home = {"split": "pull_push_legs", "placePick": {"date": sat, "place": "home"}}
-	ok(Missions.place_of(at_home, sat) == "home" and Missions.place_of(at_home, "2026-11-22") == "gym" and Missions.place_of({}, sat) == "gym", "a place counts on its own day; the gym otherwise")
-	ok(Missions.gear_at({}, "home") == ["dumbbell"] and Missions.gear_at({"homeGear": ["dumbbell", "band"]}, "home") == ["dumbbell", "band"] and Missions.gear_at({}, "gym") == null, "home gear: dumbbells to start with")
-	var gp = Missions.day_plan(split_log, sat, {}, {"split": "pull_push_legs"})
-	var fly = gp.lifts.filter(func(l): return l.name == "Chest Fly - Cable")[0]
-	var fo = names(fly.options)
-	ok(gp.place == "gym" and fo.size() == 3 and fo[0] == "Chest Fly - Cable" and fo[1] == "Chest Fly - Dumbbell" and Missions.part_of(fo[2]) == "chest" and LiftNames.split(fo[2]).move != "Chest Fly"
-		and LiftNames.split(fo[2]).move != gp.new.move, "at the gym: the cable fly, a dumbbell fly, another chest movement (not today's new one)", [fo, gp.new.name])
-	var hp = Missions.day_plan(split_log, sat, {}, at_home)
-	var hfly = names(hp.lifts.filter(func(l): return l.name == "Chest Fly - Cable")[0].options)
-	var hlat = names(hp.lifts.filter(func(l): return l.name == "Lateral Raise - Cable")[0].options)
-	var hpush = names(hp.lifts.filter(func(l): return l.name == "Tricep Pushdown - Rope")[0].options)
-	ok(hp.place == "home" and hfly[0] == "Chest Fly - Dumbbell" and hfly.size() >= 2 and hfly.all(func(n): return Missions.can_do(n, dbs)) and Missions.part_of(hfly[1]) == "chest", "at home: a dumbbell fly or another chest movement with dumbbells", hfly)
-	ok(hlat[0] == "Lateral Raise - Dumbbell" and hlat.all(func(n): return Missions.can_do(n, dbs) and Missions.kind_of(n) == "push"), "at home: dumbbell lateral raises", hlat)
-	ok(hpush.size() == 2 and hpush.all(func(n): return Missions.part_of(n) == "triceps" and not n.begins_with("Tricep Pushdown") and Missions.can_do(n, dbs)), "no cable at home: two other triceps movements", hpush)
-	ok(hp.new != null and Missions.can_do(str(hp.new.name), dbs), "something new that can be done at home", hp.new)
-	ok(names(hp.lifts) == names(gp.lifts), "the place changes the ways, not the plan")
-	var hdata = {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg"}.merged(at_home), "reading": []}
-	var hday = Missions.daily(sat, hdata, state, [])
-	var gday = Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, [])
-	ok(hday.map(func(m): return str(m.id)) == gday.map(func(m): return str(m.id)), "the same missions at the gym and at home")
-	var hfm = find(hday, ":beat:chest fly - cable")
-	ok(hfm != null and hfm.title == "Beat it: Chest Fly" and hfm.lift == "Chest Fly - Dumbbell" and str(hfm.desc).begins_with("New: Chest Fly (dumbbell).") and str(hfm.desc).contains(" Or: "), "at home the mission says the dumbbell fly, or another way", hfm.desc if hfm != null else null)
-	var gfm = find(gday, ":beat:chest fly - cable")
-	ok(gfm.lift == "Chest Fly - Cable" and str(gfm.desc).begins_with("Last time") and str(gfm.desc).contains("Or: Chest Fly (dumbbell)"), "at the gym: last time on the cable, or the dumbbell", gfm.desc)
-	# Done by any way: a first dumbbell fly, or a swap, at either place; a lighter cable lateral raise is not.
-	var did_db = split_log + [lift(sat, {"Chest Fly - Dumbbell": [[12, 10]], "Lateral Raise - Cable": [[10, 5]]})]
-	var after_db = Missions.daily(sat, {"sessions": did_db, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, [])
-	ok(find(after_db, ":beat:chest fly - cable").done and not find(after_db, ":beat:lateral raise - cable").done, "a first dumbbell fly beats it (logged at the gym); a lighter lateral raise does not")
-	var swap = str(gfm.ways[gfm.ways.size() - 1])
-	var did_swap = split_log + [lift(sat, {swap: [[8, 20]]})]
-	ok(LiftNames.split(swap).move != "Chest Fly" and find(Missions.daily(sat, {"sessions": did_swap, "pt": {}, "settings": {"weightUnit": "kg"}.merged(at_home), "reading": []}, state, []), ":beat:chest fly - cable").done, "the other movement counts too (%s)" % swap)
-	var gtext = Missions.morning_text(gp, gday, "kg")
-	ok(gtext.contains("Chest Fly (cable): ") and gtext.contains("  or Chest Fly (dumbbell, new) · ") and gtext.contains("  home: Chest Fly (dumbbell, new) · ")
-		and gtext.contains("Lateral Raise (cable): ") and gtext.contains("Tricep Pushdown (rope): ") and gtext.contains("  home: Lateral Raise (dumbbell, new)"), "the morning message: every lift, every way, at the gym and at home", gtext)
-	ok(gp.newAt.gym != null and gp.newAt.home != null and Missions.can_do(str(gp.newAt.home.name), dbs) and (gp.newAt.gym.name == gp.newAt.home.name or gtext.contains("Try: %s
-  home: %s" % [Missions.short_name(str(gp.newAt.gym.name)), Missions.short_name(str(gp.newAt.home.name))])), "something new, and its home version", gtext)
+	# --- the ways to do a lift: the player's own variations ------------------------------------------
+	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
+	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}
+	var vlog = [
+		lift("2026-09-30", {"Push-up": [[20, 0]]}),
+		lift("2026-11-14", {"Squat - Barbell": [[5, 100]]}),
+		lift("2026-11-16", {"Chest Fly - Home cable": [[12, 15], [12, 15]], "Lateral Raise - Dumbbell": [[12, 8], [12, 8]]}),
+		lift("2026-11-17", vpull),
+		lift("2026-11-19", {"Chest Fly - Gym cable": [[10, 25], [10, 25]], "Lateral Raise - Gym cable": [[12, 5]]}),
+		lift("2026-11-20", vpull),
+	]
+	var vp = Missions.day_plan(vlog, sat, {}, {"split": "pull_push_legs"})
+	var vn = names(vp.lifts)
+	ok(vp.kind == "push" and vn.has("Chest Fly - Gym cable") and not vn.has("Chest Fly - Home cable") and vn.has("Lateral Raise - Gym cable") and not vn.has("Lateral Raise - Dumbbell"), "one row per movement: the variation done last", vn)
+	var vfly = vp.lifts.filter(func(l): return l.name == "Chest Fly - Gym cable")[0]
+	ok(vfly.variations == ["Chest Fly - Gym cable", "Chest Fly - Home cable"], "its variations, the latest first", vfly.variations)
+	var vfo = names(vfly.options)
+	ok(vfo == ["Chest Fly - Gym cable", "Chest Fly - Home cable", "Push-up"], "the ways: each variation as done, then another chest movement they have done", vfo)
+	ok(is_equal_approx(float(vfly.options[1].last[0].weightKg), 15.0) and is_equal_approx(float(vfly.options[0].last[0].weightKg), 25.0) and vfly.options.all(func(o): return not bool(o.new)), "each way with its own last time (home 15, gym 25)", vfly.options)
+	var vlat = names(vp.lifts.filter(func(l): return l.name == "Lateral Raise - Gym cable")[0].options)
+	ok(vlat[0] == "Lateral Raise - Gym cable" and vlat[1] == "Lateral Raise - Dumbbell", "lateral raises: the gym cable or dumbbells, as done", vlat)
+	var vdata = {"sessions": vlog, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}
+	var vday = Missions.daily(sat, vdata, state, [])
+	var vfm = find(vday, ":beat:chest fly - gym cable")
+	ok(vfm != null and vfm.title == "Beat it: Chest Fly" and vfm.lift == "Chest Fly - Gym cable" and str(vfm.desc).begins_with("Last time") and str(vfm.desc).contains("Or: Chest Fly (home cable), Push-up."), "the mission: last time on the gym cable, or the home cable, or push-ups", vfm.desc if vfm != null else null)
+	var beat_with = func(exs: Dictionary) -> Dictionary:
+		var d = vdata.duplicate()
+		d.sessions = vlog + [lift(sat, exs)]
+		var m = find(Missions.daily(sat, d, state, []), ":beat:chest fly - gym cable")
+		var lm2 = find(Missions.daily(sat, d, state, []), ":beat:lateral raise - gym cable")
+		return {"fly": m.done, "lat": lm2.done if lm2 != null else null}
+	ok(beat_with.call({"Chest Fly - Home cable": [[12, 17.5], [12, 15]]}).fly, "more than last time on the home cable beats it (lighter than the gym cable, which has its own aim)")
+	ok(beat_with.call({"Chest Fly - Machine": [[10, 30]]}).fly, "a variation written the first time counts")
+	ok(beat_with.call({"Push-up": [[22, 0]]}).fly, "the other movement counts too")
+	ok(not beat_with.call({"Chest Fly - Home cable": [[10, 15]]}).fly and not beat_with.call({"Lateral Raise - Dumbbell": [[10, 8]]}).lat, "less than last time on the same way does not")
+	var vtext = Missions.morning_text(vp, vday, "kg")
+	ok(vtext.contains("Chest Fly (gym cable): ") and vtext.contains("
+  or Chest Fly (home cable): ") and vtext.contains("
+  or Push-up") and vtext.contains("
+  or Lateral Raise (dumbbell): "), "the morning message: every way, each with its own aim", vtext)
 
 	# --- the morning message --------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg")

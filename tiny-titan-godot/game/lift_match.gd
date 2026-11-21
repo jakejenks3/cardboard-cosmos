@@ -20,9 +20,11 @@ const SAME = 0.95
 ## Enough words in common to offer it as the closest one.
 const CLOSE = 0.5
 
-## Words that say nothing about which lift it is.
+## Words that say nothing about which lift it is. ("home" and "gym" are not
+## among them: where it was done is part of the variation, a home cable is not
+## the gym's. "home gym" is "home", see PAIRS.)
 const STOP = ["with", "and", "the", "a", "an", "on", "in", "of", "at", "to", "for", "using", "w", "attachment",
-	"home", "my", "grip", "style", "variation", "version"]
+	"my", "grip", "style", "variation", "version"]
 
 ## Short forms and other spellings, and the words they stand for.
 const WORDS = {

@@ -27,7 +27,7 @@ func _init() -> void:
 	ok(LiftMatch.tokens("DB bench press") == ["dumbbell", "bench", "press"] and LiftMatch.tokens("KB swings") == ["kettlebell", "swing"], "short forms for equipment")
 	ok(LiftMatch.tokens("row - cable, 1UE") == ["row", "cable", "single", "arm"] and LiftMatch.tokens("one arm cable row") == ["single", "arm", "cable", "row"] and LiftMatch.tokens("1-arm row") == ["single", "arm", "row"], "'1UE', 'one arm' and '1-arm' all say single arm", [LiftMatch.tokens("row - cable, 1UE"), LiftMatch.tokens("1-arm row")])
 	ok(LiftMatch.tokens("EZ-Bar Curl") == ["ez", "curl"] and LiftMatch.tokens("over head press") == ["overhead", "press"] and LiftMatch.tokens("dead lifts") == ["deadlift"], "words written apart")
-	ok(LiftMatch.tokens("leg press on the home pulley") == ["leg", "press", "cable"], "small words go, a pulley is a cable", LiftMatch.tokens("leg press on the home pulley"))
+	ok(LiftMatch.tokens("leg press on the home pulley") == ["leg", "press", "home", "cable"] and LiftMatch.tokens("leg press, home gym pulley") == ["leg", "press", "home", "cable"], "small words go, a pulley is a cable, where it was done stays ('home gym' is 'home')", LiftMatch.tokens("leg press on the home pulley"))
 	ok(LiftMatch.tokens("Presses") == ["press"] and LiftMatch.tokens("crunches") == ["crunch"] and LiftMatch.tokens("calves") == ["calf"] and LiftMatch.tokens("chest flyes") == ["chest", "fly"], "plurals", [LiftMatch.tokens("Presses"), LiftMatch.tokens("crunches")])
 	ok(LiftMatch.key("Lat pull-down, 1UE") == "latpulldown1ue" and LiftMatch.key("  Neck 4 way ") == "neck4way", "a decision is filed under letters and digits only")
 

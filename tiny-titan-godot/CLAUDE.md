@@ -100,6 +100,13 @@ is the Windows handoff.
     shorthand passed as `specials` (never committed). The demo data uses the new names.
   - The Log tab's exercise keys show movement + variation; its search matches every typed
     word. The review's "pick another lift" lists every movement with its variations.
+  - Where a lift was done is part of its variation (2026-11-21, "home cable is different than
+    gym cable"): `VOCAB` has "home" (and "home gym") and "gym" as kind "place", written just
+    before the equipment ("Chest Fly - Home cable", "Chest Fly - Gym cable", "Lat Pulldown -
+    Single arm home"); `LiftMatch.STOP` no longer drops "home"; `LiftNames.plain` moves place
+    words to the variation (`PLACE_WORDS`). A remembered name decision that only left the place
+    out (made before) is worked out again (`QuickLog.pick_exercise`); one picked on purpose
+    stays. Lifts logged before this keep their names ("Chest Fly - Cable").
   - Tests: `tests/lift_names_test.gd` (catalog sanity, every variation reads back as itself,
     the ways of writing a lift, migration), `tests/lift_library_test.gd`.
 - 19 more chase trophies (ids `quirk_*`: Five by Five, Ladder, Pyramid, Streak Week,
@@ -357,24 +364,18 @@ is the Windows handoff.
     ago is not planned unless it has a weekday habit (2+ times on this weekday); before, one
     Saturday squat made a squat "due" two days after the last one. The user's save has
     "pull_push_legs" (set 2026-11-21, backup "2026-11-21 before training split").
-  - Gym or home (2026-11-21, "at my home gym I only have dumbbells for lateral raises"):
-    `Missions.day_plan(sessions, today, marks, settings)` reads split, dayPick, `placePick`
-    ({date, place: "home"}: the Today card's Gym / Home chips, that date only) and `homeGear`
-    (equipment ids, `HOME_GEAR` = dumbbells to start with; Settings -> Home gym). The gym has
-    everything, bodyweight goes anywhere. `needs(lift)` = the equipment its variation names,
-    else its movement's `only`, else its `usual`; `can_do(lift, have)`. Every planned lift has
-    `gym`, `home` and `options` (today's place) from `options_for`: itself when it fits,
-    another variation (one done, else `variation_for` preferring other equipment: a band
-    pushdown next to the rope one), another movement of the same part and kind (two when the
-    movement cannot be done there; not one already in the day's plan). The "Beat it" mission
-    shows the first option (`lift`, `aim`; "New: ... Find a weight" when never done) and
-    "Or: ..."; it keeps the planned lift's id and is done by ANY way at either place
-    (`ways`), beaten or done for the first time (`beat_any`). "Try something new" is done
-    by the suggested movement or any movement never done before, and is picked so it can be
-    done where the player is (`newAt`: the pick at the gym and at home). The morning message
-    lists every planned lift (PT aside) with every way: the gym's with their aims, then
-    "home: ..." (or "home: the same"), and "Try:" with its home version.
-
+  - The ways to do a goal (2026-11-21; a Gym / Home switch with home equipment was tried the
+    same day and REMOVED: "I never asked to have separate gym and home exercises as a
+    dichotomy... I want those variations to be how I used them"). `likely_lifts` plans a
+    MOVEMENT (all its variations' dates together; `name` = the variation done last,
+    `variations` the latest first; a PT lift stays on its own). `options_for(l, hist, avoid,
+    marks)`: the lift, the other variations the player logged (all history), then one other
+    movement of the same part and kind they have done and that is not in the day's plan;
+    each with its own last sets and aim. The "Beat it" mission (`lift` = the first, "Or: ...",
+    `ways`, id still from the planned name) is done by any way or ANY variation of the
+    movement, beaten or done for the first time (`beat_any`). The Today row shows the others
+    as chips; the morning message lists every way with its own aim ("  or ..."). Nothing is
+    suggested from equipment the player has not used ("Try something new" aside).
 - Clearing the note's table (2026-11-21, "takes a long time to manually clear each section"
   on mobile; "as long as it doesn't mess with the current workout I'm inputting"): the game
   only READS the doc, so `app/doc_clear.gd` (`DocClear`) holds a Google Apps Script

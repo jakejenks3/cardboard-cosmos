@@ -92,6 +92,11 @@ const VOCAB = [
 	[["light"], "light", "color", ""],
 	[["medium"], "medium", "color", ""],
 	[["heavy"], "heavy", "color", ""],
+	# Where: the player's own equipment differs ("Chest Fly - Home cable" is not
+	# "Chest Fly - Gym cable"). Written just before the equipment.
+	[["home", "gym"], "Home", "place", ""],
+	[["home"], "Home", "place", ""],
+	[["gym"], "Gym", "place", ""],
 	[["smith", "machine"], "Smith machine", "equip", "machine"],
 	[["smith"], "Smith machine", "equip", "machine"],
 	[["trapbar"], "Trap bar", "equip", "barbell"],
@@ -126,6 +131,8 @@ const VOCAB = [
 
 ## Equipment words a new movement's name gives up to its variation ("cable
 ## woodchopper" is Woodchopper - Cable). Other words stay in the name.
+## Words that say where a lift was done: they go to the variation.
+const PLACE_WORDS = ["home", "gym"]
 const NAME_GEAR = ["barbell", "dumbbell", "kettlebell", "cable", "machine", "band", "landmine", "smith", "ez", "trapbar", "bodyweight"]
 ## Attachments that are only ever used on a cable: with one, "Cable" is not said.
 const CABLE_PARTS = ["Rope", "Straight bar", "V bar"]
@@ -518,17 +525,17 @@ static func plain(typed: String, singular: bool = true) -> Dictionary:
 	var gear = []
 	for w in raw_words:
 		var ws = LiftMatch.words(str(w))
-		if ["home", "with", "w", "attachment", "using"].has(str(w).to_lower().trim_suffix(",")):
-			# Words that say where or with what, nothing about the movement.
+		if ["with", "w", "attachment", "using"].has(str(w).to_lower().trim_suffix(",")):
+			# Words that say with what, nothing about the movement.
 			continue
-		if ws.size() == 1 and NAME_GEAR.has(str(ws[0])):
+		if ws.size() == 1 and (NAME_GEAR.has(str(ws[0])) or PLACE_WORDS.has(str(ws[0]))):
 			gear.append_array(ws)
 		else:
 			keep.append(_singular(str(w).trim_suffix(","), ws) if singular else str(w).trim_suffix(","))
 	if keep.is_empty():
 		keep = raw_words
 		gear = []
-	var v = canon(gear + LiftMatch.words(str(halves.variation)), null)
+	var v = canon(LiftMatch.words(" ".join(PackedStringArray(gear))) + LiftMatch.words(str(halves.variation)), null)
 	return _result(join(title_case(" ".join(PackedStringArray(keep))), v), "new", "")
 
 

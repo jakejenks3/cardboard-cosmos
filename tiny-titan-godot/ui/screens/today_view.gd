@@ -5,8 +5,9 @@ extends RefCounted
 ## App.plan()): the body area of the day, the likely lifts with what to aim for
 ## (one tap opens a lift on Compare), a movement of that area never done, the
 ## physical therapy still to do this week and the likely run, climb or ride.
-## Gym / Home chips say where the player trains today: each lift is shown the
-## way it can be done there, with the other ways under it (Missions.options_for).
+## Each lift is shown as it was done last, with the other ways the player has
+## done it under it (their variations, another movement: Missions.options_for);
+## any of them, or any variation, completes its mission.
 ## The morning message on the phone says the same (MorningAlert).
 
 static func card() -> Control:
@@ -26,9 +27,8 @@ static func card() -> Control:
 	if str(plan.label) != "":
 		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 13)))
 	c.add(head)
-	if not plan.cycle.is_empty() or not plan.lifts.is_empty() or plan.new != null:
-		c.add(_where_row(plan))
 	if not plan.cycle.is_empty():
+		c.add(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
 		c.add(_split_row(plan))
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
 	if nothing:
@@ -45,30 +45,6 @@ static func card() -> Control:
 	for o in plan.others.slice(0, 2):
 		c.add(_other_row(o))
 	return c
-
-
-## Why today is this kind of day (or a question without a split), and where
-## the player trains today: Gym or Home (Missions.PLACES).
-static func _where_row(plan: Dictionary) -> Control:
-	var h = Kit.hbox(6)
-	var why = Missions.kind_why(plan)
-	var l = Kit.clip(why if why != "" else "Where are you training?", 12, Pal.MUTED, true)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(Kit.vcenter(l))
-	for p in Missions.PLACES:
-		var b = Kit.chip(str(p.name), str(p.id) == str(plan.place), _pick_place.bind(str(p.id)), Pal.SECOND, 12)
-		b.custom_minimum_size = Vector2(60, 0)
-		b.tooltip_text = "Training at the gym today" if p.id == "gym" else "Training at home today: only what your home gym has"
-		h.add_child(b)
-	return h
-
-
-static func _pick_place(place: String) -> void:
-	Sfx.tick()
-	if place == str(App.plan().place):
-		return
-	App.update_settings({"placePick": {} if place == "gym" else {"date": App.today, "place": place}})
-	App.toast("At home today: goals for what you have there" if place == "home" else "At the gym today", "info", "lift")
 
 
 ## The training split: a chip per kind of the cycle (today's lit). Tapping
@@ -109,16 +85,16 @@ static func _step_kg(wu: String) -> float:
 	return 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
 
 
-## A likely lift, the way it can be done where the player is (its first
-## option): name and variation, why it is likely, what to aim for; the other
-## ways under it as chips. Done today (any way): what was done.
+## A likely lift as done last (its first option): name and variation, why it
+## is likely, what to aim for; the other ways the player has done it under it
+## as chips. Done today (any way): what was done.
 static func _lift_row(l: Dictionary, wu: String) -> Card:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var opts = l.get("options", [])
 	var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": l.last.sets}
 	var planned_move = str(LiftNames.split(str(l.name)).move)
 	var ways = []
-	for o in opts + l.get("gym", []) + l.get("home", []):
+	for o in opts:
 		if not ways.has(str(o.name)):
 			ways.append(str(o.name))
 	var done_name = Missions.done_of(App.sessions(), ways if not ways.is_empty() else [str(l.name)], App.today, "" if bool(l.pt) else planned_move)
@@ -139,8 +115,7 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	if bool(l.pt):
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
 	left.add_child(top)
-	var why = str(l.why) if Xp.normalize_exercise(shown) == Xp.normalize_exercise(str(l.name)) else "Instead of %s" % Missions.short_name(str(l.name))
-	left.add_child(Kit.clip(why, 11, Pal.MUTED))
+	left.add_child(Kit.clip(str(l.why), 11, Pal.MUTED))
 	row.add_child(left)
 	var right = Kit.vbox(1)
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE

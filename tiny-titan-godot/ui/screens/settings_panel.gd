@@ -72,7 +72,6 @@ func fill() -> void:
 	train.add(_row("sound_on" if snd else "sound_off", "Sound", Kit.switch(snd, _on_sound, "Sound effects")))
 	add_child(train)
 	_build_split()
-	_build_home_gear()
 
 	# --- phone inbox ----------------------------------------------------------------
 	_build_inbox()
@@ -260,36 +259,6 @@ func _build_split() -> void:
 		names.append("again")
 		card.add(Kit.para(" > ".join(PackedStringArray(names)), 12, Pal.MUTED))
 	add_child(card)
-
-
-## Home gym: the equipment there. "Home" on the Today card plans with it.
-func _build_home_gear() -> void:
-	var have = Missions.gear_at(App.settings(), "home")
-	var card = _card("HOME GYM", _info_button("Home gym", [
-		"Tap Home on the Today card when you train at home. The goals then use only what you have here: a dumbbell fly instead of the cable one, or a dumbbell bench press.",
-		"Each goal can be done more than one way. Doing any of them better than last time, or for the first time, completes it, at home or at the gym.",
-		"Bodyweight work goes anywhere.",
-	]))
-	card.set_meta("home_gear_section", true)
-	card.add(Kit.para("What you have at home", 12, Pal.MUTED))
-	var chips = Kit.flow(6)
-	for g in Missions.GEAR_CHOICES:
-		var b = Kit.chip(LiftLibrary.equip_name(g), have.has(g), _toggle_gear.bind(g), Pal.SECOND)
-		b.tooltip_text = ("Have it" if have.has(g) else "Don't have it") + " at home"
-		chips.add_child(b)
-	card.add(chips)
-	add_child(card)
-
-
-func _toggle_gear(g: String) -> void:
-	Sfx.tick()
-	var have = Missions.gear_at(App.settings(), "home")
-	if have.has(g):
-		have.erase(g)
-	else:
-		have.append(g)
-	App.update_settings({"homeGear": have})
-	call_deferred("_refill")
 
 
 func _build_morning() -> void:
