@@ -340,6 +340,53 @@ static func ghost(history: Array, cur: Dictionary):
 		"won": pct >= 0.5, "tie": absf(pct) < 0.5}
 
 
+## Sessions in a row without beating the best before them that make a lift "stuck".
+const STUCK_AFTER = 3
+
+
+## Is a lift stuck: its last STUCK_AFTER days (of at least 5) no better than
+## its best before them (ghost_score, 1% of slack)? {"stuck", "days", "best",
+## "best_date", "since"} or null when not stuck. `history`: newest first.
+static func plateau(history: Array):
+	var days = by_day(history)
+	if days.size() < STUCK_AFTER + 2:
+		return null
+	var recent = days.slice(days.size() - STUCK_AFTER)
+	var before = days.slice(0, days.size() - STUCK_AFTER)
+	var best = 0.0
+	var best_date = ""
+	for d in before:
+		if ghost_score(d) > best:
+			best = ghost_score(d)
+			best_date = str(d.date)
+	if best <= 0.0:
+		return null
+	for d in recent:
+		if ghost_score(d) > best * 1.01:
+			return null
+	return {"stuck": true, "days": STUCK_AFTER, "best": best, "best_date": best_date, "since": str(recent[0].date)}
+
+
+## Ways out of a plateau, for this lift (the weight in kg, its top working weight):
+## [{"title", "text"}]: a reset week, a variation swap, another rep range.
+static func plateau_fixes(history: Array, lift_name: String, wu: String) -> Array:
+	var d = day(history[0].sets) if not history.is_empty() else day([])
+	var top = float(d.topKg)
+	var reps = int(d.topReps)
+	var out = []
+	if top > 0.0:
+		var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
+		var reset = maxf(step, roundf(top * 0.9 / step) * step)
+		out.append({"title": "Reset week", "text": "Three sessions at %s, then build back up a step a week: it usually breaks through." % Fmt.fmt_weight(reset, wu)})
+	var sp = LiftNames.split(lift_name)
+	var swap = "dumbbells" if not str(sp.variation).to_lower().contains("dumbbell") else "a barbell or cable"
+	out.append({"title": "Swap the variation", "text": "Three weeks of %s with %s, then come back to it fresh." % [str(sp.move), swap]})
+	if reps > 0:
+		var to = "8 to 10" if reps <= 6 else ("4 to 6" if reps >= 10 else "10 to 12")
+		out.append({"title": "Change the reps", "text": "You do sets of about %d: try %d weeks of %s reps." % [reps, 3, to]})
+	return out
+
+
 ## What a ghost duel compares: the estimated one-rep max of the best set, the
 ## longest hold, or the most reps in a set (no weight).
 static func ghost_score(d: Dictionary) -> float:

@@ -172,6 +172,9 @@ static func compare(holder: Control, ctx: Dictionary) -> void:
 	var g = LiftTrend.ghost(history, cur)
 	if g != null:
 		holder.add_child(_ghost_card(g, mode, wu))
+	var stuck = LiftTrend.plateau(history)
+	if stuck != null and int(ctx.get("goal", 0)) == 0:
+		holder.add_child(_stuck_card(stuck, history, str(ctx.get("lift", "")), wu))
 	# A target for next time, except for physical therapy: that follows its plan.
 	if int(ctx.get("goal", 0)) == 0:
 		var nxt = _next_card(cur, mode, wu)
@@ -484,6 +487,24 @@ static func _ghost_card(g: Dictionary, mode: String, wu: String) -> Card:
 					if m != null and m.is_inside_tree():
 						Kit.burst(m, Pal.ACCENT, 18)))
 	c.tooltip_text = "Your session about four weeks before this one: %s" % _day_text(str(g.ghost.date))
+	return c
+
+
+## A lift stuck for its last sessions: how long, and three ways out.
+static func _stuck_card(stuck: Dictionary, history: Array, lift_name: String, wu: String) -> Card:
+	var c = Kit.card(6, Callable(), 10)
+	c.accent(Pal.DANGER)
+	c.add(Kit.label("STUCK? · %d SESSIONS WITHOUT A NEW BEST" % int(stuck.days), 10, Pal.DANGER, true))
+	c.add(Kit.para("Your best was on %s. Plateaus are normal; one of these usually gets it moving:" % _day_text(str(stuck.best_date)), 12, Pal.MUTED))
+	for f in LiftTrend.plateau_fixes(history, lift_name, wu):
+		var r = Kit.hbox(8)
+		r.add_child(Kit.vcenter(Icons.rect("target", 16)))
+		var v = Kit.vbox(0)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(Kit.label(str(f.title), 13, null, true))
+		v.add_child(Kit.para(str(f.text), 12, Pal.MUTED))
+		r.add_child(v)
+		c.add(r)
 	return c
 
 

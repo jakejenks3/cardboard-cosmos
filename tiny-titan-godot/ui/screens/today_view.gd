@@ -209,6 +209,10 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 		top.add_child(Kit.vcenter(SessionView.variation_tag(str(sp.variation))))
 	if bool(l.pt):
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
+	elif LiftTrend.plateau(_history_of(shown)) != null:
+		var st_tag = Kit.tag("STUCK", Pal.DANGER, true, 10)
+		st_tag.tooltip_text = "No new best for three sessions: its page has ways out"
+		top.add_child(Kit.vcenter(st_tag))
 	left.add_child(top)
 	left.add_child(Kit.clip(str(l.why), 11, Pal.MUTED))
 	# A barbell lift: the warm-up and what goes on the bar.
@@ -274,6 +278,12 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 			more.add_child(b)
 		c.add(more)
 	return c
+
+
+## A lift's history (newest first), as LiftLibrary.stats keeps it.
+static func _history_of(lift_name: String) -> Array:
+	var st = LiftLibrary.stats(App.sessions()).get(Xp.normalize_exercise(lift_name))
+	return st.history if st != null else []
 
 
 ## A done box: empty while still to do, a tick once done today.

@@ -505,6 +505,10 @@ is the Windows handoff.
   and are done by doing the lift any way; strong aims one `next_target` further.
   `lighter_week_due` (tired 2 of the last 3 days): a card offers 7 lighter days. The
   logger starts 10% lighter on a tired day. Mission ids do not change.
+- Plateau buster (2026-11-21): `LiftTrend.plateau(history)`: the last STUCK_AFTER (3) days of at
+  least 5 no better than the best before them (`ghost_score`, 1% slack); `plateau_fixes`: a
+  reset week at 90%, a variation swap, another rep range. The lift page's Compare view adds
+  `LiftViews._stuck_card` (not for PT); Today rows get a STUCK tag. Tests: lift_trend_test.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

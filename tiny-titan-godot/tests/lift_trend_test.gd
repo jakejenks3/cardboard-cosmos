@@ -158,6 +158,16 @@ func _init() -> void:
 	ok(LiftTrend.ghost(gh.slice(0, 2), gh[0]) == null and LiftTrend.ghost([gh[0], gh[3]], gh[0]) == null, "no session three to six weeks back: no ghost")
 	var gh_hold = LiftTrend.ghost([{"date": "2026-11-20", "sets": [{"reps": 1, "weightKg": 0.0, "holdSec": 40}]}, {"date": "2026-10-23", "sets": [{"reps": 1, "weightKg": 0.0, "holdSec": 40}]}], {"date": "2026-11-20", "sets": [{"reps": 1, "weightKg": 0.0, "holdSec": 40}]})
 	ok(gh_hold != null and gh_hold.tie and is_equal_approx(float(gh_hold.you), 40.0), "holds duel on seconds; the same is a dead heat", gh_hold)
+	# --- stuck: three sessions without a new best -----------------------------------------------------
+	var mk_day = func(d: String, kg: float, reps: int): return {"date": d, "sets": [{"reps": reps, "weightKg": kg}, {"reps": reps, "weightKg": kg}]}
+	var flat = [mk_day.call("2026-11-20", 100.0, 5), mk_day.call("2026-11-17", 100.0, 5), mk_day.call("2026-11-13", 97.5, 5),
+		mk_day.call("2026-11-10", 100.0, 5), mk_day.call("2026-11-06", 95.0, 5), mk_day.call("2026-11-03", 90.0, 5)]
+	var stuck = LiftTrend.plateau(flat)
+	ok(stuck != null and stuck.stuck and str(stuck.best_date) == "2026-11-10" and str(stuck.since) == "2026-11-13", "three sessions without beating the best before them: stuck", stuck)
+	ok(LiftTrend.plateau([mk_day.call("2026-11-24", 102.5, 5)] + flat) == null, "a new best: moving again")
+	ok(LiftTrend.plateau(flat.slice(0, 4)) == null, "too few sessions to tell")
+	var fixes = LiftTrend.plateau_fixes(flat, "Bench Press - Barbell", "kg")
+	ok(fixes.size() == 3 and str(fixes[0].text).contains("90 kg") and str(fixes[1].text).contains("dumbbells") and str(fixes[2].text).contains("8 to 10"), "ways out: a reset at 90%, dumbbells for a while, more reps", fixes)
 	print("LIFTTREND: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 
