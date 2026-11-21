@@ -877,6 +877,11 @@ static func parse_saved(raw):
 			for k in ib.names:
 				if ib.names[k] is String:
 					out.inbox.names[str(k)] = ib.names[k]
+		# Emptying the note's table (app/doc_clear.gd): the script's link and token.
+		var cl = ib.get("clear")
+		if cl is Dictionary:
+			out.inbox["clear"] = {"url": str(cl.get("url", "")), "token": str(cl.get("token", "")),
+				"on": bool(cl.get("on", false)), "plan": bool(cl.get("plan", true))}
 	# Physical therapy lifts: {normalized name: {"name", "perWeek"}}.
 	var marks = o.get("pt")
 	if marks is Dictionary:

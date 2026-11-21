@@ -215,6 +215,8 @@ func _with_stub(rows: Array, plan: Array, token: String) -> void:
 		base = "http://127.0.0.1:%d" % port
 		var inbox = app.inbox
 		ok(not inbox.can_clear() and inbox.clear_rows().is_empty(), "the inbox: not set up, nothing read yet")
+		var kept = app.parse_saved({"sessions": [], "inbox": {"source": "x", "clear": {"url": "https://script.google.com/macros/s/A/exec", "token": "tok", "on": true, "plan": false}}})
+		ok(kept != null and kept.inbox.get("clear", {}) == {"url": "https://script.google.com/macros/s/A/exec", "token": "tok", "on": true, "plan": false}, "the link and token survive loading the save (they were dropped before)", kept.inbox if kept != null else null)
 		inbox._tables = DocClear.table_rows(html)
 		inbox.last_text = PhoneInbox.html_to_text(html)
 		var t_saved = app.today
