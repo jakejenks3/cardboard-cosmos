@@ -19,7 +19,15 @@ function row(t, r) {
   return { getNumCells: () => doc[t][r].length, getCell: (c) => cell(t, r, c) };
 }
 function table(t) {
-  return { getNumRows: () => doc[t].length, getRow: (r) => row(t, r) };
+  return {
+    getNumRows: () => doc[t].length,
+    getRow: (r) => row(t, r),
+    appendTableRow: () => {
+      doc[t].push([]);
+      const r = doc[t].length - 1;
+      return { appendTableCell: (s) => { doc[t][r].push(s || ''); } };
+    },
+  };
 }
 const sandbox = {
   DocumentApp: { getActiveDocument: () => ({ getBody: () => ({ getTables: () => doc.map((_, t) => table(t)) }) }) },

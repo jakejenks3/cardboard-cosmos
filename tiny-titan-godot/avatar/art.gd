@@ -247,6 +247,21 @@ static func hero_pix(state: Dictionary, profile: Dictionary, loadout: Dictionary
 	return hero
 
 
+## The muscle map of the hero (HeroBody.draw_muscle_map), cached by its heat.
+static func muscle_texture(state: Dictionary, profile: Dictionary, heat: Dictionary) -> ImageTexture:
+	var sig = ""
+	for p in Recovery.PARTS:
+		sig += "%s=%d," % [p, int(round(float(heat.get(p, {}).get("heat", 0.0)) * 20.0))]
+	var key: String = "muscles|" + _hero_sig(state, profile, {}, "idle", 0, false) + "|" + sig
+	var tex = _tex_cache.get(key)
+	if tex == null:
+		var pix: Pix = Pix.new(HeroBody.width(), HeroBody.height())
+		HeroBody.draw_muscle_map(pix, body_input(state, profile), heat)
+		tex = pix.to_texture()
+		_cache_put(_tex_cache, key, tex, _TEX_CACHE_MAX)
+	return tex
+
+
 static func scene_pix(state: Dictionary, profile: Dictionary, loadout: Dictionary, active_pet, pose: String = "idle", frame: int = 0, happy: bool = false, hour: int = -1) -> Pix:
 	if hour < 0:
 		hour = current_hour()

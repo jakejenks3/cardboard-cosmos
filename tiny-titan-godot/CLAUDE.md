@@ -403,6 +403,27 @@ is the Windows handoff.
   (Apps Script answers a POST with a redirect). Not set up on the user's save: they do the
   Google part (authorising the script is theirs). Test: `tests/doc_clear_test.gd` (needs
   Node.js for the script part: `tests/doc_clear_stub.js` runs SCRIPT on a pretend doc).
+- The day's plan in the note (2026-11-21): script VERSION 2 (`DocClear.SCRIPT_VERSION`; a ping
+  says which; Settings' Test asks for an update when old) also writes plans (`writePlan`):
+  a date row and a row per lift ([exercise, variation, weight]: `DocClear.plan_rows`, the
+  weight to aim for in the player's unit; then the movement to try, then PT as "(PT) ...")
+  under the table's last filled row, by its header's columns, rows added when short, never
+  twice for a date. Every row it writes starts with `QuickLog.PLAN_MARK` ("▸"):
+  `QuickLog._table_line` strips it and skips a marked row with no sets without a problem;
+  `DocClear.row_line` strips it too (so a filled plan row clears like any other) and `plan`
+  also clears marked rows never filled in (`_unfilled_plan`: only Exercise / Variation /
+  Weight hold anything) once their day is over. `tools/morning.gd` writes the plan before
+  the push when `saved.inbox.clear.plan` (default on) and adds "Today's plan is in your
+  note"; Settings has the switch and "Write today's plan now" (`PhoneInbox.write_plan_now`).
+  The user must paste the new script and deploy a new version (same link) for it to work.
+- Muscle map (2026-11-21): `game/recovery.gd` (`Recovery.heat(sessions, today)`): per body part
+  a heat 1 = worked hard today, fading over RECOVER_BIG (3) / RECOVER_SMALL (2) days; a lift
+  warms its part fully per FULL_SETS (4) sets and the library's "also works" parts by half;
+  climbs / runs / rides warm parts (`OTHER`). `HeroBody.draw_muscle_map` (the bare figure,
+  parts tinted amber to red by `fig.owner` names: pec, delt, upper / peak, fore, thigh,
+  calf, neck, torso = core in the middle and back at the sides), `Art.muscle_texture`
+  (cached by heat). `ui/screens/recovery_view.gd` (`RecoveryView.row()` on the Today card
+  when the player lifts, `open()` the sheet). Test: `tests/recovery_test.gd`.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -539,6 +560,7 @@ godot --headless --path . --script res://tests/lift_trend_test.gd
 godot --headless --path . --script res://tests/missions_test.gd
 godot --headless --path . --script res://tests/figure_test.gd
 godot --headless --path . --script res://tests/doc_clear_test.gd
+godot --headless --path . --script res://tests/recovery_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other

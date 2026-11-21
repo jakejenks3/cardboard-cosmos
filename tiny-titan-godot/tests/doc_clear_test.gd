@@ -161,6 +161,41 @@ func _with_stub(rows: Array, plan: Array, token: String) -> void:
 	ok(not doc.is_empty() and doc[0] == HEAD and doc[6] == rows[6] and doc[7] == rows[7] and doc[8] == rows[8] and doc[10] == rows[10] and str(doc[9][3]) == "14", "the header, 11/19, today's date, the row not read and the changed row are untouched", doc.slice(6, 11) if not doc.is_empty() else null)
 	var again = await DocClear.send(host, base + "/exec", token, plan)
 	ok(again.ok and int(again.cleared) == 0, "sending it again clears nothing more", again)
+
+	# The day's plan written into the table (script version 2), read and cleared.
+	ok(int(ping.get("version", 0)) == 2, "the script says it writes plans (version 2)", ping)
+	var day_plan = {"date": "2026-11-22", "lifts": [
+		{"name": "Chest Fly - Gym cable", "pt": false, "last": {"sets": [{"reps": 12, "weightKg": 15.0}, {"reps": 12, "weightKg": 15.0}]}},
+		{"name": "Calf Stretch - Slant board", "pt": true, "last": {"sets": [{"reps": 3, "weightKg": 0.0, "holdSec": 30}]}}],
+		"new": {"move": "Push-up", "variation": "", "name": "Push-up"}}
+	var prow = DocClear.plan_rows(day_plan, "kg")
+	ok(prow.size() == 3 and prow[0][0] == "Chest Fly" and prow[0][1] == "Gym cable" and str(prow[0][2]).is_valid_float() and prow[1] == ["(PT) Calf Stretch", "Slant board", ""] and prow[2] == ["Push-up", "", ""] and DocClear.date_text("2026-11-22") == "11/22",
+		"the plan as rows: movement, variation, the weight to aim for; PT marked; the new movement", prow)
+	var wrote = await DocClear.send_plan(host, base + "/exec", token, day_plan, "kg")
+	var st2 = await _fetch(host, base + "/state")
+	var d3 = st2[0] if st2 is Array else []
+	var mk = QuickLog.PLAN_MARK + " "
+	ok(wrote.ok and int(wrote.planned) == 3 and d3.size() == 15 and d3[11][0] == mk + "11/22" and d3[12][0] == mk + "Chest Fly" and d3[12][1] == "Gym cable" and d3[13][0] == mk + "(PT) Calf Stretch" and d3[14][0] == mk + "Push-up" and d3.all(func(r): return r.size() == 6),
+		"written under the last filled row (rows added when short): a marked date row and a row per lift", [wrote, d3.slice(10) if not d3.is_empty() else st2])
+	var twice2 = await DocClear.send_plan(host, base + "/exec", token, day_plan, "kg")
+	ok(twice2.ok and int(twice2.planned) == 0 and twice2.already, "never twice for one day", twice2)
+	var unfilled = QuickLog.parse_any(PhoneInbox.html_to_text(export_html(d3)), {"today": "2026-11-22", "weightUnit": "kg", "distanceUnit": "km", "exercises": Summary.DEFAULT_EXERCISES})
+	ok(not unfilled.entries.any(func(e): return str(e.date) == "2026-11-22" and str(e.kind) == "session") and not unfilled.problems.any(func(p): return str(p.line).contains("Chest Fly") or str(p.line).contains("Push-up")), "the plan not filled in yet: nothing to import, no problems", unfilled.problems)
+	await _fetch(host, base + "/set?t=0&r=12&c=3&v=12")
+	var st3 = await _fetch(host, base + "/state")
+	var d4 = st3[0] if st3 is Array else []
+	var filled_in = QuickLog.parse_any(PhoneInbox.html_to_text(export_html(d4)), {"today": "2026-11-22", "weightUnit": "kg", "distanceUnit": "km", "exercises": Summary.DEFAULT_EXERCISES})
+	var e22 = filled_in.entries.filter(func(e): return str(e.date) == "2026-11-22" and str(e.kind) == "session")
+	ok(e22.size() == 1 and e22[0].data.exercises.size() == 1 and str(e22[0].data.exercises[0].name) == "Chest Fly - Gym cable" and not str(e22[0].raw).contains(QuickLog.PLAN_MARK), "a plan row with its reps typed is read like any row, without the mark", e22)
+	var t4 = DocClear.table_rows(export_html(d4))
+	var next_day = DocClear.plan(t4, filled_in.entries, {}, "2026-11-23").map(func(p): return int(p.r))
+	ok(next_day == [13, 14], "the day after: the plan rows never filled in go; the filled one (not imported yet) and its date stay", next_day)
+	ok(DocClear.plan(t4, filled_in.entries, {}, "2026-11-22").is_empty(), "on the day itself nothing of the plan goes")
+	var in_e = {}
+	for e in e22:
+		in_e[e.key] = 1
+	var after_import = DocClear.plan(t4, filled_in.entries, in_e, "2026-11-23").map(func(p): return int(p.r))
+	ok(after_import == [11, 12, 13, 14], "once the filled row is imported, the whole day goes (its date row too)", after_import)
 	await _fetch(host, base + "/quit")
 	if pid > 0 and OS.is_process_running(pid):
 		OS.kill(pid)

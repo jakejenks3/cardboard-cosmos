@@ -759,10 +759,13 @@ func import_entries(entries: Array) -> void:
 # Emptying the table (DocClear)
 # ---------------------------------------------------------------------------
 
-## {"url", "token", "on"}.
+## {"url", "token", "on" (clear after an import), "plan" (write the day's plan
+## at midnight)}.
 func clear_settings() -> Dictionary:
 	var c = settings().get("clear")
-	return {"url": str(c.get("url", "")), "token": str(c.get("token", "")), "on": bool(c.get("on", false))} if c is Dictionary else {"url": "", "token": "", "on": false}
+	if not c is Dictionary:
+		return {"url": "", "token": "", "on": false, "plan": true}
+	return {"url": str(c.get("url", "")), "token": str(c.get("token", "")), "on": bool(c.get("on", false)), "plan": bool(c.get("plan", true))}
 
 
 func set_clear(patch: Dictionary) -> void:
@@ -818,6 +821,18 @@ func clear_imported() -> Dictionary:
 			bits.append("%d left: changed since it was read" % res.skipped)
 		var said = ", ".join(PackedStringArray(bits))
 		status = said.left(1).to_upper() + said.substr(1) + "."
+		check(true)
+	return res
+
+
+## Write today's plan into the note's table now (the midnight run does it by
+## itself). Awaitable: DocClear.send's result.
+func write_plan_now() -> Dictionary:
+	if not can_clear():
+		return {"ok": false, "error": "Clearing is not set up yet."}
+	var c = clear_settings()
+	var res = await DocClear.send_plan(self, str(c.url), str(c.token), _app().plan(), _app().weight_unit())
+	if res.ok:
 		check(true)
 	return res
 

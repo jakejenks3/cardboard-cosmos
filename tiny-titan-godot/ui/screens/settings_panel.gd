@@ -447,6 +447,17 @@ static func show_clear_setup() -> void:
 	sw.add_child(Kit.vcenter(sl))
 	sw.add_child(Kit.switch(bool(cs.on), func(on): App.inbox.set_clear({"on": bool(on)}), "Empty the rows that came in, after each import"))
 	sh.box.add_child(sw)
+	# The day's plan in the table: at midnight (with Morning goals), or now.
+	var pw = Kit.hbox(8)
+	var pl = Kit.label("Write the day's plan at midnight", 14, null, true)
+	pl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pw.add_child(Kit.vcenter(pl))
+	pw.add_child(Kit.switch(bool(cs.plan), func(on): App.inbox.set_clear({"plan": bool(on)}), "Rows for each planned lift (marked with a small arrow): you type the reps"))
+	sh.box.add_child(pw)
+	var now_key = Kit.button("Write today's plan now", "secondary", SettingsPanel._write_plan_now, "md", "edit")
+	now_key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sh.box.add_child(now_key)
+	sh.box.add_child(Kit.para("The plan goes under the last filled row of the table: a date row, then a row per lift with its variation and the weight to aim for. Type the reps; rows you leave empty are skipped, and go the next day.", 12, Pal.MUTED))
 	sh.box.add_child(Kit.para("It only empties table rows that are already imported and still exactly as the game read them. Rows you are typing, rows you left out, the header row and lines outside the table stay.", 12, Pal.MUTED))
 	var done = Kit.button("Done", "primary", sh.close, "lg")
 	done.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -467,10 +478,28 @@ static func _test_clear() -> void:
 		App.toast("Paste the web app link first (it ends in /exec)", "bad", "warning")
 		return
 	var res = await DocClear.send(App.inbox, str(cs.url), App.inbox.clear_token(), [], true)
-	if res.ok:
+	if res.ok and int(res.get("version", 1)) < DocClear.SCRIPT_VERSION:
+		App.toast("It clears, but it is the old script: copy the script again, paste it over the old one, then Deploy > Manage deployments > edit > New version", "info", "warning")
+	elif res.ok:
 		App.toast("It works: the script sees %d table%s in the doc" % [res.tables, "" if int(res.tables) == 1 else "s"], "good", "check")
 	else:
 		App.toast(str(res.error), "bad", "warning")
+
+
+static func _write_plan_now() -> void:
+	Sfx.tick()
+	if not App.inbox.can_clear():
+		App.toast("Paste the web app link first (it ends in /exec)", "bad", "warning")
+		return
+	var res = await App.inbox.write_plan_now()
+	if not res.ok:
+		App.toast(str(res.error), "bad", "warning")
+	elif bool(res.get("already", false)):
+		App.toast("Today's plan is already in the note", "info", "check")
+	elif int(res.get("planned", 0)) == 0 and int(res.get("version", 2)) < DocClear.SCRIPT_VERSION:
+		App.toast("Update the script first: copy it again and deploy a new version", "info", "warning")
+	else:
+		App.toast("Wrote %d row%s of today's plan into the note" % [res.planned, "" if int(res.planned) == 1 else "s"], "good", "check")
 
 
 static func _clear_now() -> void:

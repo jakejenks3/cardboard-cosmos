@@ -304,6 +304,10 @@ static func _cell(cells: Array, roles: Array, role: String) -> String:
 ## "name ¦ sets"): a number in the name or the variation ("1 arm") is never
 ## taken for a set, and the row is always read as a lift.
 const TABLE_MARK = "¦"
+## The mark in front of a table row the game wrote itself (the day's plan,
+## DocClear.plan_rows): read without it; such a row with no sets yet is the
+## plan still to do, skipped without a word.
+const PLAN_MARK = "▸"
 ## Words in a Weight cell that mean no weight at all.
 const NO_WEIGHT = ["bw", "bodyweight", "body weight", "-", "none", "no weight"]
 
@@ -417,8 +421,12 @@ static func _table_line(block: Dictionary, orig: String, ctx: Dictionary, out: D
 		inner = inner.substr(0, inner.length() - 1)
 	var cells = []
 	var filled = []
+	var planned = false
 	for c in inner.split("|"):
 		var cell = str(c).strip_edges()
+		if cell.begins_with(PLAN_MARK):
+			cell = cell.substr(PLAN_MARK.length()).strip_edges()
+			planned = true
 		cells.append(cell)
 		if cell != "" and _rx("^:?-{2,}:?$").search(cell) == null:
 			filled.append(cell)
@@ -450,7 +458,7 @@ static func _table_line(block: Dictionary, orig: String, ctx: Dictionary, out: D
 			# A note keeps its own words (they are read from the line as typed); the
 			# other lines are shown as the row they came from.
 			block = _line(block, str(ln) if str(ln).begins_with("note: ") else shown, t, ctx, out)
-	if str(made.why) != "":
+	if str(made.why) != "" and not planned:
 		out.problems.append({"line": shown, "why": str(made.why)})
 	return block
 

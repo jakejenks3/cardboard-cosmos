@@ -328,6 +328,7 @@ godot --headless --path . --script res://tests/lift_library_test.gd # the lift l
 godot --headless --path . --script res://tests/missions_test.gd    # the day's plan and missions
 godot --headless --path . --script res://tests/figure_test.gd      # the hero figure and its gear
 godot --headless --path . --script res://tests/doc_clear_test.gd   # emptying the phone note's table
+godot --headless --path . --script res://tests/recovery_test.gd    # the muscle map
 godot --headless --path . --script res://tests/lift_trend_test.gd  # a lift over time; physical therapy
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```

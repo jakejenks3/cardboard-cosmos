@@ -7,6 +7,9 @@ extends SceneTree
 ## never writes it. --dry-run prints the message instead of sending it; --test
 ## sends even when Morning goals is off. A run after noon sends nothing (the
 ## computer was off in the morning: the day has started without it).
+## When the note's table can be cleared (Settings -> Phone inbox, script
+## version 2) and "Write the day's plan" is on, the day's plan goes into the
+## table first (DocClear.send_plan) and the message says so.
 
 func _initialize() -> void:
 	_run()
@@ -31,8 +34,16 @@ func _run() -> void:
 	var today = Dates.today_key()
 	var m = MorningAlert.settings(saved.get("settings", {}))
 	var msg = MorningAlert.message(saved, today)
+	var c = saved.get("inbox", {}).get("clear", {}) if saved.get("inbox") is Dictionary else {}
+	var write_plan = c is Dictionary and DocClear.looks_right(str(c.get("url", ""))) and str(c.get("token", "")) != "" and bool(c.get("plan", true))
+	var plan = {}
+	if write_plan:
+		var st = saved.get("settings", {})
+		plan = Missions.day_plan(saved.get("sessions", []), today, saved.get("pt", {}) if saved.get("pt") is Dictionary else {}, st)
 	print("MORNING %s\n%s" % [msg.title, msg.text])
 	if dry:
+		if write_plan:
+			print("PLAN ROWS %s" % JSON.stringify(DocClear.plan_rows(plan, str(saved.get("settings", {}).get("weightUnit", "kg")))))
 		quit(0)
 		return
 	if not m.on and not args.has("--test"):
@@ -45,6 +56,11 @@ func _run() -> void:
 		return
 	# The request needs the tree running: wait for the first frame.
 	await process_frame
+	if write_plan:
+		var wrote = await DocClear.send_plan(root, str(c.url), str(c.token), plan, str(saved.get("settings", {}).get("weightUnit", "kg")))
+		print("MORNING plan in the note: %s" % JSON.stringify(wrote))
+		if wrote.ok and int(wrote.get("planned", 0)) > 0:
+			msg.text += "\nToday's plan is in your note: type the reps."
 	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server)
 	print("MORNING sent: %s" % JSON.stringify(res))
 	quit(0 if res.ok else 1)

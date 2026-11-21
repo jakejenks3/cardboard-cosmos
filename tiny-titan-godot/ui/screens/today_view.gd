@@ -33,6 +33,8 @@ static func card() -> Control:
 	if not plan.cycle.is_empty():
 		c.add(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
 		c.add(_split_row(plan))
+	if App.sessions().any(func(s): return str(s.get("discipline", "")) == "lift"):
+		c.add(RecoveryView.row())
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
 	if nothing:
 		c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for.", 13, Pal.MUTED))

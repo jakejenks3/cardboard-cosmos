@@ -14,6 +14,14 @@ extends RefCounted
 ## day is over and every row under it is empty or cleared.
 ## The hash: the row's filled cells, lower case, spaces collapsed, " | "
 ## between (row_text), md5, first 10 hex digits; the script computes the same.
+##
+## The script also WRITES the day's plan (plan_rows, sent by tools/morning.gd at
+## midnight or "Write today's plan" in Settings): a date row and a row per
+## lift (exercise, variation, weight) at the bottom of the table, each marked
+## QuickLog.PLAN_MARK. The player types the reps; a marked row left without
+## sets is skipped by the parser, and goes in the next clear once its day is
+## over. Marks are left out of a row's text, so a filled plan row clears like
+## any other. Script VERSION 2 has plans (a ping says which).
 ## Pure but for `send`. Tests: tests/doc_clear_test.gd.
 
 ## The script the player pastes into the doc (Extensions -> Apps Script).
@@ -25,13 +33,17 @@ const SCRIPT = """/** @OnlyCurrentDoc */
 // Web app, Execute as: Me, Who has access: Anyone. Copy the web app link into
 // Tiny Titan: Settings > Phone inbox > Clear the table.
 // It only empties a row whose text is still exactly what the game imported.
+// It also writes the day's plan (rows marked \\u25b8) into empty rows at the bottom.
 const TOKEN = '%TOKEN%';
+const VERSION = 2;
+const MARK = '\\u25b8';
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (p.token !== TOKEN) return reply({ok: false, error: 'wrong token'});
   const tables = DocumentApp.getActiveDocument().getBody().getTables();
-  if (p.ping) return reply({ok: true, tables: tables.length});
+  if (p.ping) return reply({ok: true, tables: tables.length, version: VERSION});
+  if (p.plan) return reply(writePlan(tables, String(p.date || ''), JSON.parse(p.plan)));
   const lock = LockService.getDocumentLock();
   lock.waitLock(20000);
   let cleared = 0, skipped = 0;
@@ -52,10 +64,62 @@ function doGet(e) {
   return reply({ok: true, cleared: cleared, skipped: skipped});
 }
 
+// A date row and a row per lift ([exercise, variation, weight]) under their
+// columns, in the empty rows after the last row with anything in it (rows are
+// added when there are too few). Never twice for one date, never over a filled row.
+function writePlan(tables, date, rows) {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(20000);
+  try {
+    let table = null, head = -1;
+    for (let t = 0; t < tables.length && !table; t++) {
+      for (let r = 0; r < tables[t].getNumRows(); r++) {
+        if (texts(tables[t].getRow(r)).some(function (c) { return /^(exercise|exercises|lift|movement|name)$/i.test(c); })) {
+          table = tables[t]; head = r; break;
+        }
+      }
+    }
+    if (!table) return {ok: false, error: 'no table with an Exercise column'};
+    if (!date || !rows.length) return {ok: true, planned: 0};
+    const names = texts(table.getRow(head)).map(function (c) { return c.toLowerCase(); });
+    const col = function (words) { for (let i = 0; i < names.length; i++) if (words.indexOf(names[i]) >= 0) return i; return -1; };
+    const cEx = col(['exercise', 'exercises', 'lift', 'movement', 'name']);
+    const cVar = col(['variation', 'variant', 'equipment', 'type', 'version', 'kind', 'style', 'how']);
+    const cW = col(['weight', 'load', 'lb', 'lbs', 'kg', 'resistance']);
+    let last = head;
+    for (let r = head + 1; r < table.getNumRows(); r++) {
+      const cells = texts(table.getRow(r));
+      if (cells[cEx] === MARK + ' ' + date) return {ok: true, planned: 0, already: true};
+      if (cells.some(function (c) { return c !== ''; })) last = r;
+    }
+    const width = table.getRow(head).getNumCells();
+    while (table.getNumRows() - (last + 1) < rows.length + 1) {
+      const nr = table.appendTableRow();
+      for (let c = 0; c < width; c++) nr.appendTableCell('');
+    }
+    const put = function (r, c, v) { if (c >= 0 && c < table.getRow(r).getNumCells()) table.getRow(r).getCell(c).setText(String(v)); };
+    put(last + 1, cEx, MARK + ' ' + date);
+    rows.forEach(function (x, i) {
+      put(last + 2 + i, cEx, MARK + ' ' + x[0]);
+      if (x[1]) put(last + 2 + i, cVar, x[1]);
+      if (x[2]) put(last + 2 + i, cW, x[2]);
+    });
+    return {ok: true, planned: rows.length};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function texts(row) {
+  const out = [];
+  for (let c = 0; c < row.getNumCells(); c++) out.push(row.getCell(c).getText().trim());
+  return out;
+}
+
 function rowHash(row) {
   const cells = [];
   for (let c = 0; c < row.getNumCells(); c++) {
-    const t = row.getCell(c).getText().replace(/[\\u200b\\ufeff]/g, '').replace(/\\|/g, '/')
+    const t = row.getCell(c).getText().replace(/[\\u200b\\ufeff]/g, '').replace(/^\\s*\\u25b8\\s*/, '').replace(/\\|/g, '/')
       .replace(/[\\s\\u00a0]+/g, ' ').trim();
     if (t !== '' && !/^:?-{2,}:?$/.test(t)) cells.push(t.toLowerCase());
   }
@@ -69,6 +133,8 @@ function reply(obj) {
 """
 
 const TIMEOUT_SEC = 30.0
+## The script's VERSION (what a ping of the newest one says).
+const SCRIPT_VERSION = 2
 
 
 ## A new token (the script and the game share it).
@@ -115,7 +181,7 @@ static func row_line(cells: Array) -> String:
 	var space = RegEx.create_from_string("\\s+")
 	var dashes = RegEx.create_from_string("^:?-{2,}:?$")
 	for c in cells:
-		var t = str(c).replace("​", "").replace("﻿", "").replace("|", "/").replace(" ", " ")
+		var t = str(c).replace("​", "").replace("﻿", "").strip_edges().trim_prefix(QuickLog.PLAN_MARK).replace("|", "/").replace(" ", " ")
 		t = space.sub(t, " ", true).strip_edges()
 		if t != "" and dashes.search(t) == null:
 			filled.append(t)
@@ -161,8 +227,10 @@ static func plan(tables: Array, entries: Array, imported: Dictionary, today: Str
 	for ti in range(tables.size()):
 		var rows: Array = tables[ti]
 		var header = false
+		var roles = []
 		var going = {}
 		var dates = []
+		var day = ""
 		for ri in range(rows.size()):
 			var cells: Array = rows[ri]
 			var text = row_text(cells)
@@ -180,14 +248,20 @@ static func plan(tables: Array, entries: Array, imported: Dictionary, today: Str
 					has_ex = true
 			if has_ex and named >= 2 and named >= filled.size() - 1:
 				header = true
+				roles = cells.map(func(c): return QuickLog.table_role(str(c)))
 				continue
 			if filled.size() == 1:
 				var d = QuickLog.date_line(QuickLog.normalize_line(row_line(cells)), today)
 				if not d.is_empty():
 					dates.append({"r": ri, "date": str(d.date)})
+					day = str(d.date)
 					continue
 			if int(done_lines.get(text, 0)) > 0 and not open_lines.has(text):
 				done_lines[text] = int(done_lines[text]) - 1
+				going[ri] = true
+				out.append({"t": ti, "r": ri, "h": row_hash(cells), "text": text})
+			elif day != "" and day < today and not open_lines.has(text) and _unfilled_plan(cells, roles):
+				# The plan of a day that is over, never filled in: only what the game wrote.
 				going[ri] = true
 				out.append({"t": ti, "r": ri, "h": row_hash(cells), "text": text})
 		# Date rows whose day is over and has nothing left under it.
@@ -207,12 +281,60 @@ static func plan(tables: Array, entries: Array, imported: Dictionary, today: Str
 	return out
 
 
+## A row the game wrote (marked) with nothing typed in it since: only its
+## Exercise, Variation and Weight cells hold anything.
+static func _unfilled_plan(cells: Array, roles: Array) -> bool:
+	if roles.is_empty() or not cells.any(func(c): return str(c).strip_edges().begins_with(QuickLog.PLAN_MARK)):
+		return false
+	for i in range(cells.size()):
+		var role = str(roles[i]) if i < roles.size() else ""
+		if str(cells[i]).strip_edges() != "" and not ["exercise", "variation", "weight"].has(role):
+			return false
+	return true
+
+
+## The rows of a day's plan for the note's table: [exercise, variation,
+## weight] per lift (the weight to aim for, in the player's unit, as a bare
+## number; nothing for a lift without weight), then the movement to try, then
+## the physical therapy still to do this week ("(PT) " in front).
+static func plan_rows(plan: Dictionary, wu: String) -> Array:
+	var out = []
+	var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
+	for l in plan.get("lifts", []):
+		var sp = LiftNames.split(str(l.name))
+		var aim = LiftTrend.next_target(l.last.sets, step).sets if not bool(l.pt) else l.last.sets
+		var kg = 0.0
+		for one in aim:
+			kg = maxf(kg, float(one.get("weightKg", 0.0)))
+		var w = ""
+		if kg > 0.0:
+			w = TTUtil.num_str(snappedf(Fmt.kg_to_unit(kg, wu), 0.5))
+		out.append([("(PT) " if bool(l.pt) else "") + str(sp.move), str(sp.variation), w])
+	if plan.get("new") != null:
+		out.append([str(plan.new.move), str(plan.new.variation), ""])
+	# The physical therapy still to do this week (not already a lift above).
+	var named = out.map(func(r): return Xp.normalize_exercise(Pt.untag(str(r[0])).name))
+	for r in plan.get("pt", []):
+		var sp = LiftNames.split(str(r.name))
+		if not named.has(Xp.normalize_exercise(str(sp.move))):
+			out.append(["(PT) " + str(sp.move), str(sp.variation), ""])
+	return out
+
+
+## "11/22": a date the parser reads as a date row.
+static func date_text(date: String) -> String:
+	var p = date.split("-")
+	return "%d/%d" % [int(p[1]), int(p[2])] if p.size() == 3 else date
+
+
 ## The web app link with what to clear ("ping" only checks the link).
-static func request_url(url: String, token: String, rows: Array, ping: bool = false) -> String:
+static func request_url(url: String, token: String, rows: Array, ping: bool = false, plan_date: String = "") -> String:
 	var u = url.strip_edges()
 	var q = "token=" + token.uri_encode()
 	if ping:
 		q += "&ping=1"
+	elif plan_date != "":
+		q += "&date=" + plan_date.uri_encode() + "&plan=" + JSON.stringify(rows).uri_encode()
 	else:
 		var items = PackedStringArray()
 		for r in rows:
@@ -230,7 +352,7 @@ static func looks_right(url: String) -> bool:
 
 ## Call the script. Awaitable: {"ok", "cleared", "skipped", "tables", "error"}.
 ## `node`: anything in the scene tree (the request is a child of it while it runs).
-static func send(node: Node, url: String, token: String, rows: Array, ping: bool = false) -> Dictionary:
+static func send(node: Node, url: String, token: String, rows: Array, ping: bool = false, plan_date: String = "") -> Dictionary:
 	if not looks_right(url):
 		return {"ok": false, "error": "That is not a web app link (it starts with https://script.google.com/ and ends in /exec)."}
 	var http = HTTPRequest.new()
@@ -238,7 +360,7 @@ static func send(node: Node, url: String, token: String, rows: Array, ping: bool
 	http.max_redirects = 8
 	node.add_child(http)
 	await node.get_tree().process_frame
-	var err = http.request(request_url(url, token, rows, ping))
+	var err = http.request(request_url(url, token, rows, ping, plan_date))
 	if err != OK:
 		http.queue_free()
 		return {"ok": false, "error": "Could not reach the script."}
@@ -253,4 +375,13 @@ static func send(node: Node, url: String, token: String, rows: Array, ping: bool
 		return {"ok": false, "error": "The script answered with a page, not a result: check it is deployed with access for Anyone."}
 	if not bool(data.get("ok", false)):
 		return {"ok": false, "error": "The script said: %s" % str(data.get("error", "no"))}
-	return {"ok": true, "cleared": int(data.get("cleared", 0)), "skipped": int(data.get("skipped", 0)), "tables": int(data.get("tables", 0)), "error": ""}
+	return {"ok": true, "cleared": int(data.get("cleared", 0)), "skipped": int(data.get("skipped", 0)), "tables": int(data.get("tables", 0)),
+		"version": int(data.get("version", 1)), "planned": int(data.get("planned", 0)), "already": bool(data.get("already", false)), "error": ""}
+
+
+## Write a day's plan into the note's table (plan_rows). Awaitable, as send.
+static func send_plan(node: Node, url: String, token: String, plan: Dictionary, wu: String) -> Dictionary:
+	var rows = plan_rows(plan, wu)
+	if rows.is_empty():
+		return {"ok": true, "planned": 0, "error": ""}
+	return await send(node, url, token, rows, false, date_text(str(plan.date)))

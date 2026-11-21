@@ -633,6 +633,68 @@ static func _draw_figure(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
 	return m
 
 
+## The muscle map (the game's own look): the bare figure in plain shorts, each
+## body part tinted from amber to red by how recently it was worked (`heat`:
+## Recovery.heat). The classic look has no parts to tint: it is drawn as is.
+static func draw_muscle_map(p: Pix, i: Dictionary, heat: Dictionary) -> void:
+	if Pix.classic:
+		draw_hero(p, i, {"visuals": {}})
+		return
+	var m: Dictionary = HeroFigure.metrics(i)
+	HeroFigure.draw_body(p, m)
+	var fig: Dictionary = m.fig
+	var g: Dictionary = m.g
+	var owner: PackedInt32Array = fig.owner
+	var parts: Array = fig.parts
+	var warm = Pix.hex_to_rgb("#ffb21f")
+	var hot = Pix.hex_to_rgb("#ff3a1c")
+	var hv = func(part: String) -> float: return float(heat.get(part, {}).get("heat", 0.0))
+	for k in range(owner.size()):
+		var pi: int = owner[k]
+		if pi < 0 or p.data[k] == 0:
+			continue
+		var name: String = str(parts[pi].name)
+		var base: String = name.trim_suffix("L").trim_suffix("R") if name.length() > 4 or name.begins_with("pec") else name
+		var h = 0.0
+		match base:
+			"pec":
+				h = hv.call("chest")
+			"delt":
+				h = hv.call("shoulders")
+			"upper":
+				h = maxf(hv.call("biceps"), hv.call("triceps"))
+			"peak":
+				h = hv.call("biceps")
+			"fore":
+				h = hv.call("forearms")
+			"thigh":
+				h = maxf(hv.call("quads"), maxf(hv.call("hamstrings"), hv.call("glutes")))
+			"calf":
+				h = hv.call("calves")
+			"neck":
+				h = hv.call("back") * 0.7
+			"torso":
+				var x: float = (k % HeroFigure.W) + 0.5
+				h = hv.call("core") if absf(x - float(g.ax)) <= float(g.waist_hw) * 0.55 else hv.call("back")
+		if h <= 0.02:
+			continue
+		var v: int = p.data[k]
+		var r: float = v & 255
+		var gg: float = (v >> 8) & 255
+		var b: float = (v >> 16) & 255
+		var l: float = (0.3 * r + 0.59 * gg + 0.11 * b) / 255.0
+		var lit: float = 0.55 + 0.6 * l
+		var t: float = 0.3 + 0.5 * h
+		var tr: float = lerpf(warm[0], hot[0], h) * lit
+		var tg: float = lerpf(warm[1], hot[1], h) * lit
+		var tb: float = lerpf(warm[2], hot[2], h) * lit
+		p.data[k] = Pix.pack_rgb(clampi(int(lerpf(r, tr, t)), 0, 255), clampi(int(lerpf(gg, tg, t)), 0, 255), clampi(int(lerpf(b, tb, t)), 0, 255))
+	HeroFigure.paint_cloth(p, m, HeroFigure.shorts_region(m), HeroFigure.PLAIN_SHORTS)
+	HeroFigure.draw_face(p, m, i)
+	HeroFigure.draw_hair(p, m, i, false)
+	p.outline_tinted(Pix.OUTLINE)
+
+
 ## Pixels that changed since `before` were painted by the figure.
 static func _mark(own: PackedByteArray, before: PackedInt32Array, p: Pix) -> void:
 	for k in range(own.size()):
