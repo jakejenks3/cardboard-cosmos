@@ -522,6 +522,11 @@ is the Windows handoff.
   discipline (never both). Records carry `weakPart`; the card and sheet show a muscle pill
   (`BountyView.part_pill`). It only ever adds damage, so no past win was lost; weekly and
   coins stay outside parity. Tests: bounty_test.
+- Split combos (2026-11-21): `Missions.combo(sessions, today, cycle, marks)`: the week's lift days
+  (Monday on) by `kind_of_day`; a day that is the next kind after the one before adds to
+  the chain, another starts it again ({now, best, kinds}). The Today card shows "×N" (with
+  embers) beside the split chips from 2; a weekly mission "Combo week" (3 in order, 300 XP)
+  when a split is set. Tests: missions_test.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

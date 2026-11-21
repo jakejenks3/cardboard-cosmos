@@ -153,6 +153,12 @@ static func _split_row(plan: Dictionary) -> Control:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.tooltip_text = "Plan today as a %s" % str(Missions.KIND_NAMES[k]).to_lower()
 		chips.add_child(b)
+	# The split combo: lift days this week in the split's order.
+	var cb = Missions.combo(App.sessions(), App.today, plan.cycle, App.pt())
+	if int(cb.now) >= 2:
+		var pill = Kit.pill("flame", "×%d" % int(cb.now), Pal.ACCENT2, "Combo: %d lift days in a row in your split's order this week" % int(cb.now), Color.WHITE, 13)
+		Fx.embers(pill, Pal.ACCENT2, 2)
+		chips.add_child(Kit.vcenter(pill))
 	v.add_child(chips)
 	return v
 

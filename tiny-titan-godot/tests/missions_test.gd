@@ -215,6 +215,16 @@ func _init() -> void:
 	ok(Missions.lighter_week_due({"feels": {sat: 1, "2026-11-20": 1}}, sat) and not Missions.lighter_week_due({"feels": {sat: 1}}, sat) and not Missions.lighter_week_due({"feels": {sat: 1, "2026-11-20": 1}, "deloadUntil": "2026-11-25"}, sat), "tired twice in three days: a lighter week is offered (not during one)")
 	ok(Missions.easy_day({"deloadUntil": "2026-11-25"}, sat) and not Missions.easy_day({"deloadUntil": "2026-11-20"}, sat), "a lighter week makes every day easy until it ends")
 
+	# --- split combos ----------------------------------------------------------------------------------
+	var cb = Missions.combo(split_log, "2026-11-20", cycle)
+	ok(cb.kinds == ["push", "pull", "push", "pull"] and int(cb.now) == 1 and int(cb.best) == 2, "this week: push, pull (not next: 1), push (next after pull: 2), pull (1)", cb)
+	var legs_sun = {"Squat - Barbell": [[5, 100]], "Calf Raise": [[15, 40]]}
+	var cb2 = Missions.combo(split_log + [lift(sat, push), lift("2026-11-22", legs_sun)], "2026-11-22", cycle)
+	ok(int(cb2.now) == 3 and int(cb2.best) == 3, "pull, push, legs: a combo of 3", cb2)
+	ok(int(Missions.combo(split_log, "2026-11-20", []).now) == 0, "no split, no combo")
+	var wcombo = find(Missions.weekly(Dates.week_key(sat), "2026-11-22", {"sessions": split_log + [lift(sat, push), lift("2026-11-22", legs_sun)], "pt": {}, "settings": {"split": "pull_push_legs"}, "reading": []}, state, []), ":combo")
+	ok(wcombo != null and wcombo.done and int(wcombo.target) == 3, "the weekly Combo week mission", wcombo)
+
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
 	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}

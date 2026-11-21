@@ -107,6 +107,37 @@ static func easy_sets(sets: Array, step_kg: float) -> Array:
 	return out
 
 
+## Split combos: lift days this week in the split's order. {"now" (the chain
+## ending at the latest lift day), "best" (the longest this week), "kinds"
+## (the week's lift days' kinds, in order)}. The week runs Monday to `today`.
+static func combo(sessions: Array, today: String, cycle: Array, marks: Dictionary = {}) -> Dictionary:
+	var out = {"now": 0, "best": 0, "kinds": []}
+	if cycle.is_empty():
+		return out
+	var wk = Dates.week_key(today)
+	var by_day = {}
+	for s in sessions:
+		var d = str(s.get("date", ""))
+		if str(s.get("discipline", "")) == "lift" and d <= today and Dates.week_key(d) == wk:
+			if not by_day.has(d):
+				by_day[d] = []
+			by_day[d].append_array(s.get("exercises", []))
+	var days = by_day.keys()
+	days.sort()
+	var prev = ""
+	var run = 0
+	for d in days:
+		var k = kind_of_day(by_day[d], cycle, marks)
+		if k == "":
+			continue
+		out.kinds.append(k)
+		run = run + 1 if prev != "" and cycle[(cycle.find(prev) + 1) % cycle.size()] == k else 1
+		prev = k
+		out.best = maxi(int(out.best), run)
+	out.now = run
+	return out
+
+
 ## What a perfect day pays (every box of the Today card ticked).
 const PERFECT_XP = 300
 ## Ways shown to do one planned lift (its variations and one other movement).
@@ -896,6 +927,13 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 	for s in week:
 		xp += int(state.get("sessionXp", {}).get(s.id, 0))
 	out.append(_mission("tw:%s:xp" % wk, "weekly", wk, "Grind", "Earn %s XP from workouts this week." % Xp.fmt_int(target), "bolt", null, target, xp, "xp", 500, claims))
+
+	# Split combo: three lift days in the split's order this week.
+	var cycle = split_cycle(str(settings.get("split", "auto")))
+	if not cycle.is_empty():
+		var cb = combo(sessions, Dates.add_days(wk, 6), cycle, marks)
+		out.append(_mission("tw:%s:combo" % wk, "weekly", wk, "Combo week", "Three lift days in your split's order (%s)." % ", ".join(PackedStringArray(cycle.map(func(k): return str(KIND_SHORT[k]).to_lower()))), "flame", "lift",
+			3, mini(3, int(cb.best)), "", 300, claims))
 
 	if int(state.get("body", {}).get("entries", 0)) > 0:
 		var checked = 1 if int(state.body.get("weekFlags", {}).get(wk, 0)) > 0 else 0
