@@ -482,6 +482,10 @@ is the Windows handoff.
   has "Phone logger: Send to phone / Copy". Tests: `tests/doc_clear_test.gd` (the calls on
   a pretend doc, what the game reads back), and the page was driven in a browser at phone
   size against `tests/doc_clear_stub.js` (it serves `?page=log`).
+- Warm-ups and plates (2026-11-21): `game/plates.gd` (`Plates`): `is_barbell(lift)`, `per_side` /
+  `text` (a 45 lb or 20 kg bar and the usual plates), `warmups` / `warmup_text` (the bar
+  for 10, then 40 / 60 / 80 %). Shown under barbell rows of the Today card and sent to the
+  phone logger (`plan_info` aims: `warm`, `plates`). Test: `tests/plates_test.gd`.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -619,6 +623,7 @@ godot --headless --path . --script res://tests/missions_test.gd
 godot --headless --path . --script res://tests/figure_test.gd
 godot --headless --path . --script res://tests/doc_clear_test.gd
 godot --headless --path . --script res://tests/recovery_test.gd
+godot --headless --path . --script res://tests/plates_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other

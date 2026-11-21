@@ -162,6 +162,21 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
 	left.add_child(top)
 	left.add_child(Kit.clip(str(l.why), 11, Pal.MUTED))
+	# A barbell lift: the warm-up and what goes on the bar.
+	if done_name == "" and not bool(l.pt) and Plates.is_barbell(shown):
+		var top_kg = 0.0
+		for one in LiftTrend.next_target(main.last, _step_kg(wu)).sets:
+			top_kg = maxf(top_kg, float(one.get("weightKg", 0.0)))
+		var wt = snappedf(Fmt.kg_to_unit(top_kg, wu), 0.5)
+		var bits = []
+		if Plates.warmup_text(wt, wu) != "":
+			bits.append("Warm-up " + Plates.warmup_text(wt, wu))
+		if Plates.text(wt, wu) != "":
+			bits.append(Plates.text(wt, wu))
+		if not bits.is_empty():
+			var wl = Kit.clip(" · ".join(PackedStringArray(bits)), 11, Pal.with_alpha(Pal.MUTED, 0.85))
+			wl.tooltip_text = "Warm-up sets, then the plates on each side of the bar"
+			left.add_child(wl)
 	row.add_child(left)
 	var right = Kit.vbox(1)
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE

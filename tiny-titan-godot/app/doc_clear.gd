@@ -257,6 +257,12 @@ static func plan_info(plan: Dictionary, sessions: Array, settings: Dictionary) -
 			"text": LiftHistory.describe_sets(aim, fmt_w), "last": LiftHistory.describe_sets(l.last.sets, fmt_w)}
 		if float(d.topKg) > 0.0:
 			a["weight"] = to_u.call(float(d.topKg))
+			if Plates.is_barbell(str(l.name)):
+				var wt = float(a.weight)
+				if Plates.warmup_text(wt, wu) != "":
+					a["warm"] = Plates.warmup_text(wt, wu)
+				if Plates.text(wt, wu) != "":
+					a["plates"] = Plates.text(wt, wu)
 		if int(d.holdSec) > 0:
 			a["hold"] = int(d.holdSec)
 		aims[str(name).to_lower()] = a
