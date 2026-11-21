@@ -126,7 +126,7 @@ func _init() -> void:
 		lift("2026-11-10", "Calf Raise", [[15, 0]]), lift("2026-11-17", "Squat", [[5, 100]]),
 	]
 	var marks = {"neck 4 way": {"name": "Neck 4 Way", "perWeek": 3}, "clamshell": {"name": "Clamshell", "perWeek": 7},
-		"heel raise": {"name": "Heel Raise", "perWeek": 2}, "wall slide": {"name": "Wall Slide"}}
+		"calf raise": {"name": "Calf Raise", "perWeek": 2}, "wall slide": {"name": "Wall Slide"}}
 	var rows = Pt.status(log, marks, TODAY)
 	ok(rows.size() == 4 and Pt.status(log, {}, TODAY).is_empty(), "one row per marked lift, none without marks", rows.size())
 	var neck = row_of(rows, "Neck 4 Way")
@@ -135,7 +135,7 @@ func _init() -> void:
 	var clam = row_of(rows, "Clamshell")
 	ok(not clam.is_empty() and clam.perWeek == 7 and clam.thisWeek == 1 and clam.state == "behind" and clam.left == 6, "seven days asked, one done by Wednesday: behind", clam.get("state"))
 	var heel = row_of(rows, "Calf Raise")
-	ok(not heel.is_empty() and heel.key == "heel raise" and heel.count == 1 and heel.thisWeek == 0 and heel.daysSince == 8 and heel.state == "on", "a mark on another name of a library lift covers the lift (Heel Raise is Calf Raise)", heel.get("name"))
+	ok(not heel.is_empty() and heel.key == "calf raise" and heel.count == 1 and heel.thisWeek == 0 and heel.daysSince == 8 and heel.state == "on", "a mark is on one lift, by its name", heel.get("name"))
 	var wall = row_of(rows, "Wall Slide")
 	ok(not wall.is_empty() and wall.count == 0 and wall.daysSince == -1 and wall.last == "" and wall.perWeek == Pt.DEFAULT_PER_WEEK and wall.state == "on", "marked but never done still has a row, with the usual goal", wall.get("state"))
 	ok(rows[0].name == "Clamshell" and row_of(rows, "Squat").is_empty(), "the one that is behind comes first; a lift that is not marked is not listed", rows[0].name)

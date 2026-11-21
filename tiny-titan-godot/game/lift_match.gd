@@ -1,28 +1,24 @@
 class_name LiftMatch
 extends RefCounted
-## Which lift a typed name means, when it is not exactly one the player has.
+## Words of lift names, and how alike two names are.
 ##
 ## Names are compared by their WORDS, not their letters: order, dashes, commas,
 ## plurals, short forms ("db", "1UE", "pulley") and a one-letter typo do not
-## count, and a word that only says what a library lift already is ("chest fly
-## - cable" for Cable Fly) is not held against it.
+## count. Which movement and variation a name is: game/lift_names.gd, which
+## reads names with `words`.
 ##
-##   LiftMatch.find(typed, known)      -> [{name, score, own}], best first
-##   LiftMatch.library_name(typed)     -> the library's own name for it, or ""
-##   LiftMatch.same_lift(name, own)    -> the player's name for that library lift, or ""
-##   LiftMatch.key(typed)              -> what a decision about a typed name is filed under
+##   LiftMatch.tokens(name) / words(name)   the words of a name
+##   LiftMatch.alike(a, b)                  0 to 1: how many words two names share
+##   LiftMatch.find(typed, names)           [{name, score}], best first
+##   LiftMatch.key(typed)                   what a decision about a typed name is filed under
 ##
-## A score of SAME or more means the same words (taken as the same lift); CLOSE
-## or more is worth offering as "closest". The phone note uses it
-## (QuickLog.pick_exercise), and the review sheet lets the player say yes, no
-## or pick another. Pure logic, no scene and no autoload: tests/lift_match_test.gd.
+## A score of SAME or more means the same words; CLOSE or more is worth offering
+## as "closest". Pure logic, no scene and no autoload: tests/lift_match_test.gd.
 
 ## The same words: taken as the same lift.
 const SAME = 0.95
 ## Enough words in common to offer it as the closest one.
 const CLOSE = 0.5
-## What is left of a score when the typed name says other equipment than the lift uses.
-const WRONG_GEAR = 0.6
 
 ## Words that say nothing about which lift it is.
 const STOP = ["with", "and", "the", "a", "an", "on", "in", "of", "at", "to", "for", "using", "w", "attachment",
@@ -36,7 +32,7 @@ const WORDS = {
 	"rdl": ["romanian", "deadlift"], "rdls": ["romanian", "deadlift"], "sldl": ["stiff", "leg", "deadlift"],
 	"sa": ["single", "arm"], "sl": ["single", "leg"], "1ue": ["single", "arm"], "1le": ["single", "leg"],
 	"unilateral": ["single"],
-	"pulley": ["cable"], "pulleys": ["cable"], "banded": ["band"],
+	"pulley": ["cable"], "pulleys": ["cable"], "banded": ["band"], "superband": ["band"], "miniband": ["band"],
 	"tri": ["tricep"], "tris": ["tricep"], "bis": ["bicep"],
 	"ext": ["extension"], "exts": ["extension"],
 	"rev": ["reverse"], "inc": ["incline"], "dec": ["decline"], "alt": ["alternating"], "alternate": ["alternating"],
@@ -53,6 +49,7 @@ const PAIRS = {
 	"ez bar": "ez", "over head": "overhead", "up right": "upright", "good morning": "goodmorning",
 	"body weight": "bodyweight", "dumb bell": "dumbbell", "bar bell": "barbell", "kettle bell": "kettlebell",
 	"pull through": "pullthrough", "home gym": "home",
+	"trap bar": "trapbar", "hex bar": "trapbar", "super band": "band", "mini band": "band", "resistance band": "band",
 }
 ## "push up" is "pushup", "pull down" is "pulldown", "bent over" is "bentover", "roll out" is "rollout".
 const TAILS = ["up", "down", "over", "out"]
@@ -60,20 +57,8 @@ const LIMBS = ["arm", "leg", "hand"]
 const ONE = ["1", "one"]
 const TWO = ["2", "two", "both", "dual"]
 
-## Equipment the library sorts lifts by (LiftLibrary.EQUIPMENT without "other").
-const GEAR = ["barbell", "dumbbell", "cable", "machine", "bodyweight", "kettlebell", "band"]
-## The words a typed name may use for a library lift's body part.
-const PART_WORDS = {
-	"chest": ["chest"], "back": ["back"], "shoulders": ["shoulder", "delt"], "biceps": ["bicep"],
-	"triceps": ["tricep"], "forearms": ["forearm"], "quads": ["quad"], "hamstrings": ["hamstring"],
-	"glutes": ["glute"], "calves": ["calf"], "core": ["core", "ab"],
-}
-
 static var _rx_cache = {}
 static var _tok_cache = {}
-static var _rows = null
-static var _exact = {}
-static var _row_cache = {}
 
 
 static func _rx(pattern: String) -> RegEx:
@@ -102,6 +87,25 @@ static func _singular(w: String) -> String:
 static func tokens(lift_name: String) -> Array:
 	if _tok_cache.has(lift_name):
 		return _tok_cache[lift_name]
+	var out = _tokenize(lift_name, true)
+	_tok_cache[lift_name] = out
+	return out
+
+
+static var _word_cache = {}
+
+
+## The same words as `tokens`, but every one of them, in order: a word said
+## twice stays twice ("single leg leg press"). LiftNames reads names with it.
+static func words(text: String) -> Array:
+	if _word_cache.has(text):
+		return _word_cache[text]
+	var out = _tokenize(text, false)
+	_word_cache[text] = out
+	return out
+
+
+static func _tokenize(lift_name: String, dedupe: bool) -> Array:
 	var raw = Array(_rx("[^a-z0-9]+").sub(lift_name.to_lower().replace("&", " and "), " ", true).split(" ", false))
 	var joined = []
 	var i = 0
@@ -134,10 +138,9 @@ static func tokens(lift_name: String) -> Array:
 				w = "single"
 			elif TWO.has(w):
 				w = "double"
-		if STOP.has(w) or out.has(w):
+		if STOP.has(w) or (dedupe and out.has(w)):
 			continue
 		out.append(w)
-	_tok_cache[lift_name] = out
 	return out
 
 
@@ -201,143 +204,22 @@ static func _compact(s: String) -> String:
 	return s.replace(" ", "").replace("-", "").replace("_", "")
 
 
-## The library as match candidates: {name, keys, lists (the words of its name
-## and of each other name), equip ("" when it has no one kind), context (words
-## that only say what it already is: its equipment and body part)}.
-static func _library() -> Array:
-	if _rows == null:
-		_rows = []
-		_exact = {}
-		for e in LiftLibrary.catalog():
-			var lists = []
-			var seen = {}
-			for k in [str(e.name)] + e.keys:
-				var tk = tokens(str(k))
-				var sig = " ".join(PackedStringArray(tk))
-				if not tk.is_empty() and not seen.has(sig):
-					seen[sig] = true
-					lists.append(tk)
-			var context = PART_WORDS.get(str(e.part), []).duplicate()
-			if GEAR.has(str(e.equip)):
-				context.append(str(e.equip))
-			for k in e.keys:
-				if not _exact.has(_compact(str(k))):
-					_exact[_compact(str(k))] = _rows.size()
-			_rows.append({"name": str(e.name), "keys": e.keys, "lists": lists, "equip": str(e.equip) if GEAR.has(str(e.equip)) else "", "context": context})
-	return _rows
-
-
-## How well typed words fit one library lift (the best of its names). A typed
-## word that only says the lift's equipment or body part is left out; one that
-## says OTHER equipment costs.
-static func _fit(t: Array, row: Dictionary) -> float:
-	var best = 0.0
-	for c in row.lists:
-		var said = []
-		var factor = 1.0
-		for w in t:
-			if c.has(w) or not row.context.has(w):
-				said.append(w)
-				if not c.has(w) and GEAR.has(w) and row.equip != "":
-					factor = WRONG_GEAR
-		best = maxf(best, alike(said, c) * factor)
-	return best
-
-
-## The library row a name is exactly (a name or other name of it, give or take
-## spaces, dashes and a plural), or -1.
-static func _exact_row(lift_name: String) -> int:
-	_library()
-	var c = _compact(Xp.normalize_exercise(lift_name))
-	if _exact.has(c):
-		return int(_exact[c])
-	if c.length() > 3 and _exact.has(c.trim_suffix("s")):
-		return int(_exact[c.trim_suffix("s")])
-	return -1
-
-
-## The library row a name IS: exactly, or by the same words ("Chest Fly Cable"
-## is Cable Fly). -1 when it is none, or when two rows fit equally well.
-static func row_of(lift_name: String) -> int:
-	if _row_cache.has(lift_name):
-		return int(_row_cache[lift_name])
-	var found = _exact_row(lift_name)
-	if found < 0:
-		var t = tokens(lift_name)
-		var rows = _library()
-		var best = 0.0
-		var ties = 0
-		for ri in range(rows.size()):
-			var sc = _fit(t, rows[ri])
-			if sc > best + 1e-6:
-				best = sc
-				found = ri
-				ties = 1
-			elif absf(sc - best) <= 1e-6:
-				ties += 1
-		if best < SAME or ties != 1:
-			found = -1
-	_row_cache[lift_name] = found
-	return found
-
-
-## The library's own name for a typed name that is exactly one of its lifts
-## ("db bench" -> "Dumbbell Bench Press"), or "".
-static func library_name(typed: String) -> String:
-	var ri = _exact_row(typed)
-	return "" if ri < 0 else str(_library()[ri].name)
-
-
-## The player's own name for a library lift, when they log it under other
-## words ("Chest Fly Cable" for Cable Fly): so a new spelling joins the history
-## they already have. `own` is their lifts, newest first. "" when there is none.
-static func same_lift(lift_name: String, own: Array) -> String:
-	var ri = _exact_row(lift_name)
-	if ri < 0:
-		return ""
-	var n = Xp.normalize_exercise(lift_name)
-	for o in own:
-		if Xp.normalize_exercise(str(o)) != n and row_of(str(o)) == ri:
-			return str(o)
-	return ""
-
-
-## The lifts a typed name could be, best first: [{name, score, own}]. `known`
-## is the names the player has (theirs first); the library is added. A lift of
-## theirs that is a library lift under other words stands for that library lift.
-static func find(typed: String, known: Array, limit: int = 6) -> Array:
+## Names a typed name could be, best first: [{name, score}]. `names` are full
+## lift names ("Shrug - Barbell"); the score is how many words they share
+## (`alike`, 0 to 1). For the review's "pick another lift" list.
+static func find(typed: String, names: Array, limit: int = 6) -> Array:
 	var t = tokens(typed)
 	var out = []
 	if t.is_empty():
 		return out
-	var rows = _library()
-	var claimed = {}
 	var seen = {}
-	for o in known:
-		var own_name = str(o)
-		var nk = Xp.normalize_exercise(own_name)
-		if nk == "" or seen.has(nk):
+	for n in names:
+		var k = Xp.normalize_exercise(str(n))
+		if k == "" or seen.has(k):
 			continue
-		seen[nk] = true
-		var sc = alike(t, tokens(own_name))
-		var ri = row_of(own_name)
-		if ri >= 0:
-			if claimed.has(ri):
-				continue
-			claimed[ri] = true
-			sc = maxf(sc, _fit(t, rows[ri]))
+		seen[k] = true
+		var sc = alike(t, tokens(str(n)))
 		if sc > 0.0:
-			out.append({"name": own_name, "score": sc, "own": true})
-	for ri in range(rows.size()):
-		if claimed.has(ri):
-			continue
-		var sc = _fit(t, rows[ri])
-		if sc > 0.0:
-			out.append({"name": str(rows[ri].name), "score": sc, "own": false})
-	TTUtil.stable_sort(out, func(a, b):
-		if absf(float(a.score) - float(b.score)) > 1e-6:
-			return float(a.score) > float(b.score)
-		if bool(a.own) != bool(b.own):
-			return bool(a.own)
-		return false)
+			out.append({"name": str(n), "score": sc})
+	TTUtil.stable_sort(out, func(a, b): return float(a.score) > float(b.score))
 	return out.slice(0, limit)

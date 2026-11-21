@@ -69,7 +69,7 @@ func _lift_on(date: String):
 	for s in App.sessions():
 		if s.discipline == "lift" and s.date == date and s.get("source") == "manual" and str(s.id).begins_with("s"):
 			for ex in s.exercises:
-				if ex.name == "Bench Press" and ex.sets.size() == 3 and is_equal_approx(float(ex.sets[0].weightKg), 80.0):
+				if ex.name == "Bench Press - Barbell" and ex.sets.size() == 3 and is_equal_approx(float(ex.sets[0].weightKg), 80.0):
 					return s
 	return null
 
@@ -133,7 +133,7 @@ func run(m: Node, t: SceneTree) -> void:
 	check(lift != null and lift.exercises.size() == 3 and lift.get("notes") == "felt strong", "lift session: bench 3x5 @ 80, squat, pull-up, note")
 	if lift != null:
 		var sq = lift.exercises[1]
-		check(sq.name == "Squat" and sq.sets.size() == 3 and int(sq.sets[2].reps) == 4 and is_equal_approx(float(sq.sets[2].weightKg), 100.0), "squat 5,5,4 @ 100")
+		check(sq.name == "Squat - Barbell" and sq.sets.size() == 3 and int(sq.sets[2].reps) == 4 and is_equal_approx(float(sq.sets[2].weightKg), 100.0), "squat 5,5,4 @ 100")
 		check(lift.exercises[2].name == "Pull-up" and float(lift.exercises[2].sets[0].weightKg) == 0.0, "pull-up bodyweight")
 	var found = {"run": false, "ride": false, "climb": false, "body": false}
 	for s in App.sessions():

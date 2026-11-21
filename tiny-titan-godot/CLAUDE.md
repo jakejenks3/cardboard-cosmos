@@ -65,14 +65,43 @@ is the Windows handoff.
   (`s.body.photoSpanDays` / `photoMonths`, 5 `body_*` trophies, a "One month on" reel moment
   from `Diff.PHOTO_MILESTONES`). Parity strips `body.*` photo keys via dotted
   `POST_PORT_STATE_KEYS`. Unit test: `tests/extras_test.gd`.
-- Lift library (added 2026-11-15, evening): Journey → Lifts. `game/lift_library.gd` holds the
-  catalog (about 170 lifts as rows of name, part, equipment, family, also-works, tip, other
-  names) and the pure logic: `rows(sessions)` joins the catalog with the log (other names
-  such as "heel raise" merge into one lift; unknown logged lifts appear as "Your own"),
-  `query` filters/sorts, `rep_bests`, `variations`. `ui/screens/journey_lifts.gd` is the
-  screen and detail sheet; typing in the search box refills only the list. "Add to today's
+- Lift library (added 2026-11-15, evening; rebuilt 2026-11-20 around movements, see "Movement
+  and variation" below): Journey → Lifts. `game/lift_library.gd` holds the catalog (`MOVES`:
+  101 movements, 339 variations, rows of [name, part, usual, only, also-works, tip, variations,
+  other names]) and the pure logic: `catalog()`, `stats(sessions)` (per full lift name),
+  `rows(sessions)` (one row per MOVEMENT, `done` = the variations logged, `st` merged; unknown
+  logged movements appear as "Your own"), `variation_list(row)`, `query` filters/sorts,
+  `rep_bests`. `ui/screens/journey_lifts.gd` is the screen and the movement's page (variation
+  chips at the top switch it); typing in the search box refills only the list. "Add to today's
   workout" sets `App.pending_exercise`, which `LogLiftEditor.build` consumes. Tests:
   `tests/lift_library_test.gd`, walkthrough `tests/shots/lifts.gd` (year data).
+- Movement and variation (2026-11-20, the user's rule): the exercise NAME is the movement,
+  the VARIATION is the position or equipment. A lift is stored as ONE name, "Movement -
+  Variation" (`LiftNames.SEP` = " - "), or the movement alone ("Pull-up", "Calf Raise"). The
+  rules engine is untouched: it keys PRs by that name, so each variation has its own records
+  and parity does not move. Screens split it (`LiftNames.split`): the movement big, the
+  variation as a chip (`SessionView.variation_tag`, `Kit.clip_fit`).
+  - `game/lift_names.gd` (`LiftNames`, pure): `VOCAB` (variation words: positions, grips,
+    band colours, equipment), `canon(words, move)` writes a variation one way (positions
+    first, then colours, then equipment: "Single arm cable", "Incline dumbbell"). A movement's
+    `only` equipment is never said (Lat Pulldown is a cable, Pull-up bodyweight, Face Pull cable
+    + rope); its `usual` equipment is the variation when nothing is written ("squat" is Squat -
+    Barbell) and is dropped next to another word ("front squat" is Squat - Front). `ALIASES`:
+    names that hide a variation (pec deck, skull crusher, slant board).
+  - `resolve(typed, own)` -> {name, move, variation, kind, closest}: "exact" (one of the
+    player's lifts, an alias, or a movement found by its words), "match" (found through one
+    word several movements share, "row" / "curl" / "fly", or a typo: the review asks), "new"
+    (`plain`: their words in title case without plural endings, equipment words moved to the
+    variation; `closest` when one movement is clearly nearest). `QuickLog.pick_exercise` and
+    `App.absorb_pt` (names typed in the Log tab) go through it, so a lift is filed the same way
+    from the note, a table row or the Log tab.
+  - `migrate(old, specials)` turns an old-style name into this form; it was run once on the
+    user's real save (2026-11-20, backup in Documents\Tiny Titan backups), with the user's own
+    shorthand passed as `specials` (never committed). The demo data uses the new names.
+  - The Log tab's exercise keys show movement + variation; its search matches every typed
+    word. The review's "pick another lift" lists every movement with its variations.
+  - Tests: `tests/lift_names_test.gd` (catalog sanity, every variation reads back as itself,
+    the ways of writing a lift, migration), `tests/lift_library_test.gd`.
 - 19 more chase trophies (ids `quirk_*`: Five by Five, Ladder, Pyramid, Streak Week,
   On the Nose, Commuter, Friday the 13th…) read `s.quirks`, filled by
   `Derive._deal_quirks`; also dropped by parity. Unit test: `tests/quirks_test.gd`.
@@ -160,14 +189,11 @@ is the Windows handoff.
   equipment or body part is not held against it ("chest fly - cable" is Cable Fly), other
   equipment costs (`WRONG_GEAR`). `find(typed, known)` scores candidates: `SAME` (0.95) and up
   is the same lift, `CLOSE` (0.5) and up is offered as closest.
-  - `QuickLog.pick_exercise(typed, ctx)` returns {key, typed, name, kind, closest}. "exact": one
-    of the player's lifts, a short name (`ALIASES`), a library lift (it now gets the library's
-    name: "db bench" is Dumbbell Bench Press), or a name already decided. "match": the same
-    words, or the start of exactly one known lift: taken as that lift. "new": a lift of its
-    own (`plain_name`; `CAPITALS` keeps "GHD", "1UE"), with `closest` when one lift is clearly
-    nearest. The player's own lift wins over the library's name for the same lift
-    (`LiftMatch.same_lift`), so a new spelling joins the history they have. Needs `opts.own`
-    (lifts actually logged) and `opts.names` (decisions); without them it reads as before.
+  - `QuickLog.pick_exercise(typed, ctx)` returns {key, typed, name, kind, closest}: a name
+    already decided, else `LiftNames.resolve` (since 2026-11-20; see "Movement and
+    variation"). Needs `opts.own` (lifts actually logged) and `opts.names` (decisions).
+    `LiftMatch` now only reads words (`tokens`, `words`, `key`, `typo`, `alike`) and ranks
+    names for the picker (`find(typed, names)`).
   - A lift entry carries `names` (the picks that are not exact). The review sheet shows a row
     per name (`InboxSheet._name_row`): what was written, what it is taken as, and three keys:
     yes / no (a lift of its own) / another (`_pick_other`: nearest lifts, search, or a typed
@@ -369,6 +395,8 @@ godot --headless --path . --script res://tests/shot_reader_test.gd
 godot --headless --path . --script res://tests/misc_test.gd
 godot --headless --path . --script res://tests/reading_test.gd
 godot --headless --path . --script res://tests/lift_match_test.gd
+godot --headless --path . --script res://tests/lift_names_test.gd
+godot --headless --path . --script res://tests/lift_library_test.gd
 godot --headless --path . --script res://tests/lift_trend_test.gd
 ```
 
@@ -405,10 +433,11 @@ the check.
   have no timed sets.
 - Switching "Physical therapy" on a lift's page does not redraw the chart above it (the
   goal line of "How often" shows the next time the page opens).
-- Lift names are matched when a note is imported, not afterwards: a lift already in the log
-  under words of its own ("Chest Fly Cable", imported before the matching existed) stays under
-  "Your own" in Journey -> Lifts instead of joining the library's Cable Fly. New spellings of
-  it do join it.
+- Lift names are filed when a lift is imported or saved, not afterwards: changing `MOVES`,
+  `VOCAB` or `ALIASES` does not rename what is already in a save. To bring a save in line,
+  run `LiftNames.migrate` over it on a copy (as was done 2026-11-20) and check XP is unchanged.
+- A "no" in the review keeps a lift as a movement of its own ("Jefferson Curl"); there is no
+  screen yet to rename a lift or move it under another movement afterwards.
 - A note line whose date header was used before is checked against what was imported under
   it (`PhoneInbox.split_entries` / `_resolve_updates`): the same day changed is an edit that
   REPLACES the session it came from. The user clears the note between visits and may write

@@ -87,7 +87,7 @@ func _init() -> void:
 	ok(sets_of(one("squat 80kg x5 x3")) == [[5, 80.0], [5, 80.0], [5, 80.0]], "weight first x reps x sets")
 	var rf = sets_of(one("backsquat x5 135", {"weightUnit": "lb"}))
 	ok(rf.size() == 1 and rf[0][0] == 5 and absf(rf[0][1] - 61.23) < 0.01, "reps-first per-set line: x5 135", rf)
-	ok(ex_name("backsquat x5 135") == "Squat", "backsquat alias on a reps-first line")
+	ok(ex_name("backsquat x5 135") == "Squat - Barbell", "backsquat alias on a reps-first line")
 	ok(sets_of(one("heel raise x10 135
 backsquat x5 195
 heel raise x10 195")) == [[10, 135.0], [10, 195.0]], "same exercise on two lines merges its sets", sets_of(one("heel raise x10 135
@@ -116,72 +116,74 @@ heel raise x10 195")))
 	ok(p("bench 3x5 @").problems.size() == 1 and p("bench @ 80").problems.size() == 1, "broken lifting lines are problems")
 
 	# --- exercise names -------------------------------------------------------------
-	ok(ex_name("bench 3x5 @ 80") == "Bench Press", "alias bench")
-	ok(ex_name("ohp 3x5 @ 40") == "Overhead Press", "alias ohp")
-	ok(ex_name("deads 1x5 @ 140") == "Deadlift" and ex_name("dl 1x5 @ 140") == "Deadlift", "alias dl / deads")
-	ok(ex_name("squats 3x5 @ 100") == "Squat", "plural squats")
+	ok(ex_name("bench 3x5 @ 80") == "Bench Press - Barbell", "alias bench")
+	ok(ex_name("ohp 3x5 @ 40") == "Overhead Press - Barbell", "alias ohp")
+	ok(ex_name("deads 1x5 @ 140") == "Deadlift - Barbell" and ex_name("dl 1x5 @ 140") == "Deadlift - Barbell", "alias dl / deads")
+	ok(ex_name("squats 3x5 @ 100") == "Squat - Barbell", "plural squats")
 	ok(ex_name("pull ups 3x8") == "Pull-up" and ex_name("pullups 3x8") == "Pull-up", "pull ups / pullups")
-	ok(ex_name("chins 3x8") == "Chin-up" and ex_name("rows 3x8 @ 60") == "Barbell Row" and ex_name("rdl 3x8 @ 80") == "Romanian Deadlift", "chins, rows, rdl")
+	ok(ex_name("chins 3x8") == "Chin-up" and ex_name("rows 3x8 @ 60") == "Bent Over Row - Barbell" and ex_name("rdl 3x8 @ 80") == "Romanian Deadlift - Barbell", "chins, rows, rdl")
 	ok(ex_name("dips 3x8") == "Dip" and ex_name("pushups 3x20") == "Push-up" and ex_name("curls 3x10 @ 30") == "Bicep Curl", "dips, pushups, curls")
-	ok(ex_name("Romanian deadlift 3x8 @ 80") == "Romanian Deadlift", "exact match, any case")
-	ok(ex_name("incline 3x8 @ 60") == "Incline Bench Press", "unique prefix")
-	ok(ex_name("zercher squat 3x5 @ 60") == "Zercher Squat", "new exercise in Title Case")
-	ok(ex_name("bench: 3x5 @ 80") == "Bench Press", "colon after the name")
+	ok(ex_name("Romanian deadlift 3x8 @ 80") == "Romanian Deadlift - Barbell", "exact match, any case")
+	ok(ex_name("incline 3x8 @ 60") == "Bench Press - Incline", "incline alone is an incline bench press")
+	ok(ex_name("zercher squat 3x5 @ 60") == "Squat - Zercher" and ex_name("zercher carry 3x40") == "Zercher Carry", "a position of a movement; a movement of its own in Title Case", [ex_name("zercher squat 3x5 @ 60"), ex_name("zercher carry 3x40")])
+	ok(ex_name("bench: 3x5 @ 80") == "Bench Press - Barbell", "colon after the name")
 	ok(ex_name("my move 3x5 @ 60") == "My Move" and QuickLog.parse("my move 3x5 @ 60", {"today": TODAY, "exercises": ["My Move"]}).entries[0].data.exercises[0].name == "My Move", "custom known exercise")
 	# A number that belongs to the name: taken when the name is cut off by a dash
 	# or a colon, is a shape names have ("4 way", "1 arm"), or is one already logged.
 	ok(ex_name("neck 4 way - 3x20@10") == "Neck 4 Way" and sets_of(one("neck 4 way - 3x20@10")) == [[20, 10.0], [20, 10.0], [20, 10.0]], "a number inside the name, a dash before the sets", one("neck 4 way - 3x20@10"))
 	ok(ex_name("Neck 4 way 3x20 @ 10") == "Neck 4 Way" and ex_name("hip 3-way 2x15") == "Hip 3-way", "'4 way' / '3-way' with no dash", [ex_name("Neck 4 way 3x20 @ 10"), ex_name("hip 3-way 2x15")])
-	ok(ex_name("1 arm rope climb 3x2") == "1 Arm Rope Climb" and ex_name("45 degree back extension 3x12") == "45 Degree Back Extension", "a name that starts with a number", [ex_name("1 arm rope climb 3x2"), ex_name("45 degree back extension 3x12")])
-	ok(ex_name("1 arm row 3x10 @ 40") == "Dumbbell Row", "and '1 arm row' is the library's one arm row", ex_name("1 arm row 3x10 @ 40"))
-	ok(ex_name("face pull - cable, 1UE 3x15 @ 30") == "Face Pull Cable, 1UE" and ex_name("ghd back raise - 2x12") == "GHD Back Raise" and ex_name("db shrug 3x10 @ 60") == "Dumbbell Shrug", "a short form in a name ('1UE') is part of it, and short forms keep their capitals", [ex_name("face pull - cable, 1UE 3x15 @ 30"), ex_name("ghd back raise - 2x12"), ex_name("db shrug 3x10 @ 60")])
+	ok(ex_name("1 arm rope climb 3x2") == "1 Arm Rope Climb" and ex_name("45 degree back extension 3x12") == "Back Extension - 45 degree", "a name that starts with a number", [ex_name("1 arm rope climb 3x2"), ex_name("45 degree back extension 3x12")])
+	ok(ex_name("1 arm row 3x10 @ 40") == "Bent Over Row - Single arm", "and '1 arm row' is a single arm bent over row", ex_name("1 arm row 3x10 @ 40"))
+	ok(ex_name("face pull - cable, 1UE 3x15 @ 30") == "Face Pull - Single arm" and ex_name("ghd back raise - 2x12") == "Back Extension - GHD" and ex_name("db shrug 3x10 @ 60") == "Shrug - Dumbbell" and ex_name("ghd hold - 3x6") == "GHD Hold", "a short form in a name ('1UE') is read; short forms keep their capitals", [ex_name("face pull - cable, 1UE 3x15 @ 30"), ex_name("ghd back raise - 2x12"), ex_name("db shrug 3x10 @ 60")])
 	ok(ex_name("21s - 3x21 @ 20") == "21s" and ex_name("90/90 hip switch: 3x10") == "90/90 Hip Switch" and ex_name("4 way hip - 2x15") == "4 Way Hip", "after a dash or a colon any name goes")
 	var nn_big5 = QuickLog.parse("big 5 complex 3x5 @ 40", {"today": TODAY, "exercises": ["Big 5 Complex"]})
 	ok(nn_big5.problems.is_empty() and nn_big5.entries.size() == 1 and nn_big5.entries[0].data.exercises[0].name == "Big 5 Complex" and p("big 5 complex 3x5 @ 40").entries.is_empty(), "an exercise already logged keeps its number; an unknown one like it is not guessed", nn_big5)
 	var nn_day3 = one("11/14\nneck 4 way - 3x20@10\nbench 3x5 @ 80")
-	ok(not nn_day3.is_empty() and nn_day3.data.exercises.size() == 2 and nn_day3.data.exercises[0].name == "Neck 4 Way" and nn_day3.data.exercises[1].name == "Bench Press", "it joins the day's lift like any other line", nn_day3)
+	ok(not nn_day3.is_empty() and nn_day3.data.exercises.size() == 2 and nn_day3.data.exercises[0].name == "Neck 4 Way" and nn_day3.data.exercises[1].name == "Bench Press - Barbell", "it joins the day's lift like any other line", nn_day3)
 	for nn_line in ["bench 3 sets of 5 at 80", "bench 3 sets of 5 - 5 @ 80", "deadlift 1 rep max 180", "squat 100 for 5", "bench 5 heavy 3x5 @ 80", "bench 80 - 3x5", "row 1 arm 40 3x10", "3 sets bench 5 @ 80", "curl 3 x 10 each arm 25"]:
 		var nn_al = p(nn_line)
 		ok(nn_al.entries.is_empty() and nn_al.problems.size() == 1, "an amount is never taken for a name: " + nn_line, nn_al)
 	ok(str(p("bench 3 sets of 5 at 80").problems[0].why).contains("3 sets of 5"), "and the problem still quotes the line from its first number", p("bench 3 sets of 5 at 80").problems)
 	# Which lift a typed name is (game/lift_match.gd): exact, the same words, or new.
-	var lm = {"own": ["seated row - cable, 1UE", "Chest Fly Cable"], "exercises": ["seated row - cable, 1UE", "Chest Fly Cable"] + Summary.DEFAULT_EXERCISES}
+	var lm = {"own": ["Seated Row - Single arm", "Chest Fly - Cable"], "exercises": ["Seated Row - Single arm", "Chest Fly - Cable"] + Summary.DEFAULT_EXERCISES}
 	var lm_same = one("seated row single arm, home pulley 3x10 @ 40", lm)
-	ok(not lm_same.is_empty() and lm_same.data.exercises[0].name == "seated row - cable, 1UE" and lm_same.get("names", []).size() == 1 and lm_same.names[0].kind == "match" and lm_same.names[0].typed == "seated row single arm, home pulley", "the same words in other words: taken as the player's lift, and the review is told", lm_same)
-	ok(not one("seated row - cable, 1ue 3x10 @ 40", lm).has("names") and not one("bench 3x5 @ 80", lm).has("names") and not one("cable crossover 3x12 @ 20").has("names"), "their own lift, a short name and a library lift are exact: nothing to ask")
-	ok(ex_name("cable crossover 3x12 @ 20") == "Cable Fly" and ex_name("db bench 3x8 @ 30") == "Dumbbell Bench Press", "another name of a library lift gets the library's name", [ex_name("cable crossover 3x12 @ 20"), ex_name("db bench 3x8 @ 30")])
+	ok(not lm_same.is_empty() and lm_same.data.exercises[0].name == "Seated Row - Single arm" and not lm_same.has("names"), "the same movement and variation in other words is their lift, nothing to ask", lm_same)
+	ok(not one("seated row - single arm 3x10 @ 40", lm).has("names") and not one("bench 3x5 @ 80", lm).has("names") and not one("cable crossover 3x12 @ 20").has("names"), "their own lift, a short name and a known variation are exact: nothing to ask")
+	ok(ex_name("cable crossover 3x12 @ 20") == "Chest Fly - Cable" and ex_name("db bench 3x8 @ 30") == "Bench Press - Dumbbell", "a name that hides a variation", [ex_name("cable crossover 3x12 @ 20"), ex_name("db bench 3x8 @ 30")])
 	var lm_lib = one("cable fly 3x12 @ 20", lm)
-	ok(not lm_lib.is_empty() and lm_lib.data.exercises[0].name == "Chest Fly Cable" and lm_lib.names[0].kind == "match", "a library lift they log under other words joins their own", lm_lib)
+	ok(not lm_lib.is_empty() and lm_lib.data.exercises[0].name == "Chest Fly - Cable" and lm_lib.names[0].kind == "match", "found by a one-word name ('fly'): taken, and asked about", lm_lib)
 	var lm_new = one("neck 4 way - 3x20@10", lm)
 	ok(not lm_new.is_empty() and lm_new.data.exercises[0].name == "Neck 4 Way" and lm_new.names[0].kind == "new" and lm_new.names[0].closest == "", "nothing like it: a new lift, said so", lm_new)
-	var lm_near = one("incline dumbbell hammer curl 3x10 @ 20", lm)
-	ok(not lm_near.is_empty() and lm_near.data.exercises[0].name == "Incline Dumbbell Hammer Curl" and lm_near.names[0].kind == "new" and lm_near.names[0].closest == "Incline Dumbbell Curl", "one word more: a new lift, with the closest one to ask about", lm_near)
+	var lm_near = one("jefferson curl 3x10 @ 20", lm)
+	ok(not lm_near.is_empty() and lm_near.data.exercises[0].name == "Jefferson Curl" and lm_near.names[0].kind == "new" and lm_near.names[0].closest == "Bicep Curl", "a curl that is not a bicep curl: new, with the closest one to ask about", lm_near)
 	var lm_start = one("romanian 3x8 @ 60", lm)
-	ok(not lm_start.is_empty() and lm_start.data.exercises[0].name == "Romanian Deadlift" and lm_start.get("names", [{}])[0].get("kind") == "match", "the start of exactly one lift is taken, and asked about", lm_start)
+	ok(not lm_start.is_empty() and lm_start.data.exercises[0].name == "Romanian Deadlift - Barbell" and not lm_start.has("names"), "a word only one movement has is enough ('romanian')", lm_start)
+	var lm_curl = one("curl 3x10 @ 15", lm)
+	ok(not lm_curl.is_empty() and lm_curl.data.exercises[0].name == "Bicep Curl" and lm_curl.names[0].kind == "match", "a word several movements have ('curl') is taken, and asked about", lm_curl)
 	var lm_vague = one("pause row 3x8 @ 60", lm)
-	ok(not lm_vague.is_empty() and lm_vague.data.exercises[0].name == "Pause Row" and lm_vague.names[0].kind == "new" and lm_vague.names[0].closest == "", "several lifts equally near: none is called the closest", lm_vague)
+	ok(not lm_vague.is_empty() and lm_vague.data.exercises[0].name == "Bent Over Row - Paused" and lm_vague.names[0].kind == "match", "'row' alone is a bent over row, and asked about", lm_vague)
 	var lm_key = LiftMatch.key("seated row single arm, home pulley")
 	var lm_no = one("seated row single arm, home pulley 3x10 @ 40", lm.merged({"names": {lm_key: ""}}))
-	ok(not lm_no.is_empty() and lm_no.data.exercises[0].name == "Seated Row Single Arm, Home Pulley" and lm_no.names[0].kind == "exact" and lm_no.names[0].get("decided") == true, "decided 'no': it stays a lift of its own", lm_no)
+	ok(not lm_no.is_empty() and lm_no.data.exercises[0].name == "Seated Row Single Arm - Cable" and lm_no.names[0].kind == "exact" and lm_no.names[0].get("decided") == true, "decided 'no': a movement of its own from the typed words", lm_no)
 	var lm_lib_no = one("cable fly 3x12 @ 20", lm.merged({"names": {LiftMatch.key("cable fly"): ""}}))
-	ok(not lm_lib_no.is_empty() and lm_lib_no.data.exercises[0].name == "Cable Fly" and QuickLog.plain_name("db bench") == "Dumbbell Bench Press" and QuickLog.plain_name("neck 4 way") == "Neck 4 Way", "'no' to their own lift for a library lift: the library's lift, apart from theirs", lm_lib_no)
-	var lm_other = one("seated row single arm, home pulley 3x10 @ 40", lm.merged({"names": {lm_key: "Seated Cable Row"}}))
-	ok(not lm_other.is_empty() and lm_other.data.exercises[0].name == "Seated Cable Row" and lm_other.key == lm_same.key and lm_no.key == lm_same.key, "decided 'another one': that lift, and the entry keeps its key whatever is decided", lm_other)
+	ok(not lm_lib_no.is_empty() and lm_lib_no.data.exercises[0].name == "Fly - Cable" and QuickLog.plain_name("db bench") == "Bench - Dumbbell" and QuickLog.plain_name("neck 4 way") == "Neck 4 Way", "'no': their words are the movement, the equipment its variation", [lm_lib_no, QuickLog.plain_name("db bench")])
+	var lm_other = one("seated row single arm, home pulley 3x10 @ 40", lm.merged({"names": {lm_key: "Seated Row - Machine"}}))
+	ok(not lm_other.is_empty() and lm_other.data.exercises[0].name == "Seated Row - Machine" and lm_other.key == lm_same.key and lm_no.key == lm_same.key, "decided 'another one': that lift, and the entry keeps its key whatever is decided", lm_other)
 	var lm_two = one("seated row single arm, home pulley 3x10 @ 40\nseated row - cable, 1ue 2x8 @ 45", lm)
-	ok(not lm_two.is_empty() and lm_two.data.exercises.size() == 1 and lm_two.data.exercises[0].sets.size() == 5 and lm_two.names.size() == 1, "two spellings of one lift on a day are one exercise", lm_two)
+	ok(not lm_two.is_empty() and lm_two.data.exercises.size() == 1 and lm_two.data.exercises[0].sets.size() == 5, "two spellings of one lift on a day are one exercise", lm_two)
 	ok(str(one("muscle up 3x5", {"loaded": ["muscle up"]}).data.exercises[0].name) == "Muscle-up", "the library's spelling does not lose what the log knows about the lift")
 	# "(PT)" in front of an exercise: a physical therapy lift (game/pt.gd).
 	var pt_new = one("(PT) neck 4 way - 3x20@10")
 	ok(not pt_new.is_empty() and pt_new.data.exercises[0].name == "Neck 4 Way" and pt_new.data.exercises[0].get("pt") == true and pt_new.names[0].typed == "(PT) neck 4 way" and pt_new.names[0].kind == "new" and pt_new.names[0].pt, "the tag comes off the name and the exercise is marked", pt_new)
-	var pt_ctx = {"own": ["Squat"], "exercises": Summary.DEFAULT_EXERCISES}
+	var pt_ctx = {"own": ["Squat - Barbell"], "exercises": Summary.DEFAULT_EXERCISES}
 	var pt_own = one("(PT) squat 3x10", pt_ctx)
-	ok(not pt_own.is_empty() and pt_own.data.exercises[0].name == "Squat" and pt_own.data.exercises[0].get("pt") == true and pt_own.names[0].kind == "match" and pt_own.names[0].key == "ptsquat", "a lift they already do, tagged for the first time: that lift, and the review asks", pt_own)
-	var pt_known = one("(PT) squat 3x10", pt_ctx.merged({"pt": {"squat": {"name": "Squat", "perWeek": 3}}}))
-	ok(not pt_known.is_empty() and pt_known.data.exercises[0].name == "Squat" and not pt_known.has("names"), "once it is a PT lift there is nothing to ask", pt_known)
+	ok(not pt_own.is_empty() and pt_own.data.exercises[0].name == "Squat - Barbell" and pt_own.data.exercises[0].get("pt") == true and pt_own.names[0].kind == "match" and pt_own.names[0].key == "ptsquat", "a lift they already do, tagged for the first time: that lift, and the review asks", pt_own)
+	var pt_known = one("(PT) squat 3x10", pt_ctx.merged({"pt": {"squat - barbell": {"name": "Squat - Barbell", "perWeek": 3}}}))
+	ok(not pt_known.is_empty() and pt_known.data.exercises[0].name == "Squat - Barbell" and not pt_known.has("names"), "once it is a PT lift there is nothing to ask", pt_known)
 	var pt_apart = one("(PT) squat 3x10", pt_ctx.merged({"names": {"ptsquat": ""}}))
 	ok(not pt_apart.is_empty() and pt_apart.data.exercises[0].name == "PT Squat" and pt_apart.data.exercises[0].get("pt") == true, "'no': the PT one is kept apart under its own name", pt_apart)
 	var pt_plain = one("squat 3x5 @ 100", pt_ctx.merged({"names": {"ptsquat": ""}}))
-	ok(not pt_plain.is_empty() and pt_plain.data.exercises[0].name == "Squat" and not pt_plain.data.exercises[0].has("pt") and not pt_plain.has("names"), "and the untagged line is still the plain lift", pt_plain)
+	ok(not pt_plain.is_empty() and pt_plain.data.exercises[0].name == "Squat - Barbell" and not pt_plain.data.exercises[0].has("pt") and not pt_plain.has("names"), "and the untagged line is still the plain lift", pt_plain)
 	var pt_forms = p("11/14
 calf raise (PT) 3x15
 pt: clamshells 2x20
@@ -190,7 +192,7 @@ pt: clamshells 2x20
 	var pt_flags = []
 	for ex in pt_forms.entries[0].data.exercises if pt_forms.entries.size() == 1 else []:
 		pt_flags.append("%s=%s" % [str(ex.name), str(ex.get("pt", false))])
-	ok(pt_forms.problems.is_empty() and pt_flags == ["Calf Raise=true", "Clamshells=true", "Glute Bridge=true", "3 Pt Row=false"], "the tag after the name, 'pt:' and '[pt]' count; the bare letters do not", [pt_flags, pt_forms.problems])
+	ok(pt_forms.problems.is_empty() and pt_flags == ["Calf Raise=true", "Clamshell=true", "Glute Bridge=true", "3 Pt Row=false"], "the tag after the name, 'pt:' and '[pt]' count; the bare letters do not", [pt_flags, pt_forms.problems])
 	var pt_two = one("(PT) neck 4 way - 3x20@10
 neck 4 way 2x20@10")
 	ok(not pt_two.is_empty() and pt_two.data.exercises.size() == 1 and pt_two.data.exercises[0].sets.size() == 5 and pt_two.data.exercises[0].get("pt") == true, "tagged and untagged lines of one lift on a day are one exercise, marked", pt_two)
@@ -224,12 +226,12 @@ neck 4 way 2x20@10")
 	var tb_names = []
 	for tb_one in tb_ex:
 		tb_names.append(str(tb_one.name))
-	ok(tb.problems.is_empty() and tb.entries.size() == 1 and tb.entries[0].date == "2026-11-14" and tb_names == ["Seated Row Cable, 1 Arm", "Bench Press", "Neck 4 Way", "Calf Stretch Wall"], "a table: its date, and a row per exercise (the variation joins the name)", [tb_names, tb.problems])
+	ok(tb.problems.is_empty() and tb.entries.size() == 1 and tb.entries[0].date == "2026-11-14" and tb_names == ["Seated Row - Single arm", "Bench Press - Barbell", "Neck 4 Way", "Calf Stretch - Wall"], "a table: its date, and a row per exercise (the variation joins the name)", [tb_names, tb.problems])
 	ok(tb_ex.size() == 4 and tb_ex[0].sets.size() == 3 and int(tb_ex[0].sets[1].reps) == 10 and absf(float(tb_ex[0].sets[0].weightKg) - 70.0 * 0.45359237) < 0.01 and tb_ex[1].sets.size() == 3 and int(tb_ex[1].sets[0].reps) == 5, "the weight column and the reps column", tb_ex)
 	ok(tb_ex.size() == 4 and tb_ex[2].get("pt") == true and tb_ex[2].sets.size() == 3 and int(tb_ex[3].sets[0].reps) == 3 and int(tb_ex[3].sets[0].get("holdSec", 0)) == 30 and float(tb_ex[3].sets[0].weightKg) == 0.0, "(PT) in the exercise cell, and 30\" in the weight column is a hold", tb_ex)
 	var tb2 = p("11/14\n| Exercise | Type | Sets | Reps | Weight (lb) | Notes |\n|---|---|---|---|---|---|\n| Squat | barbell | 3 | 5 | 185 | felt good |", lb)
 	var tb2_ex = tb2.entries[0].data.exercises if tb2.entries.size() == 1 else []
-	ok(tb2.problems.is_empty() and tb2_ex.size() == 1 and tb2_ex[0].name == "Squat" and tb2_ex[0].sets.size() == 3 and int(tb2_ex[0].sets[2].reps) == 5 and absf(float(tb2_ex[0].sets[0].weightKg) - 185.0 * 0.45359237) < 0.01 and tb2.entries[0].data.get("notes") == "felt good", "Sets and Reps as two columns, other words in the header, a note, a ruler row", tb2)
+	ok(tb2.problems.is_empty() and tb2_ex.size() == 1 and tb2_ex[0].name == "Squat - Barbell" and tb2_ex[0].sets.size() == 3 and int(tb2_ex[0].sets[2].reps) == 5 and absf(float(tb2_ex[0].sets[0].weightKg) - 185.0 * 0.45359237) < 0.01 and tb2.entries[0].data.get("notes") == "felt good", "Sets and Reps as two columns, other words in the header, a note, a ruler row", tb2)
 	var tb3 = p("| Exercise | PT | Weight | Set 1 | Set 2 | Set 3 |\n| Deadlift | | 135 | 5 | 5 | 3 |\n| Clamshell | x | | 15 | 15 | |\n| Romanian deadlift | | | 5@135 | 5@185 | |", lb)
 	var tb3_ex = tb3.entries[0].data.exercises if tb3.entries.size() == 1 else []
 	ok(tb3.problems.is_empty() and tb3_ex.size() == 3 and tb3_ex[0].sets.size() == 3 and int(tb3_ex[0].sets[2].reps) == 3 and tb3_ex[1].get("pt") == true and tb3_ex[1].sets.size() == 2 and float(tb3_ex[1].sets[0].weightKg) == 0.0 and tb3_ex[2].sets.size() == 2 and absf(float(tb3_ex[2].sets[1].weightKg) - 185.0 * 0.45359237) < 0.01, "a column per set, a PT column, and a weight inside a set's cell", tb3)
@@ -268,22 +270,19 @@ neck 4 way 2x20@10")
 	for tw_one in tw_ex:
 		tw_by[str(tw_one.name)] = tw_one
 	ok(tw.entries.size() == 1 and tw.entries[0].date == "2026-11-14" and tw_ex.size() == 6, "one lift for the day, six exercises", tw_by.keys())
-	var tw_row = {"sets": []}
-	for tw_name in tw_by:
-		if str(tw_name).begins_with("Goblet Squat"):
-			tw_row = tw_by[tw_name]
+	var tw_row = tw_by.get("Squat - Goblet kettlebell", {"sets": []})
 	ok(tw_row.sets.size() == 3 and int(tw_row.sets[0].reps) == 12 and absf(float(tw_row.sets[0].weightKg) - 35.0 * 0.45359237) < 0.01 and int(tw_row.sets[2].reps) == 8 and absf(float(tw_row.sets[2].weightKg) - 53.0 * 0.45359237) < 0.01, "a row with no exercise goes on with the one above: a second weight of it", tw_by.keys())
-	var tw_blue = tw_by.get("Face Pull Blue Band", {"sets": []})
-	var tw_black = tw_by.get("Face Pull Black Band", {"sets": []})
+	var tw_blue = tw_by.get("Face Pull - Blue band", {"sets": []})
+	var tw_black = tw_by.get("Face Pull - Black band", {"sets": []})
 	ok(tw_blue.sets.size() == 2 and float(tw_blue.sets[0].weightKg) == 0.0 and tw_black.sets.size() == 1 and int(tw_black.sets[0].reps) == 10, "a band in the Weight column is the resistance: part of the name, no weight", tw_by.keys())
 	var tw_warned = false
 	for tw_w in tw.entries[0].warnings if tw.entries.size() == 1 else []:
 		if str(tw_w).contains("no weight given"):
 			tw_warned = true
 	ok(not tw_warned, "and no 'no weight given' warning, since the band was given", tw.entries[0].warnings if tw.entries.size() == 1 else [])
-	var tw_lat = tw_by.get("Lat Pulldown 1 Arm, Cable", {"sets": []})
+	var tw_lat = tw_by.get("Lat Pulldown - Single arm", {"sets": []})
 	ok(tw_lat.sets.size() == 2 and int(tw_lat.sets[0].reps) == 10, "a number in the variation ('1 arm') is part of the name, not a set", tw_by.keys())
-	var tw_rope = tw_by.get("Rope Pushdown", {"sets": []})
+	var tw_rope = tw_by.get("Tricep Pushdown - Rope", {"sets": []})
 	ok(tw_rope.sets.size() == 2 and int(tw_rope.sets[1].reps) == 10, "'rope pushdown' in the Exercise column is a lift, not a climb", tw_by.keys())
 	var tw_pull = tw_by.get("Pull-up", {"sets": []})
 	ok(tw_pull.sets.size() == 2 and float(tw_pull.sets[0].weightKg) == 0.0, "'bw' in the Weight column is bodyweight", tw_pull)
@@ -423,7 +422,7 @@ neck 4 way 2x20@10")
 	ok(junk.problems[0].why != "", "problems say why")
 
 	# --- summaries ----------------------------------------------------------------------------
-	ok(one("bench 3x5 @ 80").summary == "Bench Press 3×5 @ 80 kg", "lift summary", one("bench 3x5 @ 80").summary)
+	ok(one("bench 3x5 @ 80").summary == "Bench Press - Barbell 3×5 @ 80 kg", "lift summary", one("bench 3x5 @ 80").summary)
 	ok(one("run 5.2km 27:30 +80m").summary == "Run 5.2 km · 27:30 · 80 m up", "run summary", one("run 5.2km 27:30 +80m").summary)
 	ok(one("v4 flash x2, v5 send").summary == "V4 flash ×2 · V5 send", "climb summary")
 

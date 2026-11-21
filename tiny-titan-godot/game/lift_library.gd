@@ -1,16 +1,24 @@
 class_name LiftLibrary
 extends RefCounted
-## The lift library: a catalog of lifts by body part and equipment, joined with
-## what the player has actually logged. Pure logic (no scene, no autoload), so
-## it runs headless from tests/lift_library_test.gd. The screen is
-## ui/screens/journey_lifts.gd.
+## The lift library: a catalog of MOVEMENTS, each with the variations it is
+## done in (position and equipment), joined with what the player has logged.
+## A logged lift is named "Movement - Variation" (see game/lift_names.gd), so
+## its stats are per variation and the library groups them under the movement.
+## Pure logic (no scene, no autoload): tests/lift_library_test.gd. The screen
+## is ui/screens/journey_lifts.gd.
 ##
-## Entry: {name, part, equip, family, also, tip, keys: [normalized names that
-##         count as this lift], own: bool (true = not in the catalog, logged by the player)}
-## Stats (per normalized name, see `stats`): {name (as last typed), count, last (date),
-##         bestKg, bestReps (reps of the heaviest set), e1rm, bwReps (most reps in a
-##         bodyweight set), volumeKg, reps, history: [{date, id, sets}] newest first}
-## Row:   an Entry plus "st": merged Stats or null when never done.
+## Entry (catalog): {name, part, usual (the variation when none is written, or
+##   ""), only ([equipment never said: "Cable" for a lat pulldown]), equip (its
+##   main equipment id), equips ([every equipment id of its variations]),
+##   family (= name), also, tip, vars ([variations]), names ([other names]),
+##   keys ([normalized name and other names]), own: false}
+## Stats (per normalized full name, see `stats`): {name (as logged), count,
+##   last (date), bestKg, bestReps (reps of the heaviest set), e1rm, bwReps,
+##   volumeKg, reps, history: [{date, id, sets}] newest first}
+## Row (`rows`): an Entry plus "done": [{variation, name, st}] (the variations
+##   logged, most recent first) and "st": the stats of all of them together, or
+##   null when the movement was never done. A movement of the player's own is a
+##   row with own: true.
 
 const PARTS = [
 	{"id": "chest", "name": "Chest"},
@@ -24,6 +32,7 @@ const PARTS = [
 	{"id": "glutes", "name": "Glutes"},
 	{"id": "calves", "name": "Calves"},
 	{"id": "core", "name": "Core"},
+	{"id": "mobility", "name": "Mobility"},
 	{"id": "full", "name": "Full body"},
 	{"id": "other", "name": "Your own"},
 ]
@@ -49,197 +58,334 @@ const SORTS = [
 
 const REP_MARKS = [1, 3, 5, 8, 10, 12]
 
-## [name, part, equipment, family, also works, tip, other names...]
-const LIFTS = [
+## [movement, part, usual variation, [equipment never said], also works, tip,
+##  [variations], [other names]]. Variations are written the way
+## LiftNames.canon writes them (tests check it): positions first, then
+## equipment; the usual equipment is left out next to a position ("Squat -
+## Front" is a barbell front squat). Other names never carry a variation word:
+## "row" is Bent Over Row, and "dumbbell row" is Bent Over Row - Dumbbell.
+const MOVES = [
 	# --- chest ---------------------------------------------------------------
-	["Bench Press", "chest", "barbell", "Bench press", "triceps, front delts", "Pinch your shoulder blades, bar to mid-chest, feet planted."],
-	["Incline Bench Press", "chest", "barbell", "Bench press", "upper chest, front delts", "Bench at 30 to 45 degrees; bar to the upper chest."],
-	["Decline Bench Press", "chest", "barbell", "Bench press", "lower chest, triceps", "Shorter range than flat; keep the bar over the lower chest."],
-	["Dumbbell Bench Press", "chest", "dumbbell", "Bench press", "triceps, front delts", "Deeper stretch than the bar; elbows about 45 degrees from your sides.", "dumbbell press", "db bench press", "db bench"],
-	["Incline Dumbbell Press", "chest", "dumbbell", "Bench press", "upper chest, front delts", "Press up and slightly in; do not clang the bells.", "incline db press"],
-	["Decline Dumbbell Press", "chest", "dumbbell", "Bench press", "lower chest", "Hook your feet; lower under control."],
-	["Machine Chest Press", "chest", "machine", "Bench press", "triceps", "Seat so the handles line up with mid-chest.", "chest press"],
-	["Smith Machine Bench Press", "chest", "machine", "Bench press", "triceps", "Fixed path: set the bench so the bar meets mid-chest.", "smith bench press", "smith bench"],
-	["Dumbbell Fly", "chest", "dumbbell", "Fly", "front delts", "Soft elbows, wide arc, stop when the chest is stretched.", "chest fly", "db fly"],
-	["Incline Dumbbell Fly", "chest", "dumbbell", "Fly", "upper chest", "Same arc on a low incline; go lighter than you think."],
-	["Cable Fly", "chest", "cable", "Fly", "front delts", "Step forward, hug a barrel, squeeze the hands together.", "cable crossover", "cable crossovers"],
-	["Low-to-High Cable Fly", "chest", "cable", "Fly", "upper chest", "Pulleys low; sweep up to eye height."],
-	["High-to-Low Cable Fly", "chest", "cable", "Fly", "lower chest", "Pulleys high; sweep down to your hips."],
-	["Pec Deck", "chest", "machine", "Fly", "front delts", "Elbows slightly bent; pause where the pads meet.", "machine fly", "pec fly"],
-	["Push-up", "chest", "bodyweight", "Push-up", "triceps, core", "Body in one line, chest to the floor, lock out."],
-	["Incline Push-up", "chest", "bodyweight", "Push-up", "triceps", "Hands on a bench: easier, good for high reps."],
-	["Decline Push-up", "chest", "bodyweight", "Push-up", "upper chest, shoulders", "Feet on a bench: harder, more shoulders."],
-	["Dip", "chest", "bodyweight", "Dip", "triceps, front delts", "Lean forward for chest, stay upright for triceps.", "tricep dip", "chest dip"],
-	["Weighted Dip", "chest", "bodyweight", "Dip", "triceps, front delts", "Add load with a belt once bodyweight sets get easy."],
-	["Dumbbell Pullover", "chest", "dumbbell", "Pullover", "lats, serratus", "Arc one bell behind your head with soft elbows.", "pullover"],
+	["Bench Press", "chest", "Barbell", ["Flat"], "triceps, front delts", "Shoulder blades pinched, bar to mid-chest, feet planted.",
+		["Barbell", "Incline", "Decline", "Close grip", "Paused", "Dumbbell", "Incline dumbbell", "Decline dumbbell", "Machine", "Smith machine", "Incline smith machine"],
+		["bench", "bp", "benchpress"]],
+	["Chest Fly", "chest", "", [], "front delts", "Soft elbows and a wide arc; squeeze the hands together.",
+		["Dumbbell", "Incline dumbbell", "Cable", "Low to high cable", "High to low cable", "Machine"],
+		["fly", "pec fly"]],
+	["Push-up", "chest", "", ["Bodyweight"], "triceps, core", "Body in one straight line, chest to the floor.",
+		["Incline", "Decline", "Diamond", "Wide grip", "Kneeling", "Pike", "Weighted"],
+		["pushup", "press up", "pressup"]],
+	["Dip", "chest", "", ["Bodyweight"], "triceps, front delts", "Lean forward for chest, stay upright for triceps.",
+		["Weighted", "Assisted", "Bench", "Machine", "Rings"],
+		["parallel bar dip", "chest dip"]],
+	["Pullover", "chest", "Dumbbell", [], "lats, triceps", "Arms long; lower behind your head and pull back over the chest.",
+		["Dumbbell", "Cable", "Barbell"],
+		[]],
 	# --- back ----------------------------------------------------------------
-	["Deadlift", "back", "barbell", "Deadlift", "glutes, hamstrings, grip", "Bar over mid-foot, brace, push the floor away."],
-	["Sumo Deadlift", "back", "barbell", "Deadlift", "glutes, adductors", "Wide stance, toes out, chest up; spread the floor."],
-	["Trap Bar Deadlift", "back", "barbell", "Deadlift", "quads, glutes", "Stand inside the bar; more upright and kinder on the back.", "hex bar deadlift"],
-	["Rack Pull", "back", "barbell", "Deadlift", "traps, glutes", "Pull from pins around knee height to overload the top."],
-	["Barbell Row", "back", "barbell", "Row", "biceps, rear delts", "Hinge to about 45 degrees; pull the bar to your belly.", "bent over row", "bent-over row"],
-	["Pendlay Row", "back", "barbell", "Row", "biceps, lower back", "Flat back, every rep from a dead stop on the floor."],
-	["T-Bar Row", "back", "barbell", "Row", "biceps, rear delts", "Chest proud, drive the elbows back.", "t bar row", "landmine row"],
-	["Dumbbell Row", "back", "dumbbell", "Row", "biceps, rear delts", "One hand on a bench; pull the bell to your hip.", "one arm row", "single arm row", "db row"],
-	["Chest-Supported Row", "back", "dumbbell", "Row", "rear delts, biceps", "Chest on an incline bench: no cheating with the hips.", "chest supported row", "incline row"],
-	["Meadows Row", "back", "barbell", "Row", "rear delts, grip", "Staggered stance at a landmine; row with an overhand grip."],
-	["Seated Cable Row", "back", "cable", "Row", "biceps, rear delts", "Sit tall, pull to the stomach, let the shoulders stretch forward.", "cable row", "seated row"],
-	["Machine Row", "back", "machine", "Row", "biceps", "Chest on the pad; squeeze the shoulder blades."],
-	["Inverted Row", "back", "bodyweight", "Row", "biceps, core", "Hang under a bar, body straight, chest to the bar.", "body row", "australian pull-up"],
-	["Lat Pulldown", "back", "cable", "Pulldown", "biceps", "Lean back a little; pull the bar to the collarbone."],
-	["Close-Grip Lat Pulldown", "back", "cable", "Pulldown", "biceps", "V handle; drive the elbows down to your ribs.", "close grip pulldown", "v-bar pulldown"],
-	["Straight-Arm Pulldown", "back", "cable", "Pulldown", "lats, triceps", "Arms nearly straight; sweep the bar to your thighs.", "straight arm pulldown"],
-	["Pull-up", "back", "bodyweight", "Pull-up", "biceps, grip", "Overhand grip, start from a dead hang, chin over the bar."],
-	["Chin-up", "back", "bodyweight", "Pull-up", "biceps", "Underhand grip: more biceps than a pull-up."],
-	["Neutral-Grip Pull-up", "back", "bodyweight", "Pull-up", "biceps, brachialis", "Palms facing each other: easiest on the shoulders.", "neutral grip pull-up", "hammer pull-up"],
-	["Weighted Pull-up", "back", "bodyweight", "Pull-up", "biceps, grip", "Belt or a bell between your feet; same strict reps.", "weighted chin-up"],
-	["Assisted Pull-up", "back", "machine", "Pull-up", "biceps", "Use the pad or a band; take a little less help each week."],
-	["Barbell Shrug", "back", "barbell", "Shrug", "traps, grip", "Straight up to the ears, pause, no rolling.", "shrug", "shrugs"],
-	["Dumbbell Shrug", "back", "dumbbell", "Shrug", "traps, grip", "Bells at your sides; shrug up and hold a beat."],
-	["Back Extension", "back", "bodyweight", "Extension", "glutes, hamstrings", "Hinge at the hips on the bench; hold a plate to load it.", "hyperextension", "hyperextensions"],
+	["Deadlift", "back", "Barbell", [], "glutes, hamstrings, grip", "Bar over mid-foot; brace and push the floor away.",
+		["Barbell", "Sumo", "Deficit", "Paused", "Trap bar", "Dumbbell", "Kettlebell"],
+		["dl", "dls", "dead", "deads", "conventional deadlift"]],
+	["Rack Pull", "back", "Barbell", [], "traps, grip", "The top half of a deadlift, from pins or blocks.",
+		["Barbell", "Trap bar"],
+		["block pull"]],
+	["Bent Over Row", "back", "Barbell", [], "biceps, rear delts", "Hinge to about 45 degrees and pull to the belly.",
+		["Barbell", "Pendlay", "Underhand", "Dumbbell", "Single arm dumbbell", "Kettlebell", "Smith machine"],
+		["row", "bent row", "bbrow"]],
+	["Seated Row", "back", "", ["Cable"], "biceps, rear delts", "Sit tall, pull to the stomach, let the shoulders stretch forward.",
+		["Wide grip", "Single arm", "Machine", "Band"],
+		["cable row", "seated cable row"]],
+	["Chest-Supported Row", "back", "", [], "rear delts, biceps", "Chest on an incline bench; pull without swinging.",
+		["Dumbbell", "Barbell", "Machine"],
+		["chest supported row", "seal row"]],
+	["T-Bar Row", "back", "", [], "biceps, lower back", "Chest over the bar; pull to the stomach.",
+		["Landmine", "Machine"],
+		["tbar row"]],
+	["Inverted Row", "back", "", ["Bodyweight"], "biceps, core", "Body straight under a bar; chest to the bar.",
+		["Feet elevated", "Weighted", "TRX", "Rings"],
+		["body row", "australian pull-up"]],
+	["Lat Pulldown", "back", "", ["Cable"], "biceps", "Lean back a little; pull to the collarbone.",
+		["Wide grip", "Close grip", "Neutral grip", "Underhand", "Single arm", "Machine"],
+		["pulldown", "lat pull down", "lat pull"]],
+	["Straight-Arm Pulldown", "back", "", ["Cable"], "lats, triceps", "Arms nearly straight; sweep the bar to your thighs.",
+		["Rope", "Straight bar", "Band"],
+		["lat prayer"]],
+	["Pull-up", "back", "", ["Bodyweight"], "biceps, grip", "From a dead hang to chin over the bar, no kipping.",
+		["Weighted", "Assisted", "Wide grip", "Neutral grip"],
+		["pullup"]],
+	["Chin-up", "back", "", ["Bodyweight"], "biceps", "Palms toward you; chest to the bar.",
+		["Weighted", "Assisted"],
+		["chinup", "chin"]],
+	["Shrug", "back", "Barbell", [], "traps, grip", "Straight up to the ears, pause, no rolling.",
+		["Barbell", "Dumbbell", "Trap bar", "Smith machine", "Cable", "Machine"],
+		[]],
+	["Back Extension", "back", "", [], "glutes, hamstrings", "Hinge at the hips; hold a plate to load it.",
+		["45 degree", "Weighted", "Reverse", "GHD"],
+		["hyperextension", "back raise"]],
 	# --- shoulders -----------------------------------------------------------
-	["Overhead Press", "shoulders", "barbell", "Overhead press", "triceps, upper chest", "Squeeze glutes, bar from the collarbone straight overhead.", "military press", "shoulder press"],
-	["Push Press", "shoulders", "barbell", "Overhead press", "triceps, legs", "Dip and drive with the legs to start the bar moving."],
-	["Seated Dumbbell Press", "shoulders", "dumbbell", "Overhead press", "triceps", "Back supported; press up and slightly in.", "dumbbell shoulder press", "db shoulder press"],
-	["Arnold Press", "shoulders", "dumbbell", "Overhead press", "triceps", "Start palms facing you and rotate out as you press."],
-	["Machine Shoulder Press", "shoulders", "machine", "Overhead press", "triceps", "Handles at ear height to start."],
-	["Landmine Press", "shoulders", "barbell", "Overhead press", "upper chest, core", "Press the bar end up and away; friendly to cranky shoulders."],
-	["Kettlebell Press", "shoulders", "kettlebell", "Overhead press", "triceps, core", "Bell in the rack position, press with a tight fist."],
-	["Lateral Raise", "shoulders", "dumbbell", "Raise", "side delts", "Lead with the elbows to shoulder height; go light and strict.", "side raise", "lat raise"],
-	["Cable Lateral Raise", "shoulders", "cable", "Raise", "side delts", "Cable behind your back: tension all the way up."],
-	["Machine Lateral Raise", "shoulders", "machine", "Raise", "side delts", "Elbows on the pads; pause at the top."],
-	["Front Raise", "shoulders", "dumbbell", "Raise", "front delts", "Raise to eye height without swinging."],
-	["Rear Delt Fly", "shoulders", "dumbbell", "Rear delt", "rear delts, upper back", "Hinge over; sweep the bells out wide, pinkies up.", "reverse fly", "bent over fly"],
-	["Reverse Pec Deck", "shoulders", "machine", "Rear delt", "rear delts", "Face the pad; open the arms wide and squeeze.", "rear delt machine"],
-	["Face Pull", "shoulders", "cable", "Rear delt", "rear delts, rotator cuff", "Rope to your forehead, elbows high, pull the hands apart."],
-	["Band Pull-Apart", "shoulders", "band", "Rear delt", "rear delts, upper back", "Arms straight; stretch the band to your chest.", "pull apart", "pull-apart"],
-	["Upright Row", "shoulders", "barbell", "Row", "traps, side delts", "Elbows lead to shoulder height; a wider grip is kinder."],
-	["Pike Push-up", "shoulders", "bodyweight", "Push-up", "triceps", "Hips high, head toward the floor between your hands."],
-	["Handstand Push-up", "shoulders", "bodyweight", "Push-up", "triceps, core", "Against a wall: head to the floor and press out."],
-	# --- biceps --------------------------------------------------------------
-	["Bicep Curl", "biceps", "barbell", "Curl", "forearms", "Elbows pinned to your sides; no swinging.", "barbell curl", "biceps curl"],
-	["EZ-Bar Curl", "biceps", "barbell", "Curl", "forearms", "The angled grip is easier on the wrists.", "ez bar curl", "ez curl"],
-	["Dumbbell Curl", "biceps", "dumbbell", "Curl", "forearms", "Turn the palm up as you lift.", "db curl"],
-	["Hammer Curl", "biceps", "dumbbell", "Curl", "brachialis, forearms", "Palms face each other the whole way."],
-	["Incline Dumbbell Curl", "biceps", "dumbbell", "Curl", "long head", "Lie back on an incline: a big stretch at the bottom.", "incline curl"],
-	["Concentration Curl", "biceps", "dumbbell", "Curl", "peak", "Elbow against your inner thigh; squeeze at the top."],
-	["Spider Curl", "biceps", "dumbbell", "Curl", "short head", "Chest on an incline bench, arms hanging straight down."],
-	["Zottman Curl", "biceps", "dumbbell", "Curl", "forearms", "Curl palms up, turn over, lower palms down."],
-	["Preacher Curl", "biceps", "barbell", "Curl", "brachialis", "Arms on the pad; do not bounce out of the bottom."],
-	["Cable Curl", "biceps", "cable", "Curl", "forearms", "Constant tension; keep the elbows still."],
-	["Rope Hammer Curl", "biceps", "cable", "Curl", "brachialis, forearms", "Rope on a low pulley; thumbs up."],
-	["Bayesian Curl", "biceps", "cable", "Curl", "long head", "Face away from a low pulley; curl from behind your body.", "behind the body cable curl"],
-	["Machine Curl", "biceps", "machine", "Curl", "forearms", "Line the elbow up with the pivot."],
-	["Band Curl", "biceps", "band", "Curl", "forearms", "Stand on the band; hardest at the top."],
-	# --- triceps -------------------------------------------------------------
-	["Tricep Pushdown", "triceps", "cable", "Pushdown", "forearms", "Elbows at your sides; lock out and squeeze.", "triceps pushdown", "pushdown", "cable pushdown"],
-	["Rope Pushdown", "triceps", "cable", "Pushdown", "lateral head", "Pull the rope apart at the bottom."],
-	["Overhead Cable Extension", "triceps", "cable", "Extension", "long head", "Face away, rope behind your head, extend forward.", "overhead rope extension", "overhead tricep extension"],
-	["Skull Crusher", "triceps", "barbell", "Extension", "long head", "Lower the bar to your forehead, upper arms still.", "lying tricep extension", "skullcrusher", "skull crushers"],
-	["Overhead Dumbbell Extension", "triceps", "dumbbell", "Extension", "long head", "One bell in both hands behind your head.", "dumbbell tricep extension", "french press"],
-	["Dumbbell Kickback", "triceps", "dumbbell", "Extension", "lateral head", "Upper arm parallel to the floor; straighten and pause.", "tricep kickback", "kickback"],
-	["Close-Grip Bench Press", "triceps", "barbell", "Bench press", "chest, front delts", "Hands shoulder width, elbows tucked.", "close grip bench press", "close grip bench", "cgbp"],
-	["Diamond Push-up", "triceps", "bodyweight", "Push-up", "chest", "Thumbs and index fingers make a diamond under your chest."],
-	["Bench Dip", "triceps", "bodyweight", "Dip", "chest, shoulders", "Hands on a bench behind you; feet up to make it harder."],
-	["Machine Dip", "triceps", "machine", "Dip", "chest", "Seated; press the handles down to lockout.", "seated dip"],
-	# --- forearms ------------------------------------------------------------
-	["Wrist Curl", "forearms", "barbell", "Wrist", "grip", "Forearms on your thighs, palms up, curl the wrists."],
-	["Reverse Wrist Curl", "forearms", "barbell", "Wrist", "extensors", "Same, palms down. Go light."],
-	["Reverse Curl", "forearms", "barbell", "Curl", "brachioradialis, biceps", "Overhand grip curl."],
-	["Farmer's Carry", "forearms", "dumbbell", "Carry", "traps, core", "Heavy bells, tall posture, short quick steps.", "farmers carry", "farmers walk", "farmer's walk", "farmer carry"],
-	["Plate Pinch", "forearms", "other", "Grip", "thumbs", "Pinch two plates smooth side out; hold for time."],
-	["Wrist Roller", "forearms", "other", "Wrist", "grip", "Roll the weight up and back down under control."],
-	# --- quads ---------------------------------------------------------------
-	["Squat", "quads", "barbell", "Squat", "glutes, core", "Brace, sit between your hips, knees track over the toes.", "back squat", "barbell squat"],
-	["Front Squat", "quads", "barbell", "Squat", "core, upper back", "Elbows high, bar on the shoulders, stay upright."],
-	["Pause Squat", "quads", "barbell", "Squat", "glutes, core", "Hold the bottom for two seconds; no bounce."],
-	["Box Squat", "quads", "barbell", "Squat", "glutes, hamstrings", "Sit back to a box, pause, drive up."],
-	["Zercher Squat", "quads", "barbell", "Squat", "core, upper back", "Bar in the crook of your elbows."],
-	["Goblet Squat", "quads", "dumbbell", "Squat", "glutes, core", "Hold one bell at your chest; elbows inside the knees."],
-	["Smith Machine Squat", "quads", "machine", "Squat", "glutes", "Feet a little forward; fixed bar path.", "smith squat"],
-	["Hack Squat", "quads", "machine", "Squat", "glutes", "Back flat on the pad; feet low for more quads."],
-	["Leg Press", "quads", "machine", "Press", "glutes, hamstrings", "Lower until the knees are near 90 degrees; never lock out hard."],
-	["Leg Extension", "quads", "machine", "Extension", "quads only", "Pause at the top; control the way down."],
-	["Bulgarian Split Squat", "quads", "dumbbell", "Split squat", "glutes", "Rear foot on a bench; drop straight down.", "rear foot elevated split squat", "bulgarians"],
-	["Split Squat", "quads", "dumbbell", "Split squat", "glutes", "Staggered stance, both feet on the floor."],
-	["Lunge", "quads", "dumbbell", "Lunge", "glutes", "Step forward, both knees to 90 degrees, push back.", "lunges", "forward lunge"],
-	["Reverse Lunge", "quads", "dumbbell", "Lunge", "glutes", "Step back: easier on the knees than stepping forward."],
-	["Walking Lunge", "quads", "dumbbell", "Lunge", "glutes", "Keep travelling; long steps for glutes, short for quads.", "walking lunges"],
-	["Step-up", "quads", "dumbbell", "Step-up", "glutes", "Drive through the top foot; do not push off the floor.", "step up", "step-ups"],
-	["Bodyweight Squat", "quads", "bodyweight", "Squat", "glutes", "Arms forward for balance; full depth.", "air squat", "air squats"],
-	["Pistol Squat", "quads", "bodyweight", "Squat", "glutes, balance", "One leg; the other held out in front."],
-	["Sissy Squat", "quads", "bodyweight", "Squat", "quads only", "Knees travel far forward, hips stay open; hold a post."],
-	# --- hamstrings ----------------------------------------------------------
-	["Romanian Deadlift", "hamstrings", "barbell", "Hinge", "glutes, lower back", "Soft knees, hips back, bar slides down the thighs."],
-	["Stiff-Leg Deadlift", "hamstrings", "barbell", "Hinge", "lower back, glutes", "Straighter legs than an RDL; from the floor.", "stiff leg deadlift", "straight leg deadlift"],
-	["Dumbbell Romanian Deadlift", "hamstrings", "dumbbell", "Hinge", "glutes", "Bells close to your legs; feel the stretch.", "dumbbell rdl", "db rdl"],
-	["Single-Leg Romanian Deadlift", "hamstrings", "dumbbell", "Hinge", "glutes, balance", "Hinge on one leg; hips stay square.", "single leg rdl", "single-leg rdl"],
-	["Good Morning", "hamstrings", "barbell", "Hinge", "lower back, glutes", "Bar on your back; bow with a flat back."],
-	["Lying Leg Curl", "hamstrings", "machine", "Leg curl", "calves", "Hips down on the pad; curl all the way.", "leg curl", "hamstring curl"],
-	["Seated Leg Curl", "hamstrings", "machine", "Leg curl", "calves", "Lean forward a little for a bigger stretch."],
-	["Nordic Curl", "hamstrings", "bodyweight", "Leg curl", "glutes", "Anchor your feet; lower as slowly as you can.", "nordic hamstring curl", "nordics"],
-	["Glute-Ham Raise", "hamstrings", "bodyweight", "Leg curl", "glutes, lower back", "On the GHD: curl yourself up with the hamstrings.", "ghr", "glute ham raise"],
-	["Kettlebell Swing", "hamstrings", "kettlebell", "Hinge", "glutes, core", "It is a hinge, not a squat; snap the hips."],
-	# --- glutes --------------------------------------------------------------
-	["Hip Thrust", "glutes", "barbell", "Thrust", "hamstrings", "Shoulders on a bench, chin tucked, lock out the hips."],
-	["Glute Bridge", "glutes", "bodyweight", "Thrust", "hamstrings", "On the floor; squeeze at the top."],
-	["Single-Leg Hip Thrust", "glutes", "bodyweight", "Thrust", "hamstrings", "One foot down, the other knee up.", "single leg hip thrust"],
-	["Cable Pull-Through", "glutes", "cable", "Hinge", "hamstrings", "Rope between your legs; hinge and stand tall.", "pull through", "pull-through"],
-	["Cable Kickback", "glutes", "cable", "Kickback", "hamstrings", "Ankle strap; kick straight back without arching.", "glute kickback"],
-	["Hip Abduction", "glutes", "machine", "Abduction", "outer hip", "Lean forward a little; push the knees out.", "abductor machine", "hip abductor"],
-	["Hip Adduction", "glutes", "machine", "Adduction", "inner thigh", "Squeeze the pads together; control the way out.", "adductor machine", "hip adductor"],
-	["Banded Lateral Walk", "glutes", "band", "Abduction", "outer hip", "Band above the knees; stay low and step sideways.", "band walk", "monster walk"],
-	# --- calves --------------------------------------------------------------
-	["Calf Raise", "calves", "barbell", "Calf raise", "soleus", "Full stretch at the bottom, pause on your toes.", "standing calf raise", "heel raise", "heel raises", "calf raises"],
-	["Seated Calf Raise", "calves", "machine", "Calf raise", "soleus", "Bent knees work the deeper calf muscle."],
-	["Leg Press Calf Raise", "calves", "machine", "Calf raise", "soleus", "Toes on the edge of the sled; press through the ball of the foot."],
-	["Single-Leg Calf Raise", "calves", "bodyweight", "Calf raise", "balance", "One foot on a step; hold a bell to load it.", "single leg calf raise"],
-	["Donkey Calf Raise", "calves", "machine", "Calf raise", "soleus", "Hinged over with the load on your hips."],
-	["Tibialis Raise", "calves", "bodyweight", "Shin", "front of the shin", "Back against a wall, heels out; lift your toes.", "tib raise"],
+	["Overhead Press", "shoulders", "Barbell", [], "triceps, upper chest", "Glutes tight, bar over mid-foot, head through at the top.",
+		["Barbell", "Seated", "Behind the neck", "Dumbbell", "Seated dumbbell", "Single arm kettlebell", "Kettlebell", "Machine", "Landmine", "Smith machine"],
+		["ohp", "press", "shoulder press", "military press", "strict press"]],
+	["Push Press", "shoulders", "Barbell", [], "triceps, legs", "Dip and drive with the legs, then press.",
+		["Barbell", "Dumbbell", "Kettlebell"],
+		[]],
+	["Arnold Press", "shoulders", "Dumbbell", [], "triceps", "Start palms in and turn them out as you press.",
+		["Dumbbell", "Seated"],
+		[]],
+	["Lateral Raise", "shoulders", "Dumbbell", [], "side delts", "Lead with the elbows to shoulder height; light and strict.",
+		["Dumbbell", "Seated", "Cable", "Single arm cable", "Machine", "Band"],
+		["side raise", "side lateral raise", "lateral", "laterals"]],
+	["Front Raise", "shoulders", "Dumbbell", [], "front delts", "Raise to eye level without swinging.",
+		["Dumbbell", "Plate", "Cable", "Barbell", "Band"],
+		[]],
+	["Rear Delt Fly", "shoulders", "", [], "rear delts, upper back", "Hinge over, arms wide, squeeze the shoulder blades.",
+		["Dumbbell", "Seated dumbbell", "Cable", "Machine", "Band"],
+		["reverse fly", "rear delt raise", "rear fly", "rear delt"]],
+	["Face Pull", "shoulders", "", ["Cable", "Rope"], "rear delts, rotator cuff", "Pull the rope to your eyes, elbows high, ends apart.",
+		["Single arm", "Band"],
+		[]],
+	["Upright Row", "shoulders", "Barbell", [], "traps", "Elbows lead; lift to chest height.",
+		["Barbell", "EZ bar", "Dumbbell", "Cable"],
+		[]],
+	["Pull-Apart", "shoulders", "Band", [], "rear delts, upper back", "Arms straight; pull the band to your chest.",
+		["Band", "Cable"],
+		["pullapart"]],
+	["Handstand Push-up", "shoulders", "", ["Bodyweight"], "triceps", "Head to the floor and press back up.",
+		["Wall", "Deficit"],
+		["hspu"]],
+	# --- arms ----------------------------------------------------------------
+	["Bicep Curl", "biceps", "", [], "forearms", "Elbows pinned to your sides; no swinging.",
+		["Dumbbell", "Alternating dumbbell", "Barbell", "EZ bar", "Cable", "Incline dumbbell", "Reclined", "Preacher EZ bar", "Preacher machine", "Concentration dumbbell", "Spider dumbbell", "Bayesian cable", "Band", "Machine"],
+		["curl", "biceps curl"]],
+	["Hammer Curl", "biceps", "Dumbbell", [], "forearms", "Palms facing in; elbows still.",
+		["Dumbbell", "Alternating", "Cross body", "Rope"],
+		[]],
+	["Reverse Curl", "forearms", "", [], "biceps", "Palms down; elbows still.",
+		["Barbell", "EZ bar", "Dumbbell", "Cable"],
+		[]],
+	["Zottman Curl", "forearms", "Dumbbell", [], "biceps", "Curl palms up, lower palms down.",
+		["Dumbbell"],
+		[]],
+	["Tricep Pushdown", "triceps", "", ["Cable"], "forearms", "Elbows at your sides; lock out and squeeze.",
+		["Rope", "Straight bar", "V bar", "Single arm", "Band"],
+		["pushdown", "triceps pushdown", "cable pushdown"]],
+	["Tricep Extension", "triceps", "", [], "", "Upper arms still; only the elbows move.",
+		["Overhead cable", "Overhead rope", "Overhead dumbbell", "Single arm overhead dumbbell", "Lying EZ bar", "Lying dumbbell"],
+		["triceps extension", "french press"]],
+	["Tricep Kickback", "triceps", "Dumbbell", [], "", "Upper arm parallel to the floor; straighten the elbow.",
+		["Dumbbell", "Cable", "Single arm cable"],
+		["kickback", "triceps kickback"]],
+	["Wrist Curl", "forearms", "", [], "grip", "Forearms on your thighs; curl only the wrists.",
+		["Barbell", "Dumbbell", "Reverse barbell", "Reverse dumbbell", "Cable"],
+		["wrist flexion"]],
+	["Wrist Roller", "forearms", "", [], "grip, shoulders", "Arms out in front; roll the weight up and back down.",
+		[],
+		[]],
+	["Farmer Carry", "forearms", "Dumbbell", [], "traps, core", "Stand tall; short, quick steps.",
+		["Dumbbell", "Single arm", "Kettlebell", "Single arm kettlebell", "Trap bar"],
+		["farmers carry", "farmers walk", "farmer walk", "loaded carry"]],
+	["Pinch", "forearms", "Plate", [], "grip", "Pinch the plates smooth side out and hold.",
+		["Plate"],
+		["plate pinch"]],
+	["Dead Hang", "forearms", "", ["Bodyweight"], "shoulders, grip", "Hang from a bar with the shoulders active.",
+		["Single arm", "Weighted"],
+		["bar hang"]],
+	# --- legs ----------------------------------------------------------------
+	["Squat", "quads", "Barbell", [], "glutes, core", "Brace, sit between the hips, knees track the toes.",
+		["Barbell", "Front", "Paused", "Box", "Zercher", "Overhead", "Safety bar", "Goblet", "Goblet kettlebell", "Dumbbell", "Smith machine", "Bodyweight"],
+		["sq", "back squat", "backsquat"]],
+	["Hack Squat", "quads", "", ["Machine"], "glutes", "Back flat on the pad; deep and controlled.",
+		["Reverse"],
+		[]],
+	["Leg Press", "quads", "", ["Machine"], "glutes, hamstrings", "Feet shoulder width; keep your hips on the seat.",
+		["Single leg"],
+		[]],
+	["Leg Extension", "quads", "", ["Machine"], "", "Pause at the top; slow on the way down.",
+		["Single leg"],
+		["quad extension"]],
+	["Bulgarian Split Squat", "quads", "Dumbbell", [], "glutes", "Rear foot on a bench; front shin near vertical.",
+		["Dumbbell", "Barbell", "Kettlebell", "Smith machine", "Bodyweight"],
+		["bss", "rfess", "rear foot elevated split squat"]],
+	["Split Squat", "quads", "Dumbbell", [], "glutes", "Long stance; drop the back knee straight down.",
+		["Dumbbell", "Barbell", "Bodyweight"],
+		[]],
+	["Lunge", "quads", "Dumbbell", [], "glutes", "Long step; back knee toward the floor.",
+		["Dumbbell", "Walking", "Reverse", "Barbell", "Kettlebell", "Bodyweight"],
+		[]],
+	["Step-up", "quads", "Dumbbell", [], "glutes", "Drive through the top foot; don't push off the back one.",
+		["Dumbbell", "Barbell", "Bodyweight"],
+		["stepup"]],
+	["Pistol Squat", "quads", "", ["Bodyweight"], "glutes, balance", "One leg; sit all the way down and stand up.",
+		["Assisted", "Weighted"],
+		["pistol"]],
+	["Sissy Squat", "quads", "", ["Bodyweight"], "", "Knees forward, body leaning back in one line.",
+		["Weighted"],
+		[]],
+	["Wall Sit", "quads", "", ["Bodyweight"], "", "Back flat on the wall, thighs level; hold.",
+		["Weighted", "Single leg"],
+		[]],
+	["Romanian Deadlift", "hamstrings", "Barbell", [], "glutes, lower back", "Soft knees; push the hips back, bar close to the legs.",
+		["Barbell", "Dumbbell", "Single leg", "Single leg dumbbell", "Single leg kettlebell", "Kettlebell", "Trap bar"],
+		["romanian", "rdl"]],
+	["Stiff-Leg Deadlift", "hamstrings", "Barbell", [], "lower back", "Legs almost straight; hinge to a hamstring stretch.",
+		["Barbell", "Dumbbell"],
+		["stiff leg deadlift", "sldl"]],
+	["Good Morning", "hamstrings", "Barbell", [], "lower back, glutes", "Bar on your back; hinge until your torso is nearly flat.",
+		["Barbell", "Safety bar", "Band"],
+		[]],
+	["Leg Curl", "hamstrings", "", ["Machine"], "calves", "Hips down; curl all the way.",
+		["Lying", "Seated", "Standing", "Single leg", "Stability ball", "Band"],
+		["hamstring curl", "ham curl"]],
+	["Nordic Curl", "hamstrings", "", ["Bodyweight"], "", "Lower yourself as slowly as you can.",
+		["Assisted", "Band"],
+		["nordic", "nordic hamstring curl"]],
+	["Glute-Ham Raise", "hamstrings", "GHD", [], "glutes", "On the GHD: curl yourself up with the hamstrings.",
+		[],
+		["ghr"]],
+	["Swing", "hamstrings", "Kettlebell", [], "glutes, core", "Hinge and snap the hips; the arms only guide.",
+		["Kettlebell", "Single arm", "Dumbbell"],
+		[]],
+	["Hip Thrust", "glutes", "Barbell", [], "hamstrings", "Chin tucked, ribs down, squeeze at the top.",
+		["Barbell", "Single leg", "Machine", "Smith machine", "Dumbbell", "Band"],
+		["thrust"]],
+	["Glute Bridge", "glutes", "", [], "hamstrings", "Feet flat; squeeze at the top.",
+		["Single leg", "Barbell", "Band", "Weighted"],
+		["bridge", "hip bridge"]],
+	["Pull-Through", "glutes", "Cable", [], "hamstrings", "Hinge, then snap the hips through.",
+		["Cable", "Band", "Kettlebell"],
+		[]],
+	["Glute Kickback", "glutes", "", [], "hamstrings", "Squeeze the glute; don't arch the back.",
+		["Cable", "Machine", "Band", "Bodyweight"],
+		["donkey kick"]],
+	["Hip Abduction", "glutes", "Machine", [], "", "Push the knees out; slow on the way back.",
+		["Machine", "Band", "Cable"],
+		["abduction", "abductor"]],
+	["Hip Adduction", "glutes", "Machine", [], "", "Squeeze the knees together; slow on the way back.",
+		["Machine", "Band", "Cable"],
+		["adduction", "adductor"]],
+	["Lateral Walk", "glutes", "Band", [], "", "Stay low and keep tension on the band.",
+		["Band"],
+		["monster walk", "band walk"]],
+	["Clamshell", "glutes", "", [], "hips", "Hips stacked; open the knee without rolling back.",
+		["Band"],
+		["clam"]],
+	["Calf Raise", "calves", "", [], "", "Full stretch at the bottom, pause at the top.",
+		["Standing machine", "Seated machine", "Smith machine", "Barbell", "Dumbbell", "Single leg", "Leg press", "Donkey", "Bodyweight"],
+		["heel raise", "calves"]],
+	["Tibialis Raise", "calves", "", [], "shins", "Heels down; lift the toes.",
+		["Wall", "Machine", "Band"],
+		["tib raise", "toe raise", "tibialis"]],
 	# --- core ----------------------------------------------------------------
-	["Plank", "core", "bodyweight", "Hold", "shoulders, glutes", "One straight line; squeeze everything."],
-	["Side Plank", "core", "bodyweight", "Hold", "obliques", "Elbow under the shoulder, hips high."],
-	["Crunch", "core", "bodyweight", "Crunch", "upper abs", "Ribs toward hips; the lower back stays down.", "crunches"],
-	["Sit-up", "core", "bodyweight", "Crunch", "hip flexors", "Feet anchored; all the way up.", "sit up", "situps", "sit-ups"],
-	["Decline Sit-up", "core", "bodyweight", "Crunch", "hip flexors", "On a decline bench; hold a plate to load it."],
-	["Cable Crunch", "core", "cable", "Crunch", "abs", "Kneel, rope by your head, curl the spine down."],
-	["Machine Crunch", "core", "machine", "Crunch", "abs", "Curl, do not just hinge at the hips.", "ab machine"],
-	["Hanging Leg Raise", "core", "bodyweight", "Leg raise", "hip flexors, grip", "From a dead hang, straight legs to the bar height you can control."],
-	["Hanging Knee Raise", "core", "bodyweight", "Leg raise", "hip flexors, grip", "Knees to chest; no swinging.", "knee raise", "knee raises"],
-	["Lying Leg Raise", "core", "bodyweight", "Leg raise", "hip flexors", "Lower back pressed down; lower the legs slowly.", "leg raise", "leg raises"],
-	["Toes-to-Bar", "core", "bodyweight", "Leg raise", "lats, grip", "Hang and bring your toes to touch the bar.", "toes to bar", "t2b"],
-	["Ab Wheel Rollout", "core", "other", "Rollout", "lats, shoulders", "Roll out as far as you can without the hips sagging.", "ab wheel", "ab rollout", "rollout"],
-	["Russian Twist", "core", "bodyweight", "Rotation", "obliques", "Lean back, feet up, rotate side to side."],
-	["Woodchop", "core", "cable", "Rotation", "obliques", "Pull across your body from high to low.", "cable woodchop", "wood chop"],
-	["Pallof Press", "core", "cable", "Anti-rotation", "obliques", "Press straight out and do not let the cable turn you."],
-	["Dead Bug", "core", "bodyweight", "Anti-extension", "deep abs", "Opposite arm and leg reach away; back stays flat."],
-	["Dragon Flag", "core", "bodyweight", "Leg raise", "whole core", "Shoulders on the bench, body rigid, lower slowly."],
-	["L-Sit", "core", "bodyweight", "Hold", "hip flexors, triceps", "Support on bars, legs straight out in front.", "l sit"],
-	["Suitcase Carry", "core", "dumbbell", "Carry", "obliques, grip", "One heavy bell at your side; do not lean."],
-	# --- full body -----------------------------------------------------------
-	["Power Clean", "full", "barbell", "Olympic", "hips, traps, legs", "Jump the bar up and catch it on your shoulders in a quarter squat."],
-	["Clean", "full", "barbell", "Olympic", "hips, traps, legs", "Like a power clean, caught in a full squat.", "squat clean"],
-	["Hang Clean", "full", "barbell", "Olympic", "hips, traps", "Start from above the knees."],
-	["Clean and Jerk", "full", "barbell", "Olympic", "everything", "Clean it, then dip and drive it overhead.", "clean & jerk", "c&j"],
-	["Snatch", "full", "barbell", "Olympic", "everything", "Wide grip, floor to overhead in one move.", "squat snatch"],
-	["Power Snatch", "full", "barbell", "Olympic", "hips, shoulders", "Snatch caught high, above a parallel squat."],
-	["Overhead Squat", "full", "barbell", "Squat", "shoulders, core, quads", "Bar locked out overhead with a wide grip; squat under it."],
-	["Thruster", "full", "barbell", "Squat", "quads, shoulders", "Front squat straight into a press.", "thrusters"],
-	["Dumbbell Snatch", "full", "dumbbell", "Olympic", "hips, shoulders", "One bell from the floor to overhead in one pull.", "db snatch"],
-	["Kettlebell Clean", "full", "kettlebell", "Olympic", "hips, grip", "Swing and zip the bell up into the rack position.", "kb clean"],
-	["Kettlebell Snatch", "full", "kettlebell", "Olympic", "hips, shoulders", "Swing to overhead and punch through at the top.", "kb snatch"],
-	["Turkish Get-up", "full", "kettlebell", "Get-up", "shoulders, core", "From lying to standing with the bell locked out overhead.", "turkish get up", "tgu", "get-up"],
-	["Muscle-up", "full", "bodyweight", "Pull-up", "lats, chest, triceps", "Pull high and turn over into a dip.", "muscle up"],
-	["Burpee", "full", "bodyweight", "Conditioning", "everything", "Chest to the floor, jump up, repeat.", "burpees"],
-	["Sled Push", "full", "other", "Conditioning", "quads, glutes", "Low handles, lean in, drive with short steps.", "prowler", "sled"],
+	["Plank", "core", "", ["Bodyweight"], "shoulders", "Squeeze the glutes, ribs down, one straight line.",
+		["Side", "Weighted"],
+		[]],
+	["Crunch", "core", "", ["Bodyweight"], "", "Ribs to hips; short and controlled.",
+		["Decline", "Reverse", "Weighted", "Cable", "Machine"],
+		[]],
+	["Sit-up", "core", "", ["Bodyweight"], "hip flexors", "Feet anchored; all the way up.",
+		["Decline", "Weighted", "GHD"],
+		["situp"]],
+	["Leg Raise", "core", "", ["Bodyweight"], "hip flexors", "Lower slowly; low back stays down.",
+		["Hanging", "Lying"],
+		[]],
+	["Knee Raise", "core", "", ["Bodyweight"], "hip flexors", "Knees to chest without swinging.",
+		["Hanging"],
+		[]],
+	["Toes-to-Bar", "core", "", ["Bodyweight"], "lats, grip", "From a hang, toes all the way to the bar.",
+		[],
+		["toes to bar", "t2b"]],
+	["Rollout", "core", "Ab wheel", [], "lats, shoulders", "Roll out with your ribs down; pull back with the abs.",
+		["Ab wheel", "Barbell", "Stability ball"],
+		["ab rollout"]],
+	["Russian Twist", "core", "", [], "obliques", "Lean back, chest up, turn side to side.",
+		["Weighted", "Medicine ball", "Plate"],
+		[]],
+	["Woodchop", "core", "Cable", [], "obliques, shoulders", "Turn through the hips, arms long.",
+		["Cable", "High to low", "Low to high", "Band", "Medicine ball"],
+		["wood chop", "woodchopper"]],
+	["Pallof Press", "core", "Cable", [], "obliques", "Press out and hold; don't let the cable turn you.",
+		["Cable", "Half kneeling", "Band"],
+		[]],
+	["Dead Bug", "core", "", ["Bodyweight"], "", "Low back down; opposite arm and leg.",
+		["Weighted"],
+		[]],
+	["Hollow Hold", "core", "", ["Bodyweight"], "", "Low back pressed down, arms and legs long.",
+		[],
+		["hollow body hold"]],
+	["Dragon Flag", "core", "", ["Bodyweight"], "", "Body straight from the shoulders; lower slowly.",
+		[],
+		[]],
+	["L-Sit", "core", "", ["Bodyweight"], "hip flexors, triceps", "Legs straight out in front; hold.",
+		[],
+		["lsit"]],
+	# --- mobility ------------------------------------------------------------
+	["Calf Stretch", "mobility", "", [], "ankles", "Heel down, knee straight; lean in and hold.",
+		["Wall", "Slant board", "Step", "Bent knee"],
+		[]],
+	["Hamstring Stretch", "mobility", "", [], "", "Hinge with a flat back until you feel the stretch.",
+		["Standing", "Seated", "Lying", "Band"],
+		[]],
+	["Hip Flexor Stretch", "mobility", "", [], "quads", "Tuck the pelvis, squeeze the glute, lean forward.",
+		["Half kneeling", "Standing", "Couch"],
+		[]],
+	["Quad Stretch", "mobility", "", [], "hip flexors", "Heel to glute, knees together.",
+		["Standing", "Lying", "Kneeling"],
+		[]],
+	["Pigeon Stretch", "mobility", "", [], "glutes, hips", "Front shin across, hips square; sink down.",
+		["Bench"],
+		["pigeon"]],
+	["Pec Stretch", "mobility", "", [], "shoulders", "Forearm on a doorframe; step through.",
+		["Doorway", "Wall"],
+		["chest stretch"]],
+	["Thoracic Rotation", "mobility", "", [], "upper back", "Knees stacked; open the top arm and follow it with your eyes.",
+		["Lying side", "Kneeling"],
+		["open book", "t spine rotation"]],
+	["Cat-Cow", "mobility", "", [], "spine", "Round, then arch, slowly, with your breath.",
+		[],
+		["cat cow"]],
+	["90/90 Hip Switch", "mobility", "", [], "hips", "Both knees at 90 degrees; switch side to side.",
+		[],
+		["90 90", "hip switch"]],
+	["Ankle Mobility", "mobility", "", [], "calves", "Knee over the toes; heel stays down.",
+		["Band", "Wall"],
+		["ankle dorsiflexion"]],
+	# --- full body -------------------------------------------------------------
+	["Clean", "full", "", ["Barbell"], "legs, back, traps", "Pull fast, drop under, catch on the shoulders.",
+		["Power", "Hang", "Hang power", "Dumbbell", "Kettlebell"],
+		[]],
+	["Clean and Jerk", "full", "", ["Barbell"], "shoulders, legs", "Clean to the shoulders, then drive it overhead.",
+		["Power"],
+		["clean jerk"]],
+	["Snatch", "full", "", ["Barbell"], "back, shoulders", "Floor to overhead in one move.",
+		["Power", "Hang", "Dumbbell", "Kettlebell"],
+		[]],
+	["Thruster", "full", "Barbell", [], "shoulders, quads", "A front squat straight into a press.",
+		["Barbell", "Dumbbell", "Kettlebell"],
+		[]],
+	["Turkish Get-up", "full", "Kettlebell", [], "shoulders, core", "Eyes on the bell; one step at a time.",
+		["Kettlebell", "Dumbbell"],
+		["tgu", "getup"]],
+	["Muscle-up", "full", "", ["Bodyweight"], "lats, chest, triceps", "Pull high and turn over into a dip.",
+		["Rings"],
+		["muscleup"]],
+	["Burpee", "full", "", ["Bodyweight"], "chest, legs", "Chest to the floor, jump at the top.",
+		[],
+		[]],
+	["Box Jump", "full", "", ["Bodyweight"], "quads, calves", "Land soft and stand up tall on the box.",
+		[],
+		[]],
+	["Sled Push", "full", "", [], "quads, glutes", "Low and long; drive with the legs.",
+		[],
+		["sled"]],
 ]
 
+static var _catalog = null
 
-## Names a catalog row answers to, normalized.
-static func _keys_of(row: Array) -> Array:
-	var keys = [Xp.normalize_exercise(row[0])]
-	for i in range(6, row.size()):
-		var k = Xp.normalize_exercise(row[i])
+
+## Names a movement answers to, normalized.
+static func _keys_of(move_name: String, names: Array) -> Array:
+	var keys = [Xp.normalize_exercise(move_name)]
+	for o in names:
+		var k = Xp.normalize_exercise(str(o))
 		if not keys.has(k):
 			keys.append(k)
 	return keys
@@ -261,13 +407,33 @@ static func equip_name(id: String) -> String:
 
 ## The catalog as entries (no history attached).
 static func catalog() -> Array:
+	if _catalog == null:
+		_catalog = []
+		for row in MOVES:
+			var usual: String = str(row[2])
+			var only: Array = row[3]
+			var equips = []
+			for v in [usual] + only + Array(row[6]):
+				for g in LiftNames.gear_of(str(v)):
+					if not equips.has(g):
+						equips.append(g)
+			var main = "bodyweight" if only.has("Bodyweight") else ""
+			if main == "":
+				var first = LiftNames.gear_of(usual if usual != "" else (str(only[0]) if not only.is_empty() else ""))
+				main = str(first[0]) if not first.is_empty() else (str(equips[0]) if not equips.is_empty() else "other")
+			if not equips.has(main):
+				equips.append(main)
+			_catalog.append({"name": str(row[0]), "part": str(row[1]), "usual": usual, "only": only, "equip": main, "equips": equips,
+				"family": str(row[0]), "also": str(row[4]), "tip": str(row[5]), "vars": Array(row[6]), "names": Array(row[7]),
+				"keys": _keys_of(str(row[0]), row[7]), "own": false})
 	var out = []
-	for row in LIFTS:
-		out.append({"name": row[0], "part": row[1], "equip": row[2], "family": row[3], "also": row[4], "tip": row[5], "keys": _keys_of(row), "own": false})
+	for e in _catalog:
+		out.append(e.duplicate())
 	return out
 
 
-## What the player has logged, per normalized exercise name.
+## What the player has logged, per normalized exercise name (movement and
+## variation together: "shrug - barbell").
 static func stats(sessions: Array) -> Dictionary:
 	var lifts = sessions.filter(func(x): return x.discipline == "lift")
 	TTUtil.stable_sort(lifts, func(a, b): return a.date > b.date or (a.date == b.date and a.createdAt > b.createdAt))
@@ -302,7 +468,7 @@ static func stats(sessions: Array) -> Dictionary:
 	return out
 
 
-## Several names for one lift ("calf raise", "heel raise") read as one history.
+## Several logged lifts read as one history (all the variations of a movement).
 static func merge_stats(keys: Array, all: Dictionary):
 	var found = []
 	for k in keys:
@@ -330,13 +496,15 @@ static func merge_stats(keys: Array, all: Dictionary):
 	return m
 
 
-## A guess at the body part of a lift the catalog does not know, from its name.
+## A guess at the body part of a movement the catalog does not know, from its name.
 static func guess_part(key: String) -> String:
 	var rules = [
+		["stretch", "mobility"], ["mobility", "mobility"],
 		["curl", "biceps"], ["tricep", "triceps"], ["pushdown", "triceps"], ["calf", "calves"], ["squat", "quads"],
 		["lunge", "quads"], ["deadlift", "back"], ["row", "back"], ["pulldown", "back"], ["pull-up", "back"],
 		["bench", "chest"], ["fly", "chest"], ["push-up", "chest"], ["press", "shoulders"], ["raise", "shoulders"],
 		["thrust", "glutes"], ["bridge", "glutes"], ["crunch", "core"], ["plank", "core"], ["twist", "core"],
+		["wrist", "forearms"], ["grip", "forearms"],
 	]
 	for r in rules:
 		if key.contains(r[0]):
@@ -344,22 +512,61 @@ static func guess_part(key: String) -> String:
 	return "other"
 
 
-## Every lift to show: the catalog plus anything the player logged that it does
-## not know, each with "st" (merged stats, or null when never done).
+## Every movement to show: the catalog plus any movement of the player's own,
+## each with its logged variations ("done") and their stats together ("st").
 static func rows(sessions: Array) -> Array:
 	var all = stats(sessions)
 	var out = []
-	var claimed = {}
+	var by_move = {}
 	for e in catalog():
-		for k in e.keys:
-			claimed[k] = true
-		e["st"] = merge_stats(e.keys, all)
+		e["done"] = []
+		e["st"] = null
 		out.append(e)
+		for k in e.keys:
+			by_move[k] = e
 	for key in all:
-		if claimed.has(key):
-			continue
 		var st = all[key]
-		out.append({"name": st.name, "part": guess_part(key), "equip": "other", "family": "Your own", "also": "", "tip": "One of your own lifts: not in the library, so it has no notes.", "keys": [key], "own": true, "st": st})
+		var sp = LiftNames.split(str(st.name))
+		var mk = Xp.normalize_exercise(str(sp.move))
+		var row = by_move.get(mk)
+		if row == null:
+			row = {"name": str(sp.move), "part": guess_part(mk), "usual": "", "only": [], "equip": "other", "equips": ["other"],
+				"family": str(sp.move), "also": "", "tip": "One of your own: not in the library, so it has no notes.",
+				"vars": [], "names": [], "keys": [mk], "own": true, "done": [], "st": null}
+			out.append(row)
+			by_move[mk] = row
+		row.done.append({"variation": str(sp.variation), "name": str(st.name), "st": st})
+	for row in out:
+		if row.done.is_empty():
+			continue
+		TTUtil.stable_sort(row.done, func(a, b): return str(a.st.last) > str(b.st.last))
+		var keys = []
+		for d in row.done:
+			keys.append(Xp.normalize_exercise(str(d.name)))
+		row.st = merge_stats(keys, all)
+		for d in row.done:
+			for g in LiftNames.gear_of(str(d.variation)):
+				if not row.equips.has(g):
+					row.equips.append(g)
+	return out
+
+
+## Every variation of a movement row to choose from: the ones logged first (most
+## recent first, with their stats), then the catalog's others. [{variation, name, st}]
+static func variation_list(row: Dictionary) -> Array:
+	var out = []
+	var seen = {}
+	for d in row.get("done", []):
+		out.append(d)
+		seen[Xp.normalize_exercise(str(d.variation))] = true
+	# The movement with no variation said first, when it has no usual one ("Pull-up").
+	var base = [""] if str(row.get("usual", "")) == "" else []
+	for v in base + Array(row.get("vars", [])):
+		var k = Xp.normalize_exercise(str(v))
+		if seen.has(k):
+			continue
+		seen[k] = true
+		out.append({"variation": str(v), "name": LiftNames.join(str(row.name), str(v)), "st": null})
 	return out
 
 
@@ -370,15 +577,12 @@ static func _part_index(id: String) -> int:
 	return PARTS.size()
 
 
-static func _equip_index(id: String) -> int:
-	for i in range(EQUIPMENT.size()):
-		if EQUIPMENT[i].id == id:
-			return i
-	return EQUIPMENT.size()
-
-
 static func _matches(e: Dictionary, words: Array) -> bool:
-	var hay = " ".join(PackedStringArray([str(e.name), " ".join(PackedStringArray(e.keys)), part_name(e.part), equip_name(e.equip), str(e.family), str(e.also)])).to_lower()
+	var vars = []
+	for d in e.get("done", []):
+		vars.append(str(d.variation))
+	var hay = " ".join(PackedStringArray([str(e.name), " ".join(PackedStringArray(e.keys)), part_name(e.part), " ".join(PackedStringArray(e.equips.map(func(g): return equip_name(str(g))))),
+		str(e.also), " ".join(PackedStringArray(e.vars)), " ".join(PackedStringArray(vars))])).to_lower()
 	for w in words:
 		if not hay.contains(w):
 			return false
@@ -398,7 +602,7 @@ static func query(all_rows: Array, opts: Dictionary) -> Array:
 	for e in all_rows:
 		if part != "" and e.part != part:
 			continue
-		if equip != "" and e.equip != equip:
+		if equip != "" and not e.equips.has(equip):
 			continue
 		if show == "mine" and e.st == null:
 			continue
@@ -411,14 +615,7 @@ static func query(all_rows: Array, opts: Dictionary) -> Array:
 	TTUtil.stable_sort(out, by_name)
 	match str(opts.get("sort", "part")):
 		"part":
-			TTUtil.stable_sort(out, func(a, b):
-				var pa = _part_index(a.part)
-				var pb = _part_index(b.part)
-				if pa != pb:
-					return pa < pb
-				if str(a.family) != str(b.family):
-					return str(a.family) < str(b.family)
-				return _equip_index(a.equip) < _equip_index(b.equip))
+			TTUtil.stable_sort(out, func(a, b): return _part_index(a.part) < _part_index(b.part))
 		"count":
 			TTUtil.stable_sort(out, func(a, b): return (int(a.st.count) if a.st != null else 0) > (int(b.st.count) if b.st != null else 0))
 		"best":
@@ -440,14 +637,4 @@ static func rep_bests(st: Dictionary) -> Array:
 					best = one.weightKg
 		if best > 0.0:
 			out.append({"reps": r, "kg": best})
-	return out
-
-
-## Other lifts of the same family (the variations to try), same body part first.
-static func variations(e: Dictionary, all_rows: Array) -> Array:
-	var out = []
-	for o in all_rows:
-		if o.name != e.name and not o.own and o.family == e.family and (o.part == e.part or e.family == "Bench press" or e.family == "Squat" or e.family == "Curl"):
-			out.append(o)
-	TTUtil.stable_sort(out, func(a, b): return (0 if a.part == e.part else 1) < (0 if b.part == e.part else 1))
 	return out

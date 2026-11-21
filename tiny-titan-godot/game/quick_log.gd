@@ -1322,11 +1322,21 @@ static func _parse_lift(line: String, ctx: Dictionary) -> Dictionary:
 
 ## The exercise name typed before token `cut` of a lifting line (dashes and colons dropped).
 static func _lift_name(toks: Array, cut: int) -> String:
+	# "chest fly - cable" keeps its dash: the movement before it, the variation after
+	# (LiftNames.resolve). A dash or colon before the sets is dropped.
 	var words = []
 	for w in toks.slice(0, cut):
-		var c = str(w).trim_suffix(":").trim_suffix("-")
-		if c != "" and c != "-" and c != "=":
-			words.append(c)
+		var t = str(w)
+		var c = t.trim_suffix(":").trim_suffix("-")
+		if c == "" or c == "-" or c == "=":
+			if not words.is_empty() and words[words.size() - 1] != "-":
+				words.append("-")
+			continue
+		words.append(c)
+		if t.ends_with("-") and t.length() > 1:
+			words.append("-")
+	while not words.is_empty() and words[words.size() - 1] == "-":
+		words.pop_back()
 	return " ".join(PackedStringArray(words))
 
 
@@ -1569,18 +1579,13 @@ static func resolve_exercise(typed: String, ctx: Dictionary) -> String:
 
 ## Which lift a typed name is, with what the review needs to ask about it:
 ## {"key", "typed", "name", "kind", "closest"} (+ "decided" when the player has
-## already said what these words mean).
-##   kind "exact": a lift the player has, a short name ("bench"), a library
-##                 lift, or a name they decided on. Nothing to ask.
-##        "match": not exact, but the same words as one of those in another
-##                 order or spelling ("row - cable, 1UE" / "single arm cable
-##                 row"), or the start of exactly one: taken as that lift, and
-##                 the review asks whether that is right.
-##        "new":   none of those: a lift of its own under the typed name.
-##                 `closest` names the nearest lift when one is near enough to
-##                 ask about.
-## The player's own lift wins over the library's name for the same lift, so a
-## new spelling joins the history they already have.
+## already said what these words mean). The name is "Movement - Variation"
+## (LiftNames.resolve): "shrug - barbell", "barbell shrug" and "shrugs barbell"
+## are all Shrug - Barbell.
+##   kind "exact": sure (a lift in their log, a movement found by its name).
+##        "match": found by a one-word name ("row", "curl") or with a typo: the
+##                 review asks whether it is right.
+##        "new":   a movement of their own; `closest` names the nearest one.
 ##
 ## `pt`: the line was tagged "(PT)". The tag is no part of the name, but it is
 ## part of the key, so "(PT) squat" can be decided apart from "squat". A lift
@@ -1592,105 +1597,46 @@ static func pick_exercise(typed: String, ctx: Dictionary, pt: bool = false) -> D
 		return ctx.picks[key]
 	var pick = {"key": key, "typed": ("(PT) " if pt else "") + typed, "name": "", "kind": "exact", "closest": "", "pt": pt}
 	var decided = ctx.names.get(key)
-	var known = _exact_known(typed, ctx)
 	if decided is String:
 		pick.name = decided
 		if decided == "":
-			pick.name = _apart_name(typed, known, pt, ctx)
+			pick.name = _apart_name(typed, pt, ctx)
 		pick["decided"] = true
 	else:
-		if known == "":
-			known = LiftMatch.library_name(typed)
-		if known != "":
-			var mine = ""
-			var theirs = ctx.own_norm.has(Xp.normalize_exercise(known))
-			if not theirs:
-				mine = LiftMatch.same_lift(known, ctx.own)
-			pick.name = known if mine == "" else mine
-			if mine != "" or (pt and theirs and not Pt.is_pt(ctx.pt, known)):
-				pick.kind = "match"
-		else:
-			var start = _unique_prefix(typed, ctx)
-			var found = LiftMatch.find(typed, ctx.known_norm.values(), 2)
-			var best = found[0] if not found.is_empty() else {"name": "", "score": 0.0}
-			# Two lifts equally near ("row": Barbell Row, Dumbbell Row...) are no "closest".
-			var alone = found.size() < 2 or float(best.score) - float(found[1].score) > 0.04
-			if start != "":
-				pick.name = start
-				pick.kind = "match"
-			elif float(best.score) >= LiftMatch.SAME:
-				pick.name = str(best.name)
-				pick.kind = "match"
-			else:
-				pick.name = _title_case(typed)
-				pick.kind = "new"
-				if float(best.score) >= LiftMatch.CLOSE and alone:
-					pick.closest = str(best.name)
+		var r = LiftNames.resolve(typed, ctx.own)
+		pick.name = str(r.name)
+		pick.kind = str(r.kind)
+		pick.closest = str(r.closest)
+		if pt and pick.kind == "exact" and ctx.own_norm.has(Xp.normalize_exercise(pick.name)) and not Pt.is_pt(ctx.pt, pick.name):
+			pick.kind = "match"
 	ctx.picks[key] = pick
 	return pick
 
 
-## The name of a lift kept apart (the review's "no"): the lift it exactly is, the
-## library's name, or the typed one. For a PT line that would land on a lift the
-## player already does, "PT " goes in front, so the two stay two lifts.
-static func _apart_name(typed: String, known: String, pt: bool, ctx: Dictionary) -> String:
-	var plain = known if known != "" else plain_name(typed)
-	if pt and ctx.own_norm.has(Xp.normalize_exercise(plain)) and not Pt.is_pt(ctx.pt, plain):
-		return "PT " + plain
-	return plain
+## The name of a lift kept apart (the review's "no"): a movement of their own
+## from the typed words. For a PT line that would land on a lift the player
+## already does, "PT " goes in front, so the two stay two lifts.
+static func _apart_name(typed: String, pt: bool, ctx: Dictionary) -> String:
+	var made = str(LiftNames.plain(typed).name)
+	if not pt:
+		return made
+	# The movement is one they already do (not as PT): keep the PT one apart.
+	var sp = LiftNames.split(made)
+	var mk = Xp.normalize_exercise(str(sp.move))
+	for o in ctx.own:
+		if Xp.normalize_exercise(str(LiftNames.split(str(o)).move)) == mk and not Pt.is_pt(ctx.pt, str(o)):
+			return LiftNames.join("PT " + str(sp.move), str(sp.variation))
+	return made
 
 
-## A name the reader knows for certain: one of the known lifts as typed, a
-## short name, or one of those give or take spaces, dashes and a plural. "" when none.
-static func _exact_known(typed: String, ctx: Dictionary) -> String:
-	var n = Xp.normalize_exercise(typed)
-	if ctx.known_norm.has(n):
-		return ctx.known_norm[n]
-	var c = _compact(n)
-	if ALIASES.has(c):
-		return ALIASES[c]
-	var singular = c.trim_suffix("s") if c.length() > 3 else c
-	for k in ctx.known_norm:
-		var kc = _compact(k)
-		if kc == c or kc == singular:
-			return ctx.known_norm[k]
-	return ""
-
-
-## The one known lift whose name starts with what was typed ("incline" for
-## Incline Bench Press), or "".
-static func _unique_prefix(typed: String, ctx: Dictionary) -> String:
-	var n = Xp.normalize_exercise(typed)
-	if n.length() < 3:
-		return ""
-	var hits = []
-	for k in ctx.known_norm:
-		if k.begins_with(n):
-			hits.append(ctx.known_norm[k])
-	return str(hits[0]) if hits.size() == 1 else ""
-
-
-## The name a typed lift gets when it is none of the player's: the library's
-## name when it is a library lift, else what was typed, in Title Case.
+## The name a typed lift gets as a movement of the player's own.
 static func plain_name(typed: String) -> String:
-	var lib = LiftMatch.library_name(typed)
-	return lib if lib != "" else _title_case(typed)
-
-
-## Short forms that are written in capitals in a lift's name.
-const CAPITALS = ["ghd", "ghr", "db", "kb", "bb", "ez", "trx", "rdl", "ohp", "1ue", "1le", "sa", "sl", "bw", "t2b"]
+	return str(LiftNames.plain(typed).name)
 
 
 ## A new lift's name from what was typed: "ghd sit-ups" -> "GHD Sit-ups".
 static func _title_case(typed: String) -> String:
-	var out = []
-	for w in Xp.normalize_exercise(typed).split(" ", false):
-		var bare = w.trim_suffix(",")
-		if CAPITALS.has(bare):
-			out.append(bare.to_upper() + w.substr(bare.length()))
-		else:
-			out.append(w.substr(0, 1).to_upper() + w.substr(1))
-	return " ".join(PackedStringArray(out))
+	return LiftNames.title_case(typed)
 
 
 static func is_loaded(name: String, ctx: Dictionary) -> bool:

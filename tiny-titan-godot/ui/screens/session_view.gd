@@ -17,6 +17,13 @@ static func pt_tag(size: int = 10) -> Control:
 	return Kit.tag("PT", Pal.PT, true, size)
 
 
+## A lift's variation beside its movement: "Barbell", "Single arm".
+static func variation_tag(variation: String, size: int = 10) -> Control:
+	var t = Kit.tag(variation, Pal.PANEL2, false, size)
+	t.tooltip_text = variation
+	return t
+
+
 ## The sessions a session is compared with: everything logged before it.
 ## `skip_id`: a session it replaces (an edited day of the phone note).
 static func _before(data: Dictionary, skip_id = null) -> Array:
@@ -81,11 +88,11 @@ static func done_sets(ex: Dictionary) -> Array:
 ## is not in the log yet), "skip_id" (a session it replaces).
 static func lift_rows(data: Dictionary, opts: Dictionary = {}) -> Control:
 	var wu = App.weight_unit()
+	# Each lift is compared with the same movement AND variation done before.
 	var history_of = {}
-	for r in LiftLibrary.rows(_before(data, opts.get("skip_id"))):
-		if r.st != null:
-			for k in r.keys:
-				history_of[str(k)] = r.st.history
+	var all = LiftLibrary.stats(_before(data, opts.get("skip_id")))
+	for k in all:
+		history_of[str(k)] = all[k].history
 	var marks = App.pt()
 	var box = Kit.vbox(4)
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -113,7 +120,10 @@ static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: 
 	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var top = Kit.hbox(6)
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(Kit.clip(lift, 13, null, true))
+	var sp = LiftNames.split(lift)
+	top.add_child(Kit.clip_fit(str(sp.move), 13, null, true, 210.0))
+	if str(sp.variation) != "":
+		top.add_child(Kit.vcenter(variation_tag(str(sp.variation))))
 	if pt:
 		top.add_child(Kit.vcenter(pt_tag()))
 	words.add_child(top)

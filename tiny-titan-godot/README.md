@@ -98,8 +98,8 @@ game reads the rows under it:
 |       | Calf stretch | wall         | 30"    | 3          |
 ```
 
-The columns it knows: Date, Exercise, Variation (it joins the name: "Seated row - cable,
-1 arm"), PT (anything in the cell marks it), Weight (or `30"` for a hold), Hold, Sets, Reps
+The columns it knows: Date, Exercise, Variation (the game files the row under the movement
+and a variation written one way: "Seated Row - Single arm"), PT (anything in the cell marks it), Weight (or `30"` for a hold), Hold, Sets, Reps
 ("3x10", or "12, 10, 9"), a column per set ("Set 1", "Set 2"...) and Notes. A date is only
 needed in the first row of a day; empty rows are skipped. Leave Exercise empty on the next
 row to log another weight of the same exercise. A band can go in Weight ("blue band"): it
@@ -144,11 +144,14 @@ records and quests never see it. The longest walk and the heaviest vest are reco
 show in Journey (the log, a card in Stats, the Story), on the Hero tab's week card and in the
 recaps.
 
-**Lift library** (Journey → Lifts): about 170 lifts grouped by body part, with equipment
-chips (barbell, dumbbell, cable, machine…), a search box and sorting by name, most done,
-heaviest or most recent. Tap a lift for form notes, your best set, estimated 1RM, rep
-records, its trends, every session you did it in, variations to try and a button that
-adds it to today's workout. "New to me" shows what you have never done.
+**Lift library** (Journey → Lifts): 101 movements and 339 variations grouped by body part,
+with equipment chips (barbell, dumbbell, cable, machine…), a search box and sorting by name,
+most done, heaviest or most recent. An exercise's name is the MOVEMENT (Shrug, Squat, Lat
+Pulldown) and its VARIATION is the position or equipment (Barbell, Front, Single arm): a lift
+is stored as "Shrug - Barbell", and however it is written ("barbell shrug", "shrugs - bb") it
+lands there. Each variation keeps its own records. Tap a movement for its page: chips for its
+variations, then the newest session, a trend chart, every session, records, form notes and a
+button that adds it to today's workout. "New to me" shows what you have never done.
 
 **What you did, and how it is going.** The review of a phone note lists every exercise of a
 lift as its own row: the sets, and a tag that compares them with the last time (NEW, PR,
@@ -298,7 +301,9 @@ godot --headless --path . --script res://tests/quick_log_test.gd   # the phone-i
 godot --headless --path . --script res://tests/shot_reader_test.gd # reading screenshots
 godot --headless --path . --script res://tests/misc_test.gd        # misc activities (vest walks)
 godot --headless --path . --script res://tests/reading_test.gd     # pages read
-godot --headless --path . --script res://tests/lift_match_test.gd  # which lift a typed name means
+godot --headless --path . --script res://tests/lift_match_test.gd  # the words of a typed name
+godot --headless --path . --script res://tests/lift_names_test.gd  # movement + variation names
+godot --headless --path . --script res://tests/lift_library_test.gd # the lift library
 godot --headless --path . --script res://tests/lift_trend_test.gd  # a lift over time; physical therapy
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```

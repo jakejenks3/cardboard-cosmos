@@ -156,18 +156,46 @@ func set_pt_goal(lift_name: String, per_week: int) -> void:
 ## "(PT)" in front of an exercise name (typed in the Log tab), or the mark the
 ## phone note left on an exercise, makes that lift a PT lift: the tag comes off
 ## the name and the lift goes into saved.pt. Called for every session that is saved.
+##
+## A name typed in the Log tab is also put in the "Movement - Variation" form
+## (game/lift_names.gd: "barbell shrug" is saved as Shrug - Barbell), unless it
+## is already a lift in the log. The phone note's sessions were named in its
+## review already (they carry inboxKey), so their names are kept.
 func absorb_pt(session: Dictionary) -> void:
 	if str(session.get("discipline", "")) != "lift":
 		return
+	var typed_here = str(session.get("inboxKey", "")) == ""
+	var own = lift_names() if typed_here else []
+	var have = {}
+	for n in own:
+		have[Xp.normalize_exercise(str(n))] = true
 	for ex in session.get("exercises", []):
 		var tag = Pt.untag(str(ex.get("name", "")))
 		var on = bool(tag.pt) or bool(ex.get("pt", false))
 		ex.erase("pt")
-		if not on or str(tag.name) == "":
+		var n = str(tag.name).strip_edges()
+		if n == "":
 			continue
-		ex["name"] = str(tag.name)
-		if Pt.mark_of(saved.pt, str(tag.name)) == "":
-			saved.pt[Pt.key(str(tag.name))] = {"name": str(tag.name), "perWeek": Pt.DEFAULT_PER_WEEK}
+		if typed_here and not have.has(Xp.normalize_exercise(n)):
+			n = str(LiftNames.resolve(n, own).name)
+		ex["name"] = n
+		if on and Pt.mark_of(saved.pt, n) == "":
+			saved.pt[Pt.key(n)] = {"name": n, "perWeek": Pt.DEFAULT_PER_WEEK}
+
+
+## Every exercise name in the log, most recent first.
+func lift_names() -> Array:
+	var out = []
+	var seen = {}
+	var lifts = saved.sessions.filter(func(x): return str(x.get("discipline", "")) == "lift")
+	TTUtil.stable_sort(lifts, func(a, b): return str(a.date) > str(b.date))
+	for x in lifts:
+		for ex in x.get("exercises", []):
+			var k = Xp.normalize_exercise(str(ex.get("name", "")))
+			if k != "" and not seen.has(k):
+				seen[k] = true
+				out.append(str(ex.name))
+	return out
 
 
 ## Pages read: [{id, date, pages, createdAt}], one entry per day (see Reading).

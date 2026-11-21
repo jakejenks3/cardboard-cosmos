@@ -216,6 +216,19 @@ static func clip(text, size: int = 15, color = null, bold: bool = false) -> Labe
 	return l
 
 
+## A label as wide as its text, up to `max_w`, cut off with "…" past that: for a
+## name with something right beside it (a lift's movement and its variation tag).
+static func clip_fit(text, size: int = 15, color = null, bold: bool = false, max_w: float = 220.0) -> Label:
+	var l = label(text, size, color, bold)
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	l.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var f = font_bold() if bold else l.get_theme_font("font")
+	var w = f.get_string_size(str(text), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x if f != null else max_w
+	l.custom_minimum_size = Vector2(minf(ceilf(w) + 1.0, max_w), 0)
+	return l
+
+
 static func h1(text) -> Label:
 	return label(text, 22, null, true)
 

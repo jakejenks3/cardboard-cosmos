@@ -48,28 +48,12 @@ static func key(lift_name: String) -> String:
 	return Xp.normalize_exercise(lift_name)
 
 
-static var _lib_keys = null
-
-
-## The key a lift is marked under, "" when it is not PT. A mark on another name
-## of the same library lift ("heel raise" for Calf Raise) covers it.
+## The key a lift is marked under, "" when it is not PT. A mark is on one lift,
+## movement and variation together ("Romanian Deadlift - Single leg"): the other
+## variations of the movement are not PT.
 static func mark_of(marks: Dictionary, lift_name: String) -> String:
 	var k = key(lift_name)
-	if marks.has(k):
-		return k
-	if marks.is_empty() or k == "":
-		return ""
-	if _lib_keys == null:
-		_lib_keys = []
-		for e in LiftLibrary.catalog():
-			_lib_keys.append(e.keys)
-	for keys in _lib_keys:
-		if keys.has(k):
-			for other in keys:
-				if marks.has(str(other)):
-					return str(other)
-			return ""
-	return ""
+	return k if marks.has(k) else ""
 
 
 static func is_pt(marks: Dictionary, lift_name: String) -> bool:
@@ -96,23 +80,11 @@ static func status(sessions: Array, marks: Dictionary, today: String, weeks: int
 	var out = []
 	if marks.is_empty():
 		return out
-	var claimed = {}
-	for row in LiftLibrary.rows(sessions):
-		var mine = ""
-		for k in row.keys:
-			if marks.has(str(k)):
-				mine = str(k)
-				break
-		if mine == "":
-			continue
-		for k in row.keys:
-			claimed[str(k)] = true
-		var shown = str(row.st.name) if row.st != null else str(marks[mine].get("name", row.name))
-		out.append(_row(mine, shown, row.st.history if row.st != null else [], per_week(marks, mine), today, weeks))
-	# Marked, never done, and not a library lift: it still has a row.
+	var all = LiftLibrary.stats(sessions)
 	for k in marks:
-		if not claimed.has(str(k)):
-			out.append(_row(str(k), str(marks[k].get("name", k)), [], per_week(marks, str(k)), today, weeks))
+		var st = all.get(str(k))
+		var shown = str(st.name) if st != null else str(marks[k].get("name", k))
+		out.append(_row(str(k), shown, st.history if st != null else [], per_week(marks, str(k)), today, weeks))
 	var rank = {"behind": 0, "on": 1, "done": 2}
 	TTUtil.stable_sort(out, func(a, b):
 		if rank[a.state] != rank[b.state]:

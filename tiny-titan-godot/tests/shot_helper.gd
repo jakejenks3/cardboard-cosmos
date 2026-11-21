@@ -164,13 +164,13 @@ static func demo_saved(kind: String = "year") -> Dictionary:
 				var a_day = n % 2 == 0
 				var ex = []
 				if a_day:
-					ex.append({"name": "Bench Press", "sets": _sets(bench, 5, 3, rng)})
-					ex.append({"name": "Squat", "sets": _sets(squat, 5, 3, rng)})
+					ex.append({"name": "Bench Press - Barbell", "sets": _sets(bench, 5, 3, rng)})
+					ex.append({"name": "Squat - Barbell", "sets": _sets(squat, 5, 3, rng)})
 					ex.append({"name": "Pull-up", "sets": [{"reps": 5 + int(progress * 7), "weightKg": 0}, {"reps": 4 + int(progress * 6), "weightKg": 0}]})
 				else:
-					ex.append({"name": "Deadlift", "sets": _sets(dead, 3, 3, rng)})
-					ex.append({"name": "Overhead Press", "sets": _sets(25.0 + 30.0 * progress, 6, 3, rng)})
-					ex.append({"name": "Barbell Row", "sets": _sets(35.0 + 40.0 * progress, 8, 3, rng)})
+					ex.append({"name": "Deadlift - Barbell", "sets": _sets(dead, 3, 3, rng)})
+					ex.append({"name": "Overhead Press - Barbell", "sets": _sets(25.0 + 30.0 * progress, 6, 3, rng)})
+					ex.append({"name": "Bent Over Row - Barbell", "sets": _sets(35.0 + 40.0 * progress, 8, 3, rng)})
 				s["exercises"] = ex
 				s["durationSec"] = 3000 + rng.randi_range(0, 1500)
 			"climb":

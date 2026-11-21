@@ -101,7 +101,7 @@ func build(parent: Control) -> void:
 	_building = true
 	var sessions = App.sessions()
 	_last = LiftHistory.last_performances(sessions, editing_id)
-	_suggestions = LiftHistory.exercise_suggestions(sessions, Summary.DEFAULT_EXERCISES, editing_id)
+	_suggestions = LiftHistory.exercise_suggestions(sessions, LiftNames.defaults(), editing_id)
 	_bests = App.state.prs.lifts
 	_badges = []
 	_wsteps = []
@@ -424,13 +424,15 @@ func _fill_chips() -> void:
 	for e in exercises:
 		in_form[Xp.normalize_exercise(e.name)] = true
 	var q = Xp.normalize_exercise(query)
+	# Every typed word somewhere in the name: "barbell bench" finds Bench Press - Barbell.
+	var q_words = q.replace("-", " ").split(" ", false)
 	var shown = []
 	var limit = 12 if q != "" or show_all_chips else CHIPS_COLLAPSED
 	var more_left = false
 	for s in _suggestions:
 		if in_form.has(s.key):
 			continue
-		if q != "" and not str(s.key).contains(q):
+		if q != "" and not str(s.key).contains(q) and not Array(q_words).all(func(w): return str(s.key).contains(w)):
 			continue
 		if shown.size() >= limit:
 			more_left = true
@@ -449,14 +451,20 @@ func _fill_chips() -> void:
 		_add_btn.disabled = q == ""
 
 
-## One tappable exercise key: "Bench Press  85×5" (your own ones have a lift-coloured edge).
+## One tappable exercise key: "Bench Press  Barbell  85×5" (the movement, its
+## variation quieter, the last top set; your own ones have a lift-coloured edge).
 func _ex_chip(s: Dictionary) -> Button:
 	var lp = s.get("last")
 	var h = Kit.hbox(5)
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	var nm = Kit.label(str(s.name), 12, Pal.TEXT, true)
+	var sp = LiftNames.split(str(s.name))
+	var nm = Kit.label(str(sp.move), 12, Pal.TEXT, true)
 	nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(nm)
+	if str(sp.variation) != "":
+		var vl = Kit.label(str(sp.variation), 11, Pal.MUTED)
+		vl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		h.add_child(vl)
 	if lp != null:
 		var top = LiftHistory.top_set_label(lp.sets, func(kg): return Fmt.kg_to_unit(float(kg), wu))
 		if top != "":

@@ -114,7 +114,7 @@ func run(m: Node, t: SceneTree) -> void:
 	for ex in lift.exercises:
 		if not SessionView.done_sets(ex).is_empty():
 			with_sets += 1
-			if not said.contains(str(ex.name)):
+			if not said.contains(str(LiftNames.split(str(ex.name)).move)):
 				all_named = false
 	var rows = _by_tip("Trends and history of")
 	check(all_named and rows.size() == with_sets and with_sets > 0, "the detail lists every exercise as a row of its own (%d of %d)" % [rows.size(), with_sets])
@@ -125,7 +125,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.click(tree, rows[0])
 	await ShotHelper.wait(tree, 0.7)
 	var page = _sheet()
-	check(page != null and ShotHelper.find_text(page, lift_name) != null and ShotHelper.find_button(page, "How often") != null and ShotHelper.find_button(page, "Reps") != null, "a click on an exercise opens its page, with the trend picker (%s)" % lift_name)
+	check(page != null and ShotHelper.find_text(page, str(LiftNames.split(lift_name).move)) != null and ShotHelper.find_button(page, "How often") != null and ShotHelper.find_button(page, "Reps") != null, "a click on an exercise opens its page, with the trend picker (%s)" % lift_name)
 	check(_count(LineChart) == 1 and ShotHelper.find_text(page, "since ") != null, "a line of the trend, and how much it changed")
 	var trends_at = ShotHelper.find_button(page, "How often")
 	ShotHelper.reveal(trends_at)

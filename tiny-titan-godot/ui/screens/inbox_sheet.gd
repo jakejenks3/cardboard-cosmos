@@ -275,7 +275,14 @@ static func _pick_other(ui: Dictionary, pk: Dictionary) -> void:
 	var list = Kit.vbox(6)
 	s.box.add_child(list)
 	var opts = App.inbox.parse_opts()
-	var state = {"rows": LiftLibrary.rows(App.sessions()), "known": opts.exercises, "own": opts.own}
+	# Every name to choose from: the player's lifts, then every movement of the
+	# library with each of its variations ("Shrug - Dumbbell").
+	var every = Array(opts.own).duplicate()
+	for e in LiftLibrary.catalog():
+		for d in LiftLibrary.variation_list(e):
+			if not every.has(str(d.name)):
+				every.append(str(d.name))
+	var state = {"stats": LiftLibrary.stats(App.sessions()), "every": every, "own": opts.own}
 	field.text_changed.connect(InboxSheet._pick_list.bind(list, ui, pk, s, state))
 	_pick_list("", list, ui, pk, s, state)
 	s.open()
@@ -293,13 +300,9 @@ static func _pick_list(text: String, list: VBoxContainer, ui: Dictionary, pk: Di
 	for old in list.get_children():
 		list.remove_child(old)
 		old.queue_free()
-	var by_name = {}
-	for r in state.rows:
-		for k in r.keys:
-			by_name[str(k)] = r
 	var q = text.strip_edges()
 	var names = []
-	for c in LiftMatch.find(q if q != "" else str(pk.typed), state.known, PICK_SHOWN if q != "" else 5):
+	for c in LiftMatch.find(q if q != "" else str(pk.typed), state.every, PICK_SHOWN if q != "" else 5):
 		if float(c.score) >= 0.3:
 			names.append(str(c.name))
 	if q == "":
@@ -309,39 +312,40 @@ static func _pick_list(text: String, list: VBoxContainer, ui: Dictionary, pk: Di
 				break
 			if not names.has(str(n)):
 				names.append(str(n))
-	else:
-		for r in LiftLibrary.query(state.rows, {"q": q, "sort": "count"}):
-			if names.size() >= PICK_SHOWN:
-				break
-			if not names.has(str(r.name)):
-				names.append(str(r.name))
 	var exact = false
+	var made = str(LiftNames.plain(q, false).name) if q != "" else ""
 	for n in names:
-		if Xp.normalize_exercise(n) == Xp.normalize_exercise(q):
+		if Xp.normalize_exercise(n) == Xp.normalize_exercise(made):
 			exact = true
-		list.add_child(_pick_row(n, by_name.get(Xp.normalize_exercise(n)), "", InboxSheet._picked.bind(ui, pk, s, n)))
+		list.add_child(_pick_row(n, state.stats.get(Xp.normalize_exercise(n)), "", InboxSheet._picked.bind(ui, pk, s, n)))
 	if q == "":
 		list.add_child(_pick_row("Save as \"%s\"" % QuickLog.plain_name(str(pk.typed)), null, "A lift of its own", InboxSheet._picked.bind(ui, pk, s, "")))
 	elif not exact:
-		list.add_child(_pick_row("Name it \"%s\"" % q, null, "A lift of its own, under this name", InboxSheet._picked.bind(ui, pk, s, q)))
+		list.add_child(_pick_row("Name it \"%s\"" % made, null, "A lift of its own, under this name", InboxSheet._picked.bind(ui, pk, s, made)))
 
 
-## One lift in the picker: its name, and what it is (body part and equipment
-## for a library lift, how often it was done for one of the player's).
-static func _pick_row(lift: String, lib, detail: String, on_tap: Callable) -> Card:
+## One lift in the picker: the movement, its variation beside it, and how often
+## it was done (or what it works, for one never done).
+static func _pick_row(lift: String, st, detail: String, on_tap: Callable) -> Card:
 	var c = Kit.card(1, on_tap, 9)
-	c.add(Kit.clip(lift, 14, null, true))
+	var top = Kit.hbox(6)
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sp = LiftNames.split(lift) if detail == "" else {"move": lift, "variation": ""}
+	top.add_child(Kit.clip_fit(str(sp.move), 14, null, true, 230.0))
+	if str(sp.variation) != "":
+		top.add_child(Kit.vcenter(SessionView.variation_tag(str(sp.variation), 11)))
+	c.add(top)
 	var bits = []
 	if detail != "":
 		bits.append(detail)
-	elif lib != null:
-		if bool(lib.get("own", false)):
-			bits.append("Your lift")
-		else:
-			bits.append(LiftLibrary.part_name(str(lib.part)))
-			bits.append(LiftLibrary.equip_name(str(lib.equip)))
-		if lib.get("st") != null:
-			bits.append("done %d time%s" % [int(lib.st.count), "" if int(lib.st.count) == 1 else "s"])
+	elif st != null:
+		bits.append("Your lift, done %d time%s" % [int(st.count), "" if int(st.count) == 1 else "s"])
+	else:
+		var m = LiftNames.movement(str(sp.move))
+		if m != null:
+			bits.append(LiftLibrary.part_name(str(m.part)))
+			if str(m.also) != "":
+				bits.append(str(m.also))
 	if not bits.is_empty():
 		c.add(Kit.clip(" · ".join(PackedStringArray(bits)), 12, Pal.MUTED))
 	return c

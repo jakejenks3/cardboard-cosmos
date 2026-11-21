@@ -1,9 +1,11 @@
 class_name JourneyLifts
 extends RefCounted
 ## Journey → Lifts: the lift library (game/lift_library.gd). Search box, body
-## part and equipment chips, a sort row, then one compact row per lift with
-## your best on the right (or NEW). Tapping a row opens a sheet with the notes,
-## your bests, rep records, trend, history and the variations to try.
+## part and equipment chips, a sort row, then one compact row per MOVEMENT with
+## the variations you have done under its name and your best on the right (or
+## NEW). Tapping a row opens the movement's page on one variation: chips at the
+## top switch between its variations, and under them that variation's newest
+## session, trend, history and records.
 ## State lives in the screen: `st` = {q, part, equip, show, sort}.
 
 
@@ -139,13 +141,24 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var name_row = _ig(Kit.hbox(6))
-	name_row.add_child(Kit.clip(e.name, 14, null, true))
+	name_row.add_child(Kit.clip_fit(e.name, 14, null, true, 230.0))
 	if is_pt(e):
 		name_row.add_child(Kit.vcenter(SessionView.pt_tag()))
 	v.add_child(name_row)
-	var sub = LiftLibrary.equip_name(e.equip) if not e.own else "Your own"
-	if str(e.also) != "":
-		sub += " · " + str(e.also)
+	# Under the name: the variations you have done, or what it is done with.
+	var sub = ""
+	var done = e.get("done", [])
+	if not done.is_empty():
+		var said = []
+		for d in done:
+			said.append(str(d.variation) if str(d.variation) != "" else "plain")
+		sub = " · ".join(PackedStringArray(said))
+	elif e.own:
+		sub = "Your own"
+	else:
+		sub = "%d variation%s" % [e.vars.size(), "" if e.vars.size() == 1 else "s"] if e.vars.size() > 0 else LiftLibrary.equip_name(e.equip)
+		if str(e.also) != "":
+			sub += " · " + str(e.also)
 	v.add_child(Kit.clip(sub, 11, Pal.MUTED))
 	h.add_child(v)
 	var st = e.st
@@ -187,8 +200,8 @@ static func is_pt(e: Dictionary) -> bool:
 	var marks = App.pt()
 	if marks.is_empty():
 		return false
-	for k in e.keys:
-		if marks.has(str(k)):
+	for d in e.get("done", []):
+		if Pt.is_pt(marks, str(d.name)):
 			return true
 	return false
 
@@ -198,7 +211,8 @@ static func is_pt(e: Dictionary) -> bool:
 ## for `open_detail`.
 static func open_named(lift_name: String, opts: Dictionary = {}) -> void:
 	var rows = LiftLibrary.rows(App.sessions())
-	var k = Xp.normalize_exercise(lift_name)
+	var sp = LiftNames.split(lift_name)
+	var k = Xp.normalize_exercise(str(sp.move))
 	var found = null
 	for r in rows:
 		if r.keys.has(k):
@@ -206,9 +220,12 @@ static func open_named(lift_name: String, opts: Dictionary = {}) -> void:
 			break
 	if found == null:
 		# Not in the library and not in the log yet (a new lift in the phone note).
-		found = {"name": lift_name, "part": LiftLibrary.guess_part(k), "equip": "other", "family": "Your own", "also": "",
-			"tip": "One of your own lifts: not in the library, so it has no notes.", "keys": [k], "own": true, "st": null}
-	open_detail(found, rows, opts)
+		found = {"name": str(sp.move), "part": LiftLibrary.guess_part(k), "usual": "", "only": [], "equip": "other", "equips": ["other"],
+			"family": str(sp.move), "also": "", "tip": "One of your own: not in the library, so it has no notes.",
+			"vars": [], "names": [], "keys": [k], "own": true, "done": [], "st": null}
+	var o = opts.duplicate()
+	o["variation"] = str(sp.variation)
+	open_detail(found, rows, o)
 
 
 ## The numbers of a lift that can be charted, as the picker's options.
@@ -507,7 +524,23 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 	var wu = App.weight_unit()
 	var sheet = Kit.sheet(e.name)
 	var box = sheet.box
-	var st = e.st
+	# Which variation the page is on: the one asked for, else the one done last,
+	# else the usual one.
+	var choices = LiftLibrary.variation_list(e)
+	var pick = null
+	if opts.has("variation"):
+		for d in choices:
+			if Xp.normalize_exercise(str(d.variation)) == Xp.normalize_exercise(str(opts.variation)):
+				pick = d
+		if pick == null:
+			pick = {"variation": str(opts.variation), "name": LiftNames.join(str(e.name), str(opts.variation)), "st": null}
+			choices.push_front(pick)
+	elif not choices.is_empty():
+		pick = choices[0]
+	else:
+		pick = {"variation": "", "name": str(e.name), "st": null}
+		choices.append(pick)
+	var st = pick.st
 	if st != null and opts.get("skip_id") != null:
 		# The session being replaced is not part of what it is compared with.
 		var kept = st.history.filter(func(hh): return hh.id != opts.skip_id)
@@ -516,7 +549,7 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 			st["history"] = kept
 			if kept.is_empty():
 				st = null
-	var lift = str(st.name) if st != null else str(e.name)
+	var lift = str(pick.name)
 	# Every session of the lift, newest first, the note's sets among them.
 	var history = []
 	if st != null:
@@ -535,12 +568,23 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 
 	var tags = Kit.flow(6)
 	tags.add_child(Kit.tag(LiftLibrary.part_name(e.part), part_color(e.part), true, 12))
-	if not e.own:
-		tags.add_child(Kit.tag(LiftLibrary.equip_name(e.equip), Pal.PANEL2, false, 12))
-		tags.add_child(Kit.tag(str(e.family), Pal.PANEL2, false, 12))
+	if e.own:
+		tags.add_child(Kit.tag("Your own", Pal.PANEL2, false, 12))
 	if Pt.is_pt(App.pt(), lift) or (pending is Dictionary and bool(pending.get("pt", false))):
 		tags.add_child(SessionView.pt_tag(12))
 	box.add_child(tags)
+
+	# The variations: done ones lit, the rest to try. One tap switches the page.
+	if choices.size() > 1 or str(pick.variation) != "":
+		var vf = Kit.flow(5)
+		for d in choices:
+			var said = str(d.variation) if str(d.variation) != "" else "No variation"
+			var chip = LogWidgets.mini_chip(said, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.LIFT if d.st != null else Pal.MUTED)
+			chip.tooltip_text = ("Done %d time%s" % [int(d.st.count), "" if int(d.st.count) == 1 else "s"]) if d.st != null else "Not done yet"
+			if d.st == null and d.name != pick.name:
+				chip.modulate.a = 0.6
+			vf.add_child(chip)
+		box.add_child(vf)
 
 	if cur == null:
 		var nc = Kit.card(4, Callable(), 10)
@@ -567,20 +611,18 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		box.add_child(Kit.para(e.tip, 14))
 		if str(e.also) != "":
 			box.add_child(Kit.muted_para("Also works: " + str(e.also), 12))
-	var vars = LiftLibrary.variations(e, rows)
-	if not vars.is_empty():
-		box.add_child(Kit.section_title("Variations to try"))
-		var vf = Kit.flow(5)
-		for o in vars:
-			var chip = LogWidgets.mini_chip(o.name, o.st != null, JourneyLifts._jump.bind(sheet, o, rows), part_color(o.part))
-			chip.tooltip_text = ("You have done this: " + best_text(o.st, wu)) if o.st != null else "New to you"
-			vf.add_child(chip)
-		box.add_child(vf)
 
 	var add = Kit.button("Add to today's workout", "primary", JourneyLifts._add.bind(sheet, lift), "lg", "plus")
 	add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(add)
 	sheet.open()
+
+
+## Another variation of the same movement: the page again, on that one.
+static func _switch(sheet: Sheet, e: Dictionary, rows: Array, variation: String) -> void:
+	if is_instance_valid(sheet):
+		sheet.close()
+	open_detail(e, rows, {"variation": variation})
 
 
 static func _edit(sheet: Sheet, session_id) -> void:
@@ -596,11 +638,6 @@ static func _open_session(sheet: Sheet, session_id) -> void:
 		return
 	sheet.close()
 	SessionView.open(s)
-
-
-static func _jump(sheet: Sheet, o: Dictionary, rows: Array) -> void:
-	sheet.close()
-	open_detail(o, rows)
 
 
 ## Open the lifting form with this exercise on it (see LogLiftEditor.build).

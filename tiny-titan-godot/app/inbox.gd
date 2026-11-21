@@ -124,7 +124,7 @@ func parse_opts() -> Dictionary:
 	var app = _app()
 	var names = []
 	var own = []
-	for x in LiftHistory.exercise_suggestions(app.sessions(), Summary.DEFAULT_EXERCISES):
+	for x in LiftHistory.exercise_suggestions(app.sessions(), LiftNames.defaults()):
 		names.append(x.name)
 		if int(x.get("count", 0)) > 0:
 			own.append(x.name)

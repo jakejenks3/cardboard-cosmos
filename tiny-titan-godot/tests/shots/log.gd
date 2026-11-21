@@ -185,12 +185,12 @@ func _year() -> void:
 	# --- 1. lifting: pick Bench Press, prefilled from last time -------------
 	await tap("Lifting")
 	await shot("log_02_lift_templates")
-	var last_bench = LiftHistory.last_performances(App.sessions())["bench press"]
+	var last_bench = LiftHistory.last_performances(App.sessions())["bench press - barbell"]
 	print("last bench: ", sets_text(last_bench.sets))
 	var lift = screen().form().lift
 	await tap("Bench Press")
-	check(lift.exercises.size() == 1 and lift.exercises[0].name == "Bench Press", "Bench Press added")
-	var expect = LogLiftEditor.draft_from_sets("Bench Press", last_bench.sets, "kg")
+	check(lift.exercises.size() == 1 and lift.exercises[0].name == "Bench Press - Barbell", "Bench Press - Barbell added")
+	var expect = LogLiftEditor.draft_from_sets("Bench Press - Barbell", last_bench.sets, "kg")
 	check(draft_text(lift.exercises[0]) == draft_text(expect), "prefilled with last bench: " + draft_text(lift.exercises[0]))
 	click_step("ex0.s0.weight", true)
 	await ShotHelper.frames(tree, 2)
@@ -244,7 +244,7 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 4)
 	lift = screen().form().lift
 	await tap("Bench Press")
-	check(draft_text(lift.exercises[0]) == draft_text(LogLiftEditor.draft_from_sets("Bench Press", want, "kg")), "logging again pre-fills the new numbers: " + draft_text(lift.exercises[0]))
+	check(draft_text(lift.exercises[0]) == draft_text(LogLiftEditor.draft_from_sets("Bench Press - Barbell", want, "kg")), "logging again pre-fills the new numbers: " + draft_text(lift.exercises[0]))
 	await shot("log_06_lift_prefill_again")
 
 	# --- 2. templates ---------------------------------------------------------

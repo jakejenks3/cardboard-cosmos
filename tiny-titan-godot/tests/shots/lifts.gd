@@ -58,7 +58,7 @@ func run(m: Node, t: SceneTree) -> void:
 	check(search != null, "search box is there")
 	ShotHelper.type_into(search, "cable curl")
 	await ShotHelper.frames(tree, 4)
-	check(is_instance_valid(search) and ShotHelper.find_text(main, "Cable Curl") != null and ShotHelper.find_text(main, "Bench Press") == null, "typing 'cable curl' narrows the list without rebuilding the box")
+	check(is_instance_valid(search) and ShotHelper.find_text(main, "Bicep Curl") != null and ShotHelper.find_text(main, "Bench Press") == null, "typing 'cable curl' narrows the list to curls with a cable variation, without rebuilding the box")
 	await ShotHelper.snap(tree, "lifts_03_search")
 	ShotHelper.type_into(search, "")
 	await ShotHelper.frames(tree, 4)
@@ -68,7 +68,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.5)
 	ShotHelper.press(exact_button("Dumbbell"))
 	await ShotHelper.wait(tree, 0.5)
-	check(ShotHelper.find_text(main, "Dumbbell Fly") != null and ShotHelper.find_text(main, "Squat") == null, "Chest + Dumbbell shows dumbbell chest lifts only")
+	check(ShotHelper.find_text(main, "Chest Fly") != null and ShotHelper.find_text(main, "Squat") == null and ShotHelper.find_text(main, "Pec Stretch") == null, "Chest + Dumbbell shows chest movements with a dumbbell variation only")
 	await ShotHelper.snap(tree, "lifts_04_chest_dumbbell")
 	ShotHelper.press(exact_button("Chest"))
 	await ShotHelper.wait(tree, 0.4)
@@ -102,19 +102,19 @@ func run(m: Node, t: SceneTree) -> void:
 	var fresh = null
 	for n in ShotHelper.walk(main):
 		if n is LineEdit and n.placeholder_text.begins_with("Search lifts"):
-			ShotHelper.type_into(n, "bayesian")
+			ShotHelper.type_into(n, "zottman")
 	await ShotHelper.frames(tree, 4)
-	fresh = card_of(main, "Bayesian Curl")
-	check(fresh != null, "Bayesian Curl is offered as new")
+	fresh = card_of(main, "Zottman Curl")
+	check(fresh != null, "Zottman Curl is offered as new")
 	fresh._tap.call()
 	await ShotHelper.wait(tree, 0.8)
-	check(sheet() != null and ShotHelper.find_text(sheet(), "New to you") != null and ShotHelper.find_button(sheet(), "Hammer Curl") != null, "a new lift's sheet says so and lists variations")
+	check(sheet() != null and ShotHelper.find_text(sheet(), "New to you") != null and ShotHelper.find_button(sheet(), "Dumbbell") != null, "a new movement's sheet says so and shows its variation")
 	await ShotHelper.snap(tree, "lifts_08_new")
 	ShotHelper.press(ShotHelper.find_button(sheet(), "Add to today's workout"))
 	await ShotHelper.wait(tree, 1.0)
 	var on_form = false
 	for n in ShotHelper.walk(main):
-		if (n is Label or n is LineEdit or n is Button) and str(n.text).contains("Bayesian Curl"):
+		if (n is Label or n is LineEdit or n is Button) and str(n.text).contains("Zottman Curl"):
 			on_form = true
 	check(App.tab == "log" and on_form, "Add to today's workout opens the lift form with it on")
 	await ShotHelper.snap(tree, "lifts_09_added")
