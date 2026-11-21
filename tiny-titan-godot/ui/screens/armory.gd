@@ -426,7 +426,7 @@ func _shop() -> void:
 	var purse = Kit.card(6, Callable(), 12)
 	purse.accent(Pal.ACCENT)
 	purse.mouse_filter = Control.MOUSE_FILTER_STOP
-	purse.tooltip_text = "You earn 1 coin for every 10 XP you log.\nWeekly bounties, bosses, trophies and quests pay extra."
+	purse.tooltip_text = "You earn 1 coin for every 10 XP you log.\nWeekly bounties, bosses, trophies and missions pay extra."
 	var prow = Kit.hbox(10)
 	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	prow.add_child(Kit.vcenter(Icons.rect("coin", 40)))

@@ -545,7 +545,7 @@ func _build_card(ev: Dictionary, animate: bool):
 			h.add_child(Kit.vcenter(Kit.label("for the shop", 14, null, true)))
 			c.main.add_child(h)
 			c.main.add_child(_sub("%s in your purse" % Xp.fmt_int(ev.balance)))
-			c.panel.tooltip_text = "1 coin per 10 XP, plus bounties, bosses, trophies and quests. Spend them in Armory, Shop."
+			c.panel.tooltip_text = "1 coin per 10 XP, plus bounties, bosses, trophies and missions. Spend them in Armory, Shop."
 			return _finish(c, _icon_cell("coin", Pal.ACCENT))
 		"rank":
 			var rank = Xp.RANKS[int(ev.to)]

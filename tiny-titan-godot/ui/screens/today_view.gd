@@ -9,6 +9,9 @@ extends RefCounted
 ## done it under it (their variations, another movement: Missions.options_for);
 ## any of them, or any variation, completes its mission.
 ## The morning message on the phone says the same (MorningAlert).
+## Every row ends in a box: empty while it is still to do, ticked once it was
+## done today (any way of a lift, the new movement, the PT, the run...), the
+## same for every colour.
 
 static func card() -> Control:
 	var plan = App.plan()
@@ -37,7 +40,7 @@ static func card() -> Control:
 	if not plan.lifts.is_empty():
 		c.add(_kicker("PROBABLY TODAY", "From the days and gaps of your last six weeks"))
 		for l in plan.lifts:
-			c.add(_lift_row(l, wu))
+			c.add(_lift_row(l, wu, {} if bool(l.pt) else Missions.same_of(str(l.name), plan)))
 	if plan.new != null:
 		c.add(_new_row(plan.new))
 	if not plan.pt.is_empty():
@@ -88,7 +91,7 @@ static func _step_kg(wu: String) -> float:
 ## A likely lift as done last (its first option): name and variation, why it
 ## is likely, what to aim for; the other ways the player has done it under it
 ## as chips. Done today (any way): what was done.
-static func _lift_row(l: Dictionary, wu: String) -> Card:
+static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var opts = l.get("options", [])
 	var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": l.last.sets}
@@ -97,7 +100,7 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	for o in opts:
 		if not ways.has(str(o.name)):
 			ways.append(str(o.name))
-	var done_name = Missions.done_of(App.sessions(), ways if not ways.is_empty() else [str(l.name)], App.today, "" if bool(l.pt) else planned_move)
+	var done_name = Missions.done_of(App.sessions(), ways if not ways.is_empty() else [str(l.name)], App.today, "" if bool(l.pt) else planned_move, same)
 	var shown = done_name if done_name != "" else str(main.name)
 	var c = Kit.card(0, JourneyLifts.open_named.bind(shown, {"view": "compare"}), 8)
 	c.tooltip_text = "Last time, and what to beat"
@@ -126,11 +129,10 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	if done_name != "":
 		# Already done today (any way): what was done, green when it beat last
 		# time or was a first.
-		var beat = Missions.beat_any(App.sessions(), ways if not ways.is_empty() else [str(l.name)], "" if bool(l.pt) else planned_move, App.today)
+		var beat = Missions.beat_any(App.sessions(), ways if not ways.is_empty() else [str(l.name)], "" if bool(l.pt) else planned_move, App.today, same)
 		said = LiftHistory.describe_sets(Missions.sets_on(App.sessions(), done_name, App.today), fmt_w)
 		cap = "DONE · BEAT IT" if beat else "DONE TODAY"
 		col = Pal.GOOD if beat else Pal.TEXT
-		c.accent(Pal.GOOD if beat else Pal.LINE)
 	elif bool(l.pt):
 		said = LiftHistory.describe_sets(l.last.sets, fmt_w)
 		cap = "AS LAST TIME"
@@ -148,6 +150,7 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	al.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	right.add_child(al)
 	row.add_child(right)
+	row.add_child(_tick(done_name != ""))
 	c.add(row)
 	# The other ways to do it here, each opening its own page.
 	if done_name == "" and opts.size() > 1:
@@ -157,13 +160,36 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 		orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		more.add_child(orl)
 		for o in opts.slice(1):
-			var same = str(o.move) == str(main.get("move", LiftNames.split(str(main.name)).move))
-			var text = str(o.variation) if same and str(o.variation) != "" else Missions.short_name(str(o.name))
+			var same_move = str(o.move) == str(main.get("move", LiftNames.split(str(main.name)).move))
+			var text = str(o.variation) if same_move and str(o.variation) != "" else Missions.short_name(str(o.name))
 			var b = Kit.chip(text, false, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), Pal.LIFT, 11)
 			b.tooltip_text = ("New to you: " if bool(o.new) else "") + Missions.short_name(str(o.name))
 			more.add_child(b)
 		c.add(more)
 	return c
+
+
+## A done box: empty while still to do, a tick once done today.
+static func _tick(done: bool) -> Control:
+	var box = PanelContainer.new()
+	box.custom_minimum_size = Vector2(24, 24)
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.mouse_filter = Control.MOUSE_FILTER_PASS
+	box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	box.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(Pal.GOOD, 0.2) if done else Pal.PANEL2, 4, Pal.GOOD if done else Pal.LINE, 2, 2, 2))
+	box.tooltip_text = "Done today" if done else "Still to do today"
+	var mid = CenterContainer.new()
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if done:
+		mid.add_child(Icons.rect("check", 16))
+	box.add_child(mid)
+	box.set_meta("done_tick", done)
+	return box
+
+
+## Was a session of this kind logged today?
+static func _did_today(discipline: String) -> bool:
+	return App.sessions().any(func(s): return str(s.get("date", "")) == App.today and str(s.get("discipline", "")) == discipline)
 
 
 static func _new_row(nw: Dictionary) -> Card:
@@ -185,7 +211,9 @@ static func _new_row(nw: Dictionary) -> Card:
 	top.add_child(Kit.vcenter(Kit.tag(str(nw.partName), JourneyLifts.part_color(str(nw.part)), true, 10)))
 	v.add_child(top)
 	row.add_child(v)
-	row.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
+	# Done as the mission counts it: this movement, or any never done before.
+	var did = App.quests().daily.any(func(m): return str(m.id).ends_with(":new") and bool(m.done))
+	row.add_child(_tick(did))
 	c.add(row)
 	return c
 
@@ -199,15 +227,19 @@ static func _pt_row(rows: Array) -> Control:
 	var v = Kit.vbox(1)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.label("PHYSICAL THERAPY THIS WEEK", 10, Pal.PT, true))
+	v.add_child(Kit.label("PHYSICAL THERAPY TODAY", 10, Pal.PT, true))
 	var names = []
-	var left = 0
+	var done = 0
 	for r in rows:
 		names.append(str(r.name))
-		left += int(r.left)
+		if not Missions.sets_on(App.sessions(), str(r.name), App.today).is_empty():
+			done += 1
 	v.add_child(Kit.clip(", ".join(PackedStringArray(names)), 13, Pal.TEXT, true))
 	row.add_child(v)
-	row.add_child(Kit.vcenter(Kit.tag("%d to go" % left, Pal.PT, true, 11)))
+	var count = Kit.tag("%d/%d" % [done, rows.size()], Pal.PT, true, 11)
+	count.tooltip_text = "Done today, of the ones still needed this week (the week is on the PT page)"
+	row.add_child(Kit.vcenter(count))
+	row.add_child(_tick(done >= rows.size()))
 	c.add(row)
 	return c
 
@@ -231,5 +263,6 @@ static func _other_row(o: Dictionary) -> Control:
 		usual = Fmt.fmt_distance(float(o.avg), App.distance_unit())
 	var u = Kit.label("usually %s" % usual, 12, Pal.TEXT, true)
 	row.add_child(Kit.vcenter(u))
+	row.add_child(_tick(_did_today(d)))
 	c.add(row)
 	return c

@@ -376,6 +376,15 @@ is the Windows handoff.
     movement, beaten or done for the first time (`beat_any`). The Today row shows the others
     as chips; the morning message lists every way with its own aim ("  or ..."). Nothing is
     suggested from equipment the player has not used ("Try something new" aside).
+    A planned lift is also done by a movement STANDING IN for it (`stands_in` / `same_of`: the
+    same body part and kind, not itself a movement of the day's plan, `plan.moves`): cable
+    tricep extensions tick the pushdown row.
+  - Done boxes (2026-11-21, "hard to tell which ones have been completed"): every Today row
+    ends in `TodayView._tick` (empty while to do, a green tick once done today; meta
+    `done_tick`), the same for every colour; the card no longer turns a done lift green. "Try
+    something new" ticks when its mission is done. The PT row and mission are about TODAY
+    ("PHYSICAL THERAPY TODAY", done/needed today; mission "Do today: ..."). The Adventure tab
+    says "Missions" (it said "Quests": the same thing).
 - Clearing the note's table (2026-11-21, "takes a long time to manually clear each section"
   on mobile; "as long as it doesn't mess with the current workout I'm inputting"): the game
   only READS the doc, so `app/doc_clear.gd` (`DocClear`) holds a Google Apps Script

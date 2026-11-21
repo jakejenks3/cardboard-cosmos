@@ -51,6 +51,15 @@ func _home() -> void:
 	await ShotHelper.wait(tree, 0.8)
 
 
+## The done boxes on the Today card: [true / false per row].
+func _ticks() -> Array:
+	var out = []
+	for n in ShotHelper.walk(main):
+		if n.has_meta("done_tick"):
+			out.append(bool(n.get_meta("done_tick")))
+	return out
+
+
 func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
@@ -83,6 +92,9 @@ func run(m: Node, t: SceneTree) -> void:
 	check(not beats.is_empty() and q.daily.all(func(x): return str(x.unit) != "min") and q.weekly.all(func(x): return str(x.unit) != "min"), "missions to beat a lift, and none about minutes (%s)" % str(q.daily.map(func(x): return x.title)))
 	check(said.contains("Beat it: "), "the missions are on the Hero tab")
 	await ShotHelper.snap(tree, "today_1_hero")
+	var t0 = _ticks()
+	var t_base = t0.count(true)
+	check(t0.size() >= plan.lifts.size() + 1 and not t0.slice(0, plan.lifts.size()).has(true), "every Today row ends in a box; the lifts not done yet are empty (%s; the demo rides today)" % str(t0))
 
 	# The bench was done two ways (barbell, and dumbbells ten days ago): one row,
 	# the other way as a chip that opens it.
@@ -137,6 +149,18 @@ func run(m: Node, t: SceneTree) -> void:
 		if n is Button and str(n.text).begins_with("Claim"):
 			claim = n
 	check(claim != null, "a Claim key")
+	check(_ticks().count(true) == t_base + 1, "the lift done today is ticked (%s)" % str(_ticks()))
+	var nw = App.plan().new
+	if nw != null:
+		App.commit_sessions([{"id": "new1", "discipline": "lift", "date": App.today, "createdAt": App.now_ms() + 5, "source": "manual",
+			"exercises": [{"name": str(nw.name), "sets": [{"reps": 10, "weightKg": 20.0}]}]}], "Workout logged!")
+		await _dismiss_reels()
+		await _home()
+		check(_ticks().count(true) == t_base + 2, "trying the new movement ticks its row too (%s)" % str(_ticks()))
+		await ShotHelper.snap(tree, "today_3b_ticks")
+		for n in ShotHelper.walk(main):
+			if n is Button and str(n.text).begins_with("Claim"):
+				claim = n
 	var claims_before = App.saved.claims.size()
 	if claim != null:
 		ShotHelper.reveal(claim)

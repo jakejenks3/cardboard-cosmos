@@ -162,6 +162,15 @@ func _init() -> void:
 	ok(sday.filter(func(m): return str(m.id).contains(":beat:")).all(func(m): return push.has(str(m.lift))), "the beat-it missions follow the split", sday.map(func(m): return m.id))
 	ok(Missions.morning_text(sp, sday, "kg").begins_with("Push day. Yesterday was a pull day."), "the morning message names the split's day", Missions.morning_text(sp, sday, "kg"))
 
+	# --- another movement standing in for a planned one --------------------------------------------
+	var tri = Missions.same_of("Tricep Pushdown - Rope", sp)
+	ok(Missions.stands_in("Tricep Extension - Cable", tri) and not Missions.stands_in("Bicep Curl - Dumbbell", tri) and not Missions.stands_in("Chest Fly - Cable", tri), "triceps extensions stand in for the pushdown; curls and a planned fly do not")
+	var sho = Missions.same_of("Lateral Raise - Cable", sp)
+	ok(sp.new != null and Missions.kind_of(str(sp.new.name)) == "push" and (Missions.part_of(str(sp.new.name)) != "shoulders" or not Missions.stands_in(str(sp.new.name), sho)), "today's new movement counts for itself, not for a planned row", [sp.new.name, sp.moves])
+	var ext_day = split_log + [lift(sat, {"Tricep Extension - Cable": [[12, 20]]})]
+	ok(Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat, tri) and not Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat), "done by extensions only with the stand-in rule")
+	ok(Missions.done_of(ext_day, ["Tricep Pushdown - Rope"], sat, "Tricep Pushdown", tri) == "Tricep Extension - Cable", "the Today row shows what stood in")
+
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
 	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}

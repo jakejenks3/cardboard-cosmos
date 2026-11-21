@@ -24,7 +24,7 @@ func build() -> void:
 			claimable += 1
 
 	add_child(Kit.h1("Adventure"))
-	var quests_label = "Quests" if claimable == 0 else "Quests (%d)" % claimable
+	var quests_label = "Missions" if claimable == 0 else "Missions (%d)" % claimable
 	var tabs = Kit.sub_tabs([
 		{"value": "campaign", "label": "Campaign"},
 		{"value": "quests", "label": quests_label},
@@ -297,7 +297,7 @@ func _quests(q: Dictionary) -> void:
 	add_child(Kit.section_title("Daily", Kit.pill("clock", "Midnight", Pal.PANEL2, "Daily missions reset at midnight", Pal.TEXT, 11)))
 	add_child(_quest_list(q.daily))
 	var hint = "Last day!" if days_left == 0 else "%dd left" % days_left
-	add_child(Kit.section_title("Weekly", Kit.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly quests reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
+	add_child(Kit.section_title("Weekly", Kit.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly missions reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
 	add_child(_quest_list(q.weekly))
 
 
