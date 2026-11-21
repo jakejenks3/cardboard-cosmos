@@ -446,6 +446,12 @@ is the Windows handoff.
   scratch copies) unless `--recap-push-test`. Checked 2026-11-21 against a stand-in server.
 - Bigger record moments (2026-11-21): a "pr" card in the results reel adds `Sfx.level_up`,
   confetti, `_shake()` (kills a running shake first) and `_fireworks(card)`.
+- Hero mood (2026-11-21): `Recovery.mood(sessions, today)`: "tired" after TIRED_STREAK (6) days
+  in a row with a workout (a rest day ends it), "pumped" on a day with a workout, else "".
+  `App` sets `Art.mood` whenever it derives; `Art.body_input` passes `mood` and `_hero_sig`
+  includes it. `HeroFigure`: pumped = lift +0.07 / bulk +0.03, a flushed skin, a grin; tired
+  = shoulders a pixel lower, heavy lids, a sweat drop, paler skin (`_mood_skin`). The classic
+  look ignores it (parity_art unchanged).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

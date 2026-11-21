@@ -46,6 +46,9 @@ const _TEX_CACHE_MAX = 384
 const _SCENE_CACHE_MAX = 160
 
 static var _tex_cache = {} # signature -> ImageTexture (everything but scenes)
+## The hero's mood (Recovery.mood: "pumped", "tired" or ""), set by App when
+## the log changes; every hero drawing shows it.
+static var mood: String = ""
 static var _scene_cache = {} # signature -> ImageTexture (animated scenes churn)
 
 
@@ -224,6 +227,7 @@ static func body_input(state: Dictionary, profile: Dictionary, pose: String = "i
 		"blink": frame > 0 and frame % BLINK_EVERY == 0,
 		"happy": happy or pose == "flex",
 		"look": look_for(pose, frame),
+		"mood": mood,
 	}
 
 
@@ -540,10 +544,10 @@ static func _hero_sig(state: Dictionary, profile: Dictionary, loadout: Dictionar
 	# with the raw frame number.
 	var frame_key: int = frame if has_aura else frame % 8
 	var blink: bool = frame > 0 and frame % BLINK_EVERY == 0
-	return "%d.%d.%d.%d.%d|%d.%d.%d|%s|%d|%s|%s|%d|%s" % [
+	return "%d.%d.%d.%d.%d|%d.%d.%d|%s|%d|%s|%s|%d|%s|%s" % [
 		int(lv.hero.level), int(lv.lift.level), int(lv.climb.level), int(lv.run.level), int(lv.ride.level),
 		int(profile.skin), int(profile.hairStyle), int(profile.hairColor) * 10 + int(profile.get("facialHair", 0)),
-		pose, frame_key, str(blink), str(happy or pose == "flex"), look_for(pose, frame), gear,
+		pose, frame_key, str(blink), str(happy or pose == "flex"), look_for(pose, frame), gear, mood,
 	]
 
 

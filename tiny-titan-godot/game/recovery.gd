@@ -86,6 +86,29 @@ static func heat(sessions: Array, today: String) -> Dictionary:
 	return out
 
 
+## Days in a row with a workout that make the hero tired.
+const TIRED_STREAK = 6
+
+
+## The hero's mood from the log: "tired" after TIRED_STREAK days in a row with
+## a workout (ending today or yesterday: a rest day ends it), "pumped" on a day
+## with a workout, else "".
+static func mood(sessions: Array, today: String) -> String:
+	var days = {}
+	for s in sessions:
+		var d = str(s.get("date", ""))
+		if d <= today and d >= Dates.add_days(today, -TIRED_STREAK - 1):
+			days[d] = true
+	var run = 0
+	var d = today if days.has(today) else Dates.add_days(today, -1)
+	while days.has(d):
+		run += 1
+		d = Dates.add_days(d, -1)
+	if run >= TIRED_STREAK:
+		return "tired"
+	return "pumped" if days.has(today) else ""
+
+
 ## "Today", "Yesterday", "2 days ago": when a part was last worked.
 static func when(days: int) -> String:
 	if days == 0:

@@ -963,4 +963,5 @@ func _recompute() -> void:
 	perks = Perks.compute_perks(state, saved.loadout, saved.get("activePet"))
 	_quests = null
 	_plan = null
+	Art.mood = Recovery.mood(saved.sessions, today)
 	Sfx.enabled = bool(saved.settings.get("sound", true))

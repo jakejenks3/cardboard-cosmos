@@ -120,6 +120,12 @@ static func metrics(i: Dictionary) -> Dictionary:
 	var climb: float = _clamp01((int(i.climbLevel) - 1) / 35.0)
 	var run: float = _clamp01((int(i.runLevel) - 1) / 35.0)
 	var ride: float = _clamp01((int(i.rideLevel) - 1) / 35.0)
+	# Mood (Recovery.mood): a workout day pumps the muscles up a little; a
+	# tired hero's shoulders sag a pixel.
+	var mood: String = str(i.get("mood", ""))
+	if mood == "pumped":
+		lift = minf(1.0, lift + 0.07)
+		b = minf(1.0, b + 0.03)
 	var stage: int = Xp.stage_for_level(i.heroLevel)
 	var pose: String = str(i.pose)
 	var frame: int = int(i.frame)
@@ -138,7 +144,7 @@ static func metrics(i: Dictionary) -> Dictionary:
 	var ankle_y: float = base - foot_h - 0.5
 	var hip_y: float = ankle_y - leg_len
 	var crotch_y: int = int(hip_y) + 1
-	var shoulder_y: int = crotch_y - torso_len + bob
+	var shoulder_y: int = crotch_y - torso_len + bob + (1 if mood == "tired" else 0)
 	var neck_h: int = 3
 	var head_h: int = 12
 	var head_w: int = 12
@@ -426,7 +432,17 @@ static func _fill_head(g: Dictionary, pt: Dictionary, pi: int, owner, zb, nxs, n
 # The face and the hair
 # ---------------------------------------------------------------------------
 
-## Eyes, brows, nose and mouth on the painted head. i: blink, happy, look.
+## The skin tone in a mood: a little flushed when pumped, a little pale when tired.
+static func _mood_skin(skin: String, mood: String) -> String:
+	if mood == "pumped":
+		return Pix.mix(skin, "#e0503c", 0.07)
+	if mood == "tired":
+		return Pix.mix(skin, "#b4b0b8", 0.18)
+	return skin
+
+
+## Eyes, brows, nose and mouth on the painted head. i: blink, happy, look,
+## mood ("tired": heavy lids and a drop of sweat; "pumped": a grin).
 static func draw_face(p: Pix, m: Dictionary, i: Dictionary) -> void:
 	var g: Dictionary = m.g
 	var ht: int = g.head_top
@@ -448,9 +464,22 @@ static func draw_face(p: Pix, m: Dictionary, i: Dictionary) -> void:
 	else:
 		p.hline(c - 5, ey - 2, 3, brow)
 		p.hline(c + 2, ey - 2, 3, brow)
+	var mood: String = str(i.get("mood", ""))
 	if bool(i.get("blink", false)):
 		p.hline(c - 4, ey + 1, 2, lid)
 		p.hline(c + 2, ey + 1, 2, lid)
+	elif mood == "tired":
+		# heavy lids: the lid comes down over the white, only the iris shows
+		p.hline(c - 4, ey, 2, lid)
+		p.hline(c + 2, ey, 2, lid)
+		p.hline(c - 4, ey + 1, 2, lid)
+		p.hline(c + 2, ey + 1, 2, lid)
+		p.set_px(c - 3, ey + 1, iris)
+		p.set_px(c + 2, ey + 1, iris)
+		# a drop of sweat at the temple
+		p.set_px(c + 6, ey - 1, "#bfe6ff")
+		p.set_px(c + 6, ey, "#7cc4f2")
+		p.set_px(c + 7, ey, "#bfe6ff")
 	else:
 		# each eye: a lid line, then the white and the iris
 		var li: int = c - 3 + look
@@ -470,17 +499,18 @@ static func draw_face(p: Pix, m: Dictionary, i: Dictionary) -> void:
 	var lip: String = Pix.mix(rp[0], "#8a2a3a", 0.25)
 	var my: int = ht + 9
 	var facial: int = int(i.get("facialHair", 0)) % HeroBody.FACIAL_HAIR.size()
+	var grin: bool = bool(i.get("happy", false)) or mood == "pumped"
 	if facial >= 2:
 		_facial_hair(p, m, facial)
 		# under a mustache only the lower lip shows
 		p.hline(c - 1, my + 1, 2, lip)
-		if bool(i.get("happy", false)):
+		if grin:
 			p.set_px(c - 2, my + 1, lip)
 			p.set_px(c + 1, my + 1, lip)
 		return
 	if facial == 1:
 		_facial_hair(p, m, facial)
-	if bool(i.get("happy", false)):
+	if grin:
 		p.set_px(c - 2, my - 1, lip)
 		p.set_px(c + 1, my - 1, lip)
 		p.hline(c - 1, my, 2, lip)
@@ -925,7 +955,7 @@ static func _gear_metrics(g: Dictionary, fig: Dictionary, i: Dictionary, stage: 
 		"footL": {"x": int(g.legs[0].ankle.x) - 3, "w": 5},
 		"footR": {"x": int(g.legs[1].ankle.x) - 1, "w": 5},
 		"pose": g.pose,
-		"skin": HeroBody.SKIN_TONES[int(i.skin) % HeroBody.SKIN_TONES.size()],
+		"skin": _mood_skin(HeroBody.SKIN_TONES[int(i.skin) % HeroBody.SKIN_TONES.size()], str(i.get("mood", ""))),
 		"hair": HeroBody.HAIR_COLORS[int(i.hairColor) % HeroBody.HAIR_COLORS.size()],
 		"g": g,
 		"fig": fig,

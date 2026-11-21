@@ -73,5 +73,19 @@ func _init() -> void:
 		if v != 0:
 			px += 1
 	ok(px > 800, "the map is a whole figure (%d pixels)" % px)
+	# Mood: pumped on a workout day, tired after six days in a row (a rest day ends it).
+	var streak = []
+	for k in range(6):
+		streak.append(lift(Dates.add_days(TODAY, -k), {"Plank": 1}))
+	ok(Recovery.mood(streak, TODAY) == "tired" and Recovery.mood(streak.slice(0, 5), TODAY) == "pumped" and Recovery.mood(streak.slice(1), TODAY) == "", "six days in a row: tired; five with today: pumped; a rest today: nothing",
+		[Recovery.mood(streak, TODAY), Recovery.mood(streak.slice(0, 5), TODAY), Recovery.mood(streak.slice(1), TODAY)])
+	var moods = {}
+	for md in ["", "pumped", "tired"]:
+		var one = Pix.new(HeroBody.width(), HeroBody.height())
+		var inp = input.duplicate()
+		inp["mood"] = md
+		HeroBody.draw_hero(one, inp, {"visuals": {}})
+		moods[md] = one.data
+	ok(moods[""] != moods["pumped"] and moods[""] != moods["tired"] and moods["pumped"] != moods["tired"], "each mood draws the hero differently")
 	print("RECOVERY: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
