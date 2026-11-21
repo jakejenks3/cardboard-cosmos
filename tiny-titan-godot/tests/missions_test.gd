@@ -188,6 +188,14 @@ func _init() -> void:
 	var pm3 = find(Missions.daily(sat, {"sessions": half_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, []), ":perfect")
 	ok(not pm3.done and int(pm3.progress) == 1, "one box ticked: not yet", pm3)
 
+	# --- the evening check -------------------------------------------------------------------------
+	var ev0 = Missions.evening_text(sp, split_log, sat, false)
+	ok(ev0.begins_with("Still open today:") and ev0.contains("- Chest Fly (cable)") and ev0.contains("- Try: ") and ev0.ends_with("0 of %d boxes ticked." % pboxes.size()), "the evening: what is still open, and the count", ev0)
+	var ev1 = Missions.evening_text(sp, half_log, sat, false)
+	ok(not ev1.contains("- %s" % Missions.short_name(str(sp.lifts[0].name))) and ev1.ends_with("1 of %d boxes ticked." % pboxes.size()), "a lift done drops out", ev1)
+	ok(Missions.evening_text(sp, perfect_log, sat, false) == "Every box ticked today. Open your chest in the game!" and Missions.evening_text(sp, perfect_log, sat, true) == "", "all done: the chest, then nothing to say")
+	ok(Missions.evening_text(Missions.day_plan([], sat, {}), [], sat, false) == "", "no plan: nothing to say")
+
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
 	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}

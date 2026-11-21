@@ -856,6 +856,33 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 # For the phone
 # ---------------------------------------------------------------------------
 
+## The evening check: what of today's card is still open, in a few lines, or
+## "" when there is nothing to say (no plan, or every box ticked and the chest
+## already opened). `perfect_open`: every box is ticked but the chest is not
+## opened yet.
+static func evening_text(plan: Dictionary, sessions: Array, today: String, perfect_claimed: bool) -> String:
+	var boxes = day_boxes(plan, sessions, today)
+	if boxes.is_empty():
+		return ""
+	var open = boxes.filter(func(b): return not bool(b.done))
+	if open.is_empty():
+		return "" if perfect_claimed else "Every box ticked today. Open your chest in the game!"
+	var lines = ["Still open today:"]
+	for b in open:
+		match str(b.what):
+			"new":
+				lines.append("- Try: %s" % short_name(str(plan.new.name)))
+			"pt":
+				var left = plan.pt.filter(func(r): return sets_on(sessions, str(r.name), today).is_empty()).map(func(r): return str(r.name))
+				lines.append("- PT: %s" % ", ".join(PackedStringArray(left)))
+			"climb", "run", "ride", "misc":
+				lines.append("- %s" % TT.DISCIPLINE_META[str(b.what)].name)
+			_:
+				lines.append("- %s" % short_name(str(b.what)))
+	lines.append("%d of %d boxes ticked." % [boxes.size() - open.size(), boxes.size()])
+	return "\n".join(PackedStringArray(lines))
+
+
 ## The plan and the day's missions in a few short lines (a phone notification).
 static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) -> String:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)

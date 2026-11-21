@@ -16,8 +16,15 @@ extends RefCounted
 ##   message(saved, today)       {"title", "text"} for the day
 ##   send(node, title, text, topic, server) -> await: {"ok", "code", "error"}
 ##   schedule(on, time)          create / remove the Windows task: {"ok", "output"}
+## A tap on a push opens the phone note (`click`: the Google Doc link). The
+## EVENING check (settings.morning.evening, at eveningTime; its own task,
+## tools/morning.gd -- --evening) reads the note too (note_sessions: what is
+## typed there today, imported or not) and sends what is still open today
+## (Missions.evening_text), or nothing when there is nothing to say.
 
 const TASK = "Tiny Titan morning goals"
+const TASK_EVENING = "Tiny Titan evening check"
+const DEFAULT_EVENING = "19:00"
 const SERVER = "https://ntfy.sh"
 const DEFAULT_TIME = "00:00"
 
@@ -26,7 +33,78 @@ static func settings(saved_settings: Dictionary) -> Dictionary:
 	var m = saved_settings.get("morning", {})
 	if not (m is Dictionary):
 		m = {}
-	return {"on": bool(m.get("on", false)), "topic": str(m.get("topic", "")), "time": str(m.get("time", DEFAULT_TIME)), "server": str(m.get("server", SERVER))}
+	return {"on": bool(m.get("on", false)), "topic": str(m.get("topic", "")), "time": str(m.get("time", DEFAULT_TIME)), "server": str(m.get("server", SERVER)),
+		"evening": bool(m.get("evening", false)), "eveningTime": str(m.get("eveningTime", DEFAULT_EVENING))}
+
+
+## The phone note's link to open on a tap: the Google Doc's own link, or "".
+static func note_link(saved: Dictionary) -> String:
+	var src = str(saved.get("inbox", {}).get("source", "")).strip_edges() if saved.get("inbox") is Dictionary else ""
+	return src if src.begins_with("https://docs.google.com/") else ""
+
+
+## The workouts typed in the phone note for `today` (read like the game reads
+## it, imported or not), as sessions. Awaitable; [] without a Google Doc.
+static func note_sessions(node: Node, saved: Dictionary, today: String) -> Array:
+	var src = note_link(saved)
+	if src == "":
+		return []
+	var http = HTTPRequest.new()
+	http.timeout = 30.0
+	http.max_redirects = 8
+	node.add_child(http)
+	if http.request(PhoneInbox.fetch_url(src)) != OK:
+		http.queue_free()
+		return []
+	var res = await http.request_completed
+	http.queue_free()
+	if int(res[0]) != HTTPRequest.RESULT_SUCCESS or int(res[1]) != 200:
+		return []
+	var path = OS.get_temp_dir().path_join("tiny_titan_evening.zip")
+	var f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return []
+	f.store_buffer(res[3])
+	f.close()
+	var z = ZIPReader.new()
+	var html = ""
+	if z.open(path) == OK:
+		for name in z.get_files():
+			if str(name).to_lower().ends_with(".html"):
+				html = z.read_file(name).get_string_from_utf8()
+				break
+		z.close()
+	DirAccess.remove_absolute(path)
+	if html == "":
+		return []
+	var sessions: Array = saved.get("sessions", [])
+	var names = []
+	var own = []
+	for x in LiftHistory.exercise_suggestions(sessions, LiftNames.defaults()):
+		names.append(x.name)
+		if int(x.get("count", 0)) > 0:
+			own.append(x.name)
+	var st = saved.get("settings", {})
+	var parsed = QuickLog.parse_any(PhoneInbox.html_to_text(html), {"today": today, "weightUnit": str(st.get("weightUnit", "kg")),
+		"distanceUnit": str(st.get("distanceUnit", "km")), "exercises": names, "own": own,
+		"names": saved.get("inbox", {}).get("names", {}), "pt": saved.get("pt", {}) if saved.get("pt") is Dictionary else {}})
+	var out = []
+	for e in parsed.entries:
+		if str(e.kind) == "session" and str(e.date) == today:
+			var s = e.data.duplicate(true)
+			s["id"] = "note-" + str(e.key)
+			out.append(s)
+	return out
+
+
+## The evening message for `today`: {"title", "text"} ("" text: nothing to send).
+static func evening_message(saved: Dictionary, today: String, from_note: Array) -> Dictionary:
+	var settings = saved.get("settings", {})
+	var marks = saved.get("pt", {}) if saved.get("pt") is Dictionary else {}
+	var sessions = saved.get("sessions", []) + from_note
+	var plan = Missions.day_plan(saved.get("sessions", []), today, marks, settings)
+	var claimed = saved.get("claims", []).any(func(c): return str(c.get("questId", "")) == "t:%s:perfect" % today)
+	return {"title": "Tiny Titan - this evening", "text": Missions.evening_text(plan, sessions, today, claimed)}
 
 
 static func new_topic() -> String:
@@ -68,7 +146,7 @@ static func message(saved: Dictionary, today: String) -> Dictionary:
 
 ## Post a notification to the ntfy topic. Awaitable: {"ok", "code", "error"}.
 ## `node`: anything in the scene tree (the request is a child of it while it runs).
-static func send(node: Node, title: String, text: String, topic: String, server: String = SERVER) -> Dictionary:
+static func send(node: Node, title: String, text: String, topic: String, server: String = SERVER, click: String = "") -> Dictionary:
 	if topic.strip_edges() == "":
 		return {"ok": false, "code": 0, "error": "No topic"}
 	var http = HTTPRequest.new()
@@ -76,6 +154,10 @@ static func send(node: Node, title: String, text: String, topic: String, server:
 	node.add_child(http)
 	# Header values must be plain ASCII: the title is kept to letters, digits and dashes.
 	var headers = ["Title: %s" % title.to_ascii_buffer().get_string_from_ascii(), "Tags: muscle", "Content-Type: text/plain; charset=utf-8"]
+	if click.begins_with("https://"):
+		# A tap opens the phone note; a button says so.
+		headers.append("Click: %s" % click)
+		headers.append("Actions: view, Open note, %s" % click)
 	var err = http.request("%s/%s" % [server.trim_suffix("/"), topic.strip_edges()], PackedStringArray(headers), HTTPClient.METHOD_POST, text)
 	if err != OK:
 		http.queue_free()
@@ -91,26 +173,28 @@ static func send(node: Node, title: String, text: String, topic: String, server:
 ## Create (on) or remove (off) the Windows task that runs tools/morning.gd every
 ## day at `time` ("07:00"). It wakes a sleeping computer and catches up after a
 ## missed run. {"ok", "output"}. Windows only.
-static func schedule(on: bool, time: String) -> Dictionary:
+static func schedule(on: bool, time: String, task: String = TASK, extra: String = "") -> Dictionary:
 	if OS.get_name() != "Windows":
 		return {"ok": false, "output": "Only on Windows"}
 	var out = []
-	var code = OS.execute("powershell", ["-NoProfile", "-NonInteractive", "-Command", schedule_command(on, time)], out, true)
+	var code = OS.execute("powershell", ["-NoProfile", "-NonInteractive", "-Command", schedule_command(on, time, task, extra)], out, true)
 	var said = "\n".join(PackedStringArray(out)).strip_edges()
 	return {"ok": code == 0 and said.ends_with("ok"), "output": said}
 
 
 ## The PowerShell that creates (on) or removes (off) the task; it prints "ok".
-static func schedule_command(on: bool, time: String) -> String:
+static func schedule_command(on: bool, time: String, task: String = TASK, extra: String = "") -> String:
 	var ps = ""
 	if on:
 		var exe = OS.get_executable_path().replace("'", "''")
 		var proj = ProjectSettings.globalize_path("res://").trim_suffix("/").replace("'", "''")
 		var args = "--headless --path \"%s\" --script res://tools/morning.gd" % proj
+		if extra != "":
+			args += " -- " + extra
 		ps = "$a = New-ScheduledTaskAction -Execute '%s' -Argument '%s'; " % [exe, args.replace("'", "''")]
 		ps += "$t = New-ScheduledTaskTrigger -Daily -At '%s'; " % time
 		ps += "$s = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5); "
-		ps += "Register-ScheduledTask -TaskName '%s' -Action $a -Trigger $t -Settings $s -Force | Out-Null; 'ok'" % TASK
+		ps += "Register-ScheduledTask -TaskName '%s' -Action $a -Trigger $t -Settings $s -Force | Out-Null; 'ok'" % task
 	else:
-		ps = "Unregister-ScheduledTask -TaskName '%s' -Confirm:$false -ErrorAction SilentlyContinue; 'ok'" % TASK
+		ps = "Unregister-ScheduledTask -TaskName '%s' -Confirm:$false -ErrorAction SilentlyContinue; 'ok'" % task
 	return ps

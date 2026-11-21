@@ -18,6 +18,9 @@ func _initialize() -> void:
 func _run() -> void:
 	var args = OS.get_cmdline_user_args()
 	var dry = args.has("--dry-run")
+	if args.has("--evening"):
+		await _evening(args, dry)
+		return
 	var dir = OS.get_environment("TINY_TITAN_DATA")
 	var path = (dir.trim_suffix("/").trim_suffix("\\") + "/save.json") if dir != "" else "user://save.json"
 	var f = FileAccess.open(path, FileAccess.READ)
@@ -61,6 +64,44 @@ func _run() -> void:
 		print("MORNING plan in the note: %s" % JSON.stringify(wrote))
 		if wrote.ok and int(wrote.get("planned", 0)) > 0:
 			msg.text += "\nToday's plan is in your note: type the reps."
-	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server)
+	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved))
 	print("MORNING sent: %s" % JSON.stringify(res))
+	quit(0 if res.ok else 1)
+
+
+## The evening check (-- --evening): what is still open today, from the save
+## and what is typed in the note; nothing when there is nothing to say, when
+## it is off, or before noon.
+func _evening(args: Array, dry: bool) -> void:
+	var dir = OS.get_environment("TINY_TITAN_DATA")
+	var path = (dir.trim_suffix("/").trim_suffix("\\") + "/save.json") if dir != "" else "user://save.json"
+	var f = FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		print("EVENING: no save at %s" % path)
+		quit(1)
+		return
+	var saved = JSON.parse_string(f.get_as_text())
+	f.close()
+	if not (saved is Dictionary):
+		quit(1)
+		return
+	var today = Dates.today_key()
+	var m = MorningAlert.settings(saved.get("settings", {}))
+	await process_frame
+	var from_note = await MorningAlert.note_sessions(root, saved, today)
+	var msg = MorningAlert.evening_message(saved, today, from_note)
+	print("EVENING %s (%d from the note)\n%s" % [msg.title, from_note.size(), msg.text if msg.text != "" else "(nothing to send)"])
+	if dry or msg.text == "":
+		quit(0)
+		return
+	if not m.evening and not args.has("--test"):
+		print("EVENING: off in Settings, nothing sent")
+		quit(0)
+		return
+	if Time.get_datetime_dict_from_system().hour < 12 and not args.has("--test"):
+		print("EVENING: before noon, nothing sent")
+		quit(0)
+		return
+	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved))
+	print("EVENING sent: %s" % JSON.stringify(res))
 	quit(0 if res.ok else 1)

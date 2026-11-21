@@ -429,6 +429,14 @@ is the Windows handoff.
   (`perfect: true`, PERFECT_XP 300, one step per box) when there are two boxes or more.
   `TodayView._perfect_row`: a chest that fills, "Open the chest" (bursts, floaters,
   `Sfx.level_up`, `App.claim_quest`), then "Opened". Walkthrough: `tests/shots/today.gd`.
+- Pushes that open the note, and an evening check (2026-11-21): `MorningAlert.send(..., click)`
+  adds ntfy `Click` and an "Open note" action with the Google Doc link (`note_link`), for the
+  morning push and Settings' test. Evening: `settings.morning.evening` / `eveningTime` (19:00;
+  12:00 to 23:30), its own task `TASK_EVENING` running `tools/morning.gd -- --evening`
+  (`schedule(on, time, task, extra)`): it reads the save and the note (`note_sessions`: what
+  is typed there for today, imported or not) and sends `Missions.evening_text` (what of
+  `day_boxes` is still open, "open your chest" when all are ticked, nothing when there is
+  nothing to say). The switch is the user's to flip (it registers a Windows task).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

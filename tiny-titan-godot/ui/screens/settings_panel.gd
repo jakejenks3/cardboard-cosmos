@@ -277,6 +277,19 @@ func _build_morning() -> void:
 	row.add_child(Kit.spacer())
 	row.add_child(Kit.switch(m.on, _on_morning, "Send it every morning"))
 	card.add(row)
+	# The evening check: what is still open today.
+	var ev = Kit.hbox(8)
+	ev.add_child(Kit.vcenter(Icons.rect("moon", 20)))
+	var el = Kit.label("Evening check", 14, null, true)
+	el.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ev.add_child(el)
+	ev.add_child(Kit.vcenter(Kit.icon_button("minus", _evening_time.bind(-30), "30 minutes earlier", 28)))
+	ev.add_child(Kit.vcenter(PixelFont.rect(m.eveningTime, 2, Pal.ACCENT)))
+	ev.add_child(Kit.vcenter(Kit.icon_button("plus", _evening_time.bind(30), "30 minutes later", 28)))
+	ev.add_child(Kit.spacer())
+	ev.add_child(Kit.switch(m.evening, _on_evening, "In the evening: what of today is still open (nothing when all is done)"))
+	ev.set_meta("evening_row", true)
+	card.add(ev)
 	var topic = Kit.hbox(6)
 	topic.add_child(Kit.vcenter(Icons.rect("speech", 16)))
 	topic.add_child(Kit.clip("Topic: %s" % (m.topic if m.topic != "" else "(made when you first send)"), 12, Pal.MUTED))
@@ -341,13 +354,40 @@ func _on_morning(on) -> void:
 	call_deferred("_refill")
 
 
+func _on_evening(on) -> void:
+	Sfx.tick()
+	var topic = _ensure_topic()
+	var m = MorningAlert.settings(App.settings())
+	var res = MorningAlert.schedule(bool(on), m.eveningTime, MorningAlert.TASK_EVENING, "--evening")
+	if res.ok:
+		_morning_patch({"evening": bool(on)})
+		App.toast(("Every evening at %s: what is still open, to %s" % [m.eveningTime, topic]) if on else "Evening check off", "good" if on else "info", "moon")
+	else:
+		App.toast("Could not set it up: %s" % str(res.output).substr(0, 80), "bad", "warning")
+	call_deferred("_refill")
+
+
+func _evening_time(minutes: int) -> void:
+	Sfx.tick()
+	var m = MorningAlert.settings(App.settings())
+	var parts = m.eveningTime.split(":")
+	var total = clampi(int(parts[0]) * 60 + int(parts[1]) + minutes, 12 * 60, 23 * 60 + 30)
+	var t = "%02d:%02d" % [int(total / 60.0), total % 60]
+	_morning_patch({"eveningTime": t})
+	if m.evening:
+		var res = MorningAlert.schedule(true, t, MorningAlert.TASK_EVENING, "--evening")
+		if not res.ok:
+			App.toast("Could not move the evening task: %s" % str(res.output).substr(0, 80), "bad", "warning")
+	call_deferred("_refill")
+
+
 func _morning_test() -> void:
 	Sfx.tap()
 	var topic = _ensure_topic()
 	var m = MorningAlert.settings(App.settings())
 	var msg = MorningAlert.message(App.saved, App.today)
 	App.toast("Sending…", "info", "bolt")
-	var res = await MorningAlert.send(self, msg.title, msg.text, topic, m.server)
+	var res = await MorningAlert.send(self, msg.title, msg.text, topic, m.server, MorningAlert.note_link(App.saved))
 	if res.ok:
 		App.toast("Sent to %s: check your phone" % topic, "good", "check")
 	else:
