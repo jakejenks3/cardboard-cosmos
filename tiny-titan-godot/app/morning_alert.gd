@@ -60,7 +60,7 @@ static func message(saved: Dictionary, today: String) -> Dictionary:
 	var data = {"sessions": saved.get("sessions", []), "pt": marks, "settings": settings,
 		"reading": saved.get("reading", []) if saved.get("reading") is Array else []}
 	var state = derive(saved, today)
-	var plan = Missions.day_plan(data.sessions, today, marks, str(settings.get("split", "auto")), settings.get("dayPick"))
+	var plan = Missions.day_plan(data.sessions, today, marks, settings)
 	var daily = Missions.daily(today, data, state, saved.get("claims", []))
 	var title = "Tiny Titan - %s" % Dates.format_date(today, {"weekday": "short", "month": "short", "day": "numeric"})
 	return {"title": title, "text": Missions.morning_text(plan, daily, str(settings.get("weightUnit", "kg")))}

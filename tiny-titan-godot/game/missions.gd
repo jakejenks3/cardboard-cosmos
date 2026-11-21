@@ -22,6 +22,12 @@ extends RefCounted
 ## recently for its rhythm (under half its usual gap, and no weekday habit) is
 ## left to rest: one Saturday squat does not make a squat due two days after the
 ## last one.
+## PLACES: the gym has everything, home has settings.homeGear (dumbbells to
+## start with); settings.placePick = {date, place} says where on that date.
+## Every planned lift has OPTIONS there (options_for: itself when it fits, a
+## variation of it, another movement of the same part), and its "Beat it"
+## mission is done by any of them, at either place, beaten or done for the
+## first time (beat_any).
 ## then the MISSIONS of the day and the week, in the Quests format (so the
 ## quest lists, claims, coins and the replay work as before; a claim stores its
 ## XP, so changing missions never changes the XP of an old claim):
@@ -71,6 +77,13 @@ const SPLITS = [
 ]
 ## A lift done under this share of its usual gap ago rests (see the top).
 const REST = 0.5
+## Where the player trains (see the top). Bodyweight work goes anywhere.
+const PLACES = [{"id": "gym", "name": "Gym"}, {"id": "home", "name": "Home"}]
+const HOME_GEAR = ["dumbbell"]
+## The equipment a home gym can have (Settings -> Home gym).
+const GEAR_CHOICES = ["dumbbell", "barbell", "kettlebell", "band", "cable", "machine"]
+## Ways shown to do one planned lift.
+const OPTIONS = 3
 ## Good first picks for "try something new", most useful first. Movements not
 ## listed (or not in the library) come after these, in library order.
 const STAPLES = {
@@ -181,6 +194,219 @@ static func day_kind(sessions: Array, today: String, cycle: Array, marks: Dictio
 		out.kind = str(pick.kind)
 		out.picked = true
 	return out
+
+
+# ---------------------------------------------------------------------------
+# Where, and the ways to do a lift there
+# ---------------------------------------------------------------------------
+
+## "gym" or "home" on `date` (settings.placePick counts on its own date only).
+static func place_of(settings: Dictionary, date: String) -> String:
+	var p = settings.get("placePick")
+	if p is Dictionary and str(p.get("date", "")) == date and str(p.get("place", "")) == "home":
+		return "home"
+	return "gym"
+
+
+## The equipment ids at a place; null = everything (the gym).
+static func gear_at(settings: Dictionary, place: String):
+	if place != "home":
+		return null
+	var g = settings.get("homeGear")
+	return g.duplicate() if g is Array else HOME_GEAR.duplicate()
+
+
+## The equipment a lift needs (LiftLibrary.EQUIPMENT ids): what its variation
+## names, else its movement's own (a lat pulldown is a cable), else the usual
+## one (a squat is a barbell). [] when it cannot be told.
+static func needs(lift_name: String) -> Array:
+	var sp = LiftNames.split(lift_name)
+	var out = LiftNames.gear_of(str(sp.variation))
+	var e = LiftNames.movement(str(sp.move))
+	if out.is_empty() and e != null:
+		for o in e.only:
+			for g in LiftNames.gear_of(str(o)):
+				if not out.has(g):
+					out.append(g)
+		if out.is_empty() and str(e.usual) != "":
+			out = LiftNames.gear_of(str(e.usual))
+	return out
+
+
+## Can the lift be done with this equipment (null = everything)?
+static func can_do(lift_name: String, have) -> bool:
+	if have == null:
+		return true
+	for g in needs(lift_name):
+		if g != "bodyweight" and g != "other" and not have.has(g):
+			return false
+	return true
+
+
+## The variation of a library movement to do with this equipment: the usual
+## one when it fits, else the plainest that names equipment that fits, else
+## one that names none; null when nothing fits. "" = the movement alone (its
+## equipment goes without saying). `skip`: normalized lift names to pass over;
+## `other_than`: equipment to move away from (a band pushdown instead of the
+## rope one), tried last.
+static func variation_for(e: Dictionary, have, skip: Array = [], other_than: Array = []):
+	var cands = []
+	if str(e.usual) != "":
+		cands.append(str(e.usual))
+	else:
+		for o in e.only:
+			if not LiftNames.gear_of(str(o)).is_empty():
+				cands.append("")
+				break
+	var rest = []
+	for v in e.vars:
+		if not cands.has(str(v)):
+			rest.append(str(v))
+	TTUtil.stable_sort(rest, func(a, b):
+		var ga = 0 if not LiftNames.gear_of(a).is_empty() else 1
+		var gb = 0 if not LiftNames.gear_of(b).is_empty() else 1
+		if ga != gb:
+			return ga < gb
+		return a.split(" ").size() < b.split(" ").size())
+	cands.append_array(rest)
+	if not other_than.is_empty():
+		var same_gear = func(v): return needs(LiftNames.join(str(e.name), str(v))).any(func(g): return other_than.has(g))
+		cands = cands.filter(func(v): return not same_gear.call(v)) + cands.filter(func(v): return same_gear.call(v))
+	for v in cands:
+		var n = LiftNames.join(str(e.name), str(v))
+		if skip.has(Xp.normalize_exercise(n)):
+			continue
+		if can_do(n, have):
+			return str(v)
+	return null
+
+
+## "Lateral Raise (dumbbell)": a lift name in a sentence.
+static func short_name(lift_name: String) -> String:
+	var sp = LiftNames.split(lift_name)
+	return str(sp.move) + (" (%s)" % str(sp.variation).to_lower() if str(sp.variation) != "" else "")
+
+
+## The ways to do a planned lift with this equipment (null = everything), at
+## most OPTIONS, the planned one first when it fits: another variation of its
+## movement (one the player has done, else one that fits), then another
+## movement of the same part and kind ("Bench Press" for a chest fly; two when
+## the movement itself cannot be done there), one the player has done first.
+## `hist`: LiftLibrary.stats of the log before the day; `avoid`: normalized
+## movements not to offer instead (the rest of the day's plan).
+## [{"name", "move", "variation", "new" (never done), "last" (its last sets)}]
+static func options_for(lift_name: String, hist: Dictionary, have, avoid: Array = []) -> Array:
+	var out = []
+	var add = func(n: String):
+		var k = Xp.normalize_exercise(n)
+		if out.size() >= OPTIONS or out.any(func(o): return Xp.normalize_exercise(str(o.name)) == k):
+			return
+		var sp = LiftNames.split(n)
+		var st = hist.get(k)
+		out.append({"name": n, "move": str(sp.move), "variation": str(sp.variation), "new": st == null,
+			"last": st.history[0].sets if st != null else [], "lastDate": str(st.last) if st != null else ""})
+	var mv = str(LiftNames.split(lift_name).move)
+	var mk = Xp.normalize_exercise(mv)
+	var lk = Xp.normalize_exercise(lift_name)
+	var move_of = func(n: String): return Xp.normalize_exercise(str(LiftNames.split(n).move))
+	if can_do(lift_name, have):
+		add.call(lift_name)
+	# Another variation of the movement: one done (the latest), else one that fits.
+	var done = []
+	for k in hist:
+		if k != lk and move_of.call(str(hist[k].name)) == mk and can_do(str(hist[k].name), have):
+			done.append(hist[k])
+	done.sort_custom(func(a, b): return str(a.last) > str(b.last))
+	if not done.is_empty():
+		add.call(str(done[0].name))
+	else:
+		var e = LiftNames.movement(mv)
+		if e != null:
+			var v = variation_for(e, have, [lk], needs(lift_name))
+			if v != null:
+				add.call(LiftNames.join(str(e.name), str(v)))
+	# Another movement of the same part and kind.
+	var part = part_of(lift_name)
+	var kind = kind_of(lift_name)
+	var swaps = 1 if not out.is_empty() else 2
+	var taken = {}
+	var try_move = func(e2) -> String:
+		if e2 == null or str(e2.part) != part or taken.has(Xp.normalize_exercise(str(e2.name))):
+			return ""
+		var ek = Xp.normalize_exercise(str(e2.name))
+		if ek == mk or avoid.has(ek) or kind_of(LiftNames.join(str(e2.name), str(e2.usual))) != kind:
+			return ""
+		var v2 = variation_for(e2, have)
+		return LiftNames.join(str(e2.name), str(v2)) if v2 != null else ""
+	var mine = []
+	for k in hist:
+		var n = str(hist[k].name)
+		var nk = move_of.call(n)
+		if nk != mk and not avoid.has(nk) and part_of(n) == part and kind_of(n) == kind:
+			mine.append(hist[k])
+	mine.sort_custom(func(a, b): return str(a.last) > str(b.last))
+	for st in mine:
+		if swaps <= 0:
+			break
+		var n = str(st.name)
+		var pick = n if can_do(n, have) else str(try_move.call(LiftNames.movement(str(LiftNames.split(n).move))))
+		if pick != "" and not taken.has(move_of.call(pick)):
+			taken[move_of.call(pick)] = true
+			add.call(pick)
+			swaps -= 1
+	if swaps > 0:
+		var names = Array(STAPLES.get(str(GROUP.get(part, "")), [])).duplicate()
+		for e3 in LiftLibrary.catalog():
+			if str(e3.part) == part and not names.has(str(e3.name)):
+				names.append(str(e3.name))
+		for n in names:
+			if swaps <= 0:
+				break
+			var pick = str(try_move.call(LiftNames.movement(str(n))))
+			if pick != "":
+				taken[move_of.call(pick)] = true
+				add.call(pick)
+				swaps -= 1
+	return out
+
+
+## Did any of these lifts, or any variation of the movement `move`, beat its
+## last time on `date`, or get done for the first time?
+static func beat_any(sessions: Array, names: Array, move: String, date: String) -> bool:
+	var keys = names.map(func(n): return Xp.normalize_exercise(str(n)))
+	var mk = Xp.normalize_exercise(move)
+	var seen = {}
+	for s in sessions:
+		if str(s.get("discipline", "")) != "lift" or str(s.get("date", "")) != date:
+			continue
+		for ex in s.get("exercises", []):
+			var n = str(ex.get("name", ""))
+			var k = Xp.normalize_exercise(n)
+			if seen.has(k) or LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+				continue
+			if keys.has(k) or Xp.normalize_exercise(str(LiftNames.split(n).move)) == mk:
+				seen[k] = n
+	for k in seen:
+		if _history_before(sessions, str(seen[k]), date).is_empty() or beat_on(sessions, str(seen[k]), date):
+			return true
+	return false
+
+
+## The one of these, or of any variation of `move`, done on `date` (its
+## name as logged), or "".
+static func done_of(sessions: Array, names: Array, date: String, move: String = "") -> String:
+	var keys = names.map(func(n): return Xp.normalize_exercise(str(n)))
+	var mk = Xp.normalize_exercise(move)
+	for s in sessions:
+		if str(s.get("discipline", "")) != "lift" or str(s.get("date", "")) != date:
+			continue
+		for ex in s.get("exercises", []):
+			var n = str(ex.get("name", ""))
+			if LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+				continue
+			if keys.has(Xp.normalize_exercise(n)) or (mk != "" and Xp.normalize_exercise(str(LiftNames.split(n).move)) == mk):
+				return n
+	return ""
 
 
 ## "yesterday", "Thursday", "Nov 10": when a lift was last done.
@@ -339,12 +565,17 @@ static func likely_others(sessions: Array, today: String) -> Array:
 ##  ({"name", "move", "variation", "part", "partName", "tip"}) or null,
 ##  "pt": PT rows (Pt.status) not done this week, "others": likely_others,
 ##  "split", "cycle", "kind" (the split's kind of today, or ""), "after",
-##  "afterDate", "picked" (see day_kind)}. With a split, `group` is the kind.
-## `split` and `pick` are settings.split and settings.dayPick.
-static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, split: String = "auto", pick = null) -> Dictionary:
+##  "afterDate", "picked" (see day_kind), "place" ("gym" / "home")}. With a
+## split, `group` is the kind. Each lift also has "options" (options_for, at
+## today's place; never empty), "gym" and "home" (the same at each place).
+## `settings`: split, dayPick, placePick, homeGear.
+static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, settings: Dictionary = {}) -> Dictionary:
 	var before = sessions.filter(func(s): return str(s.get("date", "")) < today)
+	var split = str(settings.get("split", "auto"))
 	var cycle = split_cycle(split)
-	var dk = day_kind(before, today, cycle, marks, pick)
+	var dk = day_kind(before, today, cycle, marks, settings.get("dayPick"))
+	var place = place_of(settings, today)
+	var here = gear_at(settings, place)
 	var kind = str(dk.kind)
 	var lifts = likely_lifts(before, today, marks, kind).slice(0, PLAN_LIFTS)
 	var group = kind
@@ -363,6 +594,7 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, spl
 			if group == "" or int(count[g]) > int(count[group]):
 				group = g
 	var new = null
+	var new_at = {"gym": null, "home": null}
 	if group != "":
 		# Never done before today (what is done today keeps the day's pick).
 		var done = {}
@@ -390,25 +622,47 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, spl
 		for e in LiftLibrary.catalog():
 			if fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
 				pool.append(e)
-		if not pool.is_empty():
-			# The day picks one of the three most useful ones not done yet.
-			pool = pool.slice(0, mini(3, pool.size()))
-			var e = pool[int(Rng.make_rng("try:" + today).next() * pool.size()) % pool.size()]
-			# Its usual variation; none when its equipment goes without saying (a
-			# lat pulldown is a cable); else the first one.
-			var v = str(e.usual)
-			if v == "" and e.only.is_empty() and not e.vars.is_empty():
-				v = str(e.vars[0])
-			new = {"name": LiftNames.join(str(e.name), v), "move": str(e.name), "variation": v, "part": str(e.part),
+		# One that can be done with this equipment: the day picks one of the
+		# three most useful ones not done yet, with its usual variation when it
+		# fits (none when its equipment goes without saying), else the plainest.
+		var pick = func(gear):
+			var p = pool.filter(func(e): return variation_for(e, gear) != null)
+			if p.is_empty():
+				return null
+			p = p.slice(0, mini(3, p.size()))
+			var e = p[int(Rng.make_rng("try:" + today).next() * p.size()) % p.size()]
+			var v = str(variation_for(e, gear))
+			return {"name": LiftNames.join(str(e.name), v), "move": str(e.name), "variation": v, "part": str(e.part),
 				"partName": LiftLibrary.part_name(str(e.part)), "tip": str(e.tip)}
+		new = pick.call(here)
+		new_at = {"gym": pick.call(null), "home": pick.call(gear_at(settings, "home"))}
 	var pt = []
 	for r in Pt.status(before, marks, today):
 		if str(r.state) != "done":
 			pt.append(r)
+	# The ways to do each lift, here and at either place (PT as it is).
+	var hist = LiftLibrary.stats(before)
+	var avoid = lifts.map(func(l): return Xp.normalize_exercise(str(LiftNames.split(str(l.name)).move)))
+	if new != null:
+		avoid.append(Xp.normalize_exercise(str(new.move)))
+	var home = gear_at(settings, "home")
+	for l in lifts:
+		var own = {"name": str(l.name), "move": str(LiftNames.split(str(l.name)).move), "variation": str(LiftNames.split(str(l.name)).variation),
+			"new": false, "last": l.last.sets, "lastDate": str(l.last.date)}
+		if bool(l.pt):
+			l["gym"] = [own]
+			l["home"] = [own]
+		else:
+			l["gym"] = options_for(str(l.name), hist, null, avoid)
+			l["home"] = options_for(str(l.name), hist, home, avoid)
+			if l.home.is_empty():
+				l.home = [own]
+		l["options"] = l[place]
 	var label = str(KIND_NAMES.get(kind, "")) if kind != "" else str(GROUP_NAMES.get(group, ""))
 	return {"date": today, "lifts": lifts, "group": group, "label": label, "new": new,
 		"pt": pt, "others": likely_others(before, today), "split": split if not cycle.is_empty() else "auto",
-		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked}
+		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked, "place": place,
+		"newAt": new_at}
 
 
 ## One line on why today is that kind of day: "Yesterday was a pull day",
@@ -485,7 +739,7 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	var wu = str(settings.get("weightUnit", "kg"))
 	var du = str(settings.get("distanceUnit", "km"))
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-	var plan = day_plan(sessions, today, marks, str(settings.get("split", "auto")), settings.get("dayPick"))
+	var plan = day_plan(sessions, today, marks, settings)
 	var todays = sessions.filter(func(s): return str(s.get("date", "")) == today)
 	var out = []
 	out.append(_mission("t:%s:show" % today, "daily", today, "Show up", "Log any workout today.", "flame", null, 1, todays.size(), "sessions", 150, claims))
@@ -495,19 +749,43 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	for l in plan.lifts:
 		if beats >= BEAT_MISSIONS or bool(l.pt):
 			continue
-		var aim = LiftTrend.next_target(l.last.sets, _step_kg(wu))
-		var sp = LiftNames.split(str(l.name))
-		var desc = "Last time %s. Aim for %s." % [LiftHistory.describe_sets(l.last.sets, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
-		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "Beat it: %s" % str(sp.move), desc, "sword", "lift",
-			1, 1 if beat_on(sessions, str(l.name), today) else 0, "", 200, claims, {"lift": str(l.name), "why": str(l.why), "aim": aim.sets}))
+		# Shown as the first way to do it where the player is; done by any way at
+		# either place (the id stays the planned lift's).
+		var main = l.options[0]
+		var aim = LiftTrend.next_target(main.last, _step_kg(wu))
+		var desc = ""
+		if bool(main.new):
+			desc = "New: %s. Find a weight you can do for 8 to 12 good reps." % short_name(str(main.name))
+		else:
+			desc = "Last time %s. Aim for %s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
+		var alts = []
+		for o in l.options.slice(1):
+			alts.append(short_name(str(o.name)))
+		if not alts.is_empty():
+			desc += " Or: %s." % ", ".join(PackedStringArray(alts))
+		var ways = []
+		for o in l.gym + l.home:
+			if not ways.has(str(o.name)):
+				ways.append(str(o.name))
+		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "Beat it: %s" % str(main.move), desc, "sword", "lift",
+			1, 1 if beat_any(sessions, ways, str(LiftNames.split(str(l.name)).move), today) else 0, "", 200, claims,
+			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "options": l.options.map(func(o): return str(o.name)),
+				"homeWays": l.home.map(func(o): return str(o.name)), "planned": str(l.name)}))
 		beats += 1
 
 	if plan.new != null:
+		# Done by the movement suggested, or by any movement never done before.
 		var nw = plan.new
+		var known = {}
+		for s in sessions:
+			if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) < today:
+				for ex in s.get("exercises", []):
+					known[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
 		var did = false
 		for s in todays:
 			for ex in s.get("exercises", []):
-				if Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move)) == Xp.normalize_exercise(str(nw.move)):
+				var mk = Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))
+				if str(s.get("discipline", "")) == "lift" and (mk == Xp.normalize_exercise(str(nw.move)) or not known.has(mk)):
 					did = true
 		out.append(_mission("t:%s:new" % today, "daily", today, "Try something new", "%s: a %s movement you haven't done yet." % [str(nw.name), str(nw.partName).to_lower()], "sparkle", "lift",
 			1, 1 if did else 0, "", 200, claims, {"lift": str(nw.name)}))
@@ -644,13 +922,37 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) ->
 		lines.append("%s. %s." % [str(plan.label), kind_why(plan)])
 	elif str(plan.label) != "":
 		lines.append("Probably a %s." % str(plan.label).to_lower())
-	for m in daily_missions:
-		if m.has("aim"):
-			var sp = LiftNames.split(str(m.lift))
-			var name = str(sp.move) + (" (%s)" % str(sp.variation).to_lower() if str(sp.variation) != "" else "")
-			lines.append("%s: %s" % [name, LiftHistory.describe_sets(m.aim, fmt_w)])
-	if plan.new != null:
-		lines.append("Try: %s" % str(plan.new.name))
+	# Every planned lift (PT aside) and every way to do it: at the gym, what to
+	# aim for where it was done before, then the ways at home.
+	var way = func(o: Dictionary) -> String:
+		var tags = []
+		if str(o.variation) != "":
+			tags.append(str(o.variation).to_lower())
+		if bool(o.new):
+			tags.append("new")
+		var t = str(o.move) + (" (%s)" % ", ".join(PackedStringArray(tags)) if not tags.is_empty() else "")
+		var aim = "" if bool(o.new) else LiftHistory.describe_sets(LiftTrend.next_target(o.last, _step_kg(wu)).sets, fmt_w)
+		return t + (": " + aim if aim != "" else "")
+	for l in plan.lifts:
+		if bool(l.pt) or not l.has("gym") or l.gym.is_empty():
+			continue
+		var gym = l.gym
+		var home = l.get("home", [])
+		var first = str(way.call(gym[0]))
+		lines.append(first if not bool(gym[0].new) else first + ": find your weight")
+		if gym.size() > 1:
+			lines.append("  or " + " · ".join(PackedStringArray(gym.slice(1).map(func(o): return str(way.call(o))))))
+		var same = home.map(func(o): return str(o.name)) == gym.map(func(o): return str(o.name))
+		if same:
+			lines.append("  home: the same")
+		elif not home.is_empty():
+			lines.append("  home: " + " · ".join(PackedStringArray(home.map(func(o): return str(way.call(o))))))
+	var try_gym = plan.get("newAt", {}).get("gym") if plan.get("newAt", {}).get("gym") != null else plan.new
+	if try_gym != null:
+		lines.append("Try: %s" % short_name(str(try_gym.name)))
+		var try_home = plan.get("newAt", {}).get("home")
+		if try_home != null and str(try_home.name) != str(try_gym.name):
+			lines.append("  home: %s" % short_name(str(try_home.name)))
 	if not plan.pt.is_empty():
 		var names = []
 		for r in plan.pt:

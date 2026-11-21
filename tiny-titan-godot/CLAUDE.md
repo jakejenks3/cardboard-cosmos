@@ -357,6 +357,23 @@ is the Windows handoff.
     ago is not planned unless it has a weekday habit (2+ times on this weekday); before, one
     Saturday squat made a squat "due" two days after the last one. The user's save has
     "pull_push_legs" (set 2026-11-21, backup "2026-11-21 before training split").
+  - Gym or home (2026-11-21, "at my home gym I only have dumbbells for lateral raises"):
+    `Missions.day_plan(sessions, today, marks, settings)` reads split, dayPick, `placePick`
+    ({date, place: "home"}: the Today card's Gym / Home chips, that date only) and `homeGear`
+    (equipment ids, `HOME_GEAR` = dumbbells to start with; Settings -> Home gym). The gym has
+    everything, bodyweight goes anywhere. `needs(lift)` = the equipment its variation names,
+    else its movement's `only`, else its `usual`; `can_do(lift, have)`. Every planned lift has
+    `gym`, `home` and `options` (today's place) from `options_for`: itself when it fits,
+    another variation (one done, else `variation_for` preferring other equipment: a band
+    pushdown next to the rope one), another movement of the same part and kind (two when the
+    movement cannot be done there; not one already in the day's plan). The "Beat it" mission
+    shows the first option (`lift`, `aim`; "New: ... Find a weight" when never done) and
+    "Or: ..."; it keeps the planned lift's id and is done by ANY way at either place
+    (`ways`), beaten or done for the first time (`beat_any`). "Try something new" is done
+    by the suggested movement or any movement never done before, and is picked so it can be
+    done where the player is (`newAt`: the pick at the gym and at home). The morning message
+    lists every planned lift (PT aside) with every way: the gym's with their aims, then
+    "home: ..." (or "home: the same"), and "Try:" with its home version.
 
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).

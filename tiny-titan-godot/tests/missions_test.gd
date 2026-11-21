@@ -137,30 +137,74 @@ func _init() -> void:
 	ok(Missions.kind_of_day(split_log[4].exercises, cycle) == "push", "push with a squat added is a push day")
 	ok(Missions.fits("push", "upper") and Missions.fits("pull", "upper") and Missions.fits("legs", "lower") and not Missions.fits("", "upper"), "upper and lower")
 	var sat = "2026-11-21"
-	var sp = Missions.day_plan(split_log, sat, {}, "pull_push_legs")
+	var sp = Missions.day_plan(split_log, sat, {}, {"split": "pull_push_legs"})
 	var spn = names(sp.lifts)
 	ok(sp.kind == "push" and sp.label == "Push day" and sp.after == "pull" and sp.afterDate == "2026-11-20" and Missions.kind_why(sp) == "Yesterday was a pull day", "after a pull day: a push day", [sp.kind, sp.label, Missions.kind_why(sp)])
 	ok(spn.slice(0, 3).all(func(n): return push.has(n)) and not spn.has("Squat - Barbell") and not spn.has("Calf Raise") and not spn.has("Bent Over Row - Dumbbell"), "the push lifts; no legs or pull on a push day", spn)
 	ok(sp.lifts[0].why == "On your push days; last done Thursday", "why a push lift is planned", sp.lifts[0].why)
 	ok(sp.new != null and Missions.kind_of(str(sp.new.name)) == "push" and not push.has(str(sp.new.name)), "try a push movement never done", sp.new)
-	ok(Missions.day_plan(split_log, "2026-11-22", {}, "pull_push_legs").kind == "push" and Missions.kind_why(Missions.day_plan(split_log, "2026-11-22", {}, "pull_push_legs")) == "Friday was a pull day", "a rest day does not move the split")
+	ok(Missions.day_plan(split_log, "2026-11-22", {}, {"split": "pull_push_legs"}).kind == "push" and Missions.kind_why(Missions.day_plan(split_log, "2026-11-22", {}, {"split": "pull_push_legs"})) == "Friday was a pull day", "a rest day does not move the split")
 	var after_push = split_log + [lift(sat, push)]
-	ok(Missions.day_plan(after_push, "2026-11-22", {}, "pull_push_legs").kind == "legs", "after the push day comes legs")
-	var legs_day = Missions.day_plan(after_push, "2026-11-22", {}, "pull_push_legs")
+	ok(Missions.day_plan(after_push, "2026-11-22", {}, {"split": "pull_push_legs"}).kind == "legs", "after the push day comes legs")
+	var legs_day = Missions.day_plan(after_push, "2026-11-22", {}, {"split": "pull_push_legs"})
 	ok(names(legs_day.lifts).has("Squat - Barbell") and names(legs_day.lifts).has("Calf Raise"), "the leg day plans the squat (3 days on) and calves", names(legs_day.lifts))
-	var picked = Missions.day_plan(split_log, sat, {}, "pull_push_legs", {"date": sat, "kind": "legs"})
-	ok(picked.kind == "legs" and picked.picked and Missions.kind_why(picked) == "Your pick for today" and Missions.day_plan(split_log, "2026-11-22", {}, "pull_push_legs", {"date": sat, "kind": "legs"}).kind == "push", "a pick counts on its own day only")
-	var ul = Missions.day_plan(split_log, sat, {}, "upper_lower")
+	var picked = Missions.day_plan(split_log, sat, {}, {"split": "pull_push_legs", "dayPick": {"date": sat, "kind": "legs"}})
+	ok(picked.kind == "legs" and picked.picked and Missions.kind_why(picked) == "Your pick for today" and Missions.day_plan(split_log, "2026-11-22", {}, {"split": "pull_push_legs", "dayPick": {"date": sat, "kind": "legs"}}).kind == "push", "a pick counts on its own day only")
+	var ul = Missions.day_plan(split_log, sat, {}, {"split": "upper_lower"})
 	ok(ul.kind == "lower" and ul.label == "Leg day", "upper, lower: after an upper day, legs", [ul.kind, ul.label])
-	var first = Missions.day_plan([], sat, {}, "push_pull_legs")
+	var first = Missions.day_plan([], sat, {}, {"split": "push_pull_legs"})
 	ok(first.kind == "push" and Missions.kind_why(first) == "The first day of your split", "no lifts yet: the split's first day")
 	# Without a split: the one Saturday squat is resting (done 2 days ago, every 5).
-	var auto = Missions.day_plan(split_log, sat, {}, "auto")
+	var auto = Missions.day_plan(split_log, sat, {}, {"split": "auto"})
 	ok(auto.kind == "" and auto.cycle.is_empty() and not names(auto.lifts).has("Squat - Barbell"), "no split: a squat two days after the last one is not due, Saturday or not", names(auto.lifts))
 	var sdata = {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}
 	var sday = Missions.daily(sat, sdata, state, [])
 	ok(sday.filter(func(m): return str(m.id).contains(":beat:")).all(func(m): return push.has(str(m.lift))), "the beat-it missions follow the split", sday.map(func(m): return m.id))
 	ok(Missions.morning_text(sp, sday, "kg").begins_with("Push day. Yesterday was a pull day."), "the morning message names the split's day", Missions.morning_text(sp, sday, "kg"))
+
+	# --- the gym or home: ways to do each lift ---------------------------------------------------
+	ok(Missions.needs("Lateral Raise - Cable") == ["cable"] and Missions.needs("Lat Pulldown - Single arm") == ["cable"] and Missions.needs("Squat - Front") == ["barbell"]
+		and Missions.needs("Face Pull - Green band") == ["band"] and Missions.needs("Bicep Curl - Reclined").is_empty(), "the equipment a lift needs",
+		[Missions.needs("Lateral Raise - Cable"), Missions.needs("Lat Pulldown - Single arm"), Missions.needs("Squat - Front"), Missions.needs("Face Pull - Green band")])
+	var dbs = ["dumbbell"]
+	ok(Missions.can_do("Lateral Raise - Dumbbell", dbs) and not Missions.can_do("Lateral Raise - Cable", dbs) and Missions.can_do("Push-up", dbs) and Missions.can_do("Bench Press - Barbell", null), "what can be done with dumbbells only")
+	var at_home = {"split": "pull_push_legs", "placePick": {"date": sat, "place": "home"}}
+	ok(Missions.place_of(at_home, sat) == "home" and Missions.place_of(at_home, "2026-11-22") == "gym" and Missions.place_of({}, sat) == "gym", "a place counts on its own day; the gym otherwise")
+	ok(Missions.gear_at({}, "home") == ["dumbbell"] and Missions.gear_at({"homeGear": ["dumbbell", "band"]}, "home") == ["dumbbell", "band"] and Missions.gear_at({}, "gym") == null, "home gear: dumbbells to start with")
+	var gp = Missions.day_plan(split_log, sat, {}, {"split": "pull_push_legs"})
+	var fly = gp.lifts.filter(func(l): return l.name == "Chest Fly - Cable")[0]
+	var fo = names(fly.options)
+	ok(gp.place == "gym" and fo.size() == 3 and fo[0] == "Chest Fly - Cable" and fo[1] == "Chest Fly - Dumbbell" and Missions.part_of(fo[2]) == "chest" and LiftNames.split(fo[2]).move != "Chest Fly"
+		and LiftNames.split(fo[2]).move != gp.new.move, "at the gym: the cable fly, a dumbbell fly, another chest movement (not today's new one)", [fo, gp.new.name])
+	var hp = Missions.day_plan(split_log, sat, {}, at_home)
+	var hfly = names(hp.lifts.filter(func(l): return l.name == "Chest Fly - Cable")[0].options)
+	var hlat = names(hp.lifts.filter(func(l): return l.name == "Lateral Raise - Cable")[0].options)
+	var hpush = names(hp.lifts.filter(func(l): return l.name == "Tricep Pushdown - Rope")[0].options)
+	ok(hp.place == "home" and hfly[0] == "Chest Fly - Dumbbell" and hfly.size() >= 2 and hfly.all(func(n): return Missions.can_do(n, dbs)) and Missions.part_of(hfly[1]) == "chest", "at home: a dumbbell fly or another chest movement with dumbbells", hfly)
+	ok(hlat[0] == "Lateral Raise - Dumbbell" and hlat.all(func(n): return Missions.can_do(n, dbs) and Missions.kind_of(n) == "push"), "at home: dumbbell lateral raises", hlat)
+	ok(hpush.size() == 2 and hpush.all(func(n): return Missions.part_of(n) == "triceps" and not n.begins_with("Tricep Pushdown") and Missions.can_do(n, dbs)), "no cable at home: two other triceps movements", hpush)
+	ok(hp.new != null and Missions.can_do(str(hp.new.name), dbs), "something new that can be done at home", hp.new)
+	ok(names(hp.lifts) == names(gp.lifts), "the place changes the ways, not the plan")
+	var hdata = {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg"}.merged(at_home), "reading": []}
+	var hday = Missions.daily(sat, hdata, state, [])
+	var gday = Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, [])
+	ok(hday.map(func(m): return str(m.id)) == gday.map(func(m): return str(m.id)), "the same missions at the gym and at home")
+	var hfm = find(hday, ":beat:chest fly - cable")
+	ok(hfm != null and hfm.title == "Beat it: Chest Fly" and hfm.lift == "Chest Fly - Dumbbell" and str(hfm.desc).begins_with("New: Chest Fly (dumbbell).") and str(hfm.desc).contains(" Or: "), "at home the mission says the dumbbell fly, or another way", hfm.desc if hfm != null else null)
+	var gfm = find(gday, ":beat:chest fly - cable")
+	ok(gfm.lift == "Chest Fly - Cable" and str(gfm.desc).begins_with("Last time") and str(gfm.desc).contains("Or: Chest Fly (dumbbell)"), "at the gym: last time on the cable, or the dumbbell", gfm.desc)
+	# Done by any way: a first dumbbell fly, or a swap, at either place; a lighter cable lateral raise is not.
+	var did_db = split_log + [lift(sat, {"Chest Fly - Dumbbell": [[12, 10]], "Lateral Raise - Cable": [[10, 5]]})]
+	var after_db = Missions.daily(sat, {"sessions": did_db, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, [])
+	ok(find(after_db, ":beat:chest fly - cable").done and not find(after_db, ":beat:lateral raise - cable").done, "a first dumbbell fly beats it (logged at the gym); a lighter lateral raise does not")
+	var swap = str(gfm.ways[gfm.ways.size() - 1])
+	var did_swap = split_log + [lift(sat, {swap: [[8, 20]]})]
+	ok(LiftNames.split(swap).move != "Chest Fly" and find(Missions.daily(sat, {"sessions": did_swap, "pt": {}, "settings": {"weightUnit": "kg"}.merged(at_home), "reading": []}, state, []), ":beat:chest fly - cable").done, "the other movement counts too (%s)" % swap)
+	var gtext = Missions.morning_text(gp, gday, "kg")
+	ok(gtext.contains("Chest Fly (cable): ") and gtext.contains("  or Chest Fly (dumbbell, new) · ") and gtext.contains("  home: Chest Fly (dumbbell, new) · ")
+		and gtext.contains("Lateral Raise (cable): ") and gtext.contains("Tricep Pushdown (rope): ") and gtext.contains("  home: Lateral Raise (dumbbell, new)"), "the morning message: every lift, every way, at the gym and at home", gtext)
+	ok(gp.newAt.gym != null and gp.newAt.home != null and Missions.can_do(str(gp.newAt.home.name), dbs) and (gp.newAt.gym.name == gp.newAt.home.name or gtext.contains("Try: %s
+  home: %s" % [Missions.short_name(str(gp.newAt.gym.name)), Missions.short_name(str(gp.newAt.home.name))])), "something new, and its home version", gtext)
 
 	# --- the morning message --------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg")

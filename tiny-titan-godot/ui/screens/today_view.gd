@@ -5,6 +5,8 @@ extends RefCounted
 ## App.plan()): the body area of the day, the likely lifts with what to aim for
 ## (one tap opens a lift on Compare), a movement of that area never done, the
 ## physical therapy still to do this week and the likely run, climb or ride.
+## Gym / Home chips say where the player trains today: each lift is shown the
+## way it can be done there, with the other ways under it (Missions.options_for).
 ## The morning message on the phone says the same (MorningAlert).
 
 static func card() -> Control:
@@ -24,6 +26,8 @@ static func card() -> Control:
 	if str(plan.label) != "":
 		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 13)))
 	c.add(head)
+	if not plan.cycle.is_empty() or not plan.lifts.is_empty() or plan.new != null:
+		c.add(_where_row(plan))
 	if not plan.cycle.is_empty():
 		c.add(_split_row(plan))
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
@@ -43,12 +47,35 @@ static func card() -> Control:
 	return c
 
 
-## The training split: why today is this kind of day, and a chip per kind of
-## the cycle (today's lit). Tapping another one plans today as that kind;
-## tapping the one the split gave goes back to it.
+## Why today is this kind of day (or a question without a split), and where
+## the player trains today: Gym or Home (Missions.PLACES).
+static func _where_row(plan: Dictionary) -> Control:
+	var h = Kit.hbox(6)
+	var why = Missions.kind_why(plan)
+	var l = Kit.clip(why if why != "" else "Where are you training?", 12, Pal.MUTED, true)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(Kit.vcenter(l))
+	for p in Missions.PLACES:
+		var b = Kit.chip(str(p.name), str(p.id) == str(plan.place), _pick_place.bind(str(p.id)), Pal.SECOND, 12)
+		b.custom_minimum_size = Vector2(60, 0)
+		b.tooltip_text = "Training at the gym today" if p.id == "gym" else "Training at home today: only what your home gym has"
+		h.add_child(b)
+	return h
+
+
+static func _pick_place(place: String) -> void:
+	Sfx.tick()
+	if place == str(App.plan().place):
+		return
+	App.update_settings({"placePick": {} if place == "gym" else {"date": App.today, "place": place}})
+	App.toast("At home today: goals for what you have there" if place == "home" else "At the gym today", "info", "lift")
+
+
+## The training split: a chip per kind of the cycle (today's lit). Tapping
+## another one plans today as that kind; tapping the one the split gave goes
+## back to it.
 static func _split_row(plan: Dictionary) -> Control:
 	var v = Kit.vbox(4)
-	v.add_child(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
 	var chips = Kit.hbox(6)
 	for k in plan.cycle:
 		var b = Kit.chip(str(Missions.KIND_SHORT[k]), str(k) == str(plan.kind), _pick_kind.bind(str(k)), Pal.LIFT, 13)
@@ -82,10 +109,21 @@ static func _step_kg(wu: String) -> float:
 	return 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
 
 
-## A likely lift: its name and variation, why it is likely, and what to aim for.
+## A likely lift, the way it can be done where the player is (its first
+## option): name and variation, why it is likely, what to aim for; the other
+## ways under it as chips. Done today (any way): what was done.
 static func _lift_row(l: Dictionary, wu: String) -> Card:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-	var c = Kit.card(0, JourneyLifts.open_named.bind(str(l.name), {"view": "compare"}), 8)
+	var opts = l.get("options", [])
+	var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": l.last.sets}
+	var planned_move = str(LiftNames.split(str(l.name)).move)
+	var ways = []
+	for o in opts + l.get("gym", []) + l.get("home", []):
+		if not ways.has(str(o.name)):
+			ways.append(str(o.name))
+	var done_name = Missions.done_of(App.sessions(), ways if not ways.is_empty() else [str(l.name)], App.today, "" if bool(l.pt) else planned_move)
+	var shown = done_name if done_name != "" else str(main.name)
+	var c = Kit.card(0, JourneyLifts.open_named.bind(shown, {"view": "compare"}), 8)
 	c.tooltip_text = "Last time, and what to beat"
 	var row = Kit.hbox(8)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -94,14 +132,15 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var top = Kit.hbox(6)
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sp = LiftNames.split(str(l.name))
+	var sp = LiftNames.split(shown)
 	top.add_child(Kit.clip_fit(str(sp.move), 13, null, true, 170.0))
 	if str(sp.variation) != "":
 		top.add_child(Kit.vcenter(SessionView.variation_tag(str(sp.variation))))
 	if bool(l.pt):
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
 	left.add_child(top)
-	left.add_child(Kit.clip(str(l.why), 11, Pal.MUTED))
+	var why = str(l.why) if Xp.normalize_exercise(shown) == Xp.normalize_exercise(str(l.name)) else "Instead of %s" % Missions.short_name(str(l.name))
+	left.add_child(Kit.clip(why, 11, Pal.MUTED))
 	row.add_child(left)
 	var right = Kit.vbox(1)
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -109,19 +148,23 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	var said = ""
 	var cap = ""
 	var col = Pal.PT if bool(l.pt) else Pal.ACCENT
-	var done_today = Missions.sets_on(App.sessions(), str(l.name), App.today)
-	if not done_today.is_empty():
-		# Already done today: what was done, green when it beat last time.
-		var beat = Missions.beat_on(App.sessions(), str(l.name), App.today)
-		said = LiftHistory.describe_sets(done_today, fmt_w)
+	if done_name != "":
+		# Already done today (any way): what was done, green when it beat last
+		# time or was a first.
+		var beat = Missions.beat_any(App.sessions(), ways if not ways.is_empty() else [str(l.name)], "" if bool(l.pt) else planned_move, App.today)
+		said = LiftHistory.describe_sets(Missions.sets_on(App.sessions(), done_name, App.today), fmt_w)
 		cap = "DONE · BEAT IT" if beat else "DONE TODAY"
 		col = Pal.GOOD if beat else Pal.TEXT
 		c.accent(Pal.GOOD if beat else Pal.LINE)
 	elif bool(l.pt):
 		said = LiftHistory.describe_sets(l.last.sets, fmt_w)
 		cap = "AS LAST TIME"
+	elif bool(main.new):
+		said = "Find your weight"
+		cap = "FIRST TIME"
+		col = Pal.SECOND
 	else:
-		said = LiftHistory.describe_sets(LiftTrend.next_target(l.last.sets, _step_kg(wu)).sets, fmt_w)
+		said = LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w)
 		cap = "AIM"
 	var cl = Kit.label(cap, 9, Pal.GOOD if col == Pal.GOOD else Pal.MUTED, true)
 	cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -131,6 +174,20 @@ static func _lift_row(l: Dictionary, wu: String) -> Card:
 	right.add_child(al)
 	row.add_child(right)
 	c.add(row)
+	# The other ways to do it here, each opening its own page.
+	if done_name == "" and opts.size() > 1:
+		var more = Kit.flow(6)
+		more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var orl = Kit.label("OR", 10, Pal.MUTED, true)
+		orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		more.add_child(orl)
+		for o in opts.slice(1):
+			var same = str(o.move) == str(main.get("move", LiftNames.split(str(main.name)).move))
+			var text = str(o.variation) if same and str(o.variation) != "" else Missions.short_name(str(o.name))
+			var b = Kit.chip(text, false, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), Pal.LIFT, 11)
+			b.tooltip_text = ("New to you: " if bool(o.new) else "") + Missions.short_name(str(o.name))
+			more.add_child(b)
+		c.add(more)
 	return c
 
 
