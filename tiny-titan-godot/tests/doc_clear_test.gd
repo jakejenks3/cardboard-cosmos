@@ -103,6 +103,16 @@ func _run() -> void:
 	ok(token.length() == 24 and DocClear.script_for(token).contains("const TOKEN = '%s';" % token) and not DocClear.script_for(token).contains("%TOKEN%"), "the script carries the token")
 	ok(DocClear.script_for(token).begins_with("/** @OnlyCurrentDoc */"), "the script asks Google for this doc only")
 
+	# Importing on its own: nothing to ask, and the workout over.
+	var plain = {"key": "a", "date": "2026-11-20", "kind": "session", "data": {}, "warnings": []}
+	var today_e = {"key": "b", "date": TODAY, "kind": "session", "data": {}, "warnings": []}
+	var asks = {"key": "c", "date": "2026-11-20", "kind": "session", "data": {}, "warnings": [], "names": [{"kind": "match"}]}
+	var warned = {"key": "d", "date": "2026-11-20", "kind": "session", "data": {}, "warnings": ["A second lift on this day"]}
+	var edit = {"key": "e", "date": "2026-11-20", "kind": "session", "data": {}, "warnings": [], "replaces": "s1"}
+	var pic = {"key": "f", "date": "2026-11-20", "kind": "body", "data": {"photoRefs": ["images/x.png"]}, "warnings": []}
+	var all_e = [plain, today_e, asks, warned, edit, pic]
+	ok(PhoneInbox.auto_pick(all_e, TODAY, 0).map(func(e): return e.key) == ["a"], "on its own: an earlier day with nothing to ask; not a name to confirm, a warning, an edit or pictures; not today yet")
+	ok(PhoneInbox.auto_pick(all_e, TODAY, PhoneInbox.QUIET_MS).map(func(e): return e.key) == ["a", "b"], "today's too once the note has been still for 90 minutes")
 	await _with_stub(rows, plan, token)
 	await _logger_api(token)
 	print("DOCCLEAR: %d/%d passed" % [passed, total])

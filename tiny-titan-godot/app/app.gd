@@ -871,6 +871,8 @@ static func parse_saved(raw):
 			out.inbox.lastChecked = int(ib.lastChecked)
 		if ib.get("auto") is bool:
 			out.inbox.auto = ib.auto
+		if ib.get("autoImport") is bool:
+			out.inbox["autoImport"] = ib.autoImport
 		# (physical therapy lifts are read below, after the inbox)
 		# What the player decided a typed lift name means ("" = a lift of its own).
 		if ib.get("names") is Dictionary:

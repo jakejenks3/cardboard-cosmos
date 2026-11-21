@@ -486,6 +486,15 @@ is the Windows handoff.
   `text` (a 45 lb or 20 kg bar and the usual plates), `warmups` / `warmup_text` (the bar
   for 10, then 40 / 60 / 80 %). Shown under barbell rows of the Today card and sent to the
   phone logger (`plan_info` aims: `warm`, `plates`). Test: `tests/plates_test.gd`.
+- Importing on its own (2026-11-21): `saved.inbox.autoImport` (default on; Settings -> Phone inbox
+  "Import on its own"; kept by `parse_saved`). After a check, `PhoneInbox._auto_import`
+  imports `auto_pick(fresh, today, quiet_ms)`: nothing to ask (no `names`, no warnings, not
+  an edit: `replaces` / `replaces_key`, no pictures, not left out) and the day `settled`
+  (an earlier day, or the note unchanged for QUIET_MS = 90 min, so a workout still being
+  logged on the phone is never imported, and so never cleared, under the player's thumb).
+  The rest waits for the review. The note is read again every RECHECK_SEC (10 min) while
+  the game is open (with Auto-check). The inbox walkthrough turns it off for the review
+  and checks it at the end.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

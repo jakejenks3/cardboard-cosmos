@@ -65,6 +65,13 @@ var _unread = ""
 var _tables = []
 ## A clear in progress.
 var _clearing = false
+## When the note's text last changed (ms; this run of the game), and its md5.
+var _changed_at = 0
+var _text_md5 = ""
+## How long the note must be still before today's entries import on their own.
+const QUIET_MS = 90 * 60 * 1000
+## How often the note is read again while the game is open (with Auto-check).
+const RECHECK_SEC = 600.0
 
 
 func _app():
@@ -77,6 +84,14 @@ func _ready() -> void:
 	if str(st.get("source", "")).strip_edges() != "" and bool(st.get("auto", true)):
 		# In the background a moment after start; failures stay quiet on launch.
 		get_tree().create_timer(1.5).timeout.connect(check.bind(true))
+	# Read again every ten minutes while the game is open (Auto-check on).
+	var t = Timer.new()
+	t.wait_time = RECHECK_SEC
+	t.autostart = true
+	t.timeout.connect(func():
+		if str(settings().get("source", "")).strip_edges() != "" and bool(settings().get("auto", true)) and not _busy:
+			check(true))
+	add_child(t)
 
 
 func settings() -> Dictionary:
@@ -497,6 +512,10 @@ func _got_text(text: String, silent: bool, from_source: bool) -> void:
 		_finish({"ok": false, "error": NOT_SHARED}, silent)
 		return
 	last_text = text
+	var md5 = text.md5_text()
+	if md5 != _text_md5:
+		_text_md5 = md5
+		_changed_at = _app().now_ms()
 	var parsed = QuickLog.parse_any(text, parse_opts())
 	if from_source and _unread != "":
 		parsed.problems.append({"line": "pictures", "why": _unread, "picture": ""})
@@ -641,7 +660,47 @@ func _finish(result: Dictionary, silent: bool) -> void:
 		status = "Checked at %s: %s" % [at, result.error]
 	checked.emit(result)
 	if result.ok and not result.fresh.is_empty():
+		_auto_import.call_deferred()
 		_app().changed.emit()  # the Home card appears
+
+
+## Is the note's day over for importing on its own: from an earlier day, or
+## today's with the note still for QUIET_MS (the workout is finished)?
+static func settled(date: String, today: String, quiet_ms: int) -> bool:
+	return date < today or quiet_ms >= QUIET_MS
+
+
+## The entries that can import on their own: nothing to ask (no names to
+## confirm, no warnings, not an edit of an imported day, no pictures, not left
+## out), and their day settled. `quiet_ms`: how long the note has been still.
+static func auto_pick(entries: Array, today: String, quiet_ms: int) -> Array:
+	var out = []
+	for e in entries:
+		if not e.get("names", []).is_empty() or not e.get("warnings", []).is_empty():
+			continue
+		if e.has("replaces_key") or e.has("replaces") or bool(e.get("skip", false)):
+			continue
+		if not e.get("shots", []).is_empty() or not e.get("data", {}).get("photoRefs", []).is_empty():
+			continue
+		if settled(str(e.get("date", "")), today, quiet_ms):
+			out.append(e)
+	return out
+
+
+## Import on its own what needs no answer (Settings -> Phone inbox "Import on
+## its own", on by default); the rest waits for the review.
+func _auto_import() -> void:
+	if not bool(settings().get("autoImport", true)) or _last.fresh.is_empty():
+		return
+	var quiet = _app().now_ms() - _changed_at if _changed_at > 0 else 0
+	var easy = PhoneInbox.auto_pick(_last.fresh, _app().today, quiet)
+	if easy.is_empty():
+		return
+	var left = _last.fresh.filter(func(e): return not easy.has(e))
+	import_entries(easy)
+	_last.fresh = left
+	status = "Imported %d on its own%s." % [easy.size(), (", %d to look at" % left.size()) if not left.is_empty() else ""]
+	_app().toast("Imported %d from your phone on its own" % easy.size(), "good", "check")
 
 
 ## Turn entries into sessions / check-ins, add them to the log and remember their keys.

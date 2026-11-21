@@ -78,6 +78,8 @@ func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
 	App.update_settings({"weightUnit": "kg", "distanceUnit": "km"})
+	# The review is what this walkthrough checks: nothing imports on its own until the end.
+	App.update_inbox({"autoImport": false})
 	App.result_ready.connect(func(r): reels.append(r))
 	var today = App.today
 	var y = Dates.add_days(today, -1)
@@ -301,4 +303,16 @@ run 3km 15:00
 		App.inbox.set_source("http://127.0.0.1:1/nothing")
 		var h4 = await _check_and_wait()
 		check(not h4.ok and str(h4.error).contains("Could not reach"), "unreachable: %s" % h4.error)
+	# Importing on its own: a plain day from before, with nothing to ask.
+	App.update_inbox({"autoImport": true})
+	var auto_note = OS.get_environment("TINY_TITAN_DATA").path_join("phone-note-auto.txt")
+	_write(auto_note, "%s
+run 6km 31:00
+" % Dates.add_days(App.today, -3))
+	App.inbox.set_source(auto_note)
+	var before_auto = App.sessions().size()
+	var ra = await _check_and_wait()
+	await ShotHelper.wait(tree, 0.8)
+	await _dismiss_reels()
+	check(ra.ok and App.sessions().size() == before_auto + 1 and App.inbox.pending().is_empty(), "a day from before with nothing to ask imports on its own (%d -> %d)" % [before_auto, App.sessions().size()])
 	print("INBOX DONE, failures: %d" % fails)

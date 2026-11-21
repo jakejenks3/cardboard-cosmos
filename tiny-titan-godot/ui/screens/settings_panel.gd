@@ -197,8 +197,15 @@ func _build_inbox() -> void:
 	var auto_label = Kit.label("Auto-check", 14, null, true)
 	auto_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(auto_label)
-	row.add_child(Kit.switch(bool(ib.get("auto", true)), _on_inbox_auto, "Check when the game starts"))
+	row.add_child(Kit.switch(bool(ib.get("auto", true)), _on_inbox_auto, "Check when the game starts, then every ten minutes"))
 	card.add(row)
+	var arow = Kit.hbox(8)
+	var al = Kit.label("Import on its own", 14, null, true)
+	al.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	al.tooltip_text = "Entries with nothing to ask, once the workout is over (an earlier day, or the note still for 90 minutes)"
+	arow.add_child(Kit.vcenter(al))
+	arow.add_child(Kit.switch(bool(ib.get("autoImport", true)), func(on): App.update_inbox({"autoImport": bool(on)}), "Entries with nothing to ask, once the workout is over"))
+	card.add(arow)
 	var line = App.inbox.status
 	if line == "":
 		line = App.inbox.last_checked_text()
