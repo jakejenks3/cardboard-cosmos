@@ -831,7 +831,7 @@ func write_plan_now() -> Dictionary:
 	if not can_clear():
 		return {"ok": false, "error": "Clearing is not set up yet."}
 	var c = clear_settings()
-	var res = await DocClear.send_plan(self, str(c.url), str(c.token), _app().plan(), _app().weight_unit())
+	var res = await DocClear.send_plan(self, str(c.url), str(c.token), _app().plan(), _app().weight_unit(), DocClear.plan_info(_app().plan(), _app().sessions(), _app().settings()))
 	if res.ok:
 		check(true)
 	return res

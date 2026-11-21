@@ -458,6 +458,30 @@ is the Windows handoff.
   Compare view adds `LiftViews._ghost_card` (the hero against a see-through, flipped copy, a
   bar each, the verdict; a burst on a win through a weak reference, since the page can be
   rebuilt before it fires). Tests: lift_trend_test, the progress walkthrough.
+- The phone logger (2026-11-21, "I want the typing/clicking process to be as easy and smooth as
+  possible"): the note's script (now `app/doc_script.js`, VERSION 3; `DocClear.script_for`
+  puts `app/doc_logger.html` into it as `PAGE` and the token everywhere) serves a mobile page
+  at `?page=log&token=` (`DocClear.logger_url`, `MorningAlert.logger_link`). It calls the
+  script with `google.script.run` (`apiToday`, `apiLogSet`, `apiAddRow`, `apiAddLine`,
+  `apiClearCell`, `apiSetCell`, `apiFeel`; in a test stand-in `?api=` with fetch) and only
+  ever writes TABLE rows under today's date row, so the game imports and clears them as
+  typed rows: a set goes in the next empty Set cell of the exercise's last row when the
+  weight is that row's (or the row has no set yet: its weight is replaced), else a new
+  row under it (a row without a name = more sets of the one above); holds are `30"` in
+  Weight and times in the Set cells; bodyweight is "bw"; added exercises are marked like
+  plan rows (skipped until a set is logged); climbs / pages / weigh-ins / runs / rides /
+  notes are single-cell rows ("v4 send", "read 20 pages", "weight 182.4", "run 3.1 mi
+  28:00", "note: ..."), which the parser reads as typed lines. The page: cards with
+  steppers (only the number redraws; a redrawn button never hears the finger lift, which
+  made a hold run away), LOG SET, chips to undo, a rest timer (vibrate, beep, -15/+15),
+  the screen kept awake, auto-scroll to the next exercise when one reaches its sets, an
+  add sheet (the player's lifts), quick adds and Tired / Okay / Strong. The game sends what
+  it needs with the plan (`DocClear.plan_info`: unit, step, the day's label, the player's
+  lifts with their last weight, an aim per planned lift and PT; kept under `INFO_MAX` in a
+  link). Pushes carry "Log workout" (tap) and "Open note" actions; Settings -> Phone inbox
+  has "Phone logger: Send to phone / Copy". Tests: `tests/doc_clear_test.gd` (the calls on
+  a pretend doc, what the game reads back), and the page was driven in a browser at phone
+  size against `tests/doc_clear_stub.js` (it serves `?page=log`).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

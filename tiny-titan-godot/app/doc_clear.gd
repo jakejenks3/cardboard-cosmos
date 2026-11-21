@@ -24,117 +24,17 @@ extends RefCounted
 ## any other. Script VERSION 2 has plans (a ping says which).
 ## Pure but for `send`. Tests: tests/doc_clear_test.gd.
 
-## The script the player pastes into the doc (Extensions -> Apps Script).
-## %TOKEN% is replaced by the player's token. "@OnlyCurrentDoc" makes Google
-## ask for this one doc only, not every doc of the account.
-const SCRIPT = """/** @OnlyCurrentDoc */
-// Tiny Titan: empties the table rows the game has imported.
-// Paste into this doc: Extensions > Apps Script. Then Deploy > New deployment >
-// Web app, Execute as: Me, Who has access: Anyone. Copy the web app link into
-// Tiny Titan: Settings > Phone inbox > Clear the table.
-// It only empties a row whose text is still exactly what the game imported.
-// It also writes the day's plan (rows marked \\u25b8) into empty rows at the bottom.
-const TOKEN = '%TOKEN%';
-const VERSION = 2;
-const MARK = '\\u25b8';
-
-function doGet(e) {
-  const p = (e && e.parameter) || {};
-  if (p.token !== TOKEN) return reply({ok: false, error: 'wrong token'});
-  const tables = DocumentApp.getActiveDocument().getBody().getTables();
-  if (p.ping) return reply({ok: true, tables: tables.length, version: VERSION});
-  if (p.plan) return reply(writePlan(tables, String(p.date || ''), JSON.parse(p.plan)));
-  const lock = LockService.getDocumentLock();
-  lock.waitLock(20000);
-  let cleared = 0, skipped = 0;
-  try {
-    String(p.rows || '').split(',').filter(String).forEach(function (item) {
-      const bits = item.split('.');
-      const table = tables[Number(bits[0])];
-      const r = Number(bits[1]);
-      if (!table || r >= table.getNumRows()) { skipped++; return; }
-      const row = table.getRow(r);
-      if (rowHash(row) !== bits[2]) { skipped++; return; }
-      for (let c = 0; c < row.getNumCells(); c++) row.getCell(c).setText('');
-      cleared++;
-    });
-  } finally {
-    lock.releaseLock();
-  }
-  return reply({ok: true, cleared: cleared, skipped: skipped});
-}
-
-// A date row and a row per lift ([exercise, variation, weight]) under their
-// columns, in the empty rows after the last row with anything in it (rows are
-// added when there are too few). Never twice for one date, never over a filled row.
-function writePlan(tables, date, rows) {
-  const lock = LockService.getDocumentLock();
-  lock.waitLock(20000);
-  try {
-    let table = null, head = -1;
-    for (let t = 0; t < tables.length && !table; t++) {
-      for (let r = 0; r < tables[t].getNumRows(); r++) {
-        if (texts(tables[t].getRow(r)).some(function (c) { return /^(exercise|exercises|lift|movement|name)$/i.test(c); })) {
-          table = tables[t]; head = r; break;
-        }
-      }
-    }
-    if (!table) return {ok: false, error: 'no table with an Exercise column'};
-    if (!date || !rows.length) return {ok: true, planned: 0};
-    const names = texts(table.getRow(head)).map(function (c) { return c.toLowerCase(); });
-    const col = function (words) { for (let i = 0; i < names.length; i++) if (words.indexOf(names[i]) >= 0) return i; return -1; };
-    const cEx = col(['exercise', 'exercises', 'lift', 'movement', 'name']);
-    const cVar = col(['variation', 'variant', 'equipment', 'type', 'version', 'kind', 'style', 'how']);
-    const cW = col(['weight', 'load', 'lb', 'lbs', 'kg', 'resistance']);
-    let last = head;
-    for (let r = head + 1; r < table.getNumRows(); r++) {
-      const cells = texts(table.getRow(r));
-      if (cells[cEx] === MARK + ' ' + date) return {ok: true, planned: 0, already: true};
-      if (cells.some(function (c) { return c !== ''; })) last = r;
-    }
-    const width = table.getRow(head).getNumCells();
-    while (table.getNumRows() - (last + 1) < rows.length + 1) {
-      const nr = table.appendTableRow();
-      for (let c = 0; c < width; c++) nr.appendTableCell('');
-    }
-    const put = function (r, c, v) { if (c >= 0 && c < table.getRow(r).getNumCells()) table.getRow(r).getCell(c).setText(String(v)); };
-    put(last + 1, cEx, MARK + ' ' + date);
-    rows.forEach(function (x, i) {
-      put(last + 2 + i, cEx, MARK + ' ' + x[0]);
-      if (x[1]) put(last + 2 + i, cVar, x[1]);
-      if (x[2]) put(last + 2 + i, cW, x[2]);
-    });
-    return {ok: true, planned: rows.length};
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function texts(row) {
-  const out = [];
-  for (let c = 0; c < row.getNumCells(); c++) out.push(row.getCell(c).getText().trim());
-  return out;
-}
-
-function rowHash(row) {
-  const cells = [];
-  for (let c = 0; c < row.getNumCells(); c++) {
-    const t = row.getCell(c).getText().replace(/[\\u200b\\ufeff]/g, '').replace(/^\\s*\\u25b8\\s*/, '').replace(/\\|/g, '/')
-      .replace(/[\\s\\u00a0]+/g, ' ').trim();
-    if (t !== '' && !/^:?-{2,}:?$/.test(t)) cells.push(t.toLowerCase());
-  }
-  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, cells.join(' | '), Utilities.Charset.UTF_8);
-  return bytes.map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('').slice(0, 10);
-}
-
-function reply(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-"""
+## The script the player pastes into the doc (Extensions -> Apps Script): the
+## code in SCRIPT_FILE with the phone logger page (PAGE_FILE) inside it and the
+## player's token. "@OnlyCurrentDoc" makes Google ask for this one doc only.
+const SCRIPT_FILE = "res://app/doc_script.js"
+const PAGE_FILE = "res://app/doc_logger.html"
 
 const TIMEOUT_SEC = 30.0
 ## The script's VERSION (what a ping of the newest one says).
-const SCRIPT_VERSION = 2
+const SCRIPT_VERSION = 3
+## The longest the logger's info may be in a link (encoded characters).
+const INFO_MAX = 2600
 
 
 ## A new token (the script and the game share it).
@@ -150,7 +50,15 @@ static func new_token() -> String:
 
 ## The script with the player's token in it.
 static func script_for(token: String) -> String:
-	return SCRIPT.replace("%TOKEN%", token)
+	var js = FileAccess.get_file_as_string(SCRIPT_FILE)
+	var page = FileAccess.get_file_as_string(PAGE_FILE)
+	return js.replace("%PAGE%", JSON.stringify(page)).replace("%TOKEN%", token)
+
+
+## The phone logger page's link (bookmark it on the phone's home screen).
+static func logger_url(url: String, token: String) -> String:
+	var u = url.strip_edges()
+	return u + ("&" if u.contains("?") else "?") + "page=log&token=" + token.uri_encode()
 
 
 ## Every table of the export's HTML: [table][row] = [cell texts], read the way
@@ -321,6 +229,59 @@ static func plan_rows(plan: Dictionary, wu: String) -> Array:
 	return out
 
 
+## What the phone logger needs from the game (sent with the plan): {"unit",
+## "dunit", "step" (one tap of weight), "kind" ("Push day"), "lifts" ([{n
+## (name), w (last top weight)}], the latest first: the add list), "aims"
+## ({lower-case name: {sets, reps, weight, text, last, hold}})}.
+static func plan_info(plan: Dictionary, sessions: Array, settings: Dictionary) -> Dictionary:
+	var wu = str(settings.get("weightUnit", "kg"))
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	var to_u = func(kg: float) -> float: return snappedf(Fmt.kg_to_unit(kg, wu), 0.5)
+	var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
+	var lifts = []
+	var st = LiftLibrary.stats(sessions)
+	var rows = st.values()
+	rows.sort_custom(func(a, b): return str(a.last) > str(b.last))
+	for r in rows.slice(0, 30):
+		var top = LiftTrend.day(r.history[0].sets)
+		var one = {"n": str(r.name)}
+		if float(top.topKg) > 0.0:
+			one["w"] = TTUtil.num_str(to_u.call(float(top.topKg)))
+		lifts.append(one)
+	var aims = {}
+	for l in plan.get("lifts", []):
+		var name = Pt.untag(str(l.name)).name
+		var aim = l.last.sets if bool(l.pt) else LiftTrend.next_target(l.last.sets, step).sets
+		var d = LiftTrend.day(aim)
+		var a = {"sets": aim.size(), "reps": int(aim[0].get("reps", 10)) if not aim.is_empty() else 10,
+			"text": LiftHistory.describe_sets(aim, fmt_w), "last": LiftHistory.describe_sets(l.last.sets, fmt_w)}
+		if float(d.topKg) > 0.0:
+			a["weight"] = to_u.call(float(d.topKg))
+		if int(d.holdSec) > 0:
+			a["hold"] = int(d.holdSec)
+		aims[str(name).to_lower()] = a
+	# Physical therapy still to do this week: as last time (a hold: its seconds).
+	for r in plan.get("pt", []):
+		var h = r.get("history", [])
+		if h.is_empty():
+			continue
+		var sets = h[0].get("sets", [])
+		var d = LiftTrend.day(sets)
+		var a = {"sets": sets.size(), "reps": int(sets[0].get("reps", 10)) if not sets.is_empty() else 10,
+			"text": LiftHistory.describe_sets(sets, fmt_w), "last": LiftHistory.describe_sets(sets, fmt_w)}
+		if float(d.topKg) > 0.0:
+			a["weight"] = to_u.call(float(d.topKg))
+		if int(d.holdSec) > 0:
+			a["hold"] = int(d.holdSec)
+		aims[str(r.name).to_lower()] = a
+	var out = {"unit": wu, "dunit": str(settings.get("distanceUnit", "km")), "step": TTUtil.num_str(float(TT.weight_step_of(settings))),
+		"kind": str(plan.get("label", "")), "lifts": lifts, "aims": aims}
+	# It travels in a link: kept short (the add list loses its oldest lifts first).
+	while JSON.stringify(out).uri_encode().length() > INFO_MAX and lifts.size() > 8:
+		lifts.pop_back()
+	return out
+
+
 ## "11/22": a date the parser reads as a date row.
 static func date_text(date: String) -> String:
 	var p = date.split("-")
@@ -328,13 +289,15 @@ static func date_text(date: String) -> String:
 
 
 ## The web app link with what to clear ("ping" only checks the link).
-static func request_url(url: String, token: String, rows: Array, ping: bool = false, plan_date: String = "") -> String:
+static func request_url(url: String, token: String, rows: Array, ping: bool = false, plan_date: String = "", info = null) -> String:
 	var u = url.strip_edges()
 	var q = "token=" + token.uri_encode()
 	if ping:
 		q += "&ping=1"
 	elif plan_date != "":
 		q += "&date=" + plan_date.uri_encode() + "&plan=" + JSON.stringify(rows).uri_encode()
+		if info is Dictionary:
+			q += "&info=" + JSON.stringify(info).uri_encode()
 	else:
 		var items = PackedStringArray()
 		for r in rows:
@@ -352,7 +315,7 @@ static func looks_right(url: String) -> bool:
 
 ## Call the script. Awaitable: {"ok", "cleared", "skipped", "tables", "error"}.
 ## `node`: anything in the scene tree (the request is a child of it while it runs).
-static func send(node: Node, url: String, token: String, rows: Array, ping: bool = false, plan_date: String = "") -> Dictionary:
+static func send(node: Node, url: String, token: String, rows: Array, ping: bool = false, plan_date: String = "", info = null) -> Dictionary:
 	if not looks_right(url):
 		return {"ok": false, "error": "That is not a web app link (it starts with https://script.google.com/ and ends in /exec)."}
 	var http = HTTPRequest.new()
@@ -360,7 +323,7 @@ static func send(node: Node, url: String, token: String, rows: Array, ping: bool
 	http.max_redirects = 8
 	node.add_child(http)
 	await node.get_tree().process_frame
-	var err = http.request(request_url(url, token, rows, ping, plan_date))
+	var err = http.request(request_url(url, token, rows, ping, plan_date, info))
 	if err != OK:
 		http.queue_free()
 		return {"ok": false, "error": "Could not reach the script."}
@@ -380,8 +343,6 @@ static func send(node: Node, url: String, token: String, rows: Array, ping: bool
 
 
 ## Write a day's plan into the note's table (plan_rows). Awaitable, as send.
-static func send_plan(node: Node, url: String, token: String, plan: Dictionary, wu: String) -> Dictionary:
+static func send_plan(node: Node, url: String, token: String, plan: Dictionary, wu: String, info = null) -> Dictionary:
 	var rows = plan_rows(plan, wu)
-	if rows.is_empty():
-		return {"ok": true, "planned": 0, "error": ""}
-	return await send(node, url, token, rows, false, date_text(str(plan.date)))
+	return await send(node, url, token, rows, false, date_text(str(plan.date)), info)

@@ -232,6 +232,19 @@ func _build_inbox() -> void:
 	crow.add_child(Kit.vcenter(setup))
 	crow.set_meta("clear_row", true)
 	card.add(crow)
+	# The phone logger (the note's script serves it): to the phone once, then on its home screen.
+	if can:
+		var lrow = Kit.hbox(6)
+		lrow.add_child(Kit.vcenter(Icons.rect("edit", 16)))
+		var ll = Kit.clip("Phone logger: tap to log at the gym", 12, null, true)
+		ll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lrow.add_child(Kit.vcenter(ll))
+		var to_phone = Kit.button("Send to phone", "secondary", _send_logger, "sm")
+		to_phone.tooltip_text = "A push with the logger's link: open it, then Add to Home screen"
+		lrow.add_child(Kit.vcenter(to_phone))
+		lrow.add_child(Kit.vcenter(Kit.button("Copy", "ghost", _copy_logger, "sm")))
+		lrow.set_meta("logger_row", true)
+		card.add(lrow)
 	add_child(card)
 
 
@@ -395,7 +408,7 @@ func _morning_test() -> void:
 	var m = MorningAlert.settings(App.settings())
 	var msg = MorningAlert.message(App.saved, App.today)
 	App.toast("Sending…", "info", "bolt")
-	var res = await MorningAlert.send(self, msg.title, msg.text, topic, m.server, MorningAlert.note_link(App.saved))
+	var res = await MorningAlert.send(self, msg.title, msg.text, topic, m.server, MorningAlert.note_link(App.saved), MorningAlert.logger_link(App.saved))
 	if res.ok:
 		App.toast("Sent to %s: check your phone" % topic, "good", "check")
 	else:
@@ -447,6 +460,24 @@ func _commit_source(t: String) -> void:
 		return
 	_pending_source = null
 	App.inbox.set_source(t)
+
+
+func _send_logger() -> void:
+	Sfx.tap()
+	var m = MorningAlert.settings(App.settings())
+	var link = MorningAlert.logger_link(App.saved)
+	if link == "":
+		App.toast("Set up the note's script first", "bad", "warning")
+		return
+	var topic = _ensure_topic()
+	var res = await MorningAlert.send(self, "Tiny Titan logger", "Tap to open your logger. Then in the browser menu: Add to Home screen, for one tap at the gym.", topic, m.server, "", link)
+	App.toast(("Sent to %s: open it on your phone" % topic) if res.ok else "Not sent: %s" % str(res.error), "good" if res.ok else "bad", "check" if res.ok else "warning")
+
+
+func _copy_logger() -> void:
+	Sfx.tick()
+	DisplayServer.clipboard_set(MorningAlert.logger_link(App.saved))
+	App.toast("Logger link copied", "good", "check")
 
 
 func _on_clear_auto(on) -> void:

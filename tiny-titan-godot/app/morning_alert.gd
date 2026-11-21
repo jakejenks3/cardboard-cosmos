@@ -37,6 +37,15 @@ static func settings(saved_settings: Dictionary) -> Dictionary:
 		"evening": bool(m.get("evening", false)), "eveningTime": str(m.get("eveningTime", DEFAULT_EVENING)), "recap": bool(m.get("recap", true))}
 
 
+## The phone logger's link (the note's script serves it), or "" when the
+## note's script is not set up.
+static func logger_link(saved: Dictionary) -> String:
+	var c = saved.get("inbox", {}).get("clear", {}) if saved.get("inbox") is Dictionary else {}
+	if not (c is Dictionary) or not DocClear.looks_right(str(c.get("url", ""))) or str(c.get("token", "")) == "":
+		return ""
+	return DocClear.logger_url(str(c.url), str(c.token))
+
+
 ## The phone note's link to open on a tap: the Google Doc's own link, or "".
 static func note_link(saved: Dictionary) -> String:
 	var src = str(saved.get("inbox", {}).get("source", "")).strip_edges() if saved.get("inbox") is Dictionary else ""
@@ -146,7 +155,7 @@ static func message(saved: Dictionary, today: String) -> Dictionary:
 
 ## Post a notification to the ntfy topic. Awaitable: {"ok", "code", "error"}.
 ## `node`: anything in the scene tree (the request is a child of it while it runs).
-static func send(node: Node, title: String, text: String, topic: String, server: String = SERVER, click: String = "") -> Dictionary:
+static func send(node: Node, title: String, text: String, topic: String, server: String = SERVER, click: String = "", logger: String = "") -> Dictionary:
 	if topic.strip_edges() == "":
 		return {"ok": false, "code": 0, "error": "No topic"}
 	var http = HTTPRequest.new()
@@ -154,10 +163,16 @@ static func send(node: Node, title: String, text: String, topic: String, server:
 	node.add_child(http)
 	# Header values must be plain ASCII: the title is kept to letters, digits and dashes.
 	var headers = ["Title: %s" % title.to_ascii_buffer().get_string_from_ascii(), "Tags: muscle", "Content-Type: text/plain; charset=utf-8"]
+	var actions = []
+	if logger.begins_with("https://") or logger.begins_with("http://127.0.0.1"):
+		# The logger first: a tap logs the workout.
+		actions.append("view, Log workout, %s" % logger)
 	if click.begins_with("https://"):
-		# A tap opens the phone note; a button says so.
-		headers.append("Click: %s" % click)
-		headers.append("Actions: view, Open note, %s" % click)
+		# A tap opens the phone note (or the logger when there is one).
+		headers.append("Click: %s" % (logger if not actions.is_empty() else click))
+		actions.append("view, Open note, %s" % click)
+	if not actions.is_empty():
+		headers.append("Actions: %s" % "; ".join(PackedStringArray(actions)))
 	var err = http.request("%s/%s" % [server.trim_suffix("/"), topic.strip_edges()], PackedStringArray(headers), HTTPClient.METHOD_POST, text)
 	if err != OK:
 		http.queue_free()

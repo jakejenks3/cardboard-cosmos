@@ -60,11 +60,12 @@ func _run() -> void:
 	# The request needs the tree running: wait for the first frame.
 	await process_frame
 	if write_plan:
-		var wrote = await DocClear.send_plan(root, str(c.url), str(c.token), plan, str(saved.get("settings", {}).get("weightUnit", "kg")))
+		var wrote = await DocClear.send_plan(root, str(c.url), str(c.token), plan, str(saved.get("settings", {}).get("weightUnit", "kg")),
+			DocClear.plan_info(plan, saved.get("sessions", []), saved.get("settings", {})))
 		print("MORNING plan in the note: %s" % JSON.stringify(wrote))
 		if wrote.ok and int(wrote.get("planned", 0)) > 0:
 			msg.text += "\nToday's plan is in your note: type the reps."
-	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved))
+	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved), MorningAlert.logger_link(saved))
 	print("MORNING sent: %s" % JSON.stringify(res))
 	quit(0 if res.ok else 1)
 
@@ -102,6 +103,6 @@ func _evening(args: Array, dry: bool) -> void:
 		print("EVENING: before noon, nothing sent")
 		quit(0)
 		return
-	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved))
+	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved), MorningAlert.logger_link(saved))
 	print("EVENING sent: %s" % JSON.stringify(res))
 	quit(0 if res.ok else 1)

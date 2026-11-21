@@ -104,8 +104,93 @@ func _run() -> void:
 	ok(DocClear.script_for(token).begins_with("/** @OnlyCurrentDoc */"), "the script asks Google for this doc only")
 
 	await _with_stub(rows, plan, token)
+	await _logger_api(token)
 	print("DOCCLEAR: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
+
+
+# ---------------------------------------------------------------------------
+# The phone logger's calls, against a pretend doc on 11/22 (needs Node.js)
+# ---------------------------------------------------------------------------
+
+func _api(host: Node, base: String, token: String, fn: String, args: Array):
+	return await _fetch(host, base + "/exec?token=%s&api=%s&args=%s" % [token, fn, JSON.stringify([token] + args).uri_encode()])
+
+
+func _logger_api(token: String) -> void:
+	var out = []
+	if OS.execute("node", ["--version"], out) != 0:
+		print("SKIP  the logger: Node.js is not installed")
+		return
+	var mk = QuickLog.PLAN_MARK + " "
+	var doc = [HEAD, [mk + "11/22", "", "", "", "", ""], [mk + "Chest Fly", "Gym cable", "35", "", "", ""],
+		[mk + "(PT) Calf Stretch", "Slant board", "", "", "", ""], ["", "", "", "", "", ""], ["", "", "", "", "", ""]]
+	var dir = OS.get_temp_dir().path_join("tt_logger_%d" % (Time.get_ticks_usec() % 100000))
+	DirAccess.make_dir_recursive_absolute(dir)
+	var f = FileAccess.open(dir.path_join("script.js"), FileAccess.WRITE)
+	f.store_string(DocClear.script_for(token))
+	f.close()
+	f = FileAccess.open(dir.path_join("doc.json"), FileAccess.WRITE)
+	f.store_string(JSON.stringify([doc]))
+	f.close()
+	var port = 20000 + randi() % 2000
+	var pid = OS.create_process("node", [ProjectSettings.globalize_path("res://tests/doc_clear_stub.js"), dir.path_join("script.js"), dir.path_join("doc.json"), str(port), "2026-11-22"])
+	var host = Node.new()
+	root.add_child(host)
+	var base = "http://127.0.0.1:%d" % port
+	var t = null
+	for i in range(60):
+		t = await _api(host, base, token, "today", [])
+		if t is Dictionary:
+			break
+		await create_timer(0.1).timeout
+	ok(t is Dictionary and t.ok and t.date == "11/22" and t.items.size() == 2 and t.items[0].ex == "Chest Fly" and t.items[0].planned and t.items[1].ex == "(PT) Calf Stretch" and t.cols.sets.map(func(x): return int(x)) == [3, 4],
+		"the logger reads today: the planned rows, the Set columns", t)
+	ok(not (await _api(host, base, "nope", "today", []) as Dictionary).ok, "a wrong token reads nothing")
+	var r1 = await _api(host, base, token, "logSet", [2, "35", 12])
+	var r2 = await _api(host, base, token, "logSet", [2, "35", 11])
+	var r3 = await _api(host, base, token, "logSet", [2, "40", 8])
+	var st = (await _fetch(host, base + "/state"))[0]
+	ok(r1.ok and r2.ok and r3.ok and st[2] == [mk + "Chest Fly", "Gym cable", "35", "12", "11", ""] and st[3] == ["", "", "40", "8", "", ""] and st[4][0] == mk + "(PT) Calf Stretch",
+		"sets go into the Set cells; another weight gets a row of its own under it", st.slice(1, 6))
+	var h = await _api(host, base, token, "logSet", [4, "30\"", 1])
+	await _api(host, base, token, "logSet", [4, "30\"", 1])
+	var a1 = await _api(host, base, token, "addRow", ["Bicep Curl", "Dumbbell", "25"])
+	var a2 = await _api(host, base, token, "addLine", ["v4 send"])
+	var a3 = await _api(host, base, token, "addLine", ["read 20 pages"])
+	t = await _api(host, base, token, "today", [])
+	ok(h.ok and a1.ok and a2.ok and a3.ok and t.items.size() == 3 and t.items[2].ex == "Bicep Curl" and t.lines.map(func(l): return l.text) == ["v4 send", "read 20 pages"], "holds, an exercise added, a climb and pages", [t.items.map(func(x): return x.ex), t.lines])
+	var u = await _api(host, base, token, "clearCell", [3, 3, "8"])
+	var u_bad = await _api(host, base, token, "clearCell", [2, 3, "99"])
+	st = (await _fetch(host, base + "/state"))[0]
+	ok(u.ok and st[3].all(func(x): return str(x) == "") and not u_bad.ok and str(st[2][3]) == "12", "undo empties a cell (a row of more sets left empty goes too), only when it still says what was logged", st.slice(2, 4))
+	var fe = await _api(host, base, token, "feel", [1])
+	var props = await _fetch(host, base + "/props")
+	ok(fe.ok and str(props.get("feels", "")).contains("2026-11-22"), "how you feel is kept", props)
+	var page = await _fetch_text(host, base + "/exec?token=%s&page=log" % token)
+	ok(page.contains("LOG SET") and page.contains("const TOKEN = '%s'" % token), "the logger page is served with the token in it")
+	# What the game reads from it.
+	var parsed = QuickLog.parse_any(PhoneInbox.html_to_text(export_html(st)), {"today": "2026-11-22", "weightUnit": "lb", "distanceUnit": "mi", "exercises": Summary.DEFAULT_EXERCISES})
+	var kinds = parsed.entries.map(func(e): return "%s %s" % [e.kind, e.summary])
+	ok(parsed.entries.size() == 3 and str(kinds).contains("Chest Fly - Gym cable 12,11 @ 35 lb") and str(kinds).contains("2 × 30 s hold") and not str(kinds).contains("Bicep Curl") and str(kinds).contains("pages") and str(kinds).contains("V4 send") and parsed.problems.is_empty(),
+		"the game reads it all: sets, the hold, the climb, the pages; the added exercise with no sets yet is skipped, no problems", [kinds, parsed.problems])
+	await _fetch(host, base + "/quit")
+	if pid > 0 and OS.is_process_running(pid):
+		OS.kill(pid)
+	for n in ["script.js", "doc.json"]:
+		DirAccess.remove_absolute(dir.path_join(n))
+	DirAccess.remove_absolute(dir)
+
+
+func _fetch_text(host: Node, url: String) -> String:
+	var http = HTTPRequest.new()
+	host.add_child(http)
+	if http.request(url) != OK:
+		http.queue_free()
+		return ""
+	var res = await http.request_completed
+	http.queue_free()
+	return (res[3] as PackedByteArray).get_string_from_utf8()
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +248,7 @@ func _with_stub(rows: Array, plan: Array, token: String) -> void:
 	ok(again.ok and int(again.cleared) == 0, "sending it again clears nothing more", again)
 
 	# The day's plan written into the table (script version 2), read and cleared.
-	ok(int(ping.get("version", 0)) == 2, "the script says it writes plans (version 2)", ping)
+	ok(int(ping.get("version", 0)) == DocClear.SCRIPT_VERSION, "the script says its version (plans, the logger)", ping)
 	var day_plan = {"date": "2026-11-22", "lifts": [
 		{"name": "Chest Fly - Gym cable", "pt": false, "last": {"sets": [{"reps": 12, "weightKg": 15.0}, {"reps": 12, "weightKg": 15.0}]}},
 		{"name": "Calf Stretch - Slant board", "pt": true, "last": {"sets": [{"reps": 3, "weightKg": 0.0, "holdSec": 30}]}}],
