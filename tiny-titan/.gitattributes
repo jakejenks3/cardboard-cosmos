@@ -1,0 +1,4 @@
+# Keep the Windows launcher's CRLF line endings exactly as committed.
+*.bat -text
+*.command text eol=lf
+*.sh text eol=lf
