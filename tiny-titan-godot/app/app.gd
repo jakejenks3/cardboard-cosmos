@@ -147,6 +147,97 @@ func set_pt(lift_name: String, on: bool) -> void:
 	changed.emit()
 
 
+## Climbing projects (game/projects.gd), as stored: open, sent and set aside.
+func projects() -> Array:
+	return saved.projects
+
+
+func open_projects() -> Array:
+	return saved.projects.filter(func(p): return Projects.is_open(p))
+
+
+## Pick a new project. Returns it, or null when MAX_OPEN are already open.
+func add_project(grade: int, yds: String, name: String):
+	if open_projects().size() >= Projects.MAX_OPEN:
+		return null
+	var p = Projects.new_project(grade, yds, name, today)
+	saved.projects.append(p)
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+	return p
+
+
+func _project(id: String):
+	for p in saved.projects:
+		if str(p.id) == id:
+			return p
+	return null
+
+
+## The project is sent: on `date`, in session `session_id` (may be ""). Pays
+## Projects.SEND_XP as a claim, so the XP and coins come from the replay.
+func send_project(id: String, session_id: String, date: String) -> void:
+	var p = _project(id)
+	if p == null or str(p.sent) != "":
+		return
+	p.sent = date if date != "" else today
+	p.sessionId = session_id
+	p.aside = ""
+	var qid = "project:" + id
+	if not saved.claims.any(func(c): return str(c.get("questId", "")) == qid):
+		saved.claims.append({"id": Rng.uid("q"), "questId": qid, "xp": Projects.SEND_XP, "claimedAt": now_ms(), "date": str(p.sent)})
+	_commit()
+
+
+## Set a project aside (on = true) or bring it back. A sent project brought
+## back is open again (its XP stays: it was earned).
+func set_project_aside(id: String, on: bool) -> void:
+	var p = _project(id)
+	if p == null:
+		return
+	if on:
+		p.aside = today
+	else:
+		if not Projects.is_open(p) and open_projects().size() >= Projects.MAX_OPEN:
+			return
+		p.aside = ""
+		p.sent = ""
+		p.sessionId = ""
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## Rename a project (its words; the grade stays).
+func rename_project(id: String, name: String) -> void:
+	var p = _project(id)
+	if p == null:
+		return
+	p.name = name.strip_edges()
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## The reel's project cards for newly logged climbs: "was it your project?"
+## for a send of its grade, else how many sessions it has been.
+func _project_events(fresh: Array) -> Array:
+	var out = []
+	var seen = {}
+	for s in fresh:
+		for p in Projects.sent_in(saved.projects, s):
+			if not seen.has(p.id):
+				seen[p.id] = true
+				out.append({"type": "project", "id": str(p.id), "ask": true, "sessionId": str(s.id), "date": str(s.date)})
+	for s in fresh:
+		for p in Projects.tried_in(saved.projects, s):
+			if not seen.has(p.id):
+				seen[p.id] = true
+				out.append({"type": "project", "id": str(p.id), "ask": false, "sessionId": str(s.id), "date": str(s.date)})
+	return out
+
+
 ## Days a week to aim for with a PT lift.
 func set_pt_goal(lift_name: String, per_week: int) -> void:
 	var at = Pt.mark_of(saved.pt, lift_name)
@@ -386,10 +477,36 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	else:
 		events = Diff.diff_bulk(before, state, fresh)
 	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null, settings()))
+	events = _with_extras(events, _project_events(fresh))
 	var ids = []
 	for s in fresh:
 		ids.append(s.id)
-	result_ready.emit({"key": ",".join(PackedStringArray(ids)), "events": events, "title": title})
+	var res = {"key": ",".join(PackedStringArray(ids)), "events": events, "title": title}
+	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
+		res["replay"] = replay_moves(fresh[0])
+	result_ready.emit(res)
+
+
+## The workout replay of a lift session (the results reel's hero acts it out):
+## up to REPLAY_MAX exercises as {move, variation, sets (in words), pose, n, vol}.
+const REPLAY_MAX = 5
+func replay_moves(session: Dictionary) -> Array:
+	var wu = weight_unit()
+	var fw = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	var out = []
+	for ex in session.get("exercises", []):
+		var sets = LiftTrend.real_sets(ex.get("sets", []))
+		if sets.is_empty():
+			continue
+		var vol = 0.0
+		for st in sets:
+			vol += float(st.get("weightKg", 0.0)) * float(st.get("reps", 0))
+		var sp = LiftNames.split(str(ex.get("name", "")))
+		out.append({"move": str(sp.move), "variation": str(sp.variation), "sets": LiftHistory.describe_sets(sets, fw),
+			"pose": Missions.pose_of(str(ex.get("name", ""))), "n": sets.size(), "vol": vol})
+		if out.size() >= REPLAY_MAX:
+			break
+	return out
 
 
 func update_session(session: Dictionary) -> void:
@@ -449,7 +566,7 @@ func _with_extras(events: Array, extras: Array) -> Array:
 		if ["xp", "import", "bodyxp", "boss"].has(out[i].type):
 			at = i + 1
 	for e in extras:
-		if e.type == "bounty" or e.type == "pr":
+		if e.type == "bounty" or e.type == "pr" or e.type == "project":
 			out.insert(at, e)
 			at += 1
 		else:
@@ -824,6 +941,7 @@ static func empty_saved() -> Dictionary:
 		"updatedAt": 0,
 		"inbox": {"source": "", "imported": {}, "lastChecked": 0, "auto": true, "names": {}},
 		"pt": {},
+		"projects": [],
 	}
 
 
@@ -853,6 +971,7 @@ static func parse_saved(raw):
 			if p is Dictionary and p.get("itemId") is String and (p.get("at") is int or p.get("at") is float) and (p.get("cost") is int or p.get("cost") is float):
 				out.purchases.append({"id": str(p.get("id", "")), "itemId": p.itemId, "cost": int(p.cost), "at": int(p.at), "date": str(p.get("date", ""))})
 	out.reading = Reading.parse_log(o.get("reading"))
+	out.projects = Projects.parse(o.get("projects"))
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)
 	if o.get("activePet") is String:

@@ -270,5 +270,8 @@ func _init() -> void:
 	var text = Missions.morning_text(plan, day, "kg")
 	ok(text.begins_with("Probably a back day.") and text.contains("Lat Pulldown (single arm): ") and text.contains("Try: ") and text.contains("PT: Neck 4 Way"), "the morning message", text)
 	ok(Missions.morning_text(Missions.day_plan([], TODAY, {}), [], "kg") == "No pattern for today yet: anything counts.", "nothing to say: one line")
+	# The workout replay's poses.
+	var poses = [Missions.pose_of("Bench Press - Barbell"), Missions.pose_of("Pull-up"), Missions.pose_of("Squat - Barbell"), Missions.pose_of("Bicep Curl - Dumbbell"), Missions.pose_of("Lateral Raise - Dumbbell"), Missions.pose_of("Plank")]
+	ok(poses == ["press", "pull", "squat", "curl", "press", "flex"], "replay poses: press, pull, squat, curl", poses)
 	print("MISSIONS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

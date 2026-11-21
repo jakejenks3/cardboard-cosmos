@@ -183,6 +183,10 @@ func build() -> void:
 	var pt_card = PtView.card()
 	if pt_card != null:
 		add_child(pt_card)
+	# Climbing projects (game/projects.gd): for a player who climbs.
+	var pj_card = ProjectsView.card()
+	if pj_card != null:
+		add_child(pj_card)
 
 	# --- the four disciplines: one bright tile each ---------------------------
 	var tiles = Kit.grid(4, 8)

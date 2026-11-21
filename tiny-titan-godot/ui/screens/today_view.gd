@@ -378,6 +378,11 @@ static func _other_row(o: Dictionary) -> Control:
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(Kit.clip(TT.DISCIPLINE_META[d].name, 13, Pal.disc(d), true))
 	v.add_child(Kit.clip(str(o.why), 11, Pal.MUTED))
+	if d == "climb":
+		var pj = App.open_projects()
+		if not pj.is_empty():
+			var st = Projects.status(pj[0], App.sessions(), App.today)
+			v.add_child(Kit.clip("Project: %s · %d session%s so far" % [Projects.title(pj[0]), int(st.sessions), "" if int(st.sessions) == 1 else "s"], 11, Pal.CLIMB, true))
 	row.add_child(v)
 	var usual = ""
 	if d == "climb":

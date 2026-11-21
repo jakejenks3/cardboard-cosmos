@@ -537,6 +537,28 @@ is the Windows handoff.
   Trophies): the newest trophies on four wooden shelves (tier-coloured slots, gold and
   platinum twinkle), record plaques (the four strongest lifts by estimated 1RM, the longest
   run and ride, the hardest send, the longest hang) and the companions strolling on a floor.
+- Workout replay (2026-11-21): the results reel of ONE lift session has `replay`
+  (`App.replay_moves`: up to REPLAY_MAX 5 exercises {move, variation, sets, pose, n, vol});
+  the hero at the top does two reps of each (`Missions.pose_of`: "press" push, "pull",
+  "squat" legs, "curl" biceps / forearms, else "flex"; the poses are `HeroFigure`'s, the
+  classic look draws them as idle) with the name and sets under it (a caption of fixed
+  height), then "Workout done · 4 exercises · 20 sets · 14,000 kg moved". A skip ends it.
+- Climbing projects (2026-11-21): `game/projects.gd` (`Projects`, pure). STORED in
+  `saved.projects` = [{id, grade, yds ("" = boulder), name, since, sent, sessionId, aside}]
+  (kept by `App.parse_saved`; nothing is deleted: a project is sent or set aside, "Back on"
+  reopens it). Progress is from the log: every climb session since `since` with an entry of
+  its grade (`matches`: a boulder's V grade, a route's YDS) is a session on it, attempts are
+  its tries, until the send (`status`). `App.add_project` (MAX_OPEN 6), `send_project` (pays
+  SEND_XP 250 as a claim, questId `project:<id>`, once), `set_project_aside`. The reel:
+  `App._project_events` -> card "project" (`ResultsOverlay._project_card`): a send of its
+  grade asks "Was it your project?" (yes: gold, fanfare, fireworks, +XP; "Not this one"),
+  a session that only tried it says which session it was. UI: `ui/screens/projects_view.gd`
+  (`ProjectsView.card()` on the Hero tab under PT, for a player who climbed in the last 45
+  days; `open()` the sheet: open ones with "I sent it!" (the last session that sent its grade)
+  and "Set aside", the form under them (the sheet grows from the bottom, and `_keep_form`
+  scrolls when it is full, so adding one never moves the form), then Sent and Set aside).
+  The Today card's climb row names the open project. Tests: `tests/projects_test.gd`,
+  walkthrough `tests/shots/projects.gd` (year data).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -675,6 +697,7 @@ godot --headless --path . --script res://tests/figure_test.gd
 godot --headless --path . --script res://tests/doc_clear_test.gd
 godot --headless --path . --script res://tests/recovery_test.gd
 godot --headless --path . --script res://tests/plates_test.gd
+godot --headless --path . --script res://tests/projects_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -694,6 +717,7 @@ names (lift names that are not exact: the review's yes / no / another, `new` dat
 detail (a session's detail, a lift's trends, physical therapy, year data),
 progress (a lift's three views: Compare, Progress, Logbook, and the review's history bars, year data),
 today (the Today card, missions, claiming, yesterday's missions, the Morning goals card, year data),
+projects (climbing projects: the card, the sheet, the reel's "was it your project?", year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

@@ -178,6 +178,22 @@ static func kind_of(lift_name: String) -> String:
 	return ""
 
 
+## The hero's pose for a lift in the workout replay: "press" (push), "curl"
+## (biceps, forearms), "pull", "squat" (legs) or "flex" (anything else).
+static func pose_of(lift_name: String) -> String:
+	var part = part_of(lift_name)
+	if part == "biceps" or part == "forearms":
+		return "curl"
+	match kind_of(lift_name):
+		"push":
+			return "press"
+		"pull":
+			return "pull"
+		"legs":
+			return "squat"
+	return "flex"
+
+
 ## Does a lift of kind `lift_kind` belong on a day of kind `day_kind`?
 static func fits(lift_kind: String, day_kind: String) -> bool:
 	if day_kind == "upper":

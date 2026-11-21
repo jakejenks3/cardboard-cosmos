@@ -139,7 +139,8 @@ static func metrics(i: Dictionary) -> Dictionary:
 	# --- heights, from the floor up --------------------------------------------
 	var base: int = H - 2
 	var foot_h: int = 2
-	var leg_len: int = 23 + TTUtil.jsround(b * 2.0)
+	# A squat (the workout replay): the hips sink, the knees go out.
+	var leg_len: int = 23 + TTUtil.jsround(b * 2.0) - (6 if pose == "squat" else 0)
 	var torso_len: int = 19 + TTUtil.jsround(b * 2.0)
 	var ankle_y: float = base - foot_h - 0.5
 	var hip_y: float = ankle_y - leg_len
@@ -181,6 +182,23 @@ static func metrics(i: Dictionary) -> Dictionary:
 		if pose == "flex":
 			elbow = Vector2(sh.x + side * ua_len * 0.95, sh.y - 1.0)
 			wrist = Vector2(elbow.x - side * 1.0, elbow.y - fa_len + 0.5)
+		elif pose == "press":
+			# pressing overhead (the workout replay)
+			elbow = Vector2(sh.x + side * ua_len * 0.4, sh.y - ua_len * 0.78)
+			wrist = Vector2(elbow.x + side * 0.5, elbow.y - fa_len * 0.82)
+		elif pose == "pull":
+			# hanging from a bar, hands wide
+			elbow = Vector2(sh.x + side * ua_len * 0.8, sh.y - ua_len * 0.5)
+			wrist = Vector2(elbow.x + side * 1.0, elbow.y - fa_len * 0.8)
+		elif pose == "squat":
+			# hands on the bar across the shoulders
+			elbow = Vector2(sh.x + side * ua_len * 0.75, sh.y + 2.0)
+			wrist = Vector2(elbow.x - side * 1.2, sh.y - 2.0)
+		elif pose == "curl":
+			# the top of a curl: elbows at the sides, forearms up
+			var cs: float = 1.0 + lift * 1.4 + b * 0.6
+			elbow = Vector2(sh.x + side * cs, sh.y + ua_len)
+			wrist = Vector2(elbow.x + side * 0.6, elbow.y - fa_len * 0.8)
 		else:
 			# Hanging just off the lats: the arm may overlap their edge (it is in front).
 			var spread: float = 1.0 + lift * 1.4 + b * 0.6
@@ -200,7 +218,7 @@ static func metrics(i: Dictionary) -> Dictionary:
 	var low_jx: float = maxf(hip_jx - 0.3, ca_r + 0.8)
 	var legs = []
 	for side in [-1, 1]:
-		legs.append({"side": side, "hip": Vector2(ax + side * hip_jx, hip_y), "knee": Vector2(ax + side * low_jx, knee_y),
+		legs.append({"side": side, "hip": Vector2(ax + side * hip_jx, hip_y), "knee": Vector2(ax + side * (low_jx + (2.5 if pose == "squat" else 0.0)), knee_y),
 			"ankle": Vector2(ax + side * (low_jx - 0.3), ankle_y)})
 
 	var g = {"b": b, "lift": lift, "climb": climb, "run": run, "ride": ride, "ax": ax, "base": base, "foot_h": foot_h,

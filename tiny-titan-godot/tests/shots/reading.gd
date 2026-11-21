@@ -142,6 +142,8 @@ func run(main: Node, tree: SceneTree) -> void:
 	var nd = Dates.add_days(today, -40)
 	var head = "%d/%d" % [int(nd.substr(5, 2)), int(nd.substr(8, 2))]
 	var pages_before = Reading.pages(App.state)
+	# The review is the point here: nothing is imported on its own.
+	App.update_inbox({"autoImport": false})
 	var r1 = App.inbox.check_text(head + "
 read 20 pages
 bench 3x5 @ 60")

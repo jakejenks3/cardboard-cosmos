@@ -44,7 +44,7 @@ func _init() -> void:
 	var edge = []
 	var sizes = {}
 	for lv in levels:
-		for pose in ["idle", "flex"]:
+		for pose in ["idle", "flex", "press", "pull", "squat", "curl"]:
 			var m = HeroFigure.metrics(input(lv, pose))
 			for k in keys:
 				if not m.has(k):
@@ -91,7 +91,7 @@ func _init() -> void:
 	HeroBody.draw_hero(plain, input([30, 30, 15, 15, 12], "idle"), {"visuals": base_v})
 	var unchanged = []
 	for it in Items.all():
-		for pose in ["idle", "flex"]:
+		for pose in ["idle", "flex", "press", "pull", "squat", "curl"]:
 			var v = base_v.duplicate()
 			v[it.slot] = it.visual
 			var p = Pix.new(HeroFigure.W, HeroFigure.H)

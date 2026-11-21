@@ -50,11 +50,18 @@ var _hero_bar = null
 var _count_tween = null
 var _equip_buttons: Array = []  # [{"button", "item"}]
 var _pet_buttons: Array = []  # [{"button", "pet"}]
+## The workout replay (a lift session): App.replay_moves, the caption under the
+## hero and whether it is still playing.
+var _replay: Array = []
+var _cap_a: Label = null
+var _cap_b: Label = null
+var _replaying: bool = false
 
 
 func setup(result: Dictionary) -> void:
 	_title = Icons.strip_emoji(str(result.get("title", "")))
 	_events = result.get("events", [])
+	_replay = result.get("replay", [])
 	for e in _events:
 		match e.type:
 			"xp":
@@ -82,6 +89,8 @@ func setup(result: Dictionary) -> void:
 		_hero_pair = _body_ev.hero
 	_build()
 	_run()
+	if not _replay.is_empty():
+		_play_replay()
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +170,8 @@ func _build_head() -> Control:
 	_hero.setup(App.state, App.profile(), App.loadout(), App.active_pet(), false)
 	_hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	head.add_child(_hero)
+	if not _replay.is_empty():
+		head.add_child(_caption())
 
 	# The XP as big as it fits: the number the whole reel is about.
 	var widest = PixelFont.measure("+%s XP" % Xp.fmt_int(_amount)).x
@@ -230,6 +241,69 @@ func _set_count(v: float) -> void:
 	var t = PixelFont.tex("+%s XP" % Xp.fmt_int(TTUtil.jsround(v)), _xp_color)
 	_xp_rect.texture = t
 	_xp_rect.custom_minimum_size = Vector2(t.get_width() * _xp_scale, t.get_height() * _xp_scale)
+
+
+# ---------------------------------------------------------------------------
+# Workout replay: the hero does two reps of each exercise (press, pull, squat,
+# curl) while its name and sets show under it, then the whole workout in a line.
+# The caption keeps its height, so nothing below it moves.
+# ---------------------------------------------------------------------------
+
+func _caption() -> Control:
+	var box = Kit.vbox(0)
+	box.custom_minimum_size = Vector2(0, 40)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cap_a = Kit.clip("", 16, Pal.LIFT, true)
+	_cap_a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cap_b = Kit.clip("", 12, Pal.MUTED)
+	_cap_b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_cap_a)
+	box.add_child(_cap_b)
+	return box
+
+
+func _play_replay() -> void:
+	var gen = _gen
+	_replaying = true
+	var n = _replay.size()
+	for i in range(n):
+		var mv = _replay[i]
+		_cap_a.text = str(mv.move).to_upper()
+		var bits = PackedStringArray(["%d of %d" % [i + 1, n]])
+		if str(mv.variation) != "":
+			bits.append(str(mv.variation))
+		if str(mv.sets) != "":
+			bits.append(str(mv.sets))
+		_cap_b.text = "  ·  ".join(bits)
+		Kit.pop(_cap_a, 1.08, 0.2)
+		for rep in range(2):
+			_hero.forced_pose = str(mv.pose)
+			await _wait(0.45)
+			if not _alive(gen):
+				return
+			_hero.forced_pose = "idle"
+			await _wait(0.3)
+			if not _alive(gen):
+				return
+	_end_replay()
+
+
+## The replay's last word: the whole workout, and the hero back to its pose.
+func _end_replay() -> void:
+	if not _replaying:
+		return
+	_replaying = false
+	var sets = 0
+	var vol = 0.0
+	for mv in _replay:
+		sets += int(mv.n)
+		vol += float(mv.vol)
+	_cap_a.text = "WORKOUT DONE"
+	var bits = PackedStringArray(["%d exercise%s" % [_replay.size(), "" if _replay.size() == 1 else "s"], "%d sets" % sets])
+	if vol > 0.0:
+		bits.append("%s moved" % Fmt.fmt_weight(vol, App.weight_unit()))
+	_cap_b.text = "  ·  ".join(bits)
+	_hero.forced_pose = "flex" if (_leveled or _phase == "done") else "idle"
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +472,7 @@ func _skip() -> void:
 		_ensure_hero_bar().finish_now()
 	for i in range(_shown, _cards.size()):
 		_reveal(i, false)
+	_end_replay()
 	_set_done()
 
 
@@ -407,7 +482,8 @@ func _set_done() -> void:
 	Kit.style_button(_footer_btn, "primary", "lg")
 	_footer_btn.add_theme_font_size_override("font_size", 20)
 	Kit.pop(_footer_btn, 1.06, 0.3)
-	_hero.forced_pose = "flex"
+	if not _replaying:
+		_hero.forced_pose = "flex"
 
 
 func _close() -> void:
@@ -594,6 +670,8 @@ func _build_card(ev: Dictionary, animate: bool):
 			return _finish(c, _icon_cell("medal", rc))
 		"stage":
 			return _stage_card(ev)
+		"project":
+			return _project_card(ev)
 		"pr":
 			var c = _rcard(Pal.ACCENT)
 			c.main.add_child(_kicker("NEW RECORD", Pal.ACCENT))
@@ -629,6 +707,59 @@ func _build_card(ev: Dictionary, animate: bool):
 			c.panel.tooltip_text = "Consistency is the real superpower."
 			return _finish(c, _icon_cell("flame", Pal.ACCENT2))
 	return null
+
+
+## A climbing project (game/projects.gd). A send of its grade asks "was it
+## your project?": yes is the big moment (gold, fanfare, fireworks, +XP); a
+## session that only tried it says how long it has been.
+func _project_card(ev: Dictionary):
+	var p = null
+	for one in App.projects():
+		if str(one.id) == str(ev.id):
+			p = one
+	if p == null:
+		return null
+	var st = Projects.status(p, App.sessions(), App.today)
+	var c = _rcard(Pal.CLIMB, bool(ev.ask))
+	var kick = _kicker("PROJECT", Pal.CLIMB)
+	c.main.add_child(kick)
+	c.main.add_child(_title_l(Projects.title(p)))
+	var sub = Kit.para("", 13, Pal.with_alpha(Pal.TEXT, 0.8))
+	c.main.add_child(sub)
+	var badge = ProjectsView.grade_badge(p, 44)
+	var card = _finish(c, badge)
+	if not bool(ev.ask):
+		sub.text = "Session %d on it · %s so far. It will go." % [int(st.sessions), "%d tries" % int(st.tries) if int(st.tries) != 1 else "1 try"]
+		return card
+	sub.text = "You sent a %s. Was it your project?" % Projects.grade_text(p)
+	var keys = Kit.hbox(8)
+	var yes = Kit.button("Yes, I sent it!", "primary", Callable(), "md")
+	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var no = Kit.button("Not this one", "ghost", Callable(), "md")
+	keys.add_child(yes)
+	keys.add_child(no)
+	c.main.add_child(keys)
+	yes.pressed.connect(func():
+		App.send_project(str(p.id), str(ev.sessionId), str(ev.date))
+		keys.queue_free()
+		var done = Projects.status(p, App.sessions(), App.today)
+		var gold = _kicker("PROJECT SENT", Pal.ACCENT)
+		c.main.add_child(gold)
+		c.main.move_child(gold, kick.get_index())
+		kick.queue_free()
+		c.panel.accent(Pal.ACCENT, true)
+		var over = "picked and sent the same day" if int(done.days) == 0 else ("over %d day%s" % [int(done.days), "" if int(done.days) == 1 else "s"])
+		sub.text = "%d session%s, %s. +%d XP" % [int(done.sessions), "" if int(done.sessions) == 1 else "s", over, Projects.SEND_XP]
+		Sfx.pr()
+		Sfx.level_up()
+		_confetti.burst(1.4)
+		_shake()
+		_fireworks(card))
+	no.pressed.connect(func():
+		Sfx.tap()
+		keys.queue_free()
+		sub.text = "Still on it: session %d. It will go." % int(st.sessions))
+	return card
 
 
 func _boss_card(ev: Dictionary, animate: bool) -> Control:
