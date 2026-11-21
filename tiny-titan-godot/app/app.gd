@@ -53,12 +53,17 @@ var editing_body_id = null
 var inbox = null
 
 var _quests = null
+var _plan = null
 var _photo_cache = {}
 ## Set when the save file could not be written (shown once to the player).
 var _write_failed = false
 
 
 func _ready() -> void:
+	if OS.get_cmdline_args().has("res://tools/morning.gd"):
+		# The morning message (tools/morning.gd) reads the save by itself and
+		# must leave everything alone: no load, no backup, no phone note.
+		return
 	var custom = OS.get_environment("TINY_TITAN_DATA")
 	if custom != "":
 		DATA_DIR = custom.trim_suffix("/") + "/"
@@ -243,21 +248,41 @@ func body_by_id(id):
 	return null
 
 
-## {"daily": [...], "weekly": [...]} for today (cached until the data changes).
+## What the missions read from the save (Missions.daily / weekly).
+func mission_data() -> Dictionary:
+	return {"sessions": saved.sessions, "pt": pt(), "settings": saved.settings, "reading": reading()}
+
+
+## {"daily": [...], "weekly": [...], "yesterday": [...]} for today (cached until
+## the data changes). The missions are made from the player's own log
+## (Missions); "yesterday" holds yesterday's finished missions not claimed yet,
+## since a workout is often imported the day after.
 func quests() -> Dictionary:
 	if _quests == null:
+		var data = mission_data()
+		var yday = Dates.add_days(today, -1)
 		_quests = {
-			"daily": Quests.daily_quests(today, state, saved.sessions, saved.claims),
-			"weekly": Quests.weekly_quests(Dates.week_key(today), state, saved.sessions, saved.claims, saved.settings),
+			"daily": Missions.daily(today, data, state, saved.claims),
+			"weekly": Missions.weekly(Dates.week_key(today), today, data, state, saved.claims),
+			"yesterday": Missions.daily(yday, data, state, saved.claims).filter(func(m): return m.done and not m.claimed),
 		}
+		for m in _quests.yesterday:
+			m.desc = str(m.desc).replace("today", "yesterday")
 	return _quests
+
+
+## What the player will probably do today (Missions.day_plan; cached).
+func plan() -> Dictionary:
+	if _plan == null:
+		_plan = Missions.day_plan(saved.sessions, today, pt())
+	return _plan
 
 
 ## How many finished quests are waiting to be claimed.
 func claimable_quests() -> int:
 	var q = quests()
 	var n = 0
-	for x in q.daily + q.weekly:
+	for x in q.daily + q.weekly + q.get("yesterday", []):
 		if x.done and not x.claimed:
 			n += 1
 	return n
@@ -937,4 +962,5 @@ func _recompute() -> void:
 	})
 	perks = Perks.compute_perks(state, saved.loadout, saved.get("activePet"))
 	_quests = null
+	_plan = null
 	Sfx.enabled = bool(saved.settings.get("sound", true))

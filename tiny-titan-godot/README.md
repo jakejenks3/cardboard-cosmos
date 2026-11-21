@@ -169,6 +169,20 @@ Click any exercise for the lift's page, which has three views:
 - **Logbook**: a calendar of the days you did it (bigger days brighter, new bests ringed in
   gold) and every session as a row of blocks, one per set, month by month.
 
+**Today and missions.** The Hero tab opens with Today: what you will probably do, worked out
+from your last six weeks (the lifts you do on this weekday, or that are due by their usual gap),
+the body area of the day ("Back day"), what to aim for on each lift, a movement for that area you
+have never done, the physical therapy still to do this week and your usual climb, run or ride.
+The missions come from the same plan: show up, beat last time on your two likeliest lifts, try
+something new, do your PT, the day's climb or run, read; each week: train on your goal of days,
+set a record, try a new movement, PT on target, your usual other activity, XP and a check-in.
+None is about minutes. Missions finished yesterday but not claimed wait under "From yesterday".
+
+**Morning goals on your phone.** Settings → Morning goals sends Today to your phone every
+morning: install the free ntfy app, subscribe to the topic Settings shows, press Send a test,
+then turn it on (this computer sends it at that time when it is on or asleep; nothing is sent
+until you turn it on).
+
 **Physical therapy.** Write `(PT)` in front of an exercise (`(PT) neck 4 way - 3x20@10`), in
 the phone note or in the Log tab, and that lift becomes a physical therapy exercise; the
 tag is not part of its name. The switch on a lift's page does the same. The Hero tab then
@@ -311,6 +325,7 @@ godot --headless --path . --script res://tests/reading_test.gd     # pages read
 godot --headless --path . --script res://tests/lift_match_test.gd  # the words of a typed name
 godot --headless --path . --script res://tests/lift_names_test.gd  # movement + variation names
 godot --headless --path . --script res://tests/lift_library_test.gd # the lift library
+godot --headless --path . --script res://tests/missions_test.gd    # the day's plan and missions
 godot --headless --path . --script res://tests/lift_trend_test.gd  # a lift over time; physical therapy
 godot --headless --path . --script res://tests/bounty_test.gd      # weekly bounty, coins, shop
 ```

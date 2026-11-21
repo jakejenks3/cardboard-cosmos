@@ -74,6 +74,7 @@ func fill() -> void:
 
 	# --- phone inbox ----------------------------------------------------------------
 	_build_inbox()
+	_build_morning()
 
 	# --- data ---------------------------------------------------------------------
 	var photos = App.referenced_photo_ids().size()
@@ -217,6 +218,109 @@ func _build_inbox() -> void:
 		remembered.add_child(forget)
 		card.add(remembered)
 	add_child(card)
+
+
+## Morning goals on the phone (MorningAlert): off until the player turns it on.
+func _build_morning() -> void:
+	var m = MorningAlert.settings(App.settings())
+	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_morning_how.bind(m.topic), "sm"))
+	card.set_meta("morning_section", true)
+	card.add(Kit.muted_para("Today's plan on your phone when you wake up: what you will probably do, what to beat, PT and something new to try.", 12))
+	var row = Kit.hbox(8)
+	row.add_child(Kit.vcenter(Icons.rect("sun", 20)))
+	var l = Kit.label("Every day at", 14, null, true)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(l)
+	row.add_child(Kit.vcenter(Kit.icon_button("minus", _morning_time.bind(-30), "30 minutes earlier", 28)))
+	row.add_child(Kit.vcenter(PixelFont.rect(m.time, 2, Pal.ACCENT)))
+	row.add_child(Kit.vcenter(Kit.icon_button("plus", _morning_time.bind(30), "30 minutes later", 28)))
+	row.add_child(Kit.spacer())
+	row.add_child(Kit.switch(m.on, _on_morning, "Send it every morning"))
+	card.add(row)
+	var topic = Kit.hbox(6)
+	topic.add_child(Kit.vcenter(Icons.rect("speech", 16)))
+	topic.add_child(Kit.clip("Topic: %s" % (m.topic if m.topic != "" else "(made when you first send)"), 12, Pal.MUTED))
+	card.add(topic)
+	var keys = Kit.hbox(8)
+	keys.add_child(Kit.expand(Kit.button("Send a test", "secondary", _morning_test, "md", "bolt")))
+	keys.add_child(Kit.button("Copy topic", "ghost", _copy_topic, "md"))
+	card.add(keys)
+	add_child(card)
+
+
+static func show_morning_how(topic: String) -> void:
+	SettingsPanel.show_info("Morning goals", [
+		"1. Install the free app ntfy on your phone (App Store or Google Play).",
+		"2. In ntfy, tap + and subscribe to your topic: %s (Copy topic puts it on the clipboard)." % (topic if topic != "" else "press Send a test once to make it"),
+		"3. Press Send a test: a notification with today's plan should arrive.",
+		"4. Turn the switch on. Every morning at that time this computer works out the day's plan from your log and sends it.",
+		"The computer has to be on or asleep (it is woken), not shut down. The message goes through ntfy.sh, a free public relay: the topic is a long random name, so only someone who knows it can read it. It holds lift names and weights, nothing else.",
+	])
+
+
+func _ensure_topic() -> String:
+	var m = MorningAlert.settings(App.settings())
+	if m.topic == "":
+		var mm = App.settings().get("morning", {}).duplicate() if App.settings().get("morning") is Dictionary else {}
+		mm["topic"] = MorningAlert.new_topic()
+		App.update_settings({"morning": mm})
+		return str(mm.topic)
+	return m.topic
+
+
+func _morning_patch(patch: Dictionary) -> void:
+	var mm = App.settings().get("morning", {}).duplicate() if App.settings().get("morning") is Dictionary else {}
+	mm.merge(patch, true)
+	App.update_settings({"morning": mm})
+
+
+func _morning_time(minutes: int) -> void:
+	Sfx.tick()
+	var m = MorningAlert.settings(App.settings())
+	var parts = m.time.split(":")
+	var total = clampi(int(parts[0]) * 60 + int(parts[1]) + minutes, 4 * 60, 11 * 60 + 30)
+	var t = "%02d:%02d" % [int(total / 60.0), total % 60]
+	_morning_patch({"time": t})
+	if m.on:
+		var res = MorningAlert.schedule(true, t)
+		if not res.ok:
+			App.toast("Could not move the morning task: %s" % str(res.output).substr(0, 80), "bad", "warning")
+	call_deferred("_refill")
+
+
+func _on_morning(on) -> void:
+	Sfx.tick()
+	var topic = _ensure_topic()
+	var m = MorningAlert.settings(App.settings())
+	var res = MorningAlert.schedule(bool(on), m.time)
+	if res.ok:
+		_morning_patch({"on": bool(on)})
+		App.toast(("Every morning at %s it goes to %s" % [m.time, topic]) if on else "Morning goals off", "good" if on else "info", "sun")
+	else:
+		App.toast("Could not set it up: %s" % str(res.output).substr(0, 80), "bad", "warning")
+	call_deferred("_refill")
+
+
+func _morning_test() -> void:
+	Sfx.tap()
+	var topic = _ensure_topic()
+	var m = MorningAlert.settings(App.settings())
+	var msg = MorningAlert.message(App.saved, App.today)
+	App.toast("Sending…", "info", "bolt")
+	var res = await MorningAlert.send(self, msg.title, msg.text, topic, m.server)
+	if res.ok:
+		App.toast("Sent to %s: check your phone" % topic, "good", "check")
+	else:
+		App.toast("Not sent: %s" % str(res.error), "bad", "warning")
+	call_deferred("_refill")
+
+
+func _copy_topic() -> void:
+	Sfx.tick()
+	var topic = _ensure_topic()
+	DisplayServer.clipboard_set(topic)
+	App.toast("Copied: %s" % topic, "good", "check")
+	call_deferred("_refill")
 
 
 ## "How it works" for the phone inbox, in its own sheet.

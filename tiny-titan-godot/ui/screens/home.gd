@@ -68,6 +68,17 @@ func build() -> void:
 		rc.add(rrow)
 		add_child(rc)
 
+	# --- today: what is probably next, and the day's missions ------------------
+	# First on the page, to read before the workout (also sent to the phone in
+	# the morning: MorningAlert).
+	add_child(TodayView.card())
+	var yesterday = App.quests().get("yesterday", [])
+	if not yesterday.is_empty():
+		add_child(Kit.section_title("From yesterday"))
+		add_child(Parts.quest_list(yesterday, true))
+	add_child(Kit.section_title("Missions", Kit.link("All →", App.go.bind("adventure", "quests"))))
+	add_child(Parts.quest_list(App.quests().daily, true))
+
 	# --- the hero in the gym, with the level right under it -------------------
 	var lv = s.levels.hero
 	var stage = Xp.STAGES[s.stage]
@@ -226,10 +237,6 @@ func build() -> void:
 		for g in goals:
 			grow.add_child(Parts.goal_tile(g))
 		add_child(grow)
-
-	# --- today's quests -------------------------------------------------------
-	add_child(Kit.section_title("Quests", Kit.link("All →", App.go.bind("adventure", "quests"))))
-	add_child(Parts.quest_list(App.quests().daily, true))
 
 	# --- recent sessions ------------------------------------------------------
 	var sessions = App.sessions()

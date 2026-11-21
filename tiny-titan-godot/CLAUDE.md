@@ -310,6 +310,40 @@ is the Windows handoff.
   - Tests: more in `tests/lift_trend_test.gd`; walkthrough `tests/shots/progress.gd` (year
     data; it logs a lighter day and a day of 8s first, since the demo bench only goes up).
 
+- Missions, the day's plan, morning goals on the phone (added 2026-11-20, after "there's
+  always a time task but we never input workout time"):
+  - `game/missions.gd` (`Missions`, pure) replaces the ported quests IN THE GAME;
+    `game/quests.gd` stays only for the parity test. `day_plan(sessions, today, marks)` is
+    worked out from the log BEFORE today (so it does not move while the day is logged):
+    `likely_lifts` (done on this weekday before, or due by the lift's usual gap; a lift with
+    a weekday habit is not "due" on other days), the day's body area (`GROUP`, "Back day"),
+    a movement of that area never done (`STAPLES` first, three to pick from by the date),
+    PT still to do this week, `likely_others` (climb, run, ride, misc).
+  - `daily(today, data, state, claims)`: show up, "Beat it" on the two likeliest non-PT
+    lifts (done when today's sets compare "up" or set a record; `aim` = next_target),
+    try something new, physical therapy, the likely climb / run / ride, read; "XP hunter"
+    only on a day with fewer than three. `weekly(...)`: days, set a record, explore (a new
+    movement), PT on target, the main other activity of the last four weeks, XP, body
+    check-in. Ids `t:<date>:<slug>` / `tw:<week>:<slug>`. NO mission is about minutes.
+    Missions use the Quests dictionary shape (+ `lift`, `aim`, `why`), so `Parts.quest_list`,
+    claims, coins and the replay are unchanged (a claim stores its own XP).
+  - `App.quests()` = {daily, weekly, yesterday (done, unclaimed: workouts are often imported
+    the day after)}, `App.plan()`, `App.mission_data()`; both cached until the data changes.
+  - `ui/screens/today_view.gd` (`TodayView.card()`): first on the Hero tab, then "From
+    yesterday" and "Missions". A lift row opens its page on Compare; a mission with `lift`
+    does too (`Parts.quest_list`). The Adventure tab shows missions with their words.
+  - Morning message: `app/morning_alert.gd` (`MorningAlert`) + `tools/morning.gd`. Windows Task
+    Scheduler runs `godot --headless --path <project> --script res://tools/morning.gd` daily
+    (Settings -> Morning goals: switch, time, Send a test, Copy topic; `settings.morning` =
+    {on, topic, time, server}). The tool reads save.json itself (never writes; `App._ready`
+    returns at once when the command line has `res://tools/morning.gd`) and posts
+    `Missions.morning_text` to ntfy (https://ntfy.sh/<topic>; the phone runs the ntfy app).
+    `-- --dry-run` prints, `-- --test` sends even when off; after noon it sends nothing.
+    Verified 2026-11-20 against a local stand-in server and a copy of the real save; the
+    task itself was NOT created (the switch is the user's to flip; `schedule_command` was
+    checked by building its objects without `Register-ScheduledTask`).
+  - Tests: `tests/missions_test.gd`; walkthrough `tests/shots/today.gd` (year data).
+
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -422,6 +456,7 @@ godot --headless --path . --script res://tests/lift_match_test.gd
 godot --headless --path . --script res://tests/lift_names_test.gd
 godot --headless --path . --script res://tests/lift_library_test.gd
 godot --headless --path . --script res://tests/lift_trend_test.gd
+godot --headless --path . --script res://tests/missions_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -440,6 +475,7 @@ misc (the Miscellaneous section and vest walks), reading (pages read, year data)
 names (lift names that are not exact: the review's yes / no / another, `new` data),
 detail (a session's detail, a lift's trends, physical therapy, year data),
 progress (a lift's three views: Compare, Progress, Logbook, and the review's history bars, year data),
+today (the Today card, missions, claiming, yesterday's missions, the Morning goals card, year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -460,6 +496,11 @@ the check.
   Logbook's goal bars and the Compare target change the next time the page opens).
 - "Next time" is a rule of thumb (one more rep, then more weight), not a programme; the
   weight step is 2.5 kg or 5 lb whatever the lift.
+- The day's plan is a guess from weekdays and gaps; it does not know a programme or a
+  split the player has in mind. A lift done once in six weeks on this weekday counts.
+- The morning message only goes out when the computer is on or asleep (woken by the task)
+  at that time; a run after noon sends nothing. It runs the Godot editor's exe headless, so
+  moving Godot or the project folder needs the switch turned off and on again.
 - Lift names are filed when a lift is imported or saved, not afterwards: changing `MOVES`,
   `VOCAB` or `ALIASES` does not rename what is already in a save. To bring a save in line,
   run `LiftNames.migrate` over it on a copy (as was done 2026-11-20) and check XP is unchanged.

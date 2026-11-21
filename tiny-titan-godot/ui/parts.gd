@@ -48,7 +48,8 @@ static func quest_list(quests: Array, compact: bool = false) -> Control:
 	var settings = App.settings()
 	for q in quests:
 		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
-		var card = Kit.card(5, Callable(), 10)
+		# A mission about one lift opens that lift's page (last time, what to beat).
+		var card = Kit.card(5, JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else Callable(), 10)
 		if q.claimed:
 			card.modulate.a = 0.6
 		elif q.done:

@@ -19,7 +19,7 @@ func build() -> void:
 	var state = App.state
 	var q = App.quests()
 	var claimable = 0
-	for x in q.daily + q.weekly:
+	for x in q.daily + q.weekly + q.get("yesterday", []):
 		if x.done and not x.claimed:
 			claimable += 1
 
@@ -291,7 +291,10 @@ func _quests(q: Dictionary) -> void:
 	top.add_child(_quest_ring("WEEKLY", q.weekly, "calendar"))
 	add_child(top)
 
-	add_child(Kit.section_title("Daily", Kit.pill("clock", "Midnight", Pal.PANEL2, "Daily quests reset at midnight", Pal.TEXT, 11)))
+	if not q.get("yesterday", []).is_empty():
+		add_child(Kit.section_title("From yesterday"))
+		add_child(_quest_list(q.yesterday))
+	add_child(Kit.section_title("Daily", Kit.pill("clock", "Midnight", Pal.PANEL2, "Daily missions reset at midnight", Pal.TEXT, 11)))
 	add_child(_quest_list(q.daily))
 	var hint = "Last day!" if days_left == 0 else "%dd left" % days_left
 	add_child(Kit.section_title("Weekly", Kit.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly quests reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
@@ -324,7 +327,8 @@ func _quest_ring(caption: String, list: Array, icon: String) -> Control:
 
 ## The shared compact quest rows, with the description and exact progress as a tooltip.
 func _quest_list(list: Array) -> Control:
-	var box = Parts.quest_list(list, true)
+	# With the words under each title: a mission says what to aim for.
+	var box = Parts.quest_list(list, false)
 	var settings = App.settings()
 	var rows = box.get_children()
 	for i in range(mini(rows.size(), list.size())):
