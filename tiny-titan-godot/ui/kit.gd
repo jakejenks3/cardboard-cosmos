@@ -691,7 +691,12 @@ static func hp_bar(hp_left: float, hp_max: float, height: int = 22, tip: String 
 static func switch(on: bool, on_change: Callable, tip: String = "") -> PixSwitch:
 	var sw = PixSwitch.new()
 	sw.setup(on, tip)
-	sw.pressed.connect(func(): on_change.call(not on))
+	# The switch flips at once (a screen that rebuilds after the change draws it
+	# again anyway; one that does not, like a sheet, would look stuck).
+	sw.pressed.connect(func():
+		sw.on = not sw.on
+		sw.queue_redraw()
+		on_change.call(sw.on))
 	juice(sw)
 	return sw
 

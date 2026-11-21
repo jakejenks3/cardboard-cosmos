@@ -227,7 +227,7 @@ func _build_inbox() -> void:
 	crow.add_child(Kit.vcenter(cl))
 	if can:
 		crow.add_child(Kit.switch(bool(App.inbox.clear_settings().on), _on_clear_auto, "Empty the rows that came in, after each import"))
-	var setup = Kit.button("Set up" if not can else "Options", "secondary" if not can else "ghost", SettingsPanel.show_clear_setup, "sm")
+	var setup = Kit.button("Set up" if not can else "Options", "secondary" if not can else "ghost", _open_clear_setup, "sm")
 	setup.tooltip_text = "Add a small script to the doc so the game can empty the table"
 	crow.add_child(Kit.vcenter(setup))
 	crow.set_meta("clear_row", true)
@@ -456,9 +456,16 @@ func _on_clear_auto(on) -> void:
 	call_deferred("_refill")
 
 
+## The set-up sheet; the Phone inbox card is drawn again when it closes (set up now?).
+func _open_clear_setup() -> void:
+	var sh = SettingsPanel.show_clear_setup()
+	if sh != null:
+		sh.tree_exited.connect(func(): if is_instance_valid(self): call_deferred("_refill"))
+
+
 ## How to let the game empty the table: the script to paste into the doc, the
 ## web app link, a test, "Clear now", the switch.
-static func show_clear_setup() -> void:
+static func show_clear_setup() -> Sheet:
 	var cs = App.inbox.clear_settings()
 	var sh = Kit.sheet("Clear the table")
 	sh.box.add_child(Kit.para("The game only reads your note. To empty the table after an import, add this small script to the doc once, on your computer (about 5 minutes):", 14, Pal.TEXT))
@@ -511,6 +518,7 @@ static func show_clear_setup() -> void:
 	done.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sh.box.add_child(done)
 	sh.open()
+	return sh
 
 
 static func _copy_clear_script() -> void:
