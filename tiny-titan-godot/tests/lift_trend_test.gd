@@ -148,6 +148,16 @@ func _init() -> void:
 	ok(sum.lifts == 4 and sum.done == 3 and sum.goal == 3 + 7 + 2 + 3 and sum.behind == 1 and sum.left == 12, "the week in all", sum)
 	ok(Pt.is_pt(marks, "Neck 4 way") and not Pt.is_pt(marks, "Squat") and Pt.per_week(marks, "clamshell") == 7 and Pt.per_week(marks, "Squat") == 3 and Pt.per_week({"x": {"perWeek": 40}}, "x") == 7, "is it PT, and for how many days a week")
 	_views()
+	# --- the ghost: you about four weeks earlier -------------------------------------------------------
+	var gh = [{"date": "2026-11-20", "sets": [{"reps": 5, "weightKg": 100.0}]}, {"date": "2026-11-06", "sets": [{"reps": 5, "weightKg": 97.5}]},
+		{"date": "2026-10-23", "sets": [{"reps": 5, "weightKg": 90.0}]}, {"date": "2026-10-01", "sets": [{"reps": 5, "weightKg": 80.0}]}]
+	var g1 = LiftTrend.ghost(gh, gh[0])
+	ok(g1 != null and str(g1.ghost.date) == "2026-10-23" and int(g1.days) == 28 and g1.won and absf(float(g1.pct) - 11.11) < 0.1, "the ghost is the session four weeks back; you beat it by 11%", g1)
+	var g2 = LiftTrend.ghost([{"date": "2026-11-20", "sets": [{"reps": 5, "weightKg": 85.0}]}] + gh.slice(1), {"date": "2026-11-20", "sets": [{"reps": 5, "weightKg": 85.0}]})
+	ok(g2 != null and not g2.won and not g2.tie and float(g2.pct) < 0.0, "a lighter day: the ghost is ahead", g2)
+	ok(LiftTrend.ghost(gh.slice(0, 2), gh[0]) == null and LiftTrend.ghost([gh[0], gh[3]], gh[0]) == null, "no session three to six weeks back: no ghost")
+	var gh_hold = LiftTrend.ghost([{"date": "2026-11-20", "sets": [{"reps": 1, "weightKg": 0.0, "holdSec": 40}]}, {"date": "2026-10-23", "sets": [{"reps": 1, "weightKg": 0.0, "holdSec": 40}]}], {"date": "2026-11-20", "sets": [{"reps": 1, "weightKg": 0.0, "holdSec": 40}]})
+	ok(gh_hold != null and gh_hold.tie and is_equal_approx(float(gh_hold.you), 40.0), "holds duel on seconds; the same is a dead heat", gh_hold)
 	print("LIFTTREND: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

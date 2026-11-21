@@ -109,6 +109,8 @@ func run(m: Node, t: SceneTree) -> void:
 	check(said.contains(LiftViews.set_text(pairs[0].cur, "lb")) and said.contains(LiftViews.set_text(pairs[0].prev, "lb")), "set 1 shows both numbers (%s / %s)" % [LiftViews.set_text(pairs[0].prev, "lb"), LiftViews.set_text(pairs[0].cur, "lb")])
 	check(said.contains("Sets") and said.contains("Reps") and said.contains("Moved") and (said.contains("Every set at") or said.contains("One more rep")), "the totals, and a target for next time")
 	await ShotHelper.snap(tree, "progress_1_compare")
+	var gh = LiftTrend.ghost(st.history, st.history[0])
+	check(gh == null or (said.contains("GHOST DUEL") and (said.contains("beat your ghost") or said.contains("ghost is") or said.contains("Dead heat"))), "the ghost duel against about four weeks back (%s)" % ("none: nothing 3 to 6 weeks back" if gh == null else "%+d%%" % int(round(float(gh.pct)))))
 	await _scroll(900)
 	await ShotHelper.snap(tree, "progress_2_compare_lower")
 	await _scroll(0)

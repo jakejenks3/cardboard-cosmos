@@ -169,6 +169,9 @@ static func compare(holder: Control, ctx: Dictionary) -> void:
 		holder.add_child(_records_card(recs, wu))
 	elif best != null and LiftTrend.main_value(LiftTrend.day(best.sets)) > LiftTrend.main_value(LiftTrend.day(cur.sets)) + 1e-6:
 		holder.add_child(_best_card(cur, best, mode, wu))
+	var g = LiftTrend.ghost(history, cur)
+	if g != null:
+		holder.add_child(_ghost_card(g, mode, wu))
 	# A target for next time, except for physical therapy: that follows its plan.
 	if int(ctx.get("goal", 0)) == 0:
 		var nxt = _next_card(cur, mode, wu)
@@ -422,6 +425,74 @@ static func _best_card(cur: Dictionary, best: Dictionary, mode: String, wu: Stri
 	row.add_child(words)
 	c.add(row)
 	return c
+
+
+## The ghost duel: the hero against a see-through copy of themselves about
+## four weeks earlier, a bar each, who won (a burst when it is the player).
+static func _ghost_card(g: Dictionary, mode: String, wu: String) -> Card:
+	var c = Kit.card(6, Callable(), 10)
+	c.accent(Pal.SECOND)
+	var weeks = maxi(1, int(round(float(g.days) / 7.0)))
+	c.add(Kit.label("GHOST DUEL · YOU vs YOU, %d WEEK%s AGO" % [weeks, "" if weeks == 1 else "S"], 10, Pal.SECOND, true))
+	var row = Kit.hbox(10)
+	var tex = Art.hero_texture(App.state, App.profile(), App.loadout())
+	var me = PixelRect.make(tex, 1.0)
+	me.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(me)
+	var mid = Kit.vbox(6)
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var top = maxf(float(g.you), float(g.them))
+	for side in [["YOU", float(g.you), Pal.ACCENT], ["GHOST", float(g.them), Pal.SECOND]]:
+		var line = Kit.hbox(6)
+		var name = Kit.label(str(side[0]), 10, side[2], true)
+		name.custom_minimum_size = Vector2(46, 0)
+		line.add_child(Kit.vcenter(name))
+		var bar = Kit.bar(float(side[1]) / maxf(top, 1e-6), side[2], 10)
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(Kit.vcenter(bar))
+		mid.add_child(line)
+		mid.add_child(Kit.label(_ghost_value(float(side[1]), mode, wu), 11, Pal.MUTED, true))
+	row.add_child(mid)
+	var ghost_pic = PixelRect.make(tex, 1.0)
+	ghost_pic.flip_h = true
+	ghost_pic.modulate = Color(0.55, 0.78, 1.0, 0.55)
+	ghost_pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(ghost_pic)
+	c.add(row)
+	var said = ""
+	var col = Pal.MUTED
+	if bool(g.tie):
+		said = "Dead heat with your ghost"
+	elif bool(g.won):
+		said = "You beat your ghost by %d%%" % int(round(float(g.pct)))
+		col = Pal.GOOD
+	else:
+		said = "Your ghost is %d%% ahead: catch it" % int(round(-float(g.pct)))
+		col = Pal.ACCENT2
+	var v = banner("sword", said, col)
+	c.add(v)
+	if bool(g.won):
+		# A little burst once it is on screen.
+		# (a weak reference: the page may be rebuilt before the timer is up)
+		var wr = weakref(me)
+		me.ready.connect(func():
+			var n = wr.get_ref()
+			if n != null and n.is_inside_tree():
+				n.get_tree().create_timer(0.35).timeout.connect(func():
+					var m = wr.get_ref()
+					if m != null and m.is_inside_tree():
+						Kit.burst(m, Pal.ACCENT, 18)))
+	c.tooltip_text = "Your session about four weeks before this one: %s" % _day_text(str(g.ghost.date))
+	return c
+
+
+static func _ghost_value(v: float, mode: String, wu: String) -> String:
+	if mode == "sec":
+		return "%d s hold" % int(v)
+	if mode == "kg":
+		return "%s strength (1-rep estimate)" % Fmt.fmt_weight(v, wu)
+	return "%d reps in a set" % int(v)
 
 
 ## Something to aim for next time, as a quest.

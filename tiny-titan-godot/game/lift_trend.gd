@@ -310,6 +310,46 @@ static func best_row(history: Array):
 	return best
 
 
+## The ghost: the player about GHOST_DAYS before the session `cur` (one of
+## `history`, newest first), the session closest to that day between 3 and 6
+## weeks before; null when there is none. {"ghost" (the history row), "days",
+## "you", "them" (ghost_score), "pct" (how far ahead, in %), "won", "tie"}.
+const GHOST_DAYS = 28
+
+
+static func ghost(history: Array, cur: Dictionary):
+	var at = str(cur.get("date", ""))
+	var best = null
+	var best_gap = 99999
+	for h in history:
+		var days = Dates.days_between(str(h.get("date", "")), at)
+		if days < 21 or days > 42:
+			continue
+		var gap = absi(days - GHOST_DAYS)
+		if gap < best_gap:
+			best_gap = gap
+			best = h
+	if best == null:
+		return null
+	var you = ghost_score(day(cur.get("sets", [])))
+	var them = ghost_score(day(best.get("sets", [])))
+	if them <= 0.0:
+		return null
+	var pct = (you / them - 1.0) * 100.0
+	return {"ghost": best, "days": Dates.days_between(str(best.date), at), "you": you, "them": them, "pct": pct,
+		"won": pct >= 0.5, "tie": absf(pct) < 0.5}
+
+
+## What a ghost duel compares: the estimated one-rep max of the best set, the
+## longest hold, or the most reps in a set (no weight).
+static func ghost_score(d: Dictionary) -> float:
+	if int(d.holdSec) > 0:
+		return float(d.holdSec)
+	if float(d.e1rm) > 0.0:
+		return float(d.e1rm)
+	return float(d.bestReps)
+
+
 ## The number a session of this lift is judged by: the longest hold, else the
 ## heaviest set, else the most reps in a set.
 static func main_value(d: Dictionary) -> float:

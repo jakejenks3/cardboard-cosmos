@@ -452,6 +452,12 @@ is the Windows handoff.
   includes it. `HeroFigure`: pumped = lift +0.07 / bulk +0.03, a flushed skin, a grin; tired
   = shoulders a pixel lower, heavy lids, a sweat drop, paler skin (`_mood_skin`). The classic
   look ignores it (parity_art unchanged).
+- Ghost rival (2026-11-21): `LiftTrend.ghost(history, cur)` = the session closest to GHOST_DAYS
+  (28) before `cur`, 3 to 6 weeks back, scored by `ghost_score` (estimated 1RM, else the
+  longest hold, else the most reps in a set): {ghost, days, you, them, pct, won, tie}. The
+  Compare view adds `LiftViews._ghost_card` (the hero against a see-through, flipped copy, a
+  bar each, the verdict; a burst on a win through a weak reference, since the page can be
+  rebuilt before it fires). Tests: lift_trend_test, the progress walkthrough.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
