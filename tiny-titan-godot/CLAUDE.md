@@ -406,6 +406,27 @@ is the Windows handoff.
   rising from a key), `Kit.purse_pill` (coins count up), glints on thick bars (`Bar.glint`),
   the pixel `Ring`, pets that hop, bosses that float over a shadow, the sky's clouds / stars
   (`Backdrop.SkyFx`), the tab icon bounce and tab fade in `main.gd`.
+- The hero, redrawn (2026-11-20, "looks awful, blocky and weird as it gets bigger"):
+  in the game's own look (Pix.classic false) the hero is `avatar/hero_figure.gd`
+  (`HeroFigure`), a 64 x 70 figure of about 5 heads (Slynyrd's 6-head model shrunk; the
+  user's progress photos as the reference for build, hair and mustache). The body is
+  parts on a skeleton from the levels (tapered capsules with bulges, ellipses, rows for
+  the torso and head), filled pixel by pixel with a surface normal each: lit from the top
+  left with a 5-step hue-shifted ramp (`skin_ramp`, `ramp`, `hair_ramp`), limbs banded
+  across their width (`_band_limbs`), a 1px shadow where a part overlaps another, lone
+  pixels cleaned (`_clean`), definition (sternum, abs, obliques) as the hero trains.
+  `metrics(i)` returns the same Metrics fields as HeroBody (so Equipment still fits) plus
+  `g` (the skeleton) and `fig` (part owner and normals per pixel). `HeroBody.width()` /
+  `height()` give the canvas of the look being drawn; `GymScene.hero_x()` / `hero_y()`
+  place it. `HeroBody._draw_figure` composes: back item, body, clothes from
+  `avatar/figure_gear.gd` (`FigureGear`: a garment is the pixels of the parts it covers,
+  shaded by the body under it: shorts, tights, harness, kilt, shirt and its patterns,
+  tank, singlet, armor, gi, gloves, wraps, chalk, boxing, shoes, climbshoes, sandals,
+  boots, backpack straps, saddlebag), the rest from Equipment, face, hair, hats; then
+  `Pix.light()` on the gear only (pixels the figure painted are kept) and the outline.
+  No legs item: plain shorts (`HeroFigure.PLAIN_SHORTS`). Profile `facialHair` (0 none,
+  1 stubble, 2 mustache, 3 beard; Armory -> Look and Settings) is the game's look only.
+  The classic branch (48 x 60, `parity_art`) is untouched. Test: `tests/figure_test.gd`.
 - Every walkthrough screenshot is also a layout check: `ShotHelper.snap` prints a CHECK FAIL
   when anything is wider than the column it scrolls in (a non-clipped long label once pushed
   the Adventure page off the right edge: use `Kit.clip`, not `Kit.muted`, in a row).
@@ -457,6 +478,7 @@ godot --headless --path . --script res://tests/lift_names_test.gd
 godot --headless --path . --script res://tests/lift_library_test.gd
 godot --headless --path . --script res://tests/lift_trend_test.gd
 godot --headless --path . --script res://tests/missions_test.gd
+godot --headless --path . --script res://tests/figure_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other

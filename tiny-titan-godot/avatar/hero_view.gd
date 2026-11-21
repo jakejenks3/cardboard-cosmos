@@ -97,7 +97,7 @@ func current_pose() -> String:
 func art_size() -> Vector2i:
 	if _show_scene:
 		return Vector2i(Art.SCENE_W, Art.SCENE_H)
-	return Vector2i(Art.HERO_W, Art.HERO_H)
+	return Vector2i(HeroBody.width(), HeroBody.height())
 
 
 func _update_min_size() -> void:

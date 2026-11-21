@@ -26,7 +26,8 @@ extends RefCounted
 ##   photos: {front?, side?, back?} (photo ids), note
 ##
 ## Loadout: {slot: item id or null} (every slot optional)
-## Profile: name, skin, hairStyle, hairColor, createdAt
+## Profile: name, skin, hairStyle, hairColor, createdAt, facialHair? (0 none,
+## 1 stubble, 2 mustache, 3 beard; the game's own look only)
 ## Settings: weightUnit "kg"|"lb", distanceUnit "km"|"mi", sound: bool,
 ##   weeklyGoal: int (sessions per week needed to keep the streak alive),
 ##   optional weightStep (size of one +/- tap on a weight, in the chosen unit)

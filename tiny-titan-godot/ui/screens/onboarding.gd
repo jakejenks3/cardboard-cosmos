@@ -48,7 +48,7 @@ func _build() -> void:
 	stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_hero = HeroView.new()
 	_hero.setup(_blank, _profile(), App.DEFAULT_LOADOUT, null, false)
-	_hero.custom_minimum_size = Vector2(Art.HERO_W * 5, Art.HERO_H * 5)
+	_hero.custom_minimum_size = Vector2(HeroBody.width() * 5, HeroBody.height() * 5)
 	_hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	stage.add_child(_hero)
 	_box.add_child(stage)

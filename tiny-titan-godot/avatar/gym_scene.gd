@@ -12,6 +12,17 @@ const SCENE_H = 72
 ## Where the hero buffer is blitted. Hero baseline lands on FLOOR_Y - 1.
 const HERO_X = 24
 const HERO_Y = 10
+
+
+## Where the hero's canvas goes in the scene: its feet on the floor, centred.
+## The original look's 48 x 60 hero at HERO_X, HERO_Y; the game's own 64 x 68
+## one (HeroFigure) a little left and up.
+static func hero_x() -> int:
+	return HERO_X if Pix.classic else int((SCENE_W - HeroFigure.W) / 2.0)
+
+
+static func hero_y() -> int:
+	return HERO_Y if Pix.classic else FLOOR_Y - 1 - (HeroFigure.H - 3)
 const FLOOR_Y = 67
 
 const WALLS = ["#3a3350", "#3d3a5e", "#43406c", "#494578", "#4f4a82", "#58508f"]

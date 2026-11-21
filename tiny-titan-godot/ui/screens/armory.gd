@@ -55,7 +55,7 @@ func build() -> void:
 	elif tab == "look":
 		var card = Kit.card(8)
 		var p = App.profile()
-		card.add(Parts.appearance_editor(int(p.get("skin", 0)), int(p.get("hairStyle", 0)), int(p.get("hairColor", 0)), _on_look))
+		card.add(Parts.appearance_editor(int(p.get("skin", 0)), int(p.get("hairStyle", 0)), int(p.get("hairColor", 0)), _on_look, int(p.get("facialHair", 0))))
 		add_child(card)
 	elif tab == "pets":
 		add_child(_pet_grid())
@@ -579,7 +579,7 @@ static func slot_view(slot: String) -> Dictionary:
 			return {"rect": Rect2(cx - 13, int(m.legTop) - 5, 26, int(m.legLen) + 11), "scale": 4}
 		"feet":
 			return {"rect": Rect2(cx - 13, int(m.feetTop) - 9, 26, 15), "scale": 4}
-	return {"rect": Rect2(0, 0, Art.HERO_W, Art.HERO_H), "scale": 2}
+	return {"rect": Rect2(0, 0, HeroBody.width(), HeroBody.height()), "scale": 2}
 
 
 ## A hero texture zoomed in on what `slot` is about.

@@ -30,12 +30,25 @@ extends RefCounted
 ## the TypeScript renders, and the game's own, which is the same body with a
 ## bigger-eyed face, lit hair, shaded parts and tinted outlines.
 
+## The original look's canvas (Pix.classic); the game's own hero is
+## HeroFigure.W x HeroFigure.H. Use width() / height().
 const HERO_W = 48
 const HERO_H = 60
+
+
+## The hero's canvas in the look being drawn.
+static func width() -> int:
+	return HERO_W if Pix.classic else HeroFigure.W
+
+
+static func height() -> int:
+	return HERO_H if Pix.classic else HeroFigure.H
 
 const SKIN_TONES = ["#f6d7b8", "#e8b98f", "#c98e5f", "#a86b3f", "#7a4a2a", "#4e2e1b"]
 const HAIR_COLORS = ["#2b1b12", "#6b3f1f", "#c9842a", "#e9d37a", "#b52e2e", "#4b4b55", "#e8e8ee", "#6a3fb5", "#2e8b57", "#ff7ab6"]
 const HAIR_STYLES = ["Short", "Spiky", "Long", "Bun", "Curly", "Buzz", "Mohawk"]
+## Facial hair (the game's own look only; profile.facialHair).
+const FACIAL_HAIR = ["None", "Stubble", "Mustache", "Beard"]
 
 
 static func _clamp01(x: float) -> float:
@@ -97,6 +110,8 @@ static func _make_leg(side: int, cx: int, thigh_w: int, calf_w: int, leg_top: in
 
 
 static func body_metrics(i: Dictionary) -> Dictionary:
+	if not Pix.classic:
+		return HeroFigure.metrics(i)
 	var bulk: float = _bulk_t(i.heroLevel)
 	var lift: float = _lv_t(i.liftLevel)
 	var climb: float = _lv_t(i.climbLevel)
@@ -468,6 +483,8 @@ static func _shade_runs(p: Pix) -> void:
 ## `opts` is {visuals, noOutline?}; noOutline skips the outline (used when
 ## compositing into a scene that outlines later).
 static func draw_hero(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
+	if not Pix.classic:
+		return _draw_figure(p, i, opts)
 	var m: Dictionary = body_metrics(i)
 	var v: Dictionary = opts.visuals
 	var frame: int = int(i.frame)
@@ -537,3 +554,94 @@ static func draw_hero(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
 	if aura != null and aura.kind == "aura":
 		Equipment.draw_aura(p, aura.style, m, frame)
 	return m
+
+
+## The game's own hero (HeroFigure): a shaded body, clothes that follow it
+## (FigureGear), the rest of the gear from Equipment, then light on that gear
+## only (what the figure painted is lit already) and the outline.
+static func _draw_figure(p: Pix, i: Dictionary, opts: Dictionary) -> Dictionary:
+	var m: Dictionary = HeroFigure.metrics(i)
+	var v: Dictionary = opts.visuals
+	var frame: int = int(i.frame)
+	# own[k]: pixel k was last painted by the figure itself (skin, its clothes,
+	# face, hair), so the lighting pass at the end leaves it alone.
+	var own: PackedByteArray = PackedByteArray()
+	own.resize(p.data.size())
+	var back = v.get("back")
+	if back != null and not FigureGear.back_behind(p, back, m):
+		Equipment.draw_back_item(p, back, m, frame)
+	var before: PackedInt32Array = p.data.duplicate()
+	HeroFigure.draw_body(p, m)
+	var legs = v.get("legs")
+	var body = v.get("body")
+	if legs != null:
+		if not FigureGear.leg_garment(p, legs, m):
+			_mark(own, before, p)
+			Equipment.draw_leg_garment(p, legs, m)
+			before = p.data.duplicate()
+	elif body != null and body.kind == "singlet":
+		FigureGear.leg_garment(p, {"kind": "shorts", "color": body.color}, m)
+	else:
+		# Nothing on the legs: plain gym shorts.
+		HeroFigure.paint_cloth(p, m, HeroFigure.shorts_region(m), HeroFigure.PLAIN_SHORTS)
+	if body != null and not FigureGear.body_garment(p, body, m):
+		_mark(own, before, p)
+		Equipment.draw_body_garment(p, body, m)
+		before = p.data.duplicate()
+	if back != null:
+		FigureGear.back_front(p, back, m)
+	var feet = v.get("feet")
+	if feet != null and not FigureGear.feet(p, feet, m, frame):
+		_mark(own, before, p)
+		Equipment.draw_feet(p, feet, m, frame)
+		before = p.data.duplicate()
+	var hands = v.get("hands")
+	if hands != null and not FigureGear.hands(p, hands, m):
+		_mark(own, before, p)
+		Equipment.draw_hands(p, hands, m)
+		before = p.data.duplicate()
+	_mark(own, before, p)
+	var accessory = v.get("accessory")
+	if accessory != null:
+		Equipment.draw_accessory(p, accessory, m, frame)
+		Equipment.draw_accessory_over(p, accessory, m, frame)
+	_unmark(own, before, p)
+	before = p.data.duplicate()
+	HeroFigure.draw_face(p, m, i)
+	var hat = v.get("head")
+	var covers_top: bool = hat != null and ["beanie", "cap", "helmet", "bandana", "wizard", "viking"].has(hat.kind) and not (hat.kind == "cap" and hat.get("visor", false))
+	HeroFigure.draw_hair(p, m, i, covers_top)
+	_mark(own, before, p)
+	before = p.data.duplicate()
+	if hat != null:
+		Equipment.draw_head_item(p, hat, m)
+	var face = v.get("face")
+	if face != null:
+		Equipment.draw_face_item(p, face, m)
+	_unmark(own, before, p)
+	if not opts.get("flat", false):
+		var keep: PackedInt32Array = p.data.duplicate()
+		p.light()
+		for k in range(own.size()):
+			if own[k] == 1:
+				p.data[k] = keep[k]
+	if not opts.get("noOutline", false):
+		p.outline_tinted(Pix.OUTLINE)
+	var aura = v.get("aura")
+	if aura != null and aura.kind == "aura":
+		Equipment.draw_aura(p, aura.style, m, frame)
+	return m
+
+
+## Pixels that changed since `before` were painted by the figure.
+static func _mark(own: PackedByteArray, before: PackedInt32Array, p: Pix) -> void:
+	for k in range(own.size()):
+		if p.data[k] != before[k]:
+			own[k] = 1
+
+
+## Pixels that changed since `before` were painted by gear (to be lit).
+static func _unmark(own: PackedByteArray, before: PackedInt32Array, p: Pix) -> void:
+	for k in range(own.size()):
+		if p.data[k] != before[k]:
+			own[k] = 0

@@ -46,7 +46,7 @@ func fill() -> void:
 		name_edit.tooltip_text = "Hero name"
 		name_edit.text_changed.connect(_on_name)
 		right.add_child(name_edit)
-		right.add_child(Parts.appearance_editor(int(p.get("skin", 0)), int(p.get("hairStyle", 0)), int(p.get("hairColor", 0)), _on_look))
+		right.add_child(Parts.appearance_editor(int(p.get("skin", 0)), int(p.get("hairStyle", 0)), int(p.get("hairColor", 0)), _on_look, int(p.get("facialHair", 0))))
 		row.add_child(right)
 		hero.add(row)
 		add_child(hero)

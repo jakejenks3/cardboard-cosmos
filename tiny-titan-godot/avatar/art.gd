@@ -16,8 +16,6 @@ extends RefCounted
 ## treadmill and pets; the hero blinks on every BLINK_EVERY-th frame.
 
 ## Size of the hero buffer / of the home-gym scene, in art pixels.
-const HERO_W = HeroBody.HERO_W # 48
-const HERO_H = HeroBody.HERO_H # 60
 const SCENE_W = GymScene.SCENE_W # 96
 const SCENE_H = GymScene.SCENE_H # 72
 
@@ -53,7 +51,7 @@ static var _scene_cache = {} # signature -> ImageTexture (animated scenes churn)
 
 # --- textures (cached) --------------------------------------------------------
 
-## The hero alone on a transparent background (HERO_W x HERO_H), wearing the
+## The hero alone on a transparent background (HeroBody.width() x HeroBody.height()), wearing the
 ## loadout items the state owns. `pose` is "idle" or "flex". `happy` forces the
 ## smile (a flexing hero always smiles).
 static func hero_texture(state: Dictionary, profile: Dictionary, loadout: Dictionary, pose: String = "idle", frame: int = 0, happy: bool = false) -> ImageTexture:
@@ -111,7 +109,7 @@ static func boss_texture(boss_id: String, silhouette: bool = false, dim: bool = 
 	return tex
 
 
-## Thumbnail of an item (HERO_W x HERO_H): the item worn by the preview
+## Thumbnail of an item (HeroBody.width() x HeroBody.height()): the item worn by the preview
 ## mannequin. `locked` gives the greyed-out look of an item not owned yet.
 ## To show the item on the player's own hero (what the web Armory grid does)
 ## use item_preview_texture().
@@ -218,6 +216,7 @@ static func body_input(state: Dictionary, profile: Dictionary, pose: String = "i
 		"skin": int(profile.skin),
 		"hairStyle": int(profile.hairStyle),
 		"hairColor": int(profile.hairColor),
+		"facialHair": int(profile.get("facialHair", 0)),
 		"pose": pose,
 		"frame": frame,
 		# The web blinks when its frame counter hits a multiple of 18; the
@@ -243,7 +242,7 @@ static func look_for(pose: String, frame: int) -> int:
 
 
 static func hero_pix(state: Dictionary, profile: Dictionary, loadout: Dictionary, pose: String = "idle", frame: int = 0, happy: bool = false) -> Pix:
-	var hero: Pix = Pix.new(HERO_W, HERO_H)
+	var hero: Pix = Pix.new(HeroBody.width(), HeroBody.height())
 	HeroBody.draw_hero(hero, body_input(state, profile, pose, frame, happy), {"visuals": visuals_from_loadout(loadout, state)})
 	return hero
 
@@ -269,12 +268,12 @@ static func scene_pix(state: Dictionary, profile: Dictionary, loadout: Dictionar
 		# The shadows of the hero and of a pet that stands on the floor.
 		var feet: Array = _feet_span(hero)
 		if feet[1] >= feet[0]:
-			GymScene.shadow_under(buf, GymScene.HERO_X + feet[0], GymScene.HERO_X + feet[1])
+			GymScene.shadow_under(buf, GymScene.hero_x() + feet[0], GymScene.hero_x() + feet[1])
 		if _pet_shown(active_pet, state):
 			var sp = PetSprites.PET_SPRITES.get(active_pet)
 			if sp != null and not sp.get("fly", false):
 				GymScene.shadow_under(buf, PET_X, PET_X + int(PetSprites.sprite_size(active_pet, frame).w) - 1)
-	buf.blit(hero, GymScene.HERO_X, GymScene.HERO_Y)
+	buf.blit(hero, GymScene.hero_x(), GymScene.hero_y())
 	if _pet_shown(active_pet, state):
 		PetSprites.draw_pet(buf, active_pet, PET_X, GymScene.FLOOR_Y, frame)
 	return buf
@@ -335,13 +334,13 @@ static func item_icon_pix(item_id: String) -> Pix:
 			base_v[slot] = Items.by_id(STARTER_LOADOUT[slot]).visual
 	var with_v: Dictionary = base_v.duplicate()
 	with_v[item.slot] = item.visual
-	var a: Pix = Pix.new(HERO_W, HERO_H)
+	var a: Pix = Pix.new(HeroBody.width(), HeroBody.height())
 	HeroBody.draw_hero(a, input, {"visuals": base_v, "noOutline": true, "flat": true})
-	var b: Pix = Pix.new(HERO_W, HERO_H)
+	var b: Pix = Pix.new(HeroBody.width(), HeroBody.height())
 	HeroBody.draw_hero(b, input, {"visuals": with_v, "noOutline": true, "flat": true})
 	# Colours of the bare mannequin: a pixel that only changed to one of these
 	# is skin showing through (hair under a hat, an ankle), not part of the item.
-	var bare: Pix = Pix.new(HERO_W, HERO_H)
+	var bare: Pix = Pix.new(HeroBody.width(), HeroBody.height())
 	HeroBody.draw_hero(bare, input, {"visuals": {}, "noOutline": true, "flat": true})
 	var skin: Dictionary = {}
 	for v in bare.data:
@@ -351,18 +350,18 @@ static func item_icon_pix(item_id: String) -> Pix:
 	skin.erase(Pix.to_raw("#ffffff"))
 	skin.erase(Pix.to_raw(Pix.OUTLINE))
 	var is_aura: bool = item.slot == "aura"
-	var out: Pix = Pix.new(HERO_W, HERO_H)
+	var out: Pix = Pix.new(HeroBody.width(), HeroBody.height())
 	if item.slot == "back":
 		# Mostly hidden behind the body when worn: drawn alone, the whole of it shows.
 		Equipment.draw_back_item(out, item.visual, HeroBody.body_metrics(input), 0)
-		return _crop_icon(out, 0, HERO_W - 1)
-	var x0: int = HERO_W
-	var y0: int = HERO_H
+		return _crop_icon(out, 0, HeroBody.width() - 1)
+	var x0: int = HeroBody.width()
+	var y0: int = HeroBody.height()
 	var x1: int = -1
 	var y1: int = -1
-	for y in range(HERO_H):
-		for x in range(HERO_W):
-			var i: int = y * HERO_W + x
+	for y in range(HeroBody.height()):
+		for x in range(HeroBody.width()):
+			var i: int = y * HeroBody.width() + x
 			var v: int = b.data[i]
 			if v == 0:
 				continue
@@ -381,30 +380,30 @@ static func item_icon_pix(item_id: String) -> Pix:
 		return Pix.new(1, 1)
 	if is_aura:
 		# The upper half of the figure is enough to say "aura", and fits a slot.
-		return _crop_icon(out, 0, HERO_W - 1, y0 + 33)
+		return _crop_icon(out, 0, HeroBody.width() - 1, y0 + 33)
 	if item.slot == "hands":
 		# Two small things a body apart: one hand reads better, and with the
 		# forearm it is on, it is clear what it is.
-		var half: int = int(HERO_W / 2.0) - 1
-		var hx0: int = HERO_W
+		var half: int = int(HeroBody.width() / 2.0) - 1
+		var hx0: int = HeroBody.width()
 		var hx1: int = -1
-		var hy0: int = HERO_H
+		var hy0: int = HeroBody.height()
 		var hy1: int = -1
-		for y in range(HERO_H):
+		for y in range(HeroBody.height()):
 			for x in range(half + 1):
-				if out.data[y * HERO_W + x] != 0:
+				if out.data[y * HeroBody.width() + x] != 0:
 					hx0 = mini(hx0, x)
 					hx1 = maxi(hx1, x)
 					hy0 = mini(hy0, y)
 					hy1 = maxi(hy1, y)
 		if hx1 >= hx0:
-			for y in range(maxi(0, hy0 - 6), mini(HERO_H, hy1 + 2)):
+			for y in range(maxi(0, hy0 - 6), mini(HeroBody.height(), hy1 + 2)):
 				for x in range(maxi(0, hx0 - 1), mini(half + 1, hx1 + 2)):
-					var i: int = y * HERO_W + x
+					var i: int = y * HeroBody.width() + x
 					if out.data[i] == 0 and b.data[i] != 0:
 						out.data[i] = b.data[i]
 		return _crop_icon(out, 0, half)
-	return _crop_icon(out, 0, HERO_W - 1)
+	return _crop_icon(out, 0, HeroBody.width() - 1)
 
 
 # The filled part of `src` between the columns x_from..x_to (and above y_max),
@@ -528,7 +527,7 @@ static func _hero_sig(state: Dictionary, profile: Dictionary, loadout: Dictionar
 	var blink: bool = frame > 0 and frame % BLINK_EVERY == 0
 	return "%d.%d.%d.%d.%d|%d.%d.%d|%s|%d|%s|%s|%d|%s" % [
 		int(lv.hero.level), int(lv.lift.level), int(lv.climb.level), int(lv.run.level), int(lv.ride.level),
-		int(profile.skin), int(profile.hairStyle), int(profile.hairColor),
+		int(profile.skin), int(profile.hairStyle), int(profile.hairColor) * 10 + int(profile.get("facialHair", 0)),
 		pose, frame_key, str(blink), str(happy or pose == "flex"), look_for(pose, frame), gear,
 	]
 

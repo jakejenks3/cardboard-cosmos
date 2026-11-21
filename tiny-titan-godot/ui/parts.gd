@@ -225,9 +225,10 @@ static func session_row(session: Dictionary, xp) -> Control:
 	return card
 
 
-## Skin tone, hair style and hair colour pickers.
-## `on_change.call({"skin": i})` / `{"hairStyle": i}` / `{"hairColor": i}`.
-static func appearance_editor(skin: int, hair_style: int, hair_color: int, on_change: Callable) -> Control:
+## Skin tone, hair style and hair colour pickers, and facial hair when
+## `facial` is 0 or more. `on_change.call({"skin": i})` / `{"hairStyle": i}` /
+## `{"hairColor": i}` / `{"facialHair": i}`.
+static func appearance_editor(skin: int, hair_style: int, hair_color: int, on_change: Callable, facial: int = -1) -> Control:
 	var v = Kit.vbox(8)
 	v.add_child(Kit.label("Skin", 12, Pal.MUTED, true))
 	var skins = Kit.flow(8)
@@ -243,6 +244,12 @@ static func appearance_editor(skin: int, hair_style: int, hair_color: int, on_ch
 	for i in range(HeroBody.HAIR_COLORS.size()):
 		colors.add_child(_swatch(Pal.hex(HeroBody.HAIR_COLORS[i]), i == hair_color, on_change.bind({"hairColor": i})))
 	v.add_child(colors)
+	if facial >= 0:
+		v.add_child(Kit.label("Face", 12, Pal.MUTED, true))
+		var face = Kit.flow(6)
+		for i in range(HeroBody.FACIAL_HAIR.size()):
+			face.add_child(Kit.chip(HeroBody.FACIAL_HAIR[i], i == facial, on_change.bind({"facialHair": i})))
+		v.add_child(face)
 	return v
 
 
