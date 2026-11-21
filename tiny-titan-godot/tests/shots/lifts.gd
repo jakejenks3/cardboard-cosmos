@@ -88,7 +88,10 @@ func run(m: Node, t: SceneTree) -> void:
 	check(c != null, "the most done lift (%s) has a row" % done.name)
 	c._tap.call()
 	await ShotHelper.wait(tree, 0.8)
-	check(sheet() != null and ShotHelper.find_text(sheet(), "Sessions") != null and ShotHelper.find_text(sheet(), "Last done") != null and ShotHelper.find_button(sheet(), "Add to today's workout") != null, "its sheet shows history and the add button")
+	check(sheet() != null and ShotHelper.find_button(sheet(), "Compare") != null and ShotHelper.find_button(sheet(), "Add to today's workout") != null, "its sheet has the three views and the add button")
+	ShotHelper.press(ShotHelper.find_button(sheet(), "Progress"))
+	await ShotHelper.frames(tree, 4)
+	check(ShotHelper.find_text(sheet(), "Sessions") != null and ShotHelper.find_text(sheet(), "Last done") != null, "Progress shows the records and the history")
 	await ShotHelper.snap(tree, "lifts_06_detail")
 	sheet()._scroll.scroll_vertical = 520
 	await ShotHelper.frames(tree, 4)

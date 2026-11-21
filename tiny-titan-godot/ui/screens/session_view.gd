@@ -101,15 +101,25 @@ static func lift_rows(data: Dictionary, opts: Dictionary = {}) -> Control:
 		if sets.is_empty():
 			continue
 		var lift = str(ex.get("name", ""))
-		var cmp = LiftTrend.compare(sets, history_of.get(Xp.normalize_exercise(lift), []))
-		var page = {"skip_id": opts.get("skip_id")}
+		var hist = history_of.get(Xp.normalize_exercise(lift), [])
+		var cmp = LiftTrend.compare(sets, hist)
+		var page = {"skip_id": opts.get("skip_id"), "view": "compare"}
 		if bool(opts.get("pending", false)):
 			page["pending"] = {"date": str(data.get("date", "")), "sets": sets, "pt": bool(ex.get("pt", false))}
-		box.add_child(_lift_row(lift, sets, cmp, bool(ex.get("pt", false)) or Pt.is_pt(marks, lift), wu, page))
+		elif data.get("id") != null:
+			page["session_id"] = data.id
+		# The last few times it was done, and this time, as small bars.
+		var spark = []
+		if not hist.is_empty():
+			var days = LiftTrend.by_day(hist)
+			for d in days.slice(maxi(0, days.size() - 7)):
+				spark.append(LiftTrend.main_value(d))
+			spark.append(LiftTrend.main_value(LiftTrend.day(sets)))
+		box.add_child(_lift_row(lift, sets, cmp, bool(ex.get("pt", false)) or Pt.is_pt(marks, lift), wu, page, spark))
 	return box
 
 
-static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: String, page: Dictionary) -> Card:
+static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: String, page: Dictionary, spark: Array = []) -> Card:
 	var c = Kit.card(0, JourneyLifts.open_named.bind(lift, page), 7)
 	c.tooltip_text = "Trends and history of %s" % lift
 	var row = Kit.hbox(8)
@@ -130,6 +140,11 @@ static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: 
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	words.add_child(Kit.clip(LiftHistory.describe_sets(sets, fmt_w), 12, Pal.MUTED))
 	row.add_child(words)
+	if spark.size() >= 2:
+		var bars = SparkBars.new()
+		var lit = Pal.ACCENT if bool(cmp.get("pr", false)) else (Pal.GOOD if page.has("pending") else Pal.LIFT)
+		bars.setup(spark, lit)
+		row.add_child(Kit.vcenter(bars))
 	var tag = compare_tag(cmp, wu)
 	if tag != null:
 		row.add_child(Kit.vcenter(tag))

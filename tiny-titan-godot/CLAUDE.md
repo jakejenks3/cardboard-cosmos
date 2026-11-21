@@ -221,15 +221,9 @@ is the Windows handoff.
     `ui/charts/week_bars.gd` (`WeekBars`, and `WeekBars.Dots` for one week) draws days done
     per week.
   - The lift page (`JourneyLifts.open_detail`, or `open_named(name, opts)` from any list of
-    exercises), top to bottom, one thing to look at per block (reorganised 2026-11-19 after
-    "hard to tell where the eyes need to look"): `_now_card` (the newest session big: the
-    number the lift is about, its sets, the change against the time before; with
-    `opts.pending` that is the note's sets, "In your note"), `_trend_card` (ONE line chart
-    with a picker: it opens on `main_metric`, the note's sets are its last point; only the
-    chart is rebuilt), `_history_list` (a row per day: date, sets, the change of that day),
-    `_records` (tiles; the rep-best chips only when they differ), the physical therapy
-    card, then "How to do it" and the variations. Keep that order: new things go below the
-    chart, not above it.
+    exercises): the movement, its variation chips (only the ones done and "+N more" when
+    there are many), three view keys (see "Three views of a lift" below), the physical
+    therapy card, "How to do it", the Add key.
   - Physical therapy: `game/pt.gd` (`Pt`). Which lifts are PT is STORED, not derived:
     `saved.pt` = {normalized lift name: {name, perWeek}} (`App.pt()`, `set_pt`, `set_pt_goal`).
     A lift gets there by "(PT)" in front of an exercise in the phone note (`Pt.untag` in
@@ -286,6 +280,36 @@ is the Windows handoff.
     Verified 2026-11-19 on the real doc: it now begins with a `#` hint line (skipped, like
     every `#` line) and a table headed Exercise, Variation, Weight, Set 1 to Set 4 with empty
     rows; the typed lines under it read exactly as before (same entries, same keys).
+- Three views of a lift (added 2026-11-20, after "still not great how it shows exercise
+  progress"; modelled on Hevy's "previous" column, Fitbod's "estimated strength" and time
+  ranges, PR crowns on charts, heatmap calendars): `ui/screens/lift_views.gd` (`LiftViews`).
+  Three keys under the variation chips; only the part under them is rebuilt when one is
+  picked; `LiftViews.last_view` remembers the last one (from a list of exercises the page
+  opens on Compare: `opts.view`). `ctx` = {sheet, lift, history (newest first, the note's
+  sets among them), cur, st, wu, goal}; `opts.session_id` makes a logged session `cur`.
+  - Compare: a versus card (last time or the best day, chips to switch, against this time,
+    "IN YOUR NOTE" for the note's sets), a verdict banner (record gold, up green, down
+    orange, same grey), the sets side by side with a change pill each (`LiftTrend.pairs`),
+    three total tiles, the records beaten (`LiftTrend.records`) or the best still to beat,
+    and a "Next time" target (`LiftTrend.next_target`, double progression: +1 rep on the
+    weakest working set until all match, then +2.5 kg / 5 lb). No target for a PT lift.
+  - Progress: a metric picker (Top set, Strength = estimated 1RM, Reps, Moved; holds: Hold,
+    Reps; bodyweight: Best set, Reps in all), range chips 1M / 3M / 1Y / All (only those
+    shorter than the history), a headline (change, sessions, per month), `ProgressChart`
+    (`ui/charts/progress_chart.gd`: line, the day's work as bars, gold squares on new bests
+    from `LiftTrend.record_points` over ALL the history, a crown on the best, the note's
+    point green), the records tiles (`JourneyLifts._records`) and `RepLadder`
+    (`LiftTrend.rep_ladder`: heaviest weight for 1, 2-3... reps).
+  - Logbook: `LiftCalendar` (`LiftTrend.calendar`: 8 to 16 weeks depending on how long the
+    lift has been done, bigger days brighter, new bests ringed gold), WeekBars with the goal
+    for a PT lift, then sessions month by month as `SetBlocks` (a block per set, height =
+    weight against the lift's best, reps on top), 10 then "Show all".
+  - `SparkBars` (`ui/charts/spark_bars.gd`): the last 7 times + this time as small bars,
+    beside every exercise in `SessionView.lift_rows` (the review: green, gold for a record)
+    and every movement in Journey -> Lifts.
+  - Tests: more in `tests/lift_trend_test.gd`; walkthrough `tests/shots/progress.gd` (year
+    data; it logs a lighter day and a day of 8s first, since the demo bench only goes up).
+
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -415,6 +439,7 @@ themes, climb_more (routes and hangboard), pictures (screenshots in the note, `n
 misc (the Miscellaneous section and vest walks), reading (pages read, year data),
 names (lift names that are not exact: the review's yes / no / another, `new` data),
 detail (a session's detail, a lift's trends, physical therapy, year data),
+progress (a lift's three views: Compare, Progress, Logbook, and the review's history bars, year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -431,8 +456,10 @@ the check.
   note shows there as reps without weight (its seconds are kept when the session is saved).
 - A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules
   have no timed sets.
-- Switching "Physical therapy" on a lift's page does not redraw the chart above it (the
-  goal line of "How often" shows the next time the page opens).
+- Switching "Physical therapy" on a lift's page does not redraw the view above it (the
+  Logbook's goal bars and the Compare target change the next time the page opens).
+- "Next time" is a rule of thumb (one more rep, then more weight), not a programme; the
+  weight step is 2.5 kg or 5 lb whatever the lift.
 - Lift names are filed when a lift is imported or saved, not afterwards: changing `MOVES`,
   `VOCAB` or `ALIASES` does not rename what is already in a save. To bring a save in line,
   run `LiftNames.migrate` over it on a copy (as was done 2026-11-20) and check XP is unchanged.

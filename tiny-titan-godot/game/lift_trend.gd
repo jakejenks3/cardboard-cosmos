@@ -9,9 +9,17 @@ extends RefCounted
 ##   per_week(history, today, n)   days it was done in each of the last n weeks
 ##   compare(sets, before)         this session against the one before it
 ##   change(points)                first against last of a series
+##   pairs(sets, prev_sets)        set by set against another session
+##   records(sets, before)         the records a session sets
+##   next_target(sets, step_kg)    something to aim for next time
+##   best_row(history)             the best day
+##   record_points(points)         the points of a chart that set a new best
+##   since(points, today, days)    a chart's last days
+##   calendar(history, today, n)   the days it was done, week by week
+##   rep_ladder(history)           the heaviest weight for each number of reps
 ##
-## The lift's page (JourneyLifts.open_detail) draws these, and every list of
-## exercises (SessionView) shows `compare` beside each one.
+## The lift's page (JourneyLifts.open_detail, LiftViews) draws these, and every
+## list of exercises (SessionView) shows `compare` beside each one.
 ## Pure logic, no scene and no autoload: tests/lift_trend_test.gd.
 
 ## What can be charted. "often" is per_week, the rest are `series`.
@@ -122,6 +130,7 @@ static func weighted(history: Array) -> bool:
 ##   "reps":   every rep of the day
 ##   "volume": weight x reps of the day, in kg
 ##   "e1rm":   the best estimated one-rep max of the day, in kg
+##   "best":   the most reps in one set of the day
 ##   "hold":   the longest hold of the day, in seconds
 static func series(history: Array, metric: String) -> Array:
 	var out = []
@@ -136,6 +145,8 @@ static func series(history: Array, metric: String) -> Array:
 				y = float(row.volumeKg)
 			"e1rm":
 				y = float(row.e1rm)
+			"best":
+				y = float(row.bestReps)
 			_:
 				y = float(row.reps)
 		if y <= 0.0 and metric != "reps":
@@ -237,3 +248,257 @@ static func change(points: Array) -> Dictionary:
 	var a = points[0]
 	var b = points[points.size() - 1]
 	return {"from": float(a.y), "to": float(b.y), "delta": float(b.y) - float(a.y), "days": Dates.days_between(str(a.x), str(b.x)), "n": points.size()}
+
+
+# ---------------------------------------------------------------------------
+# The lift page's three views (ui/screens/lift_views.gd): Compare, Progress,
+# Logbook.
+# ---------------------------------------------------------------------------
+
+## The sets that were really done (reps > 0), in the order they were done.
+static func real_sets(sets: Array) -> Array:
+	return sets.filter(func(one): return int(one.get("reps", 0)) > 0)
+
+
+## Set by set, this session against another one (the "previous" column of a
+## gym log): [{"i" (1-based), "cur", "prev" (a set, or null), "kind", "dkg",
+## "dreps", "dsec"}]. kind: "up" | "down" | "same" | "added" (no set at that
+## place before) | "dropped" (that set was not done this time). A hold is
+## compared by its seconds, then reps; a weighted set by its weight, then reps.
+static func pairs(sets: Array, prev_sets: Array) -> Array:
+	var cur = real_sets(sets)
+	var prev = real_sets(prev_sets)
+	var out = []
+	for i in range(maxi(cur.size(), prev.size())):
+		var c = cur[i] if i < cur.size() else null
+		var p = prev[i] if i < prev.size() else null
+		var row = {"i": i + 1, "cur": c, "prev": p, "kind": "same", "dkg": 0.0, "dreps": 0, "dsec": 0}
+		if c == null:
+			row.kind = "dropped"
+		elif p == null:
+			row.kind = "added"
+		else:
+			row.dreps = int(c.reps) - int(p.reps)
+			if is_hold(c) or is_hold(p):
+				row.dsec = int(c.get("holdSec", 0)) - int(p.get("holdSec", 0))
+				if row.dsec != 0:
+					row.kind = "up" if row.dsec > 0 else "down"
+				elif row.dreps != 0:
+					row.kind = "up" if row.dreps > 0 else "down"
+			else:
+				var dkg = float(c.get("weightKg", 0)) - float(p.get("weightKg", 0))
+				if absf(dkg) > 1e-6:
+					row.dkg = dkg
+					row.kind = "up" if dkg > 0.0 else "down"
+				elif row.dreps != 0:
+					row.kind = "up" if row.dreps > 0 else "down"
+		out.append(row)
+	return out
+
+
+## The day the lift went best: the history row with the heaviest top set (a
+## hold: the longest; bodyweight: the most reps in a set), the newest of equal
+## days. Null for an empty history.
+static func best_row(history: Array):
+	var best = null
+	var best_v = -1.0
+	for h in history:
+		var v = main_value(day(h.get("sets", [])))
+		if v > best_v + 1e-9:
+			best_v = v
+			best = h
+	return best
+
+
+## The number a session of this lift is judged by: the longest hold, else the
+## heaviest set, else the most reps in a set.
+static func main_value(d: Dictionary) -> float:
+	if int(d.holdSec) > 0:
+		return float(d.holdSec)
+	if float(d.topKg) > 0.0:
+		return float(d.topKg)
+	return float(d.bestReps)
+
+
+## The records a session sets against everything before it, best news first:
+## [{"id", "label", "value" (kg, reps or seconds), "unit": "kg" | "reps" | "sec"}].
+## Empty for a first session (nothing to beat yet) or one that beat nothing.
+##   top       heaviest set ever
+##   reps_at   most reps ever at this weight or more (when the weight is not new)
+##   strength  best estimated strength (one-rep max worked out from a set)
+##   volume    most weight moved in one day of it
+##   reps      most reps in one set (no weight)
+##   day_reps  most reps in one day (no weight)
+##   hold      longest hold
+static func records(sets: Array, before: Array) -> Array:
+	var cur = day(sets)
+	if int(cur.sets) == 0 or before.is_empty():
+		return []
+	var b = {"top": 0.0, "strength": 0.0, "volume": 0.0, "reps": 0, "day_reps": 0, "hold": 0}
+	var reps_at = 0
+	for h in before:
+		var d = day(h.get("sets", []))
+		b.top = maxf(b.top, float(d.topKg))
+		b.strength = maxf(b.strength, float(d.e1rm))
+		b.volume = maxf(b.volume, float(d.volumeKg))
+		b.reps = maxi(b.reps, int(d.bestReps))
+		b.day_reps = maxi(b.day_reps, int(d.reps))
+		b.hold = maxi(b.hold, int(d.holdSec))
+		for one in real_sets(h.get("sets", [])):
+			if float(cur.topKg) > 0.0 and float(one.get("weightKg", 0)) >= float(cur.topKg) - 1e-6:
+				reps_at = maxi(reps_at, int(one.reps))
+	var out = []
+	if int(cur.holdSec) > 0:
+		if int(cur.holdSec) > int(b.hold):
+			out.append({"id": "hold", "label": "Longest hold", "value": int(cur.holdSec), "unit": "sec"})
+		return out
+	if float(cur.topKg) > 0.0:
+		if float(cur.topKg) > float(b.top) + 1e-6:
+			out.append({"id": "top", "label": "Heaviest set", "value": float(cur.topKg), "unit": "kg"})
+		elif int(cur.topReps) > reps_at:
+			out.append({"id": "reps_at", "label": "Most reps at this weight", "value": int(cur.topReps), "unit": "reps"})
+		if float(cur.e1rm) > float(b.strength) + 1e-6:
+			out.append({"id": "strength", "label": "Best estimated strength", "value": float(cur.e1rm), "unit": "kg"})
+		if float(cur.volumeKg) > float(b.volume) + 1e-6:
+			out.append({"id": "volume", "label": "Most weight moved in a day", "value": float(cur.volumeKg), "unit": "kg"})
+		return out
+	if int(cur.bestReps) > int(b.reps):
+		out.append({"id": "reps", "label": "Most reps in a set", "value": int(cur.bestReps), "unit": "reps"})
+	if int(cur.reps) > int(b.day_reps):
+		out.append({"id": "day_reps", "label": "Most reps in a day", "value": int(cur.reps), "unit": "reps"})
+	return out
+
+
+## Something to aim for next time, from a session's sets (double progression:
+## more reps at the same weight until every set gets there, then more weight).
+## {"kind": "weight" | "reps" | "hold" | "none", "sets": the sets to aim for,
+##  "set": the set that changes (1-based, 0 = all), "reps": its reps, "addKg",
+##  "addSec", "kg": the working weight}. `step_kg`: the weight to add (2.5 kg,
+## or 5 lb in kg).
+static func next_target(sets: Array, step_kg: float) -> Dictionary:
+	var real = real_sets(sets)
+	var out = {"kind": "none", "sets": [], "set": 0, "reps": 0, "addKg": 0.0, "addSec": 0, "kg": 0.0}
+	if real.is_empty():
+		return out
+	var aim = []
+	for one in real:
+		aim.append(one.duplicate())
+	var holds = real.filter(func(one): return is_hold(one))
+	if not holds.is_empty():
+		for one in aim:
+			if is_hold(one):
+				one.holdSec = int(one.holdSec) + 5
+		out.kind = "hold"
+		out.sets = aim
+		out.addSec = 5
+		return out
+	var top = 0.0
+	for one in real:
+		top = maxf(top, float(one.get("weightKg", 0)))
+	out.kg = top
+	# The working sets: the ones at the top weight (warm-ups stay as they were).
+	var work = []
+	for i in range(real.size()):
+		if absf(float(real[i].get("weightKg", 0)) - top) <= 1e-6:
+			work.append(i)
+	var most = 0
+	var least_i = work[0]
+	for i in work:
+		most = maxi(most, int(real[i].reps))
+		if int(real[i].reps) < int(real[least_i].reps):
+			least_i = i
+	if top > 0.0 and int(real[least_i].reps) >= most:
+		for i in work:
+			aim[i].weightKg = top + step_kg
+		out.kind = "weight"
+		out.addKg = step_kg
+		out.reps = most
+		out.sets = aim
+		return out
+	aim[least_i].reps = int(aim[least_i].reps) + 1
+	out.kind = "reps"
+	out.set = least_i + 1
+	out.reps = int(aim[least_i].reps)
+	out.sets = aim
+	return out
+
+
+## The points of a chart that set a new best: indexes into `points` (oldest
+## first) whose y beats every point before it. The first point is not one.
+static func record_points(points: Array) -> Array:
+	var out = []
+	var best = -INF
+	for i in range(points.size()):
+		var y = float(points[i].y)
+		if i > 0 and y > best + 1e-9:
+			out.append(i)
+		best = maxf(best, y)
+	return out
+
+
+## The points of the last `days` days up to `today` (days <= 0: all of them).
+static func since(points: Array, today: String, days: int) -> Array:
+	if days <= 0:
+		return points
+	var from = Dates.add_days(today, -days)
+	return points.filter(func(p): return str(p.x) >= from)
+
+
+## The lift's calendar: the last `weeks` Monday-weeks up to the week of
+## `today`, day by day, Monday first. [{"date", "sets", "level" (0 = not done,
+## 1..4 how big a day it was against its biggest), "pr" (a new best that day),
+## "future" (after today)}]. A day's size is its weight moved, or its reps
+## (holds: seconds held) for a lift without weight.
+static func calendar(history: Array, today: String, weeks: int) -> Array:
+	var rows = by_day(history)
+	var size_of = {}
+	var biggest = 0.0
+	var loaded = weighted(history)
+	var pr_days = {}
+	var best = -1.0
+	for i in range(rows.size()):
+		var r = rows[i]
+		var v = float(r.volumeKg) if loaded else float(r.reps + r.holdTotal)
+		size_of[r.date] = {"v": v, "sets": int(r.sets)}
+		biggest = maxf(biggest, v)
+		var m = main_value(r)
+		if i > 0 and m > best + 1e-9:
+			pr_days[r.date] = true
+		best = maxf(best, m)
+	var start = Dates.add_weeks(Dates.week_key(today), -(weeks - 1))
+	var out = []
+	for w in range(weeks):
+		for d in range(7):
+			var date = Dates.add_days(Dates.add_weeks(start, w), d)
+			var cell = {"date": date, "sets": 0, "level": 0, "pr": pr_days.has(date), "future": date > today}
+			if size_of.has(date):
+				cell.sets = size_of[date].sets
+				cell.level = clampi(int(ceil(4.0 * float(size_of[date].v) / maxf(biggest, 1e-9))), 1, 4)
+			out.append(cell)
+	return out
+
+
+## The heaviest weight lifted for at least n reps, as steps: consecutive rep
+## counts with the same best are one step. [{"from", "to" (reps), "kg", "date"}],
+## fewest reps first. Only sets with weight count; rep counts past `max_reps`
+## are left out.
+static func rep_ladder(history: Array, max_reps: int = 12) -> Array:
+	var best = {}
+	for h in history:
+		for one in real_sets(h.get("sets", [])):
+			var w = float(one.get("weightKg", 0))
+			if w <= 0.0 or is_hold(one):
+				continue
+			for n in range(1, mini(int(one.reps), max_reps) + 1):
+				if not best.has(n) or w > float(best[n].kg) + 1e-9:
+					best[n] = {"kg": w, "date": str(h.get("date", ""))}
+	var out = []
+	for n in range(1, max_reps + 1):
+		if not best.has(n):
+			continue
+		var last = out[out.size() - 1] if not out.is_empty() else null
+		if last != null and int(last.to) == n - 1 and absf(float(last.kg) - float(best[n].kg)) <= 1e-9:
+			last.to = n
+		else:
+			out.append({"from": n, "to": n, "kg": float(best[n].kg), "date": best[n].date})
+	return out

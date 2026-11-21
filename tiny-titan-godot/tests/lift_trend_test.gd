@@ -147,5 +147,63 @@ func _init() -> void:
 	var sum = Pt.summary(rows)
 	ok(sum.lifts == 4 and sum.done == 3 and sum.goal == 3 + 7 + 2 + 3 and sum.behind == 1 and sum.left == 12, "the week in all", sum)
 	ok(Pt.is_pt(marks, "Neck 4 way") and not Pt.is_pt(marks, "Squat") and Pt.per_week(marks, "clamshell") == 7 and Pt.per_week(marks, "Squat") == 3 and Pt.per_week({"x": {"perWeek": 40}}, "x") == 7, "is it PT, and for how many days a week")
+	_views()
 	print("LIFTTREND: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
+
+
+## The lift page's three views: set-by-set compare, records, next time, the
+## chart's record points, the calendar and the rep ladder.
+func _views() -> void:
+	# --- set by set ---------------------------------------------------------------------
+	var p = LiftTrend.pairs(sets([[10, 60], [10, 60], [8, 60], [6, 65]]), sets([[10, 60], [9, 60], [8, 62.5]]))
+	ok(p.size() == 4 and p[0].kind == "same" and p[1].kind == "up" and p[1].dreps == 1 and p[2].kind == "down" and near(p[2].dkg, -2.5) and p[3].kind == "added" and p[3].prev == null, "set by set: same, one more rep, lighter, a set added", p)
+	var dropped = LiftTrend.pairs(sets([[5, 100]]), sets([[5, 100], [5, 100]]))
+	ok(dropped.size() == 2 and dropped[1].kind == "dropped" and dropped[1].cur == null, "a set not done this time is 'dropped'")
+	var holds = LiftTrend.pairs([{"reps": 1, "weightKg": 0.0, "holdSec": 45}], [{"reps": 1, "weightKg": 0.0, "holdSec": 30}])
+	ok(holds[0].kind == "up" and holds[0].dsec == 15, "holds compare by their seconds", holds)
+	ok(LiftTrend.pairs(sets([[0, 60], [5, 60]]), sets([[5, 60]])).size() == 1, "sets without reps are not counted")
+
+	# --- records --------------------------------------------------------------------------
+	var before = [h("2026-11-10", [[5, 100], [5, 100]]), h("2026-11-03", [[8, 90], [8, 90], [8, 90]])]
+	var heavier = LiftTrend.records(sets([[3, 105]]), before)
+	ok(heavier.size() >= 1 and heavier[0].id == "top" and near(heavier[0].value, 105.0), "a heavier set than ever is the first record", heavier)
+	var more = LiftTrend.records(sets([[7, 100]]), before)
+	ok(more.size() >= 1 and more[0].id == "reps_at" and int(more[0].value) == 7 and more.any(func(r): return r.id == "strength"), "more reps at the best weight, and a better estimated strength", more)
+	var vol = LiftTrend.records(sets([[8, 90], [8, 90], [8, 90], [8, 90]]), before)
+	ok(vol.size() == 1 and vol[0].id == "volume", "a fourth set of eight: only the volume is new", vol)
+	ok(LiftTrend.records(sets([[5, 100]]), before).is_empty() and LiftTrend.records(sets([[5, 100]]), []).is_empty(), "nothing beaten, or nothing before: no records")
+	var bw = LiftTrend.records(sets([[12, 0], [10, 0]]), [h("2026-11-10", [[11, 0], [11, 0]])])
+	ok(bw.size() == 1 and bw[0].id == "reps" and int(bw[0].value) == 12, "without weight: most reps in a set (not in a day: 22 = 22)", bw)
+	var hold_rec = LiftTrend.records([{"reps": 3, "weightKg": 0.0, "holdSec": 40}], [{"date": "2026-11-10", "id": "x", "sets": [{"reps": 3, "weightKg": 0.0, "holdSec": 30}]}])
+	ok(hold_rec.size() == 1 and hold_rec[0].id == "hold" and int(hold_rec[0].value) == 40, "a hold: longest hold", hold_rec)
+
+	# --- next time ------------------------------------------------------------------------
+	var all_in = LiftTrend.next_target(sets([[10, 60], [10, 60], [10, 60]]), 2.5)
+	ok(all_in.kind == "weight" and near(all_in.addKg, 2.5) and all_in.sets.all(func(s): return near(s.weightKg, 62.5) and int(s.reps) == 10), "every set at 10: add weight, same reps", all_in)
+	var short = LiftTrend.next_target(sets([[10, 60], [10, 60], [8, 60]]), 2.5)
+	ok(short.kind == "reps" and short.set == 3 and short.reps == 9 and int(short.sets[2].reps) == 9 and near(short.sets[2].weightKg, 60.0), "one set short: one more rep on it", short)
+	var warm = LiftTrend.next_target(sets([[10, 40], [5, 80], [5, 80]]), 2.5)
+	ok(warm.kind == "weight" and near(warm.sets[0].weightKg, 40.0) and near(warm.sets[1].weightKg, 82.5), "a warm-up set stays as it was", warm)
+	var body = LiftTrend.next_target(sets([[12, 0], [10, 0]]), 2.5)
+	ok(body.kind == "reps" and body.set == 2 and body.reps == 11, "bodyweight: one more rep on the weakest set", body)
+	var hold_next = LiftTrend.next_target([{"reps": 3, "weightKg": 0.0, "holdSec": 30}], 2.5)
+	ok(hold_next.kind == "hold" and int(hold_next.sets[0].holdSec) == 35, "a hold: five seconds longer", hold_next)
+	ok(LiftTrend.next_target([], 2.5).kind == "none", "nothing done: nothing to aim for")
+
+	# --- the chart, the calendar, the ladder ---------------------------------------------------
+	var pts = [{"x": "2026-10-01", "y": 50.0}, {"x": "2026-10-08", "y": 55.0}, {"x": "2026-10-15", "y": 52.0}, {"x": "2026-10-22", "y": 55.0}, {"x": "2026-10-29", "y": 60.0}]
+	ok(LiftTrend.record_points(pts) == [1, 4], "record points: only a new best, never a tie, never the first", LiftTrend.record_points(pts))
+	ok(LiftTrend.since(pts, "2026-10-29", 14).size() == 3 and LiftTrend.since(pts, "2026-10-29", 0).size() == 5, "a range keeps the last days only")
+	var hist = [h("2026-11-18", [[5, 100], [5, 100]]), h("2026-11-16", [[5, 95]]), h("2026-11-02", [[5, 100], [5, 100], [5, 100], [5, 100]])]
+	var cal = LiftTrend.calendar(hist, TODAY, 4)
+	var by = {}
+	for c in cal:
+		by[c.date] = c
+	ok(cal.size() == 28 and cal[0].date == "2026-10-26" and cal[27].date == "2026-11-22", "four weeks of days, Monday first, to the end of this week", [cal[0].date, cal[27].date])
+	ok(by["2026-11-02"].level == 4 and by["2026-11-18"].level == 2 and by["2026-11-16"].level == 1 and by["2026-11-10"].level == 0, "the biggest day is level 4, the others by their size", [by["2026-11-18"].level, by["2026-11-16"].level])
+	ok(not by["2026-11-02"].pr and not by["2026-11-18"].pr and by["2026-11-22"].future and not by["2026-11-18"].future, "no new best in this history (100 is tied, never beaten); days after today are marked")
+	var lad = LiftTrend.rep_ladder([h("2026-11-18", [[3, 110], [5, 100]]), h("2026-11-10", [[8, 90], [1, 120]])])
+	ok(lad.size() == 4 and lad[0].from == 1 and lad[0].to == 1 and near(lad[0].kg, 120.0) and lad[1].from == 2 and lad[1].to == 3 and near(lad[1].kg, 110.0) and lad[2].from == 4 and lad[2].to == 5 and lad[3].from == 6 and lad[3].to == 8 and near(lad[3].kg, 90.0), "the rep ladder: 1 rep 120, 2-3 110, 4-5 100, 6-8 90", lad)
+	var best = LiftTrend.best_row(hist)
+	ok(best != null and best.date == "2026-11-18", "the best day: the heaviest, the newest of equal days", best)

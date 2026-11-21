@@ -151,7 +151,7 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 	if not done.is_empty():
 		var said = []
 		for d in done:
-			said.append(str(d.variation) if str(d.variation) != "" else "plain")
+			said.append(str(d.variation) if str(d.variation) != "" else "Standard")
 		sub = " · ".join(PackedStringArray(said))
 	elif e.own:
 		sub = "Your own"
@@ -165,6 +165,17 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 	if st == null:
 		h.add_child(Kit.vcenter(Kit.tag("NEW", Pal.SECOND, false, 10)))
 	else:
+		# The last few times of the variation done most recently, as small bars.
+		var latest = e.get("done", [])
+		if not latest.is_empty() and latest[0].st != null and latest[0].st.history.size() >= 2:
+			var days = LiftTrend.by_day(latest[0].st.history)
+			var vals = []
+			for d in days.slice(maxi(0, days.size() - 8)):
+				vals.append(LiftTrend.main_value(d))
+			var sb = SparkBars.new()
+			sb.setup(vals, Pal.LIFT)
+			sb.tooltip_text = "The last %d times" % vals.size()
+			h.add_child(Kit.vcenter(sb))
 		var r = _ig(Kit.vbox(0))
 		r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var best = Kit.label(best_text(st, wu), 13, Pal.ACCENT, true)
@@ -228,108 +239,6 @@ static func open_named(lift_name: String, opts: Dictionary = {}) -> void:
 	open_detail(found, rows, o)
 
 
-## The numbers of a lift that can be charted, as the picker's options.
-static func trend_options(history: Array) -> Array:
-	var out = []
-	var loaded = LiftTrend.weighted(history)
-	if loaded:
-		out.append({"value": "weight", "label": "Weight"})
-	if LiftTrend.held(history):
-		out.append({"value": "hold", "label": "Hold"})
-	out.append({"value": "reps", "label": "Reps"})
-	if loaded:
-		out.append({"value": "volume", "label": "Volume"})
-	out.append({"value": "often", "label": "How often"})
-	return out
-
-
-## The number a lift is about: the seconds when it is held, the weight when it
-## carries one, else the reps. The page opens on its chart.
-static func main_metric(history: Array) -> String:
-	if LiftTrend.held(history):
-		return "hold"
-	return "weight" if LiftTrend.weighted(history) else "reps"
-
-
-## A number of a trend with its unit: "52.5 lb", "3.4k lb", "30 s", "68".
-static func trend_text(metric: String, v: float, wu: String) -> String:
-	match metric:
-		"weight":
-			return "%s %s" % [TTUtil.num_str(snappedf(v, 0.1)), wu]
-		"volume":
-			return "%s %s" % [Charts.fmt_k(v), wu]
-		"hold":
-			return "%d s" % TTUtil.jsround(v)
-	return str(TTUtil.jsround(v))
-
-
-## The trend: one chart in a card, with a picker for what it shows. It opens on
-## the number the lift is about. `history` is every session of the lift, the
-## note's sets among them when the page was opened from the phone note. Only
-## the chart is rebuilt when another number is picked.
-static func _trend_card(box: Control, history: Array, wu: String, goal: int) -> void:
-	var current = main_metric(history)
-	var holder = Kit.vbox(6)
-	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var c = Kit.card(8, Callable(), 10)
-	c.add(Kit.segmented(trend_options(history), current, JourneyLifts._show_trend.bind(holder, history, wu, goal), Pal.LIFT))
-	c.add(holder)
-	box.add_child(c)
-	_show_trend(current, holder, history, wu, goal)
-
-
-static func _show_trend(metric, holder: Control, history: Array, wu: String, goal: int) -> void:
-	if not is_instance_valid(holder):
-		return
-	var which = str(metric)
-	for old in holder.get_children():
-		holder.remove_child(old)
-		old.queue_free()
-	if which == "often":
-		var weeks = LiftTrend.per_week(history, App.today, 8)
-		var bars = WeekBars.new()
-		bars.setup(weeks, Pal.PT if goal > 0 else Pal.LIFT, goal)
-		holder.add_child(bars)
-		var last_day = ""
-		for d in LiftTrend.days_done(history):
-			if str(d) > last_day:
-				last_day = str(d)
-		var said = Kit.hbox(8)
-		said.add_child(Kit.vcenter(Kit.tag("%s a week" % Fmt.to_fixed(LiftTrend.weekly_rate(weeks), 1), Pal.LIFT, true, 12)))
-		var last_text = Dates.relative_day(last_day, App.today)
-		if Dates.days_between(last_day, App.today) <= 1:
-			last_text = last_text.to_lower()
-		var rest = "%d days in all · last %s" % [LiftTrend.days_done(history).size(), last_text]
-		if goal > 0:
-			rest += " · the line is your %d a week" % goal
-		said.add_child(Kit.vcenter(Kit.clip(rest, 12, Pal.MUTED)))
-		holder.add_child(said)
-		return
-	var points = []
-	for p in LiftTrend.series(history, which):
-		points.append({"x": p.x, "y": float(p.y) if (which == "reps" or which == "hold") else Fmt.kg_to_unit(float(p.y), wu)})
-	var what = {"weight": "The heaviest set of each day", "reps": "Every rep of each day", "volume": "Weight x reps of each day", "hold": "The longest hold of each day"}[which]
-	if points.is_empty():
-		holder.add_child(Kit.para("Nothing to chart here yet.", 12, Pal.MUTED))
-		return
-	var ln = Charts.line(points, Pal.LIFT, func(val): return JourneyLifts.trend_text(which, float(val), wu))
-	ln.tooltip_text = what
-	holder.add_child(ln)
-	var said = Kit.hbox(8)
-	if points.size() < 2:
-		said.add_child(Kit.vcenter(Kit.tag("First day", Pal.SECOND, false, 12)))
-		said.add_child(Kit.vcenter(Kit.clip("The line starts with the next one", 12, Pal.MUTED)))
-	else:
-		var ch = LiftTrend.change(points)
-		var delta = float(ch.delta)
-		if absf(delta) < 0.05:
-			said.add_child(Kit.vcenter(Kit.tag("Level", Pal.PANEL2, false, 12)))
-		else:
-			said.add_child(Kit.vcenter(Kit.tag("%s%s" % ["+" if delta > 0.0 else "-", trend_text(which, absf(delta), wu)], Pal.GOOD if delta > 0.0 else Pal.ACCENT2, true, 12)))
-		said.add_child(Kit.vcenter(Kit.clip("since %s · %d sessions" % [Dates.format_date(points[0].x), int(ch.n)], 12, Pal.MUTED)))
-	holder.add_child(said)
-
-
 ## The physical therapy card of a lift: a switch, and when it is on, this
 ## week's days and how many days a week to aim for. Rebuilt in place.
 static func _pt_block(holder: Control, lift: String) -> void:
@@ -387,89 +296,7 @@ static func _set_goal(holder: Control, lift: String, per_week: int) -> void:
 	_pt_block(holder, lift)
 
 
-## The top of a lift's page: its newest session, big. From the phone note that
-## is the note's sets, else the last time it was done. The number the lift is
-## about on the left; the sets and how they compare with the time before on
-## the right. `cur` is a history row, `before` the rows older than it.
-static func _now_card(cur: Dictionary, before: Array, wu: String) -> Card:
-	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-	var from_note = bool(cur.get("note", false))
-	var day = LiftTrend.day(cur.sets)
-	var c = Kit.card(8, Callable(), 12)
-	c.accent(Pal.GOOD if from_note else Pal.LIFT)
-	var kicker = Kit.hbox(6)
-	kicker.add_child(Kit.vcenter(Icons.rect("speech" if from_note else "calendar", 16)))
-	var when = Dates.format_date(str(cur.date), {"weekday": "short", "month": "short", "day": "numeric"})
-	kicker.add_child(Kit.vcenter(Kit.clip(("In your note · %s" if from_note else "Last time · %s") % when, 12, Pal.MUTED, true)))
-	c.add(kicker)
-	var num = str(int(day.bestReps))
-	var unit = "reps, best set"
-	if int(day.holdSec) > 0:
-		num = str(int(day.holdSec))
-		unit = "seconds held"
-	elif float(day.topKg) > 0.0:
-		var parts = JourneyScreen.split_unit(Fmt.fmt_weight(float(day.topKg), wu))
-		num = str(parts[0])
-		unit = "%s, top set" % str(parts[1])
-	var row = Kit.hbox(14)
-	var big = Kit.vbox(2)
-	big.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var digits = PixelFont.rect(num, 4 if num.length() <= 5 else 3, Pal.ACCENT)
-	digits.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	big.add_child(digits)
-	big.add_child(Kit.label(unit, 11, Pal.MUTED, true))
-	row.add_child(big)
-	var words = Kit.vbox(6)
-	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	words.add_child(Kit.para(LiftHistory.describe_sets(cur.sets, fmt_w), 15, null, true))
-	var tag = SessionView.compare_tag(LiftTrend.compare(cur.sets, before), wu, 12)
-	if tag != null:
-		words.add_child(tag)
-	row.add_child(words)
-	c.add(row)
-	if not before.is_empty():
-		var prev_day = Dates.relative_day(before[0].date, App.today)
-		if Dates.days_between(str(before[0].date), App.today) <= 1:
-			prev_day = prev_day.to_lower()
-		c.add(Kit.clip("Before that (%s): %s" % [prev_day, LiftHistory.describe_sets(before[0].sets, fmt_w)], 12, Pal.MUTED))
-	return c
-
-
-## The history as a list, newest first: the day, what was done, and how it
-## compares with the day before it. A day opens its session.
-static func _history_list(box: Control, sheet: Sheet, history: Array, wu: String) -> void:
-	box.add_child(Kit.section_title("History"))
-	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-	var this_year = App.today.substr(0, 4)
-	var shown = mini(8, history.size())
-	for i in range(shown):
-		var hs = history[i]
-		var from_note = bool(hs.get("note", false))
-		var hc = Kit.card(0, Callable() if from_note else JourneyLifts._open_session.bind(sheet, hs.id), 7)
-		if from_note:
-			hc.accent(Pal.GOOD)
-		else:
-			hc.tooltip_text = "Everything you did that day"
-		var hr = _ig(Kit.hbox(8))
-		var day_text = Dates.format_date(str(hs.date)) if str(hs.date).substr(0, 4) == this_year else Dates.format_date(str(hs.date), {"month": "short", "day": "numeric", "year": "numeric"})
-		var d = Kit.label(day_text, 12, Pal.GOOD if from_note else Pal.MUTED, true)
-		d.custom_minimum_size.x = 52
-		hr.add_child(Kit.vcenter(d))
-		var what = Kit.clip(LiftHistory.describe_sets(hs.sets, fmt_w), 13, null, true)
-		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hr.add_child(Kit.vcenter(what))
-		var tag = SessionView.compare_tag(LiftTrend.compare(hs.sets, history.slice(i + 1)), wu)
-		if tag != null:
-			hr.add_child(Kit.vcenter(tag))
-		hc.add(hr)
-		box.add_child(hc)
-	if history.size() > shown:
-		box.add_child(Kit.muted("and %d earlier session%s" % [history.size() - shown, "" if history.size() - shown == 1 else "s"], 11))
-
-
-## The lift's bests, from the log: three tiles, the heaviest set for each rep
-## count when they differ, and one line of totals.
+## The lift's bests, from the log: three tiles and one line of totals.
 static func _records(box: Control, st: Dictionary, wu: String) -> void:
 	box.add_child(Kit.section_title("Records"))
 	var vals
@@ -495,30 +322,22 @@ static func _records(box: Control, st: Dictionary, wu: String) -> void:
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		g.add_child(t)
 	box.add_child(g)
-	# The heaviest set of at least 1, 3, 5... reps: worth showing only when they differ.
-	var marks = LiftLibrary.rep_bests(st)
-	var different = {}
-	for m in marks:
-		different[snappedf(float(m.kg), 0.01)] = true
-	if different.size() >= 2:
-		var mf = Kit.grid(mini(3, marks.size()), 6)
-		mf.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		for m in marks:
-			mf.add_child(JourneyScreen.value_chip("1 rep" if int(m.reps) == 1 else "%d+ reps" % int(m.reps), Fmt.fmt_weight(float(m.kg), wu), Pal.LIFT, "Heaviest set of at least %d rep%s" % [int(m.reps), "" if int(m.reps) == 1 else "s"]))
-		box.add_child(mf)
+	# (The heaviest set for each number of reps is the ladder under it: LiftViews.progress.)
 	var facts = "Last done %s" % Dates.relative_day(st.last, App.today)
 	if float(st.volumeKg) > 0.0:
 		facts += " · %s lifted in all" % Fmt.fmt_big_kg(float(st.volumeKg), wu)
 	box.add_child(Kit.muted(facts, 12))
 
 
-## The page of one lift, top to bottom: its newest session big, the trend
-## chart, the history as a list, then the records, the physical therapy switch
-## and the notes. opts:
+## The page of one lift, top to bottom: its variations, three keys for three
+## views of it (LiftViews: Compare, Progress, Logbook), the physical therapy
+## switch and the notes. opts:
 ##   "pending": {"date", "sets"}  sets from the phone note that are not in the
 ##                                log yet: they are the newest session, and a
 ##                                point on the chart
 ##   "skip_id": a session to leave out of the history (the one such a note replaces)
+##   "session_id": the logged session the page is about (else the newest)
+##   "view": "compare" | "progress" | "logbook" (else the last one picked)
 static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> void:
 	Sfx.tap()
 	var wu = App.weight_unit()
@@ -563,7 +382,12 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 			if str(a.date) != str(b.date):
 				return str(a.date) > str(b.date)
 			return bool(a.get("note", false)) and not bool(b.get("note", false)))
-	elif not history.is_empty():
+	elif opts.get("session_id") != null:
+		# Opened from a logged session: the page is about that day.
+		for hh in history:
+			if hh.id == opts.session_id:
+				cur = hh
+	if cur == null and not history.is_empty():
 		cur = history[0]
 
 	var tags = Kit.flow(6)
@@ -577,14 +401,8 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 	# The variations: done ones lit, the rest to try. One tap switches the page.
 	if choices.size() > 1 or str(pick.variation) != "":
 		var vf = Kit.flow(5)
-		for d in choices:
-			var said = str(d.variation) if str(d.variation) != "" else "No variation"
-			var chip = LogWidgets.mini_chip(said, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.LIFT if d.st != null else Pal.MUTED)
-			chip.tooltip_text = ("Done %d time%s" % [int(d.st.count), "" if int(d.st.count) == 1 else "s"]) if d.st != null else "Not done yet"
-			if d.st == null and d.name != pick.name:
-				chip.modulate.a = 0.6
-			vf.add_child(chip)
 		box.add_child(vf)
+		_variation_chips(vf, sheet, e, rows, choices, pick, false)
 
 	if cur == null:
 		var nc = Kit.card(4, Callable(), 10)
@@ -595,11 +413,11 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		nc.add(nr)
 		box.add_child(nc)
 	else:
-		box.add_child(_now_card(cur, history.slice(history.find(cur) + 1), wu))
-		_trend_card(box, history, wu, Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0)
-		_history_list(box, sheet, history, wu)
-	if st != null:
-		_records(box, st, wu)
+		# Three ways to look at it: Compare, Progress, Logbook (LiftViews). From a
+		# list of exercises (the note's review, a session) it opens on Compare.
+		var view = str(opts.get("view", LiftViews.last_view))
+		LiftViews.build(box, {"sheet": sheet, "lift": lift, "history": history, "cur": cur, "st": st, "wu": wu,
+			"goal": Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0, "view": view})
 
 	var pt_holder = Kit.vbox(0)
 	pt_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -616,6 +434,34 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 	add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(add)
 	sheet.open()
+
+
+## The variation chips at the top of a lift's page. With many variations only
+## the ones done (and the one shown) are there, and "+N more" shows the rest.
+static func _variation_chips(vf: Control, sheet: Sheet, e: Dictionary, rows: Array, choices: Array, pick: Dictionary, all: bool) -> void:
+	if not is_instance_valid(vf):
+		return
+	Kit.clear(vf)
+	var hidden = 0
+	for d in choices:
+		if not all and choices.size() > 6 and d.st == null and d.name != pick.name:
+			hidden += 1
+			continue
+		var said = str(d.variation) if str(d.variation) != "" else "No variation"
+		var chip = LogWidgets.mini_chip(said, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.LIFT if d.st != null else Pal.MUTED)
+		chip.tooltip_text = ("Done %d time%s" % [int(d.st.count), "" if int(d.st.count) == 1 else "s"]) if d.st != null else "Not done yet"
+		if d.st == null and d.name != pick.name:
+			chip.modulate.a = 0.6
+		vf.add_child(chip)
+	if hidden > 0:
+		var more = LogWidgets.mini_chip("+%d more" % hidden, false, JourneyLifts._more_variations.bind(vf, sheet, e, rows, choices, pick), Pal.MUTED)
+		more.tooltip_text = "Show every variation"
+		vf.add_child(more)
+
+
+static func _more_variations(vf: Control, sheet: Sheet, e: Dictionary, rows: Array, choices: Array, pick: Dictionary) -> void:
+	Sfx.tick()
+	_variation_chips(vf, sheet, e, rows, choices, pick, true)
 
 
 ## Another variation of the same movement: the page again, on that one.

@@ -156,11 +156,18 @@ button that adds it to today's workout. "New to me" shows what you have never do
 **What you did, and how it is going.** The review of a phone note lists every exercise of a
 lift as its own row: the sets, and a tag that compares them with the last time (NEW, PR,
 +2.5 lb, -4 reps, same). A session in your log opens the same list (Journey → Log, or the
-recent ones on the Hero tab), with the XP it earned and an Edit key. Click any exercise for
-the lift's page. It reads from the top: your newest session in big numbers with the change
-since the time before; one line graph of the lift over time (Weight to start with; Reps,
-Volume and How often are one tap away), with how much it changed since the first day; then
-the history as a list, one row per day with that day's change; then your records.
+recent ones on the Hero tab), with the XP it earned and an Edit key. Each exercise also has
+small bars for the last few times you did it, this time lit at the end (gold for a record).
+Click any exercise for the lift's page, which has three views:
+
+- **Compare**: this time against last time (or your best day), like a versus screen: both top
+  sets big, a line that says how it went, the sets side by side with what changed on each,
+  the totals, the records you beat, and a target for next time.
+- **Progress**: a chart over time (top set, estimated strength, reps or weight moved), with
+  1M / 3M / 1Y / All, bars for each day's work, gold marks on every new best and a crown on
+  the best ever; then your records and your heaviest weight for each number of reps.
+- **Logbook**: a calendar of the days you did it (bigger days brighter, new bests ringed in
+  gold) and every session as a row of blocks, one per set, month by month.
 
 **Physical therapy.** Write `(PT)` in front of an exercise (`(PT) neck 4 way - 3x20@10`), in
 the phone note or in the Log tab, and that lift becomes a physical therapy exercise; the
