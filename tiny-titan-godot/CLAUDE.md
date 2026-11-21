@@ -509,6 +509,12 @@ is the Windows handoff.
   least 5 no better than the best before them (`ghost_score`, 1% slack); `plateau_fixes`: a
   reset week at 90%, a variation swap, another rep range. The lift page's Compare view adds
   `LiftViews._stuck_card` (not for PT); Today rows get a STUCK tag. Tests: lift_trend_test.
+- Strength standards (2026-11-21): `game/standards.gd` (`Standards`): `bodyweight(body)` (the newest
+  check-in with a weight), `rate(lift, e1rm_kg, best_reps, bw)` -> level 0-4 (Beginner to
+  Elite) from general standards for men: one-rep max / bodyweight for barbell bench,
+  squat, deadlift, overhead press, row, RDL, hip thrust (`RATIO`); reps in a set for
+  pull-up, chin-up, push-up, dip (`REPS`). The Compare view adds `_standard_card` (five
+  coloured steps, what the next level needs). Tests in `tests/plates_test.gd`.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

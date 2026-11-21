@@ -172,6 +172,9 @@ static func compare(holder: Control, ctx: Dictionary) -> void:
 	var g = LiftTrend.ghost(history, cur)
 	if g != null:
 		holder.add_child(_ghost_card(g, mode, wu))
+	var std = _standard_card(history, str(ctx.get("lift", "")), wu)
+	if std != null:
+		holder.add_child(std)
 	var stuck = LiftTrend.plateau(history)
 	if stuck != null and int(ctx.get("goal", 0)) == 0:
 		holder.add_child(_stuck_card(stuck, history, str(ctx.get("lift", "")), wu))
@@ -487,6 +490,49 @@ static func _ghost_card(g: Dictionary, mode: String, wu: String) -> Card:
 					if m != null and m.is_inside_tree():
 						Kit.burst(m, Pal.ACCENT, 18)))
 	c.tooltip_text = "Your session about four weeks before this one: %s" % _day_text(str(g.ghost.date))
+	return c
+
+
+## How strong the lift is for the player's bodyweight (Standards): the level,
+## a bar of five steps, what the next level needs.
+static func _standard_card(history: Array, lift_name: String, wu: String):
+	var e1 = 0.0
+	var reps = 0
+	for h in history:
+		var d = LiftTrend.day(h.get("sets", []))
+		e1 = maxf(e1, float(d.e1rm))
+		reps = maxi(reps, int(d.bestReps))
+	var bw = Standards.bodyweight(App.body())
+	var r = Standards.rate(lift_name, e1, reps, bw)
+	if r == null:
+		return null
+	var col = Color(Standards.COLORS[int(r.level)])
+	var c = Kit.card(6, Callable(), 10)
+	c.accent(col)
+	var head = Kit.hbox(8)
+	head.add_child(Kit.vcenter(Icons.rect("medal", 24)))
+	var v = Kit.vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(Kit.label("STRENGTH LEVEL", 10, Pal.MUTED, true))
+	var said = "%.2f× bodyweight" % float(r.value) if r.kind == "ratio" else "%d reps in a set" % int(r.value)
+	v.add_child(Kit.clip("%s · %s" % [r.name, said], 15, col, true))
+	head.add_child(v)
+	c.add(head)
+	var bars = Kit.hbox(4)
+	for i in range(Standards.LEVELS.size()):
+		var seg = Kit.bar(1.0 if i < int(r.level) else (float(r.progress) if i == int(r.level) + 1 else (1.0 if i == int(r.level) else 0.0)), Color(Standards.COLORS[i]), 8)
+		seg.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		seg.tooltip_text = Standards.LEVELS[i]
+		bars.add_child(seg)
+	c.add(bars)
+	if float(r.next) > 0.0:
+		var need = ""
+		if r.kind == "ratio":
+			need = "%s at %.2f× (%s one-rep max)" % [Standards.LEVELS[int(r.level) + 1], float(r.next), Fmt.fmt_weight(float(r.next) * bw, wu)]
+		else:
+			need = "%s at %d reps in a set" % [Standards.LEVELS[int(r.level) + 1], int(r.next)]
+		c.add(Kit.label(need, 12, Pal.MUTED))
+	c.tooltip_text = "General standards for men, from your best estimated one-rep max and your latest weigh-in"
 	return c
 
 
