@@ -418,7 +418,7 @@ static func show_clear_setup() -> void:
 		"Open the note in Google Docs. Extensions > Apps Script.",
 		"Delete what is there and paste the script (Copy the script, below). Save.",
 		"Deploy > New deployment. Click the gear and pick Web app. Execute as: Me. Who has access: Anyone. Deploy.",
-		"Google asks you to allow it: pick your account. If it says Google hasn't verified this app: Advanced, then Go to the project, then Allow. It is your own script and only works on this doc.",
+		"Google asks you to allow it: pick your account. If it says Google hasn't verified this app: Advanced, then Go to the project, then Continue (or Allow). It is your own script and only works on this doc.",
 		"Copy the Web app link (it ends in /exec), paste it below and press Test.",
 	]
 	for i in range(steps.size()):

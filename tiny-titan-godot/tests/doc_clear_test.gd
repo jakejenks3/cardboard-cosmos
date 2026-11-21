@@ -101,6 +101,7 @@ func _run() -> void:
 	ok(DocClear.looks_right("https://script.google.com/macros/s/AKf/exec") and not DocClear.looks_right("https://docs.google.com/document/d/x/edit") and not DocClear.looks_right(""), "only a web app link is taken")
 	var token = DocClear.new_token()
 	ok(token.length() == 24 and DocClear.script_for(token).contains("const TOKEN = '%s';" % token) and not DocClear.script_for(token).contains("%TOKEN%"), "the script carries the token")
+	ok(DocClear.script_for(token).begins_with("/** @OnlyCurrentDoc */"), "the script asks Google for this doc only")
 
 	await _with_stub(rows, plan, token)
 	print("DOCCLEAR: %d/%d passed" % [passed, total])

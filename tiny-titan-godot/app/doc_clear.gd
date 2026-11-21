@@ -17,8 +17,10 @@ extends RefCounted
 ## Pure but for `send`. Tests: tests/doc_clear_test.gd.
 
 ## The script the player pastes into the doc (Extensions -> Apps Script).
-## %TOKEN% is replaced by the player's token.
-const SCRIPT = """// Tiny Titan: empties the table rows the game has imported.
+## %TOKEN% is replaced by the player's token. "@OnlyCurrentDoc" makes Google
+## ask for this one doc only, not every doc of the account.
+const SCRIPT = """/** @OnlyCurrentDoc */
+// Tiny Titan: empties the table rows the game has imported.
 // Paste into this doc: Extensions > Apps Script. Then Deploy > New deployment >
 // Web app, Execute as: Me, Who has access: Anyone. Copy the web app link into
 // Tiny Titan: Settings > Phone inbox > Clear the table.

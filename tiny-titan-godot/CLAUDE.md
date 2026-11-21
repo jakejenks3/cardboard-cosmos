@@ -380,7 +380,8 @@ is the Windows handoff.
   on mobile; "as long as it doesn't mess with the current workout I'm inputting"): the game
   only READS the doc, so `app/doc_clear.gd` (`DocClear`) holds a Google Apps Script
   (`SCRIPT`, with a token from `new_token`) the player pastes into the doc once and deploys
-  as a web app ("Execute as me, anyone"); its link and the token are `saved.inbox.clear` =
+  as a web app ("Execute as me, anyone"; `/** @OnlyCurrentDoc */` keeps Google's consent to that
+  one doc); its link and the token are `saved.inbox.clear` =
   {url, token, on} (Settings -> Phone inbox -> "Clear the table after import": switch,
   Set up sheet with Copy the script, the link, Test, Clear now). `PhoneInbox._tables`
   (`DocClear.table_rows` of the last export) + `clear_rows()` -> `DocClear.plan`: a table
