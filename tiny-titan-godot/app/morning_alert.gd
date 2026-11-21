@@ -11,7 +11,7 @@ extends RefCounted
 ## Nothing leaves the computer until the player turns it on. The computer has
 ## to be on or asleep (a sleeping one is woken), not shut down.
 ##
-##   settings(saved_settings)   {"on", "topic", "time" ("07:00"), "server"}
+##   settings(saved_settings)   {"on", "topic", "time" ("00:00": midnight, the start of the day), "server"}
 ##   new_topic()                 "tinytitan-" and 12 random letters and digits
 ##   message(saved, today)       {"title", "text"} for the day
 ##   send(node, title, text, topic, server) -> await: {"ok", "code", "error"}
@@ -19,7 +19,7 @@ extends RefCounted
 
 const TASK = "Tiny Titan morning goals"
 const SERVER = "https://ntfy.sh"
-const DEFAULT_TIME = "07:00"
+const DEFAULT_TIME = "00:00"
 
 
 static func settings(saved_settings: Dictionary) -> Dictionary:

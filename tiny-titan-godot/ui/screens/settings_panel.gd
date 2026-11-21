@@ -253,7 +253,7 @@ static func show_morning_how(topic: String) -> void:
 		"1. Install the free app ntfy on your phone (App Store or Google Play).",
 		"2. In ntfy, tap + and subscribe to your topic: %s (Copy topic puts it on the clipboard)." % (topic if topic != "" else "press Send a test once to make it"),
 		"3. Press Send a test: a notification with today's plan should arrive.",
-		"4. Turn the switch on. Every morning at that time this computer works out the day's plan from your log and sends it.",
+		"4. Turn the switch on. Every day at that time (midnight to start with, for an early workout) this computer works out the day's plan from your log and sends it.",
 		"The computer has to be on or asleep (it is woken), not shut down. The message goes through ntfy.sh, a free public relay: the topic is a long random name, so only someone who knows it can read it. It holds lift names and weights, nothing else.",
 	])
 
@@ -278,7 +278,7 @@ func _morning_time(minutes: int) -> void:
 	Sfx.tick()
 	var m = MorningAlert.settings(App.settings())
 	var parts = m.time.split(":")
-	var total = clampi(int(parts[0]) * 60 + int(parts[1]) + minutes, 4 * 60, 11 * 60 + 30)
+	var total = clampi(int(parts[0]) * 60 + int(parts[1]) + minutes, 0, 11 * 60 + 30)
 	var t = "%02d:%02d" % [int(total / 60.0), total % 60]
 	_morning_patch({"time": t})
 	if m.on:

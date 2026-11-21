@@ -180,7 +180,7 @@ None is about minutes. Missions finished yesterday but not claimed wait under "F
 
 **Morning goals on your phone.** Settings → Morning goals sends Today to your phone every
 morning: install the free ntfy app, subscribe to the topic Settings shows, press Send a test,
-then turn it on (this computer sends it at that time when it is on or asleep; nothing is sent
+then turn it on (at midnight to start with, or any time up to 11:30; this computer sends it when it is on or asleep; nothing is sent
 until you turn it on).
 
 **Physical therapy.** Write `(PT)` in front of an exercise (`(PT) neck 4 way - 3x20@10`), in

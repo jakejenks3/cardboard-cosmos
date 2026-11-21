@@ -335,7 +335,7 @@ is the Windows handoff.
   - Morning message: `app/morning_alert.gd` (`MorningAlert`) + `tools/morning.gd`. Windows Task
     Scheduler runs `godot --headless --path <project> --script res://tools/morning.gd` daily
     (Settings -> Morning goals: switch, time, Send a test, Copy topic; `settings.morning` =
-    {on, topic, time, server}). The tool reads save.json itself (never writes; `App._ready`
+    {on, topic, time ("00:00" by default, up to 11:30), server}). The tool reads save.json itself (never writes; `App._ready`
     returns at once when the command line has `res://tools/morning.gd`) and posts
     `Missions.morning_text` to ntfy (https://ntfy.sh/<topic>; the phone runs the ntfy app).
     `-- --dry-run` prints, `-- --test` sends even when off; after noon it sends nothing.
