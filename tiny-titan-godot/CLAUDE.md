@@ -533,6 +533,10 @@ is the Windows handoff.
   plates piled on the rack's bar (legs / lower), a crash pad and a chalk bucket (climb).
   `Art.focus` (set by App when it derives: the plan's kind, else "climb" on a climbing day
   with no lifts) goes to the scene and into `_scene_sig`. parity_art untouched.
+- Trophy room (2026-11-21): `ui/screens/trophy_room.gd` (`TrophyRoom.open`, a key on Adventure ->
+  Trophies): the newest trophies on four wooden shelves (tier-coloured slots, gold and
+  platinum twinkle), record plaques (the four strongest lifts by estimated 1RM, the longest
+  run and ride, the hardest send, the longest hang) and the companions strolling on a floor.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

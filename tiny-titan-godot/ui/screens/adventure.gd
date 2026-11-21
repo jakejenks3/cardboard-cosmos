@@ -379,6 +379,10 @@ func _trophies(state: Dictionary) -> void:
 	ring.mouse_filter = Control.MOUSE_FILTER_STOP
 	row.add_child(Kit.vcenter(ring))
 	sum.add(row)
+	var room = Kit.button("Trophy room", "secondary", TrophyRoom.open, "md", "trophy")
+	room.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	room.tooltip_text = "Your trophies on shelves, your records on plaques, your companions"
+	sum.add(room)
 	var tf = Kit.hbox(6)
 	for t in tiers:
 		var tc = Pal.hex(Achievements.TIER_COLOR[t])
