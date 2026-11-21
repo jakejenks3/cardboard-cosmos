@@ -170,6 +170,20 @@ static func send(node: Node, title: String, text: String, topic: String, server:
 	return {"ok": code >= 200 and code < 300, "code": code, "error": "" if code >= 200 and code < 300 else "The server said %d" % code}
 
 
+## The week whose recap goes to the phone now (RecapPush) ("2026-11-16"), or "" (off, sent already, an empty week).
+static func recap_due(saved_settings: Dictionary, sessions: Array, today: String) -> String:
+	var m = saved_settings.get("morning", {})
+	if not (m is Dictionary) or not bool(m.get("on", false)) or str(m.get("topic", "")) == "" or not bool(m.get("recap", true)):
+		return ""
+	var key = Recap.shift("week", Recap.key_of("week", today), -1)
+	if str(m.get("recapSent", "")) == key:
+		return ""
+	var b = Recap.bounds("week", key)
+	if not sessions.any(func(s): return str(s.get("date", "")) >= str(b[0]) and str(s.get("date", "")) <= str(b[1])):
+		return ""
+	return key
+
+
 ## Send a picture (a PNG file) to the ntfy topic as an attachment, with a
 ## short message (plain ASCII: it goes in a header). Awaitable, as send.
 static func send_picture(node: Node, title: String, words: String, topic: String, server: String, png_path: String, click: String = "") -> Dictionary:

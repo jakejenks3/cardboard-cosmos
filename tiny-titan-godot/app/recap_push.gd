@@ -10,25 +10,11 @@ extends RefCounted
 ## game itself only.
 
 
-## The week to send now ("2026-11-16"), or "" (off, sent already, an empty week).
-static func due(saved_settings: Dictionary, sessions: Array, today: String) -> String:
-	var m = saved_settings.get("morning", {})
-	if not (m is Dictionary) or not bool(m.get("on", false)) or str(m.get("topic", "")) == "" or not bool(m.get("recap", true)):
-		return ""
-	var key = Recap.shift("week", Recap.key_of("week", today), -1)
-	if str(m.get("recapSent", "")) == key:
-		return ""
-	var b = Recap.bounds("week", key)
-	if not sessions.any(func(s): return str(s.get("date", "")) >= str(b[0]) and str(s.get("date", "")) <= str(b[1])):
-		return ""
-	return key
-
-
 ## Send last week's poster when it is due. Awaitable: true when sent.
 static func send_if_due() -> bool:
 	if OS.get_environment("TINY_TITAN_DATA") != "" and not OS.get_cmdline_user_args().has("--recap-push-test"):
 		return false
-	var key = due(App.settings(), App.sessions(), App.today)
+	var key = MorningAlert.recap_due(App.settings(), App.sessions(), App.today)
 	if key == "":
 		return false
 	var r = Recap.build("week", key, App.state, App.sessions(), App.body(), App.today)

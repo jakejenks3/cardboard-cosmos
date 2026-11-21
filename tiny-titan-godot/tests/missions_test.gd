@@ -198,9 +198,9 @@ func _init() -> void:
 
 	# --- last week's recap to the phone: once a week ------------------------------------------------
 	var rs = {"morning": {"on": true, "topic": "t"}}
-	ok(RecapPush.due(rs, split_log, sat) == "2026-11-09", "a new week: last week's recap is due", RecapPush.due(rs, split_log, sat))
-	ok(RecapPush.due({"morning": {"on": true, "topic": "t", "recapSent": "2026-11-09"}}, split_log, sat) == "" and RecapPush.due({"morning": {"on": false, "topic": "t"}}, split_log, sat) == ""
-		and RecapPush.due({"morning": {"on": true, "topic": "t", "recap": false}}, split_log, sat) == "" and RecapPush.due(rs, [], sat) == "", "sent already, off, switched off or an empty week: nothing")
+	ok(MorningAlert.recap_due(rs, split_log, sat) == "2026-11-09", "a new week: last week's recap is due", MorningAlert.recap_due(rs, split_log, sat))
+	ok(MorningAlert.recap_due({"morning": {"on": true, "topic": "t", "recapSent": "2026-11-09"}}, split_log, sat) == "" and MorningAlert.recap_due({"morning": {"on": false, "topic": "t"}}, split_log, sat) == ""
+		and MorningAlert.recap_due({"morning": {"on": true, "topic": "t", "recap": false}}, split_log, sat) == "" and MorningAlert.recap_due(rs, [], sat) == "", "sent already, off, switched off or an empty week: nothing")
 
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
