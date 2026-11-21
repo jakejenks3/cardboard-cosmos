@@ -569,6 +569,9 @@ static func _draw_scene_lit(p: Pix, s: Dictionary) -> void:
 		p.set_px(x + 1 + sway, FLOOR_Y - 13, g)
 		p.set_px(x + 2, FLOOR_Y - 11, g2)
 
+	# --- today's day, from the split (draw_focus) ----------------------------
+	draw_focus(p, str(s.get("focus", "")))
+
 	# --- rug: a border, a fringe at each end ---------------------------------------
 	if stage >= 2:
 		p.rect(28, FLOOR_Y + 1, 40, 3, "#8e2a3a")
@@ -579,6 +582,86 @@ static func _draw_scene_lit(p: Pix, s: Dictionary) -> void:
 			p.set_px(x, FLOOR_Y + 2, "#d6b25a")
 		p.set_px(27, FLOOR_Y + 2, "#d6b25a")
 		p.set_px(68, FLOOR_Y + 2, "#d6b25a")
+
+
+# ---------------------------------------------------------------------------
+# Today's day: a chalkboard and the kit for it (the game's own look only)
+# ---------------------------------------------------------------------------
+
+## 3x5 letters for the chalkboard, rows top to bottom ("#" = chalk).
+const GLYPHS = {
+	"P": ["##.", "#.#", "##.", "#..", "#.."], "U": ["#.#", "#.#", "#.#", "#.#", "###"], "S": [".##", "#..", ".#.", "..#", "##."],
+	"H": ["#.#", "#.#", "###", "#.#", "#.#"], "L": ["#..", "#..", "#..", "#..", "###"], "E": ["###", "#..", "##.", "#..", "###"],
+	"G": [".##", "#..", "#.#", "#.#", ".##"], "R": ["##.", "#.#", "##.", "#.#", "#.#"], "O": [".#.", "#.#", "#.#", "#.#", ".#."],
+	"W": ["#.#", "#.#", "#.#", "###", "#.#"], "C": [".##", "#..", "#..", "#..", ".##"], "I": ["###", ".#.", ".#.", ".#.", "###"],
+	"M": ["#.#", "###", "###", "#.#", "#.#"], "B": ["##.", "#.#", "##.", "#.#", "##."],
+}
+const FOCUS_WORDS = {"push": "PUSH", "pull": "PULL", "legs": "LEGS", "upper": "UPPER", "lower": "LOWER", "climb": "CLIMB"}
+
+
+## The chalkboard with today's day, top right, and what the day needs: a
+## bench with a loaded bar (push), a pull-up bar on the rack (pull), plates
+## piled on the rack's bar (legs), a crash pad and a chalk bucket (climb).
+static func draw_focus(p: Pix, focus: String) -> void:
+	var word: String = str(FOCUS_WORDS.get(focus, ""))
+	if word == "":
+		return
+	# chalkboard: a wooden frame, a slate, the word in chalk
+	var w: int = word.length() * 4 + 3
+	var x0: int = 92 - w
+	var y0: int = 5
+	p.rect(x0, y0, w, 9, "#6b4a2e")
+	p.rect(x0 + 1, y0 + 1, w - 2, 7, "#22332c")
+	p.hline(x0 + 1, y0 + 1, w - 2, "#2c4238")
+	for i in range(word.length()):
+		var g: Array = GLYPHS.get(word[i], [])
+		for r in range(g.size()):
+			for c in range(3):
+				if str(g[r])[c] == "#":
+					p.set_px(x0 + 2 + i * 4 + c, y0 + 2 + r, "#e8f0e6")
+	p.set_px(x0 + w - 3, y0 + 8, "#d8d8d8")
+	match focus:
+		"push", "upper":
+			# a flat bench, a loaded bar racked over it
+			var bx: int = 23
+			p.rect(bx, 60, 12, 2, "#b0342c")
+			p.hline(bx, 60, 12, "#d95a4f")
+			p.rect(bx + 1, 62, 1, 5, "#55606c")
+			p.rect(bx + 10, 62, 1, 5, "#55606c")
+			p.rect(bx + 2, 54, 1, 6, "#66717f")
+			p.rect(bx + 9, 54, 1, 6, "#66717f")
+			p.hline(bx - 3, 54, 18, "#c3ccd6")
+			p.rect(bx - 3, 51, 2, 7, "#3d6fd6")
+			p.rect(bx + 13, 51, 2, 7, "#3d6fd6")
+			p.vline(bx - 3, 51, 7, "#6f9bf0")
+			p.vline(bx + 13, 51, 7, "#6f9bf0")
+	match focus:
+		"pull", "upper":
+			# a pull-up bar across the top of the rack
+			p.hline(1, 22, 23, "#9aa6b4")
+			p.hline(1, 23, 23, "#55606c")
+			p.rect(2, 20, 1, 3, "#66717f")
+			p.rect(21, 20, 1, 3, "#66717f")
+			for x in range(6, 19, 3):
+				p.set_px(x, 22, "#c9d2dc")
+		"legs", "lower":
+			# plates piled on the rack's bar: a heavy squat day
+			for side in [[0, 1], [22, -1]]:
+				var x: int = int(side[0])
+				p.rect(x, 29, 2, 12, "#2f8f4e")
+				p.vline(x, 29, 12, "#4fc47a")
+			p.rect(2, 30, 1, 10, "#e0b23a")
+			p.rect(21, 30, 1, 10, "#e0b23a")
+		"climb":
+			# a crash pad under the wall and a chalk bucket
+			p.rect(26, FLOOR_Y - 3, 38, 4, "#2e6fb8")
+			p.hline(26, FLOOR_Y - 3, 38, "#5a98e0")
+			p.hline(26, FLOOR_Y, 38, "#1f4c80")
+			for x in range(32, 62, 8):
+				p.vline(x, FLOOR_Y - 2, 2, "#245a96")
+			p.rect(66, FLOOR_Y - 5, 5, 5, "#d6c9b0")
+			p.hline(66, FLOOR_Y - 5, 5, "#f4efe6")
+			p.hline(67, FLOOR_Y - 6, 3, "#ffffff")
 
 
 ## Darken the floor under something that stands at columns x0..x1 (its feet on

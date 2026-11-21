@@ -971,4 +971,7 @@ func _recompute() -> void:
 	_quests = null
 	_plan = null
 	Art.mood = Recovery.mood(saved.sessions, today)
+	# The gym shows today's kind of day (the split's), else a climb day.
+	var pl = plan()
+	Art.focus = str(pl.kind) if str(pl.kind) != "" else ("climb" if not pl.others.is_empty() and str(pl.others[0].discipline) == "climb" and pl.lifts.is_empty() else "")
 	Sfx.enabled = bool(saved.settings.get("sound", true))

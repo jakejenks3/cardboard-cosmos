@@ -527,6 +527,12 @@ is the Windows handoff.
   the chain, another starts it again ({now, best, kinds}). The Today card shows "×N" (with
   embers) beside the split chips from 2; a weekly mission "Combo week" (3 in order, 300 XP)
   when a split is set. Tests: missions_test.
+- The gym follows the split (2026-11-21): `GymScene.draw_focus(p, focus)` (the game's own look):
+  a chalkboard top right with the day in 3x5 chalk letters (`GLYPHS`, `FOCUS_WORDS`) and its
+  kit: a bench and a loaded bar (push / upper), a pull-up bar on the rack (pull / upper),
+  plates piled on the rack's bar (legs / lower), a crash pad and a chalk bucket (climb).
+  `Art.focus` (set by App when it derives: the plan's kind, else "climb" on a climbing day
+  with no lifts) goes to the scene and into `_scene_sig`. parity_art untouched.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

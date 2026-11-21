@@ -49,6 +49,9 @@ static var _tex_cache = {} # signature -> ImageTexture (everything but scenes)
 ## The hero's mood (Recovery.mood: "pumped", "tired" or ""), set by App when
 ## the log changes; every hero drawing shows it.
 static var mood: String = ""
+## Today's kind of day for the gym (GymScene.draw_focus: "push", "pull",
+## "legs", "upper", "lower", "climb" or ""), set by App when the log changes.
+static var focus: String = ""
 static var _scene_cache = {} # signature -> ImageTexture (animated scenes churn)
 
 
@@ -282,6 +285,7 @@ static func scene_pix(state: Dictionary, profile: Dictionary, loadout: Dictionar
 		"sessions": int(state.totals.sessions),
 		"hour": hour,
 		"frame": frame,
+		"focus": focus,
 	})
 	if not Pix.classic:
 		# The shadows of the hero and of a pet that stands on the floor.
@@ -562,7 +566,7 @@ static func _scene_sig(state: Dictionary, active_pet, frame: int, hour: int) -> 
 	if _pet_shown(active_pet, state):
 		pet = active_pet + ":" + str(frame % 4)
 	var sky: Dictionary = GymScene.sky_colors(hour)
-	var sig: String = "%d|%d|%s|%s|%d|%d|%s" % [stage, state.achievements.size(), str(int(state.totals.sessions) >= 5), sky.sky, lights, treadmill, pet]
+	var sig: String = "%d|%d|%s|%s|%d|%d|%s|%s" % [stage, state.achievements.size(), str(int(state.totals.sessions) >= 5), sky.sky, lights, treadmill, pet, focus]
 	if not Pix.classic:
 		# The lit scene moves a little more: clouds and stars in the window, the
 		# plant, a lamp on the treadmill.
