@@ -437,6 +437,15 @@ is the Windows handoff.
   is typed there for today, imported or not) and sends `Missions.evening_text` (what of
   `day_boxes` is still open, "open your chest" when all are ticked, nothing when there is
   nothing to say). The switch is the user's to flip (it registers a Windows task).
+- Weekly recap to the phone (2026-11-21): `app/recap_push.gd` (`RecapPush`). `main.gd` calls
+  `send_if_due` 6 s after start: Morning goals on, `settings.morning.recap` (default on), last
+  week not yet sent (`recapSent`) and not empty -> the poster without progress photos
+  (`r.photos = null`: ntfy.sh is public and keeps attachments a while), saved to its own
+  file (`RecapSheet.save_picture(r, file_name)`) and PUT as an attachment
+  (`MorningAlert.send_picture`), then deleted. Never with TINY_TITAN_DATA set (tests,
+  scratch copies) unless `--recap-push-test`. Checked 2026-11-21 against a stand-in server.
+- Bigger record moments (2026-11-21): a "pr" card in the results reel adds `Sfx.level_up`,
+  confetti, `_shake()` (kills a running shake first) and `_fireworks(card)`.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

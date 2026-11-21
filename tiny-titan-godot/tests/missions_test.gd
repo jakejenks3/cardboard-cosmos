@@ -196,6 +196,12 @@ func _init() -> void:
 	ok(Missions.evening_text(sp, perfect_log, sat, false) == "Every box ticked today. Open your chest in the game!" and Missions.evening_text(sp, perfect_log, sat, true) == "", "all done: the chest, then nothing to say")
 	ok(Missions.evening_text(Missions.day_plan([], sat, {}), [], sat, false) == "", "no plan: nothing to say")
 
+	# --- last week's recap to the phone: once a week ------------------------------------------------
+	var rs = {"morning": {"on": true, "topic": "t"}}
+	ok(RecapPush.due(rs, split_log, sat) == "2026-11-09", "a new week: last week's recap is due", RecapPush.due(rs, split_log, sat))
+	ok(RecapPush.due({"morning": {"on": true, "topic": "t", "recapSent": "2026-11-09"}}, split_log, sat) == "" and RecapPush.due({"morning": {"on": false, "topic": "t"}}, split_log, sat) == ""
+		and RecapPush.due({"morning": {"on": true, "topic": "t", "recap": false}}, split_log, sat) == "" and RecapPush.due(rs, [], sat) == "", "sent already, off, switched off or an empty week: nothing")
+
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
 	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}

@@ -321,7 +321,7 @@ static func poster(r: Dictionary) -> Control:
 
 ## Render the poster of `r` off screen and save it as a PNG. Returns the path,
 ## or "" when it could not be written.
-static func save_picture(r: Dictionary) -> String:
+static func save_picture(r: Dictionary, file_name: String = "") -> String:
 	var host = Kit.overlay_root
 	if host == null or not host.is_inside_tree():
 		return ""
@@ -357,7 +357,7 @@ static func save_picture(r: Dictionary) -> String:
 		return ""
 	var dir = App.recap_dir()
 	DirAccess.make_dir_recursive_absolute(dir)
-	var path = dir.path_join("recap-%s-%s.png" % [r.kind, r.key])
+	var path = dir.path_join(file_name if file_name != "" else "recap-%s-%s.png" % [r.kind, r.key])
 	if img.save_png(path) != OK:
 		return ""
 	return path

@@ -290,6 +290,14 @@ func _build_morning() -> void:
 	ev.add_child(Kit.switch(m.evening, _on_evening, "In the evening: what of today is still open (nothing when all is done)"))
 	ev.set_meta("evening_row", true)
 	card.add(ev)
+	var rc = Kit.hbox(8)
+	rc.add_child(Kit.vcenter(Icons.rect("photo", 20)))
+	var rl = Kit.label("Weekly recap picture", 14, null, true)
+	rl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rc.add_child(rl)
+	rc.add_child(Kit.switch(m.recap, func(on): _morning_patch({"recap": bool(on)}), "Last week's recap poster on your phone, when you open the game in a new week"))
+	card.add(rc)
 	var topic = Kit.hbox(6)
 	topic.add_child(Kit.vcenter(Icons.rect("speech", 16)))
 	topic.add_child(Kit.clip("Topic: %s" % (m.topic if m.topic != "" else "(made when you first send)"), 12, Pal.MUTED))

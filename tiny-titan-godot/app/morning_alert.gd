@@ -34,7 +34,7 @@ static func settings(saved_settings: Dictionary) -> Dictionary:
 	if not (m is Dictionary):
 		m = {}
 	return {"on": bool(m.get("on", false)), "topic": str(m.get("topic", "")), "time": str(m.get("time", DEFAULT_TIME)), "server": str(m.get("server", SERVER)),
-		"evening": bool(m.get("evening", false)), "eveningTime": str(m.get("eveningTime", DEFAULT_EVENING))}
+		"evening": bool(m.get("evening", false)), "eveningTime": str(m.get("eveningTime", DEFAULT_EVENING)), "recap": bool(m.get("recap", true))}
 
 
 ## The phone note's link to open on a tap: the Google Doc's own link, or "".
@@ -159,6 +159,33 @@ static func send(node: Node, title: String, text: String, topic: String, server:
 		headers.append("Click: %s" % click)
 		headers.append("Actions: view, Open note, %s" % click)
 	var err = http.request("%s/%s" % [server.trim_suffix("/"), topic.strip_edges()], PackedStringArray(headers), HTTPClient.METHOD_POST, text)
+	if err != OK:
+		http.queue_free()
+		return {"ok": false, "code": 0, "error": "Could not start the request (%d)" % err}
+	var res = await http.request_completed
+	http.queue_free()
+	var code = int(res[1])
+	if int(res[0]) != HTTPRequest.RESULT_SUCCESS:
+		return {"ok": false, "code": code, "error": "No connection"}
+	return {"ok": code >= 200 and code < 300, "code": code, "error": "" if code >= 200 and code < 300 else "The server said %d" % code}
+
+
+## Send a picture (a PNG file) to the ntfy topic as an attachment, with a
+## short message (plain ASCII: it goes in a header). Awaitable, as send.
+static func send_picture(node: Node, title: String, words: String, topic: String, server: String, png_path: String, click: String = "") -> Dictionary:
+	if topic.strip_edges() == "":
+		return {"ok": false, "code": 0, "error": "No topic"}
+	var bytes = FileAccess.get_file_as_bytes(png_path)
+	if bytes.is_empty():
+		return {"ok": false, "code": 0, "error": "No picture"}
+	var http = HTTPRequest.new()
+	http.timeout = 30.0
+	node.add_child(http)
+	var ascii = func(t: String) -> String: return t.to_ascii_buffer().get_string_from_ascii()
+	var headers = ["Title: %s" % ascii.call(title), "Message: %s" % ascii.call(words), "Filename: tiny-titan-week.png", "Tags: trophy"]
+	if click.begins_with("https://"):
+		headers.append("Click: %s" % click)
+	var err = http.request_raw("%s/%s" % [server.trim_suffix("/"), topic.strip_edges()], PackedStringArray(headers), HTTPClient.METHOD_PUT, bytes)
 	if err != OK:
 		http.queue_free()
 		return {"ok": false, "code": 0, "error": "Could not start the request (%d)" % err}

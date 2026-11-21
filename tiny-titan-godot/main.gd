@@ -50,6 +50,8 @@ func _ready() -> void:
 	App.result_ready.connect(_on_result)
 	App.toast_requested.connect(_on_toast)
 	_refresh()
+	# Last week's recap to the phone, once a week (app/recap_push.gd), a moment after start.
+	get_tree().create_timer(6.0).timeout.connect(RecapPush.send_if_due)
 
 
 ## Build the shell: scene, column, screen holder, tab bar, overlay and toast layers.
