@@ -8,10 +8,20 @@ extends RefCounted
 ##   likely_lifts(sessions, today, marks)   the lifts probably done today: the ones
 ##                                           done on this weekday before, or due by
 ##                                           their usual gap
-##   day_plan(sessions, today, marks)        those lifts, the body area of the day
+##   day_plan(sessions, today, marks, split, pick)
+##                                           those lifts, the body area of the day
 ##                                           ("Back day"), a movement of that area
 ##                                           never done, the PT still to do this week
 ##                                           and the other activities likely today
+## With a training SPLIT (settings.split: "pull_push_legs", "push_pull_legs",
+## "upper_lower"; "auto" = none) the day's kind comes from the split: the one
+## after the kind of the last lift day ("Push day" after a pull day), or the
+## player's pick for today (settings.dayPick = {date, kind}). Only that kind's
+## lifts are planned (forearms, core and stretches go with any day). Without a
+## split the day is named after its likeliest lifts. Either way a lift done
+## recently for its rhythm (under half its usual gap, and no weekday habit) is
+## left to rest: one Saturday squat does not make a squat due two days after the
+## last one.
 ## then the MISSIONS of the day and the week, in the Quests format (so the
 ## quest lists, claims, coins and the replay work as before; a claim stores its
 ## XP, so changing missions never changes the XP of an old claim):
@@ -39,6 +49,28 @@ const GROUP = {"back": "back", "chest": "chest", "shoulders": "shoulders", "bice
 const GROUP_NAMES = {"back": "Back day", "chest": "Chest day", "shoulders": "Shoulder day", "arms": "Arm day",
 	"legs": "Leg day", "core": "Core day", "full": "Full body day"}
 const OTHER = ["climb", "run", "ride", "misc"]
+
+## The kinds of day in a split and the body parts that make each one. Forearms,
+## core, mobility and full-body work belong to none: they go with any day.
+const KIND_PARTS = {"pull": ["back", "biceps"], "push": ["chest", "shoulders", "triceps"],
+	"legs": ["quads", "hamstrings", "glutes", "calves"]}
+## Shoulder movements that pull (a pull day's).
+const PULL_SHOULDERS = ["Rear Delt Fly", "Face Pull", "Upright Row", "Pull-Apart"]
+## A split's kinds may also be "upper" (pull and push) and "lower" (legs).
+const KIND_NAMES = {"pull": "Pull day", "push": "Push day", "legs": "Leg day", "upper": "Upper body day", "lower": "Leg day"}
+const KIND_SHORT = {"pull": "Pull", "push": "Push", "legs": "Legs", "upper": "Upper", "lower": "Lower"}
+## The body areas a "try something new" of that kind comes from (STAPLES keys).
+const KIND_GROUPS = {"pull": ["back", "arms"], "push": ["chest", "shoulders", "arms"], "legs": ["legs"],
+	"upper": ["back", "chest", "shoulders", "arms"], "lower": ["legs"]}
+## The splits a player can pick (Settings -> Training split). "auto": none.
+const SPLITS = [
+	{"id": "auto", "name": "From my log", "cycle": []},
+	{"id": "pull_push_legs", "name": "Pull, push, legs", "cycle": ["pull", "push", "legs"]},
+	{"id": "push_pull_legs", "name": "Push, pull, legs", "cycle": ["push", "pull", "legs"]},
+	{"id": "upper_lower", "name": "Upper, lower", "cycle": ["upper", "lower"]},
+]
+## A lift done under this share of its usual gap ago rests (see the top).
+const REST = 0.5
 ## Good first picks for "try something new", most useful first. Movements not
 ## listed (or not in the library) come after these, in library order.
 const STAPLES = {
@@ -62,6 +94,99 @@ static func part_of(lift_name: String) -> String:
 	if m != null:
 		return str(m.part)
 	return LiftLibrary.guess_part(Xp.normalize_exercise(mv))
+
+
+## The kind of day a lift belongs to: "pull", "push", "legs", or "" (any day).
+static func kind_of(lift_name: String) -> String:
+	var part = part_of(lift_name)
+	if part == "shoulders" and PULL_SHOULDERS.has(str(LiftNames.split(lift_name).move)):
+		return "pull"
+	for k in KIND_PARTS:
+		if KIND_PARTS[k].has(part):
+			return k
+	return ""
+
+
+## Does a lift of kind `lift_kind` belong on a day of kind `day_kind`?
+static func fits(lift_kind: String, day_kind: String) -> bool:
+	if day_kind == "upper":
+		return lift_kind == "pull" or lift_kind == "push"
+	if day_kind == "lower":
+		return lift_kind == "legs"
+	return lift_kind == day_kind
+
+
+## The kinds of a split, in order ([] for "auto" or an unknown id).
+static func split_cycle(split: String) -> Array:
+	for s in SPLITS:
+		if str(s.id) == split:
+			return s.cycle
+	return []
+
+
+static func split_name(split: String) -> String:
+	for s in SPLITS:
+		if str(s.id) == split:
+			return str(s.name)
+	return str(SPLITS[0].name)
+
+
+## The kind of one day's lifting in a split: the kind most of its working
+## exercises belong to (PT aside), or "" when none does.
+static func kind_of_day(exercises: Array, cycle: Array, marks: Dictionary = {}) -> String:
+	var count = {}
+	var order = []
+	for ex in exercises:
+		var n = str(ex.get("name", ""))
+		if Pt.is_pt(marks, n) or LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+			continue
+		var lk = kind_of(n)
+		for k in cycle:
+			if fits(lk, str(k)):
+				count[k] = int(count.get(k, 0)) + 1
+				if not order.has(k):
+					order.append(k)
+	var best = ""
+	for k in order:
+		if best == "" or int(count[k]) > int(count[best]):
+			best = k
+	return best
+
+
+## Today's kind in a split: {"kind", "after" (the last lift day's kind, or ""),
+## "afterDate", "picked" (the player chose it for today)}. `pick` is
+## settings.dayPick; it counts on its own date only.
+static func day_kind(sessions: Array, today: String, cycle: Array, marks: Dictionary = {}, pick = null) -> Dictionary:
+	var out = {"kind": "", "after": "", "afterDate": "", "picked": false}
+	if cycle.is_empty():
+		return out
+	var by_day = {}
+	for s in sessions:
+		var d = str(s.get("date", ""))
+		if str(s.get("discipline", "")) == "lift" and d < today and d >= Dates.add_days(today, -LOOKBACK):
+			if not by_day.has(d):
+				by_day[d] = []
+			by_day[d].append_array(s.get("exercises", []))
+	var days = by_day.keys()
+	days.sort()
+	days.reverse()
+	for d in days:
+		var k = kind_of_day(by_day[d], cycle, marks)
+		if k != "":
+			out.after = k
+			out.afterDate = d
+			break
+	out.kind = str(cycle[(cycle.find(out.after) + 1) % cycle.size()]) if out.after != "" else str(cycle[0])
+	if pick is Dictionary and str(pick.get("date", "")) == today and cycle.has(str(pick.get("kind", ""))):
+		out.kind = str(pick.kind)
+		out.picked = true
+	return out
+
+
+## "yesterday", "Thursday", "Nov 10": when a lift was last done.
+static func when_text(last: String, today: String) -> String:
+	var rel = Dates.relative_day(last, today)
+	return rel.to_lower() if rel == "Yesterday" or rel == "Today" else rel
 
 
 ## Is there a weekday it is nearly always done on (2 or more times, two thirds
@@ -102,10 +227,12 @@ static func usual_gap(dates: Array) -> float:
 
 ## The lifts the player will probably do on `today`, judged from the log
 ## before it (the last LOOKBACK days): [{"name", "score", "why", "part", "pt",
-## "last": {"date", "sets"}, "since", "gap", "same"}], likeliest first. A lift
-## counts when it was done on this weekday before, or when as many days have
-## passed as usually pass between two of its sessions (three quarters of them).
-static func likely_lifts(sessions: Array, today: String, marks: Dictionary = {}) -> Array:
+## "kind", "last": {"date", "sets"}, "since", "gap", "same"}], likeliest first.
+## A lift counts when it was done on this weekday before, or when as many days
+## have passed as usually pass between two of its sessions (three quarters of
+## them). On a day of a split (`kind`) every lift of that kind counts and the
+## lifts of the other kinds do not. A lift that is resting (REST) never counts.
+static func likely_lifts(sessions: Array, today: String, marks: Dictionary = {}, kind: String = "") -> Array:
 	var from = Dates.add_days(today, -LOOKBACK)
 	var days_of = {}
 	for s in sessions:
@@ -138,18 +265,26 @@ static func likely_lifts(sessions: Array, today: String, marks: Dictionary = {})
 			if Dates.weekday_index(str(d)) == wd:
 				same += 1
 		var due = clampf(float(since) / maxf(gap, 1.0), 0.0, 1.5)
-		if same == 0 and (due < 0.75 or weekday_habit(dates)):
-			continue
 		var pt = Pt.is_pt(marks, n)
-		var score = same * 1.5 + due + (0.25 if pt else 0.0)
+		var lk = kind_of(n)
+		var on_day = kind != "" and fits(lk, kind)
+		if kind != "" and lk != "" and not on_day and not pt:
+			continue
+		if not pt and same < 2 and due < REST:
+			continue
+		if not on_day and same == 0 and (due < 0.75 or weekday_habit(dates)):
+			continue
+		var score = same * 1.5 + due + (0.25 if pt else 0.0) + (1.0 if on_day else 0.0)
 		var why = ""
-		if same >= 2:
+		if on_day and same < 2:
+			why = "On your %ss; last done %s" % [str(KIND_NAMES.get(kind, kind)).to_lower(), when_text(last, today)]
+		elif same >= 2:
 			why = "You often do it on %ss" % day_name
 		elif same == 1:
 			why = "You did it on a %s" % day_name
 		else:
-			why = "%s; last %s" % [every_text(gap), Dates.relative_day(last, today).to_lower()]
-		out.append({"name": n, "score": score, "why": why, "part": part_of(n), "pt": pt,
+			why = "%s; last done %s" % [every_text(gap), when_text(last, today)]
+		out.append({"name": n, "score": score, "why": why, "part": part_of(n), "pt": pt, "kind": lk,
 			"last": {"date": last, "sets": days_of[n][last]}, "since": since, "gap": gap, "same": same})
 	TTUtil.stable_sort(out, func(a, b):
 		if absf(float(a.score) - float(b.score)) > 1e-9:
@@ -202,24 +337,31 @@ static func likely_others(sessions: Array, today: String) -> Array:
 ## {"date", "lifts" (the likeliest PLAN_LIFTS), "group" ("back", or ""),
 ##  "label" ("Back day", or ""), "new": a movement of that area never done
 ##  ({"name", "move", "variation", "part", "partName", "tip"}) or null,
-##  "pt": PT rows (Pt.status) not done this week, "others": likely_others}
-static func day_plan(sessions: Array, today: String, marks: Dictionary = {}) -> Dictionary:
+##  "pt": PT rows (Pt.status) not done this week, "others": likely_others,
+##  "split", "cycle", "kind" (the split's kind of today, or ""), "after",
+##  "afterDate", "picked" (see day_kind)}. With a split, `group` is the kind.
+## `split` and `pick` are settings.split and settings.dayPick.
+static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, split: String = "auto", pick = null) -> Dictionary:
 	var before = sessions.filter(func(s): return str(s.get("date", "")) < today)
-	var lifts = likely_lifts(before, today, marks).slice(0, PLAN_LIFTS)
-	# The body area most of the likely lifts work (PT and stretches aside).
-	var count = {}
-	var first_seen = []
-	for l in lifts:
-		var g = str(GROUP.get(str(l.part), ""))
-		if g == "" or bool(l.pt):
-			continue
-		count[g] = int(count.get(g, 0)) + 1
-		if not first_seen.has(g):
-			first_seen.append(g)
-	var group = ""
-	for g in first_seen:
-		if group == "" or int(count[g]) > int(count[group]):
-			group = g
+	var cycle = split_cycle(split)
+	var dk = day_kind(before, today, cycle, marks, pick)
+	var kind = str(dk.kind)
+	var lifts = likely_lifts(before, today, marks, kind).slice(0, PLAN_LIFTS)
+	var group = kind
+	if kind == "":
+		# The body area most of the likely lifts work (PT and stretches aside).
+		var count = {}
+		var first_seen = []
+		for l in lifts:
+			var g = str(GROUP.get(str(l.part), ""))
+			if g == "" or bool(l.pt):
+				continue
+			count[g] = int(count.get(g, 0)) + 1
+			if not first_seen.has(g):
+				first_seen.append(g)
+		for g in first_seen:
+			if group == "" or int(count[g]) > int(count[group]):
+				group = g
 	var new = null
 	if group != "":
 		# Never done before today (what is done today keeps the day's pick).
@@ -228,13 +370,25 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}) -> 
 			if str(s.get("discipline", "")) == "lift":
 				for ex in s.get("exercises", []):
 					done[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+		# A movement of the area (or of the day's kind) not done: the staples of
+		# its areas taken in turn, then the rest of the library.
+		var fit = func(e): return fits(kind_of(str(e.name)), kind) if kind != "" else str(GROUP.get(str(e.part), "")) == group
+		var lists = []
+		for g in (KIND_GROUPS.get(kind, []) if kind != "" else [group]):
+			lists.append(STAPLES.get(g, []))
 		var pool = []
-		for n in STAPLES.get(group, []):
-			var e = LiftNames.movement(str(n))
-			if e != null and str(GROUP.get(str(e.part), "")) == group and not done.has(Xp.normalize_exercise(str(e.name))):
-				pool.append(e)
+		var longest = 0
+		for l in lists:
+			longest = maxi(longest, l.size())
+		for i in range(longest):
+			for l in lists:
+				if i >= l.size():
+					continue
+				var e = LiftNames.movement(str(l[i]))
+				if e != null and fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
+					pool.append(e)
 		for e in LiftLibrary.catalog():
-			if str(GROUP.get(str(e.part), "")) == group and not done.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
+			if fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
 				pool.append(e)
 		if not pool.is_empty():
 			# The day picks one of the three most useful ones not done yet.
@@ -251,8 +405,25 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}) -> 
 	for r in Pt.status(before, marks, today):
 		if str(r.state) != "done":
 			pt.append(r)
-	return {"date": today, "lifts": lifts, "group": group, "label": str(GROUP_NAMES.get(group, "")), "new": new,
-		"pt": pt, "others": likely_others(before, today)}
+	var label = str(KIND_NAMES.get(kind, "")) if kind != "" else str(GROUP_NAMES.get(group, ""))
+	return {"date": today, "lifts": lifts, "group": group, "label": label, "new": new,
+		"pt": pt, "others": likely_others(before, today), "split": split if not cycle.is_empty() else "auto",
+		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked}
+
+
+## One line on why today is that kind of day: "Yesterday was a pull day",
+## "Your pick for today", "" without a split.
+static func kind_why(plan: Dictionary) -> String:
+	if str(plan.get("kind", "")) == "":
+		return ""
+	if bool(plan.get("picked", false)):
+		return "Your pick for today"
+	if str(plan.get("after", "")) == "":
+		return "The first day of your split"
+	var d = str(plan.afterDate)
+	var n = Dates.days_between(d, str(plan.date))
+	var day = "Yesterday" if n == 1 else (Dates.format_date(d, {"weekday": "long"}) if n < 7 else "Your last lift")
+	return "%s was a %s" % [day, str(KIND_NAMES.get(str(plan.after), "")).to_lower()]
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +485,7 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	var wu = str(settings.get("weightUnit", "kg"))
 	var du = str(settings.get("distanceUnit", "km"))
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-	var plan = day_plan(sessions, today, marks)
+	var plan = day_plan(sessions, today, marks, str(settings.get("split", "auto")), settings.get("dayPick"))
 	var todays = sessions.filter(func(s): return str(s.get("date", "")) == today)
 	var out = []
 	out.append(_mission("t:%s:show" % today, "daily", today, "Show up", "Log any workout today.", "flame", null, 1, todays.size(), "sessions", 150, claims))
@@ -469,7 +640,9 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) -> String:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var lines = []
-	if str(plan.label) != "":
+	if str(plan.get("kind", "")) != "":
+		lines.append("%s. %s." % [str(plan.label), kind_why(plan)])
+	elif str(plan.label) != "":
 		lines.append("Probably a %s." % str(plan.label).to_lower())
 	for m in daily_missions:
 		if m.has("aim"):
@@ -484,7 +657,8 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) ->
 			names.append(str(r.name))
 		lines.append("PT: %s" % ", ".join(PackedStringArray(names)))
 	for o in plan.others.slice(0, 1):
-		lines.append("%s: %s" % [TT.DISCIPLINE_META[o.discipline].name, str(o.why).to_lower()])
+		var why = str(o.why)
+		lines.append("%s: %s" % [TT.DISCIPLINE_META[o.discipline].name, why.left(1).to_lower() + why.substr(1)])
 	if lines.is_empty():
 		lines.append("No pattern for today yet: anything counts.")
 	return "\n".join(PackedStringArray(lines))

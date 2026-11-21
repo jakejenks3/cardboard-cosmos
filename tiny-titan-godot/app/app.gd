@@ -274,7 +274,7 @@ func quests() -> Dictionary:
 ## What the player will probably do today (Missions.day_plan; cached).
 func plan() -> Dictionary:
 	if _plan == null:
-		_plan = Missions.day_plan(saved.sessions, today, pt())
+		_plan = Missions.day_plan(saved.sessions, today, pt(), str(saved.settings.get("split", "auto")), saved.settings.get("dayPick"))
 	return _plan
 
 

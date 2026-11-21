@@ -71,6 +71,7 @@ func fill() -> void:
 	var snd = bool(st.get("sound", true))
 	train.add(_row("sound_on" if snd else "sound_off", "Sound", Kit.switch(snd, _on_sound, "Sound effects")))
 	add_child(train)
+	_build_split()
 
 	# --- phone inbox ----------------------------------------------------------------
 	_build_inbox()
@@ -221,6 +222,31 @@ func _build_inbox() -> void:
 
 
 ## Morning goals on the phone (MorningAlert): off until the player turns it on.
+## Training split: which kind of day follows which. The Today card, the
+## missions and the morning message plan the day after the last lift day.
+func _build_split() -> void:
+	var cur = str(App.settings().get("split", "auto"))
+	var card = _card("TRAINING SPLIT", _info_button("Training split", [
+		"Pick the order you train in. The day after a pull day is then a push day, and so on round the cycle.",
+		"The Today card, the missions and the morning message plan that day: its lifts from your log, and one of its movements you have not tried.",
+		"Doing something else today? Tap another day on the Today card. Whatever you log decides what comes next.",
+		"\"From my log\" has no cycle: the day is guessed from your weekdays and how often you do each lift.",
+	]))
+	card.set_meta("split_section", true)
+	var chips = Kit.flow(6)
+	for s in Missions.SPLITS:
+		chips.add_child(Kit.chip(str(s.name), str(s.id) == cur, _on_setting.bind(str(s.id), "split"), Pal.LIFT))
+	card.add(chips)
+	var cycle = Missions.split_cycle(cur)
+	if not cycle.is_empty():
+		var names = []
+		for k in cycle:
+			names.append(str(Missions.KIND_NAMES[k]))
+		names.append("again")
+		card.add(Kit.para(" > ".join(PackedStringArray(names)), 12, Pal.MUTED))
+	add_child(card)
+
+
 func _build_morning() -> void:
 	var m = MorningAlert.settings(App.settings())
 	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_morning_how.bind(m.topic), "sm"))

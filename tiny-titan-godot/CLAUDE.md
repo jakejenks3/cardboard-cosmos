@@ -343,6 +343,20 @@ is the Windows handoff.
     task itself was NOT created (the switch is the user's to flip; `schedule_command` was
     checked by building its objects without `Register-ScheduledTask`).
   - Tests: `tests/missions_test.gd`; walkthrough `tests/shots/today.gd` (year data).
+  - Training split (2026-11-21, "I do a pull day, push day, then leg day, in that cycle"):
+    `settings.split` (`Missions.SPLITS`: "auto" = none, "pull_push_legs", "push_pull_legs",
+    "upper_lower"; Settings -> Training split). With a split, `Missions.day_kind` takes the
+    kind of the last lift day before today (`kind_of_day`: the kind most of its working,
+    non-PT exercises belong to; `kind_of(lift)` from the body part, face pulls and rear delts
+    pull) and plans the next one in the cycle; only lifts of that kind are planned (forearms,
+    core, stretches go with any day), "try something new" comes from that kind's staples.
+    `settings.dayPick` = {date, kind}: the Today card's chips plan today as another kind
+    (that date only; tapping the split's own kind drops it). Plan fields `split`, `cycle`,
+    `kind`, `after`, `afterDate`, `picked`; `Missions.kind_why` ("Yesterday was a pull day").
+    Rest, with or without a split: a non-PT lift done under `REST` (half) of its usual gap
+    ago is not planned unless it has a weekday habit (2+ times on this weekday); before, one
+    Saturday squat made a squat "due" two days after the last one. The user's save has
+    "pull_push_legs" (set 2026-11-21, backup "2026-11-21 before training split").
 
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
@@ -518,8 +532,10 @@ the check.
   Logbook's goal bars and the Compare target change the next time the page opens).
 - "Next time" is a rule of thumb (one more rep, then more weight), not a programme; the
   weight step is 2.5 kg or 5 lb whatever the lift.
-- The day's plan is a guess from weekdays and gaps; it does not know a programme or a
-  split the player has in mind. A lift done once in six weeks on this weekday counts.
+- The day's plan is a guess from weekdays and gaps unless a training split is picked;
+  "From my log" does not work out a cycle by itself. A lift done once in six weeks on this
+  weekday counts. A day mixing two kinds (push with a squat added) counts as the kind most
+  of its exercises are.
 - The morning message only goes out when the computer is on or asleep (woken by the task)
   at that time; a run after noon sends nothing. It runs the Godot editor's exe headless, so
   moving Godot or the project folder needs the switch turned off and on again.

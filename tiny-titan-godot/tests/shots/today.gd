@@ -55,6 +55,14 @@ func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
 	App.update_settings({"weightUnit": "lb"})
+	# A lift done on this weekday the last two weeks, so today has a likely lift
+	# whatever day the walkthrough runs on (the demo player lifts Mondays and Fridays).
+	var habit = []
+	for wk in [14, 7]:
+		habit.append({"id": "habit%d" % wk, "discipline": "lift", "date": Dates.add_days(App.today, -wk), "createdAt": App.now_ms() - wk * 86400000, "source": "manual",
+			"exercises": [{"name": "Bench Press - Barbell", "sets": [{"reps": 5, "weightKg": 60.0}, {"reps": 5, "weightKg": 60.0}]}]})
+	App.commit_sessions(habit, "Workout logged!")
+	await _dismiss_reels()
 	# A physical therapy lift done twice this week, so the plan has PT in it.
 	var monday = Dates.week_key(App.today)
 	if monday != App.today:
@@ -130,6 +138,54 @@ func run(m: Node, t: SceneTree) -> void:
 			claims_shown += 1
 	check(not y.is_empty() and claims_shown >= y.size(), "yesterday's finished missions wait to be claimed (%d, %d Claim keys)" % [y.size(), claims_shown])
 	await ShotHelper.snap(tree, "today_4_yesterday")
+
+	# Settings: pick a training split; the Today card then names the split's day.
+	SettingsSheet.open()
+	await ShotHelper.wait(tree, 0.6)
+	var sc = null
+	for n in ShotHelper.walk(_sheet()):
+		if n.has_meta("split_section"):
+			sc = n
+	var ppl = ShotHelper.find_button(_sheet(), "Pull, push, legs")
+	check(sc != null and ppl != null and str(App.settings().get("split", "auto")) == "auto", "Settings has Training split, from the log to start with")
+	if ppl != null:
+		ShotHelper.reveal(ppl)
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.click(tree, ppl)
+		await ShotHelper.wait(tree, 0.6)
+	check(str(App.settings().get("split", "")) == "pull_push_legs" and ShotHelper.all_text(_sheet()).contains("Pull day > Push day > Leg day > again"), "picked: pull, push, legs")
+	# (the card was rebuilt by the pick: `sc` is gone, find it again)
+	if _sheet() != null:
+		for n in ShotHelper.walk(_sheet()):
+			if n.has_meta("split_section"):
+				ShotHelper.reveal(n)
+		await ShotHelper.frames(tree, 4)
+		await ShotHelper.snap(tree, "today_5_split_settings")
+	await _close_sheets()
+	await _home()
+	var sp = App.plan()
+	print("SPLIT PLAN ", sp.label, " (", Missions.kind_why(sp), ") | ", sp.lifts.map(func(l): return "%s (%s)" % [l.name, l.why]))
+	check(sp.kind in ["pull", "push", "legs"] and sp.label == Missions.KIND_NAMES[sp.kind] and ShotHelper.all_text(main).contains(Missions.kind_why(sp)), "the Today card: %s, %s" % [sp.label, Missions.kind_why(sp)])
+	check(sp.lifts.all(func(l): return bool(l.pt) or str(l.kind) == "" or str(l.kind) == sp.kind), "only that day's lifts (and any-day ones)")
+	var other = "legs" if sp.kind != "legs" else "pull"
+	var chip = ShotHelper.find_button(main, str(Missions.KIND_SHORT[other]))
+	check(chip != null, "a chip per day of the split")
+	if chip != null:
+		ShotHelper.reveal(chip)
+		await ShotHelper.frames(tree, 3)
+		var y0 = chip.get_global_rect().position.y
+		await ShotHelper.click(tree, chip)
+		await ShotHelper.wait(tree, 0.8)
+		var pk = App.plan()
+		check(pk.kind == other and pk.picked and ShotHelper.all_text(main).contains("Your pick for today"), "tapping %s plans today as a %s" % [Missions.KIND_SHORT[other], pk.label])
+		var chip2 = ShotHelper.find_button(main, str(Missions.KIND_SHORT[other]))
+		check(chip2 != null and absf(chip2.get_global_rect().position.y - y0) < 1.0, "the chip stays under the cursor")
+		await ShotHelper.snap(tree, "today_6_split_pick")
+		var back = ShotHelper.find_button(main, str(Missions.KIND_SHORT[sp.kind]))
+		if back != null:
+			await ShotHelper.click(tree, back)
+			await ShotHelper.wait(tree, 0.8)
+		check(App.plan().kind == sp.kind and not App.plan().picked and (App.settings().get("dayPick", {}) as Dictionary).is_empty(), "tapping the split's own day drops the pick")
 
 	# Settings: the morning goals card (nothing is sent here).
 	SettingsSheet.open()

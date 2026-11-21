@@ -24,6 +24,8 @@ static func card() -> Control:
 	if str(plan.label) != "":
 		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 13)))
 	c.add(head)
+	if not plan.cycle.is_empty():
+		c.add(_split_row(plan))
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
 	if nothing:
 		c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for.", 13, Pal.MUTED))
@@ -39,6 +41,34 @@ static func card() -> Control:
 	for o in plan.others.slice(0, 2):
 		c.add(_other_row(o))
 	return c
+
+
+## The training split: why today is this kind of day, and a chip per kind of
+## the cycle (today's lit). Tapping another one plans today as that kind;
+## tapping the one the split gave goes back to it.
+static func _split_row(plan: Dictionary) -> Control:
+	var v = Kit.vbox(4)
+	v.add_child(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
+	var chips = Kit.hbox(6)
+	for k in plan.cycle:
+		var b = Kit.chip(str(Missions.KIND_SHORT[k]), str(k) == str(plan.kind), _pick_kind.bind(str(k)), Pal.LIFT, 13)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.tooltip_text = "Plan today as a %s" % str(Missions.KIND_NAMES[k]).to_lower()
+		chips.add_child(b)
+	v.add_child(chips)
+	return v
+
+
+static func _pick_kind(kind: String) -> void:
+	Sfx.tick()
+	var st = App.settings()
+	var plan = App.plan()
+	if kind == str(plan.kind) and not bool(plan.picked):
+		return
+	# The kind the split itself gives today: the pick is dropped.
+	var own = Missions.day_kind(App.sessions(), App.today, plan.cycle, App.pt()).kind
+	App.update_settings({"dayPick": {} if kind == own else {"date": App.today, "kind": kind}})
+	App.toast("Today: %s" % str(Missions.KIND_NAMES[kind]).to_lower(), "info", "lift")
 
 
 static func _kicker(text: String, tip: String) -> Control:

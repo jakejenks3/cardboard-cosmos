@@ -120,6 +120,48 @@ func _init() -> void:
 	var reader = Missions.daily(TODAY, {"sessions": [], "pt": {}, "settings": {"readingGoal": 25}, "reading": [{"date": TODAY, "pages": 30}]}, state, [])
 	ok(find(reader, ":read") != null and int(find(reader, ":read").target) == 25 and find(reader, ":read").done, "a reader gets a reading goal", find(reader, ":read"))
 
+	# --- a training split -----------------------------------------------------------------------
+	# Pull, push, legs: a pull day (Fri), legs (Sat), push (Mon), pull (Tue),
+	# push with a squat added (Thu), pull (Fri). Saturday: one squat, last Saturday.
+	var pull = {"Bent Over Row - Dumbbell": [[10, 30], [10, 30]], "Lat Pulldown - Single arm": [[12, 36]], "Face Pull - Rope": [[15, 20]], "Wrist 3 Way": [[20, 5]]}
+	var push = {"Chest Fly - Cable": [[12, 15], [12, 15]], "Lateral Raise - Cable": [[12, 7.5]], "Tricep Pushdown - Rope": [[12, 25]]}
+	var split_log = [
+		lift("2026-11-13", pull), lift("2026-11-14", {"Squat - Barbell": [[5, 100]], "Calf Raise": [[15, 40]]}),
+		lift("2026-11-16", push), lift("2026-11-17", pull),
+		lift("2026-11-19", push.merged({"Squat - Barbell": [[5, 100]]})), lift("2026-11-20", pull),
+	]
+	var cycle = Missions.split_cycle("pull_push_legs")
+	ok(cycle == ["pull", "push", "legs"] and Missions.split_cycle("auto").is_empty() and Missions.split_cycle("nonsense").is_empty(), "the splits", cycle)
+	ok(Missions.kind_of("Face Pull - Rope") == "pull" and Missions.kind_of("Lateral Raise - Cable") == "push" and Missions.kind_of("Bicep Curl - Reclined") == "pull"
+		and Missions.kind_of("Romanian Deadlift - Barbell") == "legs" and Missions.kind_of("Wrist 3 Way") == "" and Missions.kind_of("Plank") == "", "the kind of a lift (face pull pulls, wrists go with any day)")
+	ok(Missions.kind_of_day(split_log[4].exercises, cycle) == "push", "push with a squat added is a push day")
+	ok(Missions.fits("push", "upper") and Missions.fits("pull", "upper") and Missions.fits("legs", "lower") and not Missions.fits("", "upper"), "upper and lower")
+	var sat = "2026-11-21"
+	var sp = Missions.day_plan(split_log, sat, {}, "pull_push_legs")
+	var spn = names(sp.lifts)
+	ok(sp.kind == "push" and sp.label == "Push day" and sp.after == "pull" and sp.afterDate == "2026-11-20" and Missions.kind_why(sp) == "Yesterday was a pull day", "after a pull day: a push day", [sp.kind, sp.label, Missions.kind_why(sp)])
+	ok(spn.slice(0, 3).all(func(n): return push.has(n)) and not spn.has("Squat - Barbell") and not spn.has("Calf Raise") and not spn.has("Bent Over Row - Dumbbell"), "the push lifts; no legs or pull on a push day", spn)
+	ok(sp.lifts[0].why == "On your push days; last done Thursday", "why a push lift is planned", sp.lifts[0].why)
+	ok(sp.new != null and Missions.kind_of(str(sp.new.name)) == "push" and not push.has(str(sp.new.name)), "try a push movement never done", sp.new)
+	ok(Missions.day_plan(split_log, "2026-11-22", {}, "pull_push_legs").kind == "push" and Missions.kind_why(Missions.day_plan(split_log, "2026-11-22", {}, "pull_push_legs")) == "Friday was a pull day", "a rest day does not move the split")
+	var after_push = split_log + [lift(sat, push)]
+	ok(Missions.day_plan(after_push, "2026-11-22", {}, "pull_push_legs").kind == "legs", "after the push day comes legs")
+	var legs_day = Missions.day_plan(after_push, "2026-11-22", {}, "pull_push_legs")
+	ok(names(legs_day.lifts).has("Squat - Barbell") and names(legs_day.lifts).has("Calf Raise"), "the leg day plans the squat (3 days on) and calves", names(legs_day.lifts))
+	var picked = Missions.day_plan(split_log, sat, {}, "pull_push_legs", {"date": sat, "kind": "legs"})
+	ok(picked.kind == "legs" and picked.picked and Missions.kind_why(picked) == "Your pick for today" and Missions.day_plan(split_log, "2026-11-22", {}, "pull_push_legs", {"date": sat, "kind": "legs"}).kind == "push", "a pick counts on its own day only")
+	var ul = Missions.day_plan(split_log, sat, {}, "upper_lower")
+	ok(ul.kind == "lower" and ul.label == "Leg day", "upper, lower: after an upper day, legs", [ul.kind, ul.label])
+	var first = Missions.day_plan([], sat, {}, "push_pull_legs")
+	ok(first.kind == "push" and Missions.kind_why(first) == "The first day of your split", "no lifts yet: the split's first day")
+	# Without a split: the one Saturday squat is resting (done 2 days ago, every 5).
+	var auto = Missions.day_plan(split_log, sat, {}, "auto")
+	ok(auto.kind == "" and auto.cycle.is_empty() and not names(auto.lifts).has("Squat - Barbell"), "no split: a squat two days after the last one is not due, Saturday or not", names(auto.lifts))
+	var sdata = {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}
+	var sday = Missions.daily(sat, sdata, state, [])
+	ok(sday.filter(func(m): return str(m.id).contains(":beat:")).all(func(m): return push.has(str(m.lift))), "the beat-it missions follow the split", sday.map(func(m): return m.id))
+	ok(Missions.morning_text(sp, sday, "kg").begins_with("Push day. Yesterday was a pull day."), "the morning message names the split's day", Missions.morning_text(sp, sday, "kg"))
+
 	# --- the morning message --------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg")
 	ok(text.begins_with("Probably a back day.") and text.contains("Lat Pulldown (single arm): ") and text.contains("Try: ") and text.contains("PT: Neck 4 Way"), "the morning message", text)
