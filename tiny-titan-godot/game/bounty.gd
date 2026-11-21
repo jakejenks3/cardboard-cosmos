@@ -33,6 +33,32 @@ const COINS_WIN = 100
 const COINS_CRUSH = 50
 const COINS_STREAK_STEP = 10
 const COINS_STREAK_MAX = 50
+## Muscle groups a monster can be weak to, and the body parts of each. A
+## session with WEAK_SETS working sets or more of the group hits for WEAK_MULT
+## (not on top of the weak discipline: the best of the two).
+const MUSCLE_GROUPS = {"legs": ["quads", "hamstrings", "glutes", "calves"], "back": ["back"], "chest": ["chest"],
+	"shoulders": ["shoulders"], "arms": ["biceps", "triceps", "forearms"], "core": ["core"]}
+const MUSCLE_NAMES = {"legs": "Legs", "back": "Back", "chest": "Chest", "shoulders": "Shoulders", "arms": "Arms", "core": "Core"}
+const WEAK_SETS = 3
+
+
+## The muscle group a week's monster is weak to.
+static func weak_part_for(wk: String) -> String:
+	var keys = MUSCLE_GROUPS.keys()
+	return str(keys[Rng.hash_string("bounty-part:" + wk) % keys.size()])
+
+
+## Working sets per muscle group in a lift session: {group: sets}.
+static func muscles_of(session: Dictionary) -> Dictionary:
+	var out = {}
+	if str(session.get("discipline", "")) != "lift":
+		return out
+	for ex in session.get("exercises", []):
+		var part = Missions.part_of(str(ex.get("name", "")))
+		for g in MUSCLE_GROUPS:
+			if MUSCLE_GROUPS[g].has(part):
+				out[g] = int(out.get(g, 0)) + LiftTrend.real_sets(ex.get("sets", [])).size()
+	return out
 
 ## The monsters that turn up. Each id has a look in BossSprites.boss_looks().
 const MONSTERS = [
@@ -136,12 +162,14 @@ static func weak_for(wk: String, weeks: Dictionary):
 static func _record(wk: String, first: String, weeks: Dictionary) -> Dictionary:
 	var hp: int = hp_for(wk, first, weeks)
 	var weak = weak_for(wk, weeks)
+	var part = weak_part_for(wk)
 	var rec = {
 		"week": wk,
 		"monster": monster_for(wk).id,
 		"hp": hp,
 		"damage": 0,
 		"weak": weak,
+		"weakPart": part,
 		"defeated": false,
 		"crushed": false,
 		"at": null,
@@ -151,7 +179,8 @@ static func _record(wk: String, first: String, weeks: Dictionary) -> Dictionary:
 	}
 	if weeks.has(wk):
 		for x in weeks[wk].list:
-			rec.damage += TTUtil.jsround(float(x.xp) * (WEAK_MULT if x.disc == weak else 1.0))
+			var hit = x.disc == weak or int(x.get("muscles", {}).get(part, 0)) >= WEAK_SETS
+			rec.damage += TTUtil.jsround(float(x.xp) * (WEAK_MULT if hit else 1.0))
 			if not rec.defeated and rec.damage >= hp:
 				rec.defeated = true
 				rec.at = x.date
@@ -172,7 +201,7 @@ static func weeks_of(s: Dictionary, sessions: Array) -> Dictionary:
 		var xp: int = int(s.sessionXp[x.id])
 		weeks[wk].xp += xp
 		weeks[wk].discs[x.discipline] = true
-		weeks[wk].list.append({"date": str(x.date), "t": x.createdAt, "id": x.id, "disc": x.discipline, "xp": xp})
+		weeks[wk].list.append({"date": str(x.date), "t": x.createdAt, "id": x.id, "disc": x.discipline, "xp": xp, "muscles": muscles_of(x)})
 	for wk in weeks:
 		TTUtil.stable_sort(weeks[wk].list, func(a, b): return a.date < b.date or (a.date == b.date and a.t < b.t))
 	return weeks

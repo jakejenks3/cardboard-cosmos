@@ -26,6 +26,12 @@ static func weak_pill(d: String) -> Control:
 	return Kit.pill(d, "×%s" % TTUtil.num_str(Bounty.WEAK_MULT), Pal.disc(d), tip, Color.WHITE, 12)
 
 
+## A small pill for the muscle group the monster is weak to.
+static func part_pill(g: String) -> Control:
+	var tip = "Weak to %s: a session with %d sets or more of it hits for ×%s" % [str(Bounty.MUSCLE_NAMES.get(g, g)).to_lower(), Bounty.WEAK_SETS, TTUtil.num_str(Bounty.WEAK_MULT)]
+	return Kit.pill("muscle", "%s ×%s" % [str(Bounty.MUSCLE_NAMES.get(g, g)), TTUtil.num_str(Bounty.WEAK_MULT)], Pal.LIFT, tip, Color.WHITE, 12)
+
+
 ## This week's bounty as a tappable card. `big` (Adventure) shows a larger
 ## monster and the reward chips; the small one (Hero tab) is a single row.
 static func card(big: bool = false) -> Control:
@@ -59,6 +65,8 @@ static func card(big: bool = false) -> Control:
 	top.add_child(Kit.clip(mon.name, 16 if not big else 18, null, true))
 	if cur.weak != null and not cur.defeated:
 		top.add_child(weak_pill(cur.weak))
+	if cur.get("weakPart") != null and not cur.defeated:
+		top.add_child(part_pill(str(cur.weakPart)))
 	main.add_child(top)
 	if cur.defeated:
 		var done = Kit.hbox(6)
@@ -141,11 +149,13 @@ static func open() -> void:
 		chips.add_child(Kit.pill("clock", _left_text(), Pal.PANEL2, "", Pal.TEXT))
 		if cur.weak != null:
 			chips.add_child(weak_pill(cur.weak))
+		if cur.get("weakPart") != null:
+			chips.add_child(part_pill(str(cur.weakPart)))
 		chips.add_child(Kit.coin_pill(coins_now(w), "Coins for beating it this week"))
 		chips.add_child(Kit.pill("bolt", "+%d crush" % Bounty.COINS_CRUSH, Pal.ACCENT2, "Deal %d%% of its HP for a bonus" % TTUtil.jsround(Bounty.CRUSH_MULT * 100.0), Color.WHITE))
 	sh.box.add_child(chips)
 	sh.box.add_child(Kit.hp_bar(maxf(0.0, float(cur.hp) - float(cur.damage)), float(cur.hp), 22, "Every XP you earn from a session this week deals 1 damage."))
-	var how = Kit.muted_para("Its HP is 90%% of your average week over the last four. Train its weakness for ×%s. A new monster arrives every Monday." % TTUtil.num_str(Bounty.WEAK_MULT), 12)
+	var how = Kit.muted_para("Its HP is 90%% of your average week over the last four. Train its weak discipline, or its weak muscles (%d sets or more), for ×%s. A new monster arrives every Monday." % [Bounty.WEAK_SETS, TTUtil.num_str(Bounty.WEAK_MULT)], 12)
 	how.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sh.box.add_child(how)
 

@@ -515,6 +515,13 @@ is the Windows handoff.
   squat, deadlift, overhead press, row, RDL, hip thrust (`RATIO`); reps in a set for
   pull-up, chin-up, push-up, dip (`REPS`). The Compare view adds `_standard_card` (five
   coloured steps, what the next level needs). Tests in `tests/plates_test.gd`.
+- Body-part bosses (2026-11-21): every weekly bounty monster is also weak to a muscle group
+  (`Bounty.weak_part_for(wk)`, one of MUSCLE_GROUPS: legs, back, chest, shoulders, arms,
+  core): a session with WEAK_SETS (3) working sets or more of it (`muscles_of`, stored in
+  `weeks_of` lists as `muscles`) hits for WEAK_MULT, the best of that and the weak
+  discipline (never both). Records carry `weakPart`; the card and sheet show a muscle pill
+  (`BountyView.part_pill`). It only ever adds damage, so no past win was lost; weekly and
+  coins stay outside parity. Tests: bounty_test.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

@@ -226,5 +226,17 @@ func _init() -> void:
 	Items.restrict_to(null)
 	ok(Items.all().size() == 124 and Wallet.shop_items().size() == shop.size(), "and null restores it")
 
+	# --- weak muscles: a session with 3 sets or more of the week's group hits for x1.5 ---------------
+	var bwk = "2026-11-16"
+	var bpart = Bounty.weak_part_for(bwk)
+	ok(Bounty.MUSCLE_GROUPS.has(bpart) and Bounty.weak_part_for(bwk) == bpart, "each week's monster is weak to a muscle group (the same every time)", bpart)
+	var mus = Bounty.muscles_of({"discipline": "lift", "exercises": [{"name": "Squat - Barbell", "sets": [{"reps": 5, "weightKg": 100.0}, {"reps": 5, "weightKg": 100.0}]}, {"name": "Calf Raise", "sets": [{"reps": 12, "weightKg": 40.0}]}, {"name": "Bench Press - Barbell", "sets": [{"reps": 5, "weightKg": 80.0}]}]})
+	ok(int(mus.get("legs", 0)) == 3 and int(mus.get("chest", 0)) == 1, "working sets per muscle group", mus)
+	var bweeks = {"2026-11-09": {"xp": 1000, "discs": {"climb": true}, "list": [{"date": "2026-11-10", "t": 1, "id": "c0", "disc": "climb", "xp": 1000, "muscles": {}}]},
+		bwk: {"xp": 2000, "discs": {"lift": true}, "list": [
+			{"date": "2026-11-17", "t": 2, "id": "a", "disc": "lift", "xp": 1000, "muscles": {bpart: 3}},
+			{"date": "2026-11-18", "t": 3, "id": "b", "disc": "lift", "xp": 1000, "muscles": {bpart: 2}}]}}
+	var brec = Bounty._record(bwk, "2026-11-09", bweeks)
+	ok(str(brec.weakPart) == bpart and (brec.weak == "lift" or int(brec.damage) == 2500), "3 sets of the weak muscles: x1.5; 2 sets: x1 (%s, damage %d)" % [str(brec.weak), int(brec.damage)])
 	print("BOUNTY: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
