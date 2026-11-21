@@ -158,6 +158,27 @@ func run(m: Node, t: SceneTree) -> void:
 		await _home()
 		check(_ticks().count(true) == t_base + 2, "trying the new movement ticks its row too (%s)" % str(_ticks()))
 		await ShotHelper.snap(tree, "today_3b_ticks")
+		# The PT too: every box ticked, the chest opens once.
+		var pt_names = App.plan().pt.map(func(r): return str(r.name))
+		if not pt_names.is_empty():
+			var exs = []
+			for n in pt_names:
+				exs.append({"name": n, "sets": [{"reps": 20, "weightKg": 4.5}]})
+			App.commit_sessions([{"id": "pt2", "discipline": "lift", "date": App.today, "createdAt": App.now_ms() + 9, "source": "manual", "exercises": exs}], "Workout logged!")
+			await _dismiss_reels()
+			await _home()
+		var open_key = ShotHelper.find_button(main, "Open the chest")
+		check(not _ticks().has(false) and open_key != null, "every box ticked: the chest can be opened (%s)" % str(_ticks()))
+		if open_key != null:
+			ShotHelper.reveal(open_key)
+			await ShotHelper.frames(tree, 3)
+			await ShotHelper.snap(tree, "today_3c_chest")
+			var before_claims = App.saved.claims.size()
+			await ShotHelper.click(tree, open_key)
+			await ShotHelper.wait(tree, 0.5)
+			await ShotHelper.snap(tree, "today_3d_chest_open")
+			await ShotHelper.wait(tree, 0.8)
+			check(App.saved.claims.size() == before_claims + 1 and App.saved.claims.any(func(c): return str(c.questId).ends_with(":perfect")) and ShotHelper.find_button(main, "Open the chest") == null and ShotHelper.all_text(main).contains("Opened"), "the chest paid once and says it was opened")
 		for n in ShotHelper.walk(main):
 			if n is Button and str(n.text).begins_with("Claim"):
 				claim = n

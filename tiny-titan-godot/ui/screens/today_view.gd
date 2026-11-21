@@ -49,7 +49,48 @@ static func card() -> Control:
 		c.add(_pt_row(plan.pt))
 	for o in plan.others.slice(0, 2):
 		c.add(_other_row(o))
+	var perfect = App.quests().daily.filter(func(m): return m.get("perfect", false))
+	if not perfect.is_empty():
+		c.add(_perfect_row(perfect[0]))
 	return c
+
+
+## Perfect day: a chest that fills as the boxes tick; once all are ticked it
+## glows and opens with a burst.
+static func _perfect_row(m: Dictionary) -> Control:
+	var c = Kit.card(0, Callable(), 8)
+	c.accent(Pal.ACCENT if bool(m.done) else Pal.LINE)
+	var row = Kit.hbox(10)
+	var chest = Icons.rect("chest" if not bool(m.claimed) else "gift", 32)
+	chest.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(Kit.vcenter(chest))
+	var v = Kit.vbox(2)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(Kit.label("PERFECT DAY", 10, Pal.ACCENT, true))
+	var said = "Opened: +%s XP" % Xp.fmt_int(int(m.xp)) if bool(m.claimed) else ("Every box ticked!" if bool(m.done) else "%d of %d boxes ticked" % [int(m.progress), int(m.target)])
+	v.add_child(Kit.clip(said, 13, Pal.TEXT, true))
+	row.add_child(v)
+	if bool(m.done) and not bool(m.claimed):
+		var b = Kit.button("Open the chest", "good", Callable(), "sm", "gift")
+		b.pressed.connect(_open_chest.bind(m, chest, c))
+		Fx.shine(b, 2.0, 0.3, 0.5)
+		Fx.twinkle(chest, Pal.ACCENT, 3)
+		row.add_child(Kit.vcenter(b))
+	elif not bool(m.claimed):
+		row.add_child(Kit.vcenter(Kit.tag("+%s XP" % Xp.fmt_int(int(m.xp)), Pal.ACCENT, true, 11)))
+	else:
+		row.add_child(_tick(true))
+	c.add(row)
+	return c
+
+
+static func _open_chest(m: Dictionary, chest: Control, card: Control) -> void:
+	Kit.burst(chest, Pal.ACCENT, 48)
+	Kit.burst(card, Pal.GOOD, 24)
+	Kit.floater(card, "PERFECT DAY", Pal.ACCENT, 0.0, 2)
+	Kit.floater(card, "+%s XP" % Xp.fmt_int(int(m.xp)), Pal.GOOD, 0.35, 2)
+	Sfx.level_up()
+	App.claim_quest(m)
 
 
 ## The training split: a chip per kind of the cycle (today's lit). Tapping

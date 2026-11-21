@@ -424,6 +424,11 @@ is the Windows handoff.
   calf, neck, torso = core in the middle and back at the sides), `Art.muscle_texture`
   (cached by heat). `ui/screens/recovery_view.gd` (`RecoveryView.row()` on the Today card
   when the player lifts, `open()` the sheet). Test: `tests/recovery_test.gd`.
+- Perfect day (2026-11-21): `Missions.day_boxes(plan, sessions, today)` = the Today card's boxes,
+  ticked the same way (`new_done` for the movement to try); a daily mission `t:<date>:perfect`
+  (`perfect: true`, PERFECT_XP 300, one step per box) when there are two boxes or more.
+  `TodayView._perfect_row`: a chest that fills, "Open the chest" (bursts, floaters,
+  `Sfx.level_up`, `App.claim_quest`), then "Opened". Walkthrough: `tests/shots/today.gd`.
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`

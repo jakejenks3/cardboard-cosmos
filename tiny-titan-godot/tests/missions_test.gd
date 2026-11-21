@@ -171,6 +171,23 @@ func _init() -> void:
 	ok(Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat, tri) and not Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat), "done by extensions only with the stand-in rule")
 	ok(Missions.done_of(ext_day, ["Tricep Pushdown - Rope"], sat, "Tricep Pushdown", tri) == "Tricep Extension - Cable", "the Today row shows what stood in")
 
+	# --- perfect day: every box of the Today card --------------------------------------------------
+	var pboxes = Missions.day_boxes(sp, split_log, sat)
+	ok(pboxes.size() >= 4 and not pboxes.any(func(b): return bool(b.done)), "the Today card's boxes, none ticked before the day starts", pboxes)
+	var pday = Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, [])
+	var pm = find(pday, ":perfect")
+	ok(pm != null and int(pm.target) == pboxes.size() and int(pm.progress) == 0 and int(pm.xp) == Missions.PERFECT_XP and pm.get("perfect", false), "a Perfect day mission, one step per box", pm)
+	var all_done = {}
+	for l in sp.lifts:
+		all_done[str(l.name)] = [[13, 20]]
+	all_done[str(sp.new.name)] = [[10, 10]]
+	var perfect_log = split_log + [lift(sat, all_done)]
+	var pm2 = find(Missions.daily(sat, {"sessions": perfect_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, []), ":perfect")
+	ok(pm2.done and int(pm2.progress) == int(pm2.target), "every planned lift and the new movement done: a perfect day", pm2)
+	var half_log = split_log + [lift(sat, {str(sp.lifts[0].name): [[13, 20]]})]
+	var pm3 = find(Missions.daily(sat, {"sessions": half_log, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}, state, []), ":perfect")
+	ok(not pm3.done and int(pm3.progress) == 1, "one box ticked: not yet", pm3)
+
 	# --- the ways to do a lift: the player's own variations ------------------------------------------
 	# Chest fly on the home cable (Mon) and the gym cable (Thu): one chest fly to plan, two ways.
 	var vpull = {"Bent Over Row - Dumbbell": [[10, 30]], "Lat Pulldown - Single arm home": [[12, 36]]}

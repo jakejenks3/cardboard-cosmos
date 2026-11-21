@@ -65,6 +65,8 @@ const SPLITS = [
 ]
 ## A lift done under this share of its usual gap ago rests (see the top).
 const REST = 0.5
+## What a perfect day pays (every box of the Today card ticked).
+const PERFECT_XP = 300
 ## Ways shown to do one planned lift (its variations and one other movement).
 const OPTIONS = 4
 ## Good first picks for "try something new", most useful first. Movements not
@@ -294,6 +296,48 @@ static func beat_any(sessions: Array, names: Array, move: String, date: String, 
 		if _history_before(sessions, str(seen[k]), date).is_empty() or beat_on(sessions, str(seen[k]), date):
 			return true
 	return false
+
+
+## Was the movement to try done on `today`: it, or any movement never done before?
+static func new_done(sessions: Array, today: String, nw) -> bool:
+	if nw == null:
+		return false
+	var known = {}
+	for s in sessions:
+		if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) < today:
+			for ex in s.get("exercises", []):
+				known[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+	for s in sessions:
+		if str(s.get("discipline", "")) != "lift" or str(s.get("date", "")) != today:
+			continue
+		for ex in s.get("exercises", []):
+			var mk = Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))
+			if mk == Xp.normalize_exercise(str(nw.move)) or not known.has(mk):
+				return true
+	return false
+
+
+## The boxes of the Today card, ticked as TodayView ticks them: a row per
+## planned lift (done any way), the movement to try, the PT (all of it), the
+## first two other activities (logged). [{"what", "done"}].
+static func day_boxes(plan: Dictionary, sessions: Array, today: String) -> Array:
+	var out = []
+	for l in plan.get("lifts", []):
+		var ways = l.get("options", []).map(func(o): return str(o.name))
+		if ways.is_empty():
+			ways = [str(l.name)]
+		var pt = bool(l.pt)
+		var move = "" if pt else str(LiftNames.split(str(l.name)).move)
+		var done = done_of(sessions, ways, today, move, {} if pt else same_of(str(l.name), plan)) != ""
+		out.append({"what": str(l.name), "done": done})
+	if plan.get("new") != null:
+		out.append({"what": "new", "done": new_done(sessions, today, plan.new)})
+	if not plan.get("pt", []).is_empty():
+		out.append({"what": "pt", "done": plan.pt.all(func(r): return not sets_on(sessions, str(r.name), today).is_empty())})
+	for o in plan.get("others", []).slice(0, 2):
+		var d = str(o.discipline)
+		out.append({"what": d, "done": sessions.any(func(s): return str(s.get("date", "")) == today and str(s.get("discipline", "")) == d)})
+	return out
 
 
 ## The one of these, of any variation of `move`, or (with `same`) of a
@@ -678,17 +722,7 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	if plan.new != null:
 		# Done by the movement suggested, or by any movement never done before.
 		var nw = plan.new
-		var known = {}
-		for s in sessions:
-			if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) < today:
-				for ex in s.get("exercises", []):
-					known[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
-		var did = false
-		for s in todays:
-			for ex in s.get("exercises", []):
-				var mk = Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))
-				if str(s.get("discipline", "")) == "lift" and (mk == Xp.normalize_exercise(str(nw.move)) or not known.has(mk)):
-					did = true
+		var did = new_done(sessions, today, nw)
 		out.append(_mission("t:%s:new" % today, "daily", today, "Try something new", "%s: a %s movement you haven't done yet." % [str(nw.name), str(nw.partName).to_lower()], "sparkle", "lift",
 			1, 1 if did else 0, "", 200, claims, {"lift": str(nw.name)}))
 
@@ -732,6 +766,12 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			if str(r.get("date", "")) == today:
 				pages += int(r.get("pages", 0))
 		out.append(_mission("t:%s:read" % today, "daily", today, "Read", "Read %d pages today." % goal, "book", null, goal, pages, "pages", 100, claims))
+
+	# Perfect day: every box of the Today card ticked (a chest on the card).
+	var boxes = day_boxes(plan, sessions, today)
+	if boxes.size() >= 2:
+		out.append(_mission("t:%s:perfect" % today, "daily", today, "Perfect day", "Tick every box on today's card.", "chest", null,
+			boxes.size(), boxes.filter(func(b): return bool(b.done)).size(), "", PERFECT_XP, claims, {"perfect": true}))
 
 	# A quiet day in the plan: one goal for everything.
 	if out.size() < 3:
