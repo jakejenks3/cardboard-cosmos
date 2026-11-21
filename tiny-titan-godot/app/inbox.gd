@@ -8,7 +8,12 @@ extends Node
 ## through get_parent() rather than the autoload name, so this script also loads
 ## in `--script` unit tests (tests/quick_log_test.gd uses fetch_url).
 ##
-## The note is never cleared by the game, so what was imported is remembered as
+## The game does not clear the note by itself (it only reads it). With a
+## Google Doc it can empty the TABLE rows it imported through a script the
+## player adds to the doc (app/doc_clear.gd; saved.inbox.clear = {url, token,
+## on}): after an import, or with "Clear now". Lines outside a table, rows
+## not imported and rows changed since the note was read stay. So what was
+## imported is still remembered as
 ## {key: count} in saved.inbox.imported: for each key the first `count`
 ## occurrences in the text are already in the log, any further ones are new.
 ##
@@ -55,6 +60,11 @@ var _readings = {}
 var _reading = null
 ## Why the pictures could not be read on this check ("" when they were).
 var _unread = ""
+## The note's tables as last read from the Google Doc (DocClear.table_rows);
+## [] for a file or pasted text.
+var _tables = []
+## A clear in progress.
+var _clearing = false
 
 
 func _app():
@@ -196,6 +206,7 @@ func check(silent: bool = false) -> void:
 			_finish({"ok": false, "error": "Could not find the file %s." % path}, silent)
 			return
 		_readings = {}
+		_tables = []
 		_got_text(FileAccess.get_file_as_string(path), silent, true)
 		return
 	if _http == null:
@@ -259,6 +270,7 @@ func _got_zip(bytes: PackedByteArray, silent: bool) -> void:
 	DirAccess.remove_absolute(path)
 	_images = images
 	_image_tex = {}
+	_tables = DocClear.table_rows(html)
 	_read_pictures(html_to_text(html), silent)
 
 
@@ -474,6 +486,7 @@ func image_texture(ref: String):
 ## Read pasted text the same way (nothing is fetched). Returns the result.
 func check_text(text: String) -> Dictionary:
 	_readings = {}
+	_tables = []
 	_got_text(text, false, false)
 	return _last
 
@@ -739,6 +752,85 @@ func import_entries(entries: Array) -> void:
 	status = ", ".join(PackedStringArray(bits)).capitalize() + "."
 	if n_up > 0 and sessions.is_empty() and bodies.is_empty():
 		app.toast("Updated %d entr%s from your phone" % [n_up, "y" if n_up == 1 else "ies"], "good", "check")
+	_clear_after_import.call_deferred()
+
+
+# ---------------------------------------------------------------------------
+# Emptying the table (DocClear)
+# ---------------------------------------------------------------------------
+
+## {"url", "token", "on"}.
+func clear_settings() -> Dictionary:
+	var c = settings().get("clear")
+	return {"url": str(c.get("url", "")), "token": str(c.get("token", "")), "on": bool(c.get("on", false))} if c is Dictionary else {"url": "", "token": "", "on": false}
+
+
+func set_clear(patch: Dictionary) -> void:
+	var c = clear_settings()
+	c.merge(patch, true)
+	_app().update_inbox({"clear": c})
+
+
+## The token the script carries (made the first time it is asked for).
+func clear_token() -> String:
+	var c = clear_settings()
+	if str(c.token) == "":
+		c.token = DocClear.new_token()
+		set_clear({"token": c.token})
+	return str(c.token)
+
+
+## Can the table be emptied (a script link set)?
+func can_clear() -> bool:
+	var c = clear_settings()
+	return DocClear.looks_right(str(c.url)) and str(c.token) != ""
+
+
+func clearing() -> bool:
+	return _clearing
+
+
+## The table rows to empty now: rows of imported entries in the note as it
+## was last read (DocClear.plan).
+func clear_rows() -> Array:
+	if _tables.is_empty() or last_text == "":
+		return []
+	var parsed = QuickLog.parse_any(last_text, parse_opts())
+	return DocClear.plan(_tables, parsed.entries, settings().get("imported", {}), _app().today)
+
+
+## Empty the imported rows of the note's table. Awaitable: DocClear.send's
+## result, or {"ok": true, "cleared": 0} when there is nothing to clear. The
+## note is read again afterwards (quietly).
+func clear_imported() -> Dictionary:
+	if _clearing or not can_clear():
+		return {"ok": false, "error": "Clearing is not set up yet." if not can_clear() else "Already clearing."}
+	var rows = clear_rows()
+	if rows.is_empty():
+		return {"ok": true, "cleared": 0, "skipped": 0}
+	_clearing = true
+	var c = clear_settings()
+	var res = await DocClear.send(self, str(c.url), str(c.token), rows)
+	_clearing = false
+	if res.ok:
+		var bits = ["cleared %d row%s of the note's table" % [res.cleared, "" if int(res.cleared) == 1 else "s"]]
+		if int(res.skipped) > 0:
+			bits.append("%d left: changed since it was read" % res.skipped)
+		var said = ", ".join(PackedStringArray(bits))
+		status = said.left(1).to_upper() + said.substr(1) + "."
+		check(true)
+	return res
+
+
+## After an import: empty what came in, when switched on.
+func _clear_after_import() -> void:
+	if not clear_settings().on or not can_clear():
+		return
+	var res = await clear_imported()
+	if not res.ok:
+		_app().toast("Could not clear the note's table: %s" % str(res.error), "bad", "warning")
+	elif int(res.get("cleared", 0)) > 0:
+		_app().toast("Cleared %d row%s of the note's table" % [res.cleared, "" if int(res.cleared) == 1 else "s"], "good", "check")
 
 
 ## "Last checked Nov 14, 18:32" from the saved time (local), or "" when never.

@@ -375,6 +375,23 @@ is the Windows handoff.
     lists every planned lift (PT aside) with every way: the gym's with their aims, then
     "home: ..." (or "home: the same"), and "Try:" with its home version.
 
+- Clearing the note's table (2026-11-21, "takes a long time to manually clear each section"
+  on mobile; "as long as it doesn't mess with the current workout I'm inputting"): the game
+  only READS the doc, so `app/doc_clear.gd` (`DocClear`) holds a Google Apps Script
+  (`SCRIPT`, with a token from `new_token`) the player pastes into the doc once and deploys
+  as a web app ("Execute as me, anyone"); its link and the token are `saved.inbox.clear` =
+  {url, token, on} (Settings -> Phone inbox -> "Clear the table after import": switch,
+  Set up sheet with Copy the script, the link, Test, Clear now). `PhoneInbox._tables`
+  (`DocClear.table_rows` of the last export) + `clear_rows()` -> `DocClear.plan`: a table
+  row goes when its line is in an imported entry's `raw` and in no entry not imported (the
+  same text in both: neither); headers never; a date row only when its day is before today
+  and every row under it is empty or going. Each row is sent as `table.row.hash` (md5 of
+  `row_text`: filled cells, lower case, spaces collapsed, " | "); the script empties it only
+  when its text there still hashes the same, so rows typed or changed since the note was
+  read stay. `import_entries` ends with `_clear_after_import` (when on). GET, not POST
+  (Apps Script answers a POST with a redirect). Not set up on the user's save: they do the
+  Google part (authorising the script is theirs). Test: `tests/doc_clear_test.gd` (needs
+  Node.js for the script part: `tests/doc_clear_stub.js` runs SCRIPT on a pretend doc).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -510,6 +527,7 @@ godot --headless --path . --script res://tests/lift_library_test.gd
 godot --headless --path . --script res://tests/lift_trend_test.gd
 godot --headless --path . --script res://tests/missions_test.gd
 godot --headless --path . --script res://tests/figure_test.gd
+godot --headless --path . --script res://tests/doc_clear_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other

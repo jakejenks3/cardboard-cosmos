@@ -219,6 +219,20 @@ func _build_inbox() -> void:
 		forget.tooltip_text = "The next import works the names out again, and asks"
 		remembered.add_child(forget)
 		card.add(remembered)
+	# Emptying the note's table after an import (app/doc_clear.gd).
+	var can = App.inbox.can_clear()
+	var crow = Kit.hbox(6)
+	crow.add_child(Kit.vcenter(Icons.rect("sparkle", 16)))
+	var cl = Kit.clip("Clear the table after import" if can else "Clear the table after import: not set up", 12, null if can else Pal.MUTED, can)
+	cl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	crow.add_child(Kit.vcenter(cl))
+	if can:
+		crow.add_child(Kit.switch(bool(App.inbox.clear_settings().on), _on_clear_auto, "Empty the rows that came in, after each import"))
+	var setup = Kit.button("Set up" if not can else "Options", "secondary" if not can else "ghost", SettingsPanel.show_clear_setup, "sm")
+	setup.tooltip_text = "Add a small script to the doc so the game can empty the table"
+	crow.add_child(Kit.vcenter(setup))
+	crow.set_meta("clear_row", true)
+	card.add(crow)
 	add_child(card)
 
 
@@ -416,6 +430,92 @@ func _commit_source(t: String) -> void:
 		return
 	_pending_source = null
 	App.inbox.set_source(t)
+
+
+func _on_clear_auto(on) -> void:
+	Sfx.tick()
+	App.inbox.set_clear({"on": bool(on)})
+	App.toast("The table empties itself after each import" if on else "The table is left as it is", "good" if on else "info", "sparkle")
+	call_deferred("_refill")
+
+
+## How to let the game empty the table: the script to paste into the doc, the
+## web app link, a test, "Clear now", the switch.
+static func show_clear_setup() -> void:
+	var cs = App.inbox.clear_settings()
+	var sh = Kit.sheet("Clear the table")
+	sh.box.add_child(Kit.para("The game only reads your note. To empty the table after an import, add this small script to the doc once, on your computer (about 5 minutes):", 14, Pal.TEXT))
+	var steps = [
+		"Open the note in Google Docs. Extensions > Apps Script.",
+		"Delete what is there and paste the script (Copy the script, below). Save.",
+		"Deploy > New deployment. Click the gear and pick Web app. Execute as: Me. Who has access: Anyone. Deploy.",
+		"Google asks you to allow it: pick your account. If it says Google hasn't verified this app: Advanced, then Go to the project, then Allow. It is your own script and only works on this doc.",
+		"Copy the Web app link (it ends in /exec), paste it below and press Test.",
+	]
+	for i in range(steps.size()):
+		var row = Kit.hbox(8)
+		var n = Kit.label("%d" % (i + 1), 14, Pal.ACCENT, true)
+		n.custom_minimum_size = Vector2(16, 0)
+		row.add_child(n)
+		var p = Kit.para(str(steps[i]), 13, Pal.TEXT)
+		p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(p)
+		sh.box.add_child(row)
+	var copy = Kit.button("Copy the script", "secondary", SettingsPanel._copy_clear_script, "md", "edit")
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sh.box.add_child(copy)
+	var link = Kit.input(str(cs.url), "Web app link (https://script.google.com/.../exec)")
+	link.select_all_on_focus = false
+	link.text_changed.connect(func(t): App.inbox.set_clear({"url": str(t).strip_edges()}))
+	sh.box.add_child(link)
+	var keys = Kit.hbox(8)
+	keys.add_child(Kit.expand(Kit.button("Test", "secondary", SettingsPanel._test_clear, "md", "check")))
+	keys.add_child(Kit.expand(Kit.button("Clear now", "secondary", SettingsPanel._clear_now, "md", "sparkle")))
+	sh.box.add_child(keys)
+	var sw = Kit.hbox(8)
+	var sl = Kit.label("After each import", 14, null, true)
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sw.add_child(Kit.vcenter(sl))
+	sw.add_child(Kit.switch(bool(cs.on), func(on): App.inbox.set_clear({"on": bool(on)}), "Empty the rows that came in, after each import"))
+	sh.box.add_child(sw)
+	sh.box.add_child(Kit.para("It only empties table rows that are already imported and still exactly as the game read them. Rows you are typing, rows you left out, the header row and lines outside the table stay.", 12, Pal.MUTED))
+	var done = Kit.button("Done", "primary", sh.close, "lg")
+	done.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sh.box.add_child(done)
+	sh.open()
+
+
+static func _copy_clear_script() -> void:
+	Sfx.tick()
+	DisplayServer.clipboard_set(DocClear.script_for(App.inbox.clear_token()))
+	App.toast("Script copied: paste it into the doc's Apps Script", "good", "check")
+
+
+static func _test_clear() -> void:
+	Sfx.tick()
+	var cs = App.inbox.clear_settings()
+	if not DocClear.looks_right(str(cs.url)):
+		App.toast("Paste the web app link first (it ends in /exec)", "bad", "warning")
+		return
+	var res = await DocClear.send(App.inbox, str(cs.url), App.inbox.clear_token(), [], true)
+	if res.ok:
+		App.toast("It works: the script sees %d table%s in the doc" % [res.tables, "" if int(res.tables) == 1 else "s"], "good", "check")
+	else:
+		App.toast(str(res.error), "bad", "warning")
+
+
+static func _clear_now() -> void:
+	Sfx.tick()
+	if not App.inbox.can_clear():
+		App.toast("Paste the web app link first (it ends in /exec)", "bad", "warning")
+		return
+	var res = await App.inbox.clear_imported()
+	if not res.ok:
+		App.toast(str(res.error), "bad", "warning")
+	elif int(res.cleared) == 0 and int(res.get("skipped", 0)) == 0:
+		App.toast("Nothing to clear: no imported rows in the table (check the note first if you just typed)", "info", "sparkle")
+	else:
+		App.toast("Cleared %d row%s%s" % [res.cleared, "" if int(res.cleared) == 1 else "s", (", %d changed since it was read stayed" % res.skipped) if int(res.skipped) > 0 else ""], "good", "check")
 
 
 func _forget_names() -> void:
