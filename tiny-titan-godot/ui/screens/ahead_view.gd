@@ -70,6 +70,9 @@ static func _aim(l: Dictionary, wu: String) -> String:
 	var opts = l.get("options", [])
 	var first = opts[0] if not opts.is_empty() else {"new": false, "last": l.last.sets}
 	var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
+	if int(first.get("planned", 0)) > 0 and not l.has("dose"):
+		# Only planned so far (an extra lift of an earlier day in this look-ahead).
+		return "%d sets" % int(first.planned)
 	if l.has("dose"):
 		if bool(first.new):
 			return "add %d sets" % int(l.dose.sets)
@@ -158,6 +161,20 @@ static func _day_card(a: Dictionary, wu: String, du: String) -> Control:
 	var label = "Rest day" if bool(a.rest) else (str(plan.label) if (bool(a.lift) and str(plan.label) != "") else ("Lift" if bool(a.lift) else str(w.text)))
 	head.add_child(Kit.vcenter(Kit.tag(label, col, true, 12)))
 	c.add(head)
+	# What the day's plan gives each of its muscles, and where the week then
+	# stands against its target (a training focus).
+	var dose = plan.get("doseToday", [])
+	if bool(a.lift) and not dose.is_empty():
+		var tags = Kit.flow(4)
+		tags.set_meta("ahead_dose", str(a.date))
+		for d in dose:
+			var after = float(a.get("week", {}).get(str(d.part), float(d.after)))
+			var text = "%s +%s → %s/%s" % [Dose.part_name(str(d.part)), Dosage._n(float(d.today)), Dosage._n(after), Dosage._n(float(d.min))]
+			if str(d.mode) == "build":
+				tags.add_child(Kit.tag(text, DoseView.state_color(DoseView.state_of(after, float(d.min), float(d.max))), true, 10))
+			else:
+				tags.add_child(Kit.tag(text, Pal.PANEL2, false, 10))
+		c.add(tags)
 	if bool(a.rest):
 		c.add(_line("moon", "%d hard days in a row by then" % int(plan.rest.run), Pal.SECOND))
 		c.add(Kit.clip("A walk, PT and stretches are fine. The lifts move to the day after.", 11, Pal.MUTED))
@@ -186,6 +203,34 @@ static func _day_card(a: Dictionary, wu: String, du: String) -> Control:
 	return c
 
 
+## Where the plan leads: the sets a week each muscle being built gets when the
+## days go as planned (the average of the seven-day totals of the days shown:
+## one day's total alone dips whenever a rest day falls in it), against its
+## weekly target. null without a training focus.
+static func _week_card(days: Array):
+	var st = App.settings()
+	var plan = Dose.plan_of(st)
+	if plan == null or days.is_empty() or days[days.size() - 1].get("week", {}).is_empty():
+		return null
+	var last = days[days.size() - 1]
+	var c = Kit.card(4, DoseView.open, 10)
+	c.accent(Pal.LIFT)
+	c.set_meta("ahead_week", true)
+	c.tooltip_text = "Your weekly sets per muscle, and what counts"
+	c.add(Kit.label("IF IT GOES AS PLANNED · SETS A WEEK", 10, Pal.LIFT, true))
+	var cells = Kit.hbox(8)
+	cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for p in Dose.build_parts(st):
+		var t = plan.targets[p]
+		var sum = 0.0
+		for a in days:
+			sum += float(a.week.get(p, 0.0))
+		var total = snappedf(sum / float(days.size()), 0.5)
+		cells.add_child(DoseView.cell(str(p), total, total, float(t[0]), float(t[1])))
+	c.add(cells)
+	return c
+
+
 ## The sheet: every day of the look-ahead.
 static func open() -> void:
 	Sfx.tick()
@@ -195,6 +240,9 @@ static func open() -> void:
 		sh.box.add_child(Kit.para("Not enough workouts yet to look ahead. After a few weeks this shows what the next days will probably be.", 13, Pal.MUTED))
 	else:
 		sh.box.add_child(Kit.para("The next days if each one goes as planned. Nothing here is logged, and it moves with what you really do.", 12, Pal.MUTED))
+		var week = _week_card(days)
+		if week != null:
+			sh.box.add_child(week)
 		for a in days:
 			sh.box.add_child(_day_card(a, App.weight_unit(), App.distance_unit()))
 	var ok = Kit.button("Got it", "primary", sh.close, "lg")

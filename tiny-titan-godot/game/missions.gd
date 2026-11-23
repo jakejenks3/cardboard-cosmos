@@ -955,7 +955,8 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		"pt": pt, "others": others, "split": split if not cycle.is_empty() else "auto",
 		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked, "moves": avoid, "marks": marks,
 		"focus": focus, "rest": Dose.rest(before, marks, today) if focus != "" else {"run": 0, "today": false, "due": false},
-		"run": run_goal, "runToday": run_today}
+		"run": run_goal, "runToday": run_today,
+		"doseToday": Dose.day_dose(extra + lifts, before, today, marks, settings, kind, group) if focus != "" else []}
 
 
 ## One line on why today is that kind of day: "Yesterday was a pull day",
@@ -1056,7 +1057,10 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 		var title = ("%s: add %s" % [pn, str(anchor.what)]) if anchor != null else ("More for your %s" % pn.to_lower())
 		var words = "%s: " % pn
 		if float(d.need) >= 1.0:
-			words += "%s of %s weekly sets" % [Dosage._n(float(d.have)), Dosage._n(float(d.min))]
+			if float(d.have) < float(d.min):
+				words += "%s of %s weekly sets" % [Dosage._n(float(d.have)), Dosage._n(float(d.min))]
+			else:
+				words += "today's share is %s sets, to stay at %s a week" % [Dosage._n(float(d.share)), Dosage._n(float(d.min))]
 			if anchor != null:
 				words += ", no %s in two weeks" % str(anchor.word)
 		else:
@@ -1329,28 +1333,62 @@ static func _noon_ms(day: String) -> int:
 
 ## A day's plan done as last time, as one pretend session ("pretend-<day>"):
 ## its lifts (each the way it was done last) and its PT, with last time's sets.
-## A lift never done has no sets to pretend and is left out. null when nothing
-## of the plan has been done before.
-static func pretend_lift(log: Array, day: String, plan: Dictionary):
+## A lift never done has no sets to pretend and is left out; with `with_new`
+## (the look-ahead) an EXTRA lift of the training focus that was never done is
+## pretended all the same, for the sets it asks (8 reps, no weight), and named
+## in "invented": the week it leads to has to count it. null when nothing of
+## the plan can be pretended.
+static func pretend_lift(log: Array, day: String, plan: Dictionary, with_new: bool = false):
 	var last = LiftHistory.last_performances(log)
-	var names = []
-	for l in plan.lifts:
-		var opts = l.get("options", [])
-		names.append(str(opts[0].name) if not opts.is_empty() else str(l.name))
-	for r in plan.pt:
-		names.append(str(r.name))
 	var exercises = []
 	var have = {}
-	for nm in names:
+	var invented = []
+	for l in plan.lifts:
+		var opts = l.get("options", [])
+		var nm = str(opts[0].name) if not opts.is_empty() else str(l.name)
 		var k = Xp.normalize_exercise(nm)
-		var lp = last.get(k)
-		if lp == null or have.has(k):
+		if have.has(k):
 			continue
-		have[k] = true
-		exercises.append({"name": str(lp.name), "sets": lp.sets.duplicate(true)})
+		var lp = last.get(k)
+		if lp != null:
+			have[k] = true
+			exercises.append({"name": str(lp.name), "sets": lp.sets.duplicate(true)})
+		elif with_new and l.has("dose"):
+			have[k] = true
+			var sets = []
+			for i in range(int(l.dose.sets)):
+				sets.append({"reps": 8, "weightKg": 0.0})
+			exercises.append({"name": nm, "sets": sets})
+			invented.append(nm)
+	for r in plan.pt:
+		var k2 = Xp.normalize_exercise(str(r.name))
+		var lp2 = last.get(k2)
+		if lp2 == null or have.has(k2):
+			continue
+		have[k2] = true
+		exercises.append({"name": str(lp2.name), "sets": lp2.sets.duplicate(true)})
 	if exercises.is_empty():
 		return null
-	return {"id": "pretend-" + day, "discipline": "lift", "date": day, "createdAt": _noon_ms(day), "source": "manual", "exercises": exercises}
+	var out = {"id": "pretend-" + day, "discipline": "lift", "date": day, "createdAt": _noon_ms(day), "source": "manual", "exercises": exercises}
+	if with_new:
+		out["invented"] = invented
+	return out
+
+
+## In a plan of the look-ahead, a lift that has only been PRETENDED (an extra
+## lift of the focus never really done: `invented`, normalized names) is still
+## new: no last time, no weight to aim for, only the sets it was planned for
+## ("planned" on its option).
+static func _as_planned(plan: Dictionary, invented: Dictionary) -> void:
+	if invented.is_empty():
+		return
+	for l in plan.lifts:
+		for o in l.get("options", []):
+			if invented.has(Xp.normalize_exercise(str(o.name))):
+				o["planned"] = LiftTrend.real_sets(o.get("last", [])).size()
+				o["new"] = true
+				o["last"] = []
+				o["lastDate"] = ""
 
 
 ## A likely climb, run, ride or walk (`o`, of plan.others) as a pretend session
@@ -1377,7 +1415,9 @@ static func pretend_other(log: Array, day: String, o: Dictionary, plan: Dictiona
 ## The next `days` days as they will probably go when every day before goes as
 ## planned: [{"date", "plan" (day_plan of that morning), "rest" (a rest day is
 ## due: nothing is pretended on it), "lift" (a lift is likely: a weekday the
-## player lifts on, with lifts to plan), "others" (the likely climb, run...)}].
+## player lifts on, with lifts to plan), "others" (the likely climb, run...),
+## "week" ({part: its sets in the seven days ending that evening, the day done
+## as planned}; {} without a training focus)}].
 ## From today on, each day's plan is pretended done (pretend_lift,
 ## pretend_other) unless it is a rest day or already logged, and the next
 ## day's plan is made from that: the split goes on, a muscle that got its sets
@@ -1385,9 +1425,12 @@ static func pretend_other(log: Array, day: String, o: Dictionary, plan: Dictiona
 static func ahead(sessions: Array, today: String, marks: Dictionary = {}, settings: Dictionary = {}, days: int = AHEAD_DAYS) -> Array:
 	var out = []
 	var log = sessions.duplicate()
+	var invented = {}
+	var focus = Dose.plan_id(settings) != ""
 	for i in range(days + 1):
 		var day = Dates.add_days(today, i)
 		var plan = day_plan(log, day, marks, settings)
+		_as_planned(plan, invented)
 		var logged = {}
 		for s in log:
 			if str(s.get("date", "")) == day:
@@ -1402,20 +1445,26 @@ static func ahead(sessions: Array, today: String, marks: Dictionary = {}, settin
 			for o in plan.others:
 				if others.size() < 2 and float(o.get("score", 0.0)) >= 1.0 and not _too_soon(log, str(o.discipline), day):
 					others.append(o)
+		if not rest:
+			if lift and not logged.has("lift"):
+				var p = pretend_lift(log, day, plan, true)
+				if p != null:
+					for nm in p.get("invented", []):
+						invented[Xp.normalize_exercise(str(nm))] = true
+					log.append(p)
+			for o in others:
+				if logged.has(str(o.discipline)):
+					continue
+				var q = pretend_other(log, day, o, plan)
+				if q != null:
+					log.append(q)
 		if i > 0:
-			out.append({"date": day, "plan": plan, "rest": rest, "lift": lift, "others": others})
-		if rest:
-			continue
-		if lift and not logged.has("lift"):
-			var p = pretend_lift(log, day, plan)
-			if p != null:
-				log.append(p)
-		for o in others:
-			if logged.has(str(o.discipline)):
-				continue
-			var q = pretend_other(log, day, o, plan)
-			if q != null:
-				log.append(q)
+			var week = {}
+			if focus:
+				var w = Dose.window(log, marks, settings, day)
+				for part in w.parts:
+					week[part] = float(w.parts[part].total)
+			out.append({"date": day, "plan": plan, "rest": rest, "lift": lift, "others": others, "week": week})
 	return out
 
 

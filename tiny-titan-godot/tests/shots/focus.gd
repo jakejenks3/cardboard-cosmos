@@ -109,7 +109,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var text = ShotHelper.all_text(main)
 	check(plan.kind == "push" and plan.lifts[0].has("dose") and str(plan.lifts[0].dose.part) == "chest" and bool(plan.lifts[0].dose.anchor), "a push day: the plan's first lift is a press for the chest")
 	check(text.contains("YOUR FOCUS ADDS") and text.contains("FOR CHEST") and text.contains("ADD · %d SETS" % int(plan.lifts[0].dose.sets)) and text.contains("Bench Press"), "the Today card says so, before the usual lifts")
-	check(_find("dose_row") != null and text.contains("LAST 7 DAYS · SETS") and text.contains("Chest") and text.contains("Triceps"), "the weekly sets of the day's muscles are on the card")
+	var dchest = plan.doseToday[0]
+	check(_find("dose_row") != null and text.contains("SETS THIS WEEK") and text.contains("Chest") and text.contains("Triceps") and str(dchest.part) == "chest" and text.contains("%s → %s / %s" % [Dosage._n(float(dchest.have)), Dosage._n(float(dchest.after)), Dosage._n(float(dchest.min))]), "the card says where today's plan takes the week of each of the day's muscles (chest %s → %s of %s)" % [Dosage._n(float(dchest.have)), Dosage._n(float(dchest.after)), Dosage._n(float(dchest.min))])
+	check(float(dchest.after) >= float(dchest.min), "and with the press the plan gives the chest its weekly sets")
 	check(_find("rest_row") == null and not bool(plan.rest.due), "no rest day yet (a day off three days ago)")
 	check(text.contains("aim 5.5 km") and text.contains("Your run day") and text.contains("or quicker than 6:00 /km over 3.8 km"), "the run day: a little further than the last one, or quicker")
 	await ShotHelper.snap(tree, "focus_1_home")

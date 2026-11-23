@@ -81,6 +81,13 @@ func _init() -> void:
 	ok(fd[0].plan.lifts[0].has("dose") and str(fd[0].plan.lifts[0].dose.part) == "chest", "and it comes with the press for the chest")
 	ok(fd.map(func(a): return str(Missions.ahead_word(a).text)) == ["Push", "Legs", "Pull", "Push", "Legs", "Rest"], "five days round the split, then a rest day", fd.map(func(a): return str(Missions.ahead_word(a).text)))
 	ok(bool(fd[5].rest) and not bool(fd[5].lift) and int(fd[5].plan.rest.run) == 5 and fd[5].others.is_empty() and Missions.ahead_word(fd[5]).what == "rest", "the rest day: five hard days in a row by then, nothing else on it", fd[5].plan.rest)
+	# Each day says where the week stands once it is done as planned; the press the plan adds is counted.
+	ok(days.all(func(a): return a.week.is_empty()) and fd.all(func(a): return a.week.has("chest") and a.week.has("back")), "with a focus every day carries the week's sets per muscle (none without)")
+	ok(is_equal_approx(float(fd[0].plan.doseToday[0].have), 3.0) and int(fd[0].plan.lifts[0].dose.sets) == 4 and is_equal_approx(float(fd[0].week.chest), 10.0), "the push day: 3 chest sets in the week, the flyes and a press of 4 make it 10", [fd[0].plan.doseToday[0], fd[0].week.chest])
+	var second_push = fd[3]
+	var bench = second_push.plan.lifts.filter(func(l): return str(LiftNames.split(str(l.name)).move) == "Bench Press")
+	ok(str(second_push.plan.kind) == "push" and bench.size() == 1 and not bench[0].has("dose") and bool(bench[0].options[0].new) and int(bench[0].options[0].planned) == 4 and bench[0].options[0].last.is_empty(), "the next push day: the press is part of the day now, still new (only planned so far: no weight to aim for)", bench)
+	ok(float(fd[3].week.chest) >= 10.0 and float(fd[3].week.chest) <= 16.0 and not log.any(func(s): return s.has("invented")), "and the chest is within its target; nothing of this reaches the log", fd[3].week.chest)
 	var longer = Missions.ahead(log, today, {}, on, 8)
 	ok(str(longer[6].plan.kind) == "pull" and bool(longer[6].lift) and not bool(longer[6].rest), "the day after the rest day the split goes on", [longer[6].date, longer[6].plan.kind, longer[6].rest])
 

@@ -164,7 +164,16 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await _open_card()
 	sh = _sheet()
 	st = ShotHelper.all_text(sh) if sh != null else ""
-	check(st.contains("Rest day") and st.contains("hard days in a row by then") and st.contains("FOR CHEST") and st.contains("Incline dumbbell") and st.contains("Dip") and st.contains("Pull-up"), "the sheet: the rest day, the press for the chest and its other ways, a pull-up beside the pulldown")
+	check(st.contains("Rest day") and st.contains("hard days in a row by then") and st.contains("Bench Press") and st.contains("Pull-up"), "the sheet: the rest day, the press on the next push day, a pull-up beside the pulldown")
+	# The plan in numbers: the week it leads to, and what each day gives its muscles.
+	var week_card = _find("ahead_week", sh)
+	var wt = ShotHelper.all_text(week_card) if week_card != null else ""
+	check(week_card != null and wt.contains("IF IT GOES AS PLANNED") and wt.contains("Chest") and wt.contains("Triceps"), "the week the plan leads to, in sets per muscle being built")
+	var chest_sum = 0.0
+	for a in days:
+		chest_sum += float(a.week.get("chest", 0.0))
+	check(chest_sum / float(days.size()) >= 10.0, "the planned days give the chest its weekly sets (%s a week)" % Dosage._n(chest_sum / float(days.size())))
+	check(_all("ahead_dose", sh).size() >= 3 and st.contains("Chest +") and st.contains("Back +"), "each lift day says what it adds to each of its muscles")
 	check(st.contains("Running") and st.contains("aim 5.5 km"), "and the run with the distance to aim for")
 	await ShotHelper.snap(tree, "ahead_5_sheet_focus")
 	if sh != null:

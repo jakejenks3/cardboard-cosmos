@@ -89,7 +89,7 @@ func _init() -> void:
 	ok(plain.kind == "push" and plain.focus == "" and not plain.lifts.any(func(l): return l.has("dose") or l.has("mode")) and plain.run == null and not plain.rest.due, "no focus: the plan is as it was", plain.lifts.map(func(l): return str(l.name)))
 	ok(plan.focus == "upper" and plan.lifts.size() == plain.lifts.size() + 1 and plan.lifts[0].has("dose") and plan.lifts.slice(1).map(func(l): return str(l.name)) == plain.lifts.map(func(l): return str(l.name)), "with a focus: one extra lift, put first, the usual ones after it", plan.lifts.map(func(l): return str(l.name)))
 	var x = plan.lifts[0]
-	ok(x.dose.part == "chest" and bool(x.dose.anchor) and int(x.dose.sets) == 3 and is_equal_approx(float(x.dose.have), 6.0) and is_equal_approx(float(x.dose.cover), 3.0) and str(x.why) == "6 of 10 sets in 7 days, no press" and is_equal_approx(float(x.dose.need), 1.0), "the chest is short and has no press: 3 sets of one", [x.dose, x.why])
+	ok(x.dose.part == "chest" and bool(x.dose.anchor) and int(x.dose.sets) == 3 and is_equal_approx(float(x.dose.have), 6.0) and is_equal_approx(float(x.dose.cover), 3.0) and str(x.why) == "6 of 10 sets in 7 days, no press" and is_equal_approx(float(x.dose.share), 5.0) and is_equal_approx(float(x.dose.need), 2.0), "the chest is short and has no press: 3 sets of one", [x.dose, x.why])
 	ok(x.options.map(func(o): return str(o.name)) == ["Bench Press - Barbell", "Bench Press - Incline dumbbell", "Bench Press - Machine", "Push-up - Weighted", "Dip"] and x.options.all(func(o): return bool(o.new)) and x.name == "Bench Press - Barbell", "a press for every sort of equipment, the barbell first", x.options.map(func(o): return str(o.name)))
 	ok(plan.new != null and not ["Bench Press", "Push-up", "Dip"].has(str(plan.new.move)) and not plan.new.alts.any(func(a): return ["Bench Press", "Push-up", "Dip"].has(str(a.move))), "\"try something new\" offers other movements than the press", [plan.new.name, plan.new.alts.map(func(a): return str(a.name))])
 	ok(plan.lifts.slice(1).all(func(l): return str(l.mode) == "build") and ["Bench Press", "Push-up", "Dip"].all(func(m): return plan.moves.has(Xp.normalize_exercise(m))), "the day's lifts are for building; the press's movements belong to the plan", plan.moves)
@@ -176,7 +176,23 @@ func _init() -> void:
 	tri_log.append(lift("2026-11-22", PULL))
 	var tp = Missions.day_plan(tri_log, today, marks, st)
 	var tx = tp.lifts.filter(func(l): return l.has("dose"))
-	ok(tx.any(func(l): return str(l.dose.part) == "triceps" and not bool(l.dose.anchor) and l.options.size() >= 1 and Dosage.part(str(l.name)) == "triceps") and not tx.any(func(l): return str(l.dose.part) == "chest"), "triceps short (only the bench's half sets): a triceps movement is added; the chest has its press", tx.map(func(l): return [l.dose, l.options.map(func(o): return str(o.name))]))
+	ok(tx.any(func(l): return str(l.dose.part) == "triceps" and not bool(l.dose.anchor) and l.options.size() >= 1 and Dosage.part(str(l.name)) == "triceps") and not tx.any(func(l): return bool(l.dose.anchor)), "triceps short (only the bench's half sets): a triceps movement is added; the chest has its press, so no press is asked for again", tx.map(func(l): return [l.dose, l.options.map(func(o): return str(o.name))]))
+	var cx = tx.filter(func(l): return str(l.dose.part) == "chest")
+	ok(cx.size() == 1 and is_equal_approx(float(cx[0].dose.share), 5.0) and is_equal_approx(float(cx[0].dose.cover), 4.0) and not ["Bench Press"].has(str(LiftNames.split(str(cx[0].name)).move)) and str(cx[0].why) == "8 of 10 sets in 7 days", "the bench alone (4 sets, twice a week) leaves the chest under its share of 5 a day: another chest movement is added", cx.map(func(l): return [l.name, l.dose, l.why]))
+
+	# --- the day's share of the week, and what a plan gives each muscle ----------------------------
+	ok(is_equal_approx(Dose.day_target([10, 16, "build"], 7.5, 2.0), 5.0), "a muscle trained twice a week: half its weekly least a day")
+	ok(is_equal_approx(Dose.day_target([10, 16, "build"], 2.0, 2.0), 8.0) and is_equal_approx(Dose.day_target([10, 16, "build"], 4.0, 2.0), 6.0), "a week that is behind asks for what it lacks, up to the most a day may give")
+	ok(is_equal_approx(Dose.day_target([10, 16, "build"], 14.0, 2.0), 2.0) and is_equal_approx(Dose.day_target([10, 16, "build"], 17.0, 2.0), 0.0), "never more than keeps the week within its most")
+	ok(is_equal_approx(Dose.day_target([8, 16, "build"], 6.0, 3.0), 3.0) and is_equal_approx(Dose.day_target([8, 16, "build"], 0.0, 1.0), 8.0), "three days a week: a third; once a week: all of it")
+	ok(is_equal_approx(Dose.freq_of(log, today, "chest", marks), 2.0) and is_equal_approx(Dose.freq_of(log, today, "calves", marks), 2.0) and is_equal_approx(Dose.freq_of([], today, "chest", marks), 1.0), "how often a muscle is trained: four chest days in two weeks is twice a week")
+	var dd = plan.doseToday
+	ok(dd.map(func(d): return str(d.part)) == ["chest", "shoulders", "triceps"] and plain.doseToday.is_empty(), "the plan says what it gives each muscle of the day (nothing without a focus)", dd.map(func(d): return str(d.part)))
+	var dchest = dd[0]
+	ok(is_equal_approx(float(dchest.have), 6.0) and is_equal_approx(float(dchest.today), 6.0) and is_equal_approx(float(dchest.after), 12.0) and dchest.state == "ok" and is_equal_approx(float(dchest.share), 5.0), "chest: 6 in the week, the flyes and the added press give 6 more: 12, on target", dchest)
+	var plain_dose = Dose.day_dose(plain.lifts, log.filter(func(s): return str(s.date) < today), today, marks, st, "push", "push")
+	ok(is_equal_approx(float(plain_dose[0].today), 3.0) and plain_dose[0].state == "short", "without the press the day would leave the chest short (9 of 10)", plain_dose[0])
+	ok(Dose.planned_sets(x, marks) == 3 and Dose.planned_sets(fly, marks) == 3 and Dose.planned_sets({"name": "Neck 4 Way", "pt": true, "last": {"sets": [{"reps": 20, "weightKg": 4.0}]}}, marks) == 0, "a lift counts for the sets it was done for; an added one for what it asks; PT for nothing")
 	var tm = find(Missions.daily(today, {"sessions": tri_log, "pt": marks, "settings": st, "reading": [], "now": today}, state, []), ":dose:triceps")
 	ok(tm != null and tm.title == "More for your triceps", "its mission", tm)
 

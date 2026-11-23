@@ -26,9 +26,16 @@ extends RefCounted
 ## "leg stuff can still have goals to beat, I just don't plan on adding more
 ## volume").
 ##
-## The day's plan gets EXTRA lifts from it (extras): on a day whose kind trains
-## a muscle being built that will still be short after the day's usual lifts,
-## one more movement for it, with several to pick from for whatever equipment is there.
+## THE DAY'S PLAN IS MADE FROM THESE TARGETS (the user, 2026-11-22: "You
+## planned out sets of volume for those areas based on my priorities and was
+## that ignored for this?... the plan should go based off that"). Each muscle
+## being built has a SHARE to get on a day that trains it (day_target): its
+## weekly least divided by how many days a week it is trained (freq_of), more
+## when the week is behind, never past its weekly most. The day's usual lifts
+## are counted against that share (day_dose says what the day gives each
+## muscle and where the week then stands), and what is missing is ADDED
+## (extras): on a day whose kind trains a muscle being built that the day's
+## usual lifts leave short of its share, one more movement for it, with several to pick from for whatever equipment is there.
 ## A muscle with an ANCHOR (the chest's press) gets that first when no lift of
 ## that sort was done in ANCHOR_DAYS: flyes alone never load the chest much.
 
@@ -38,6 +45,10 @@ const CLIMB_SETS = {"forearms": 4.0}
 ## A rest day is due after this many days in a row with a hard session.
 const REST_AFTER = 5
 const ANCHOR_DAYS = 14
+## The days looked at for how often a muscle is trained, and the most sets a
+## day is asked to give one muscle.
+const FREQ_LOOK = 14
+const DAY_CAP = 8.0
 ## Extra lifts a day's plan may get, and the sets one asks for.
 const EXTRA_LIFTS = 2
 const EXTRA_MIN = 3
@@ -269,10 +280,85 @@ static func more_options(part: String, hist: Dictionary, taken: Array, kind: Str
 	return out
 
 
+## How many days a week the muscle gets direct work: the FREQ_LOOK days before
+## `today` (or as many as the log has, a week at least), 1 to 3.
+static func freq_of(before: Array, today: String, part: String, marks: Dictionary) -> float:
+	var from = Dates.add_days(today, -FREQ_LOOK)
+	var first = today
+	var days = {}
+	for s in before:
+		var d = str(s.get("date", ""))
+		if d == "" or d >= today:
+			continue
+		if d < first:
+			first = d
+		if d < from or str(s.get("discipline", "")) != "lift":
+			continue
+		for ex in s.get("exercises", []):
+			if LiftTrend.real_sets(ex.get("sets", [])).is_empty() or Dosage.is_mobility(ex, marks):
+				continue
+			if Dosage.part(str(ex.get("name", ""))) == part:
+				days[d] = true
+	var span = float(clampi(Dates.days_between(first if first > from else from, today), 7, FREQ_LOOK))
+	return clampf(days.size() / (span / 7.0), 1.0, 3.0)
+
+
+## The sets a muscle should get today: its share of the weekly least (`t` =
+## [least, most, mode]) for a muscle trained `freq` days a week, or what the
+## week still lacks when that is more; never more than keeps the week within
+## its most, and never more than DAY_CAP. `have`: its sets in the six days before.
+static func day_target(t: Array, have: float, freq: float) -> float:
+	var share = ceilf(float(t[0]) / maxf(1.0, freq))
+	var want = maxf(share, float(t[0]) - have)
+	return clampf(want, 0.0, maxf(0.0, minf(float(t[1]) - have, DAY_CAP)))
+
+
+## The sets a planned lift counts for today: an extra lift what it asks for,
+## any other what it was done for last time. 0 for physical therapy and stretches.
+static func planned_sets(l: Dictionary, marks: Dictionary) -> int:
+	if bool(l.get("pt", false)):
+		return 0
+	if l.has("dose"):
+		return int(l.dose.sets)
+	if Dosage.is_mobility({"name": str(l.name), "sets": l.last.sets}, marks):
+		return 0
+	return LiftTrend.real_sets(l.last.sets).size()
+
+
+## What a day's plan gives each muscle of the day, and where the week then
+## stands: [{"part", "have" (its sets in the six days before), "today" (the
+## sets the plan gives it: a lift's sets for its main muscle, half for one it
+## also works), "share" (day_target; 0 for a kept muscle), "after" (have +
+## today), "min", "max", "mode", "state" (of "after")}], in PARTS order.
+## `lifts`: the whole plan (the extras among them).
+static func day_dose(lifts: Array, before: Array, today: String, marks: Dictionary, settings: Dictionary, kind: String, group: String) -> Array:
+	var plan = plan_of(settings)
+	if plan == null:
+		return []
+	var w = window(before, marks, settings, Dates.add_days(today, -1), DAYS - 1)
+	var cover = {}
+	for l in lifts:
+		var n = planned_sets(l, marks)
+		if n > 0:
+			add_lift(cover, str(l.name), float(n))
+	var out = []
+	for p in parts_today(kind, group):
+		var t = plan.targets.get(p)
+		if t == null:
+			continue
+		var have = float(w.parts[p].total)
+		var gives = float(cover.get(p, 0.0))
+		var after = have + gives
+		out.append({"part": p, "have": have, "today": gives, "after": after, "min": float(t[0]), "max": float(t[1]), "mode": str(t[2]),
+			"share": day_target(t, have, freq_of(before, today, p, marks)) if str(t[2]) == "build" else 0.0,
+			"state": "short" if after < float(t[0]) - 0.01 else ("plenty" if after > float(t[1]) + 0.01 else "ok")})
+	return out
+
+
 ## The extra lifts of a day (see the top), shaped like Missions.likely_lifts
 ## rows with "options" and "dose": {"part", "sets", "have" (the six days
-## before), "cover" (what the day's own lifts will add), "need" (what is
-## still missing after those), "min", "mode",
+## before), "cover" (what the day's own lifts will add), "share" (day_target),
+## "need" (what of the share is still missing after those), "min", "mode",
 ## "anchor" (bool), "moves" (an anchor's movements, normalized)}.
 ## `lifts`: the day's likely lifts; `hist`: LiftLibrary.stats of the log before
 ## the day; `taken`: normalized movements already in the plan.
@@ -299,13 +385,17 @@ static func extras(lifts: Array, before: Array, today: String, marks: Dictionary
 		if t == null or not todays.has(p) or str(t[2]) != "build":
 			continue
 		var have = float(w.parts[p].total)
-		var need = float(t[0]) - have - float(cover.get(p, 0.0))
+		var share = day_target(t, have, freq_of(before, today, p, marks))
+		var need = share - float(cover.get(p, 0.0))
 		var anchor = ANCHORS.get(p)
 		var missing = false
 		if anchor != null:
 			var keys = anchor.moves.map(func(m): return Xp.normalize_exercise(str(m)))
 			missing = not keys.any(func(k): return planned.has(k)) and not moves_done(before, anchor.moves, Dates.add_days(today, -ANCHOR_DAYS), today)
 		if need < 1.0 and not missing:
+			continue
+		# (never a lift that would take the week past the muscle's most)
+		if not missing and have + float(cover.get(p, 0.0)) + EXTRA_MIN > float(t[1]) + 0.01:
 			continue
 		var opts = anchor_options(anchor, hist, taken) if missing else more_options(p, hist, taken, kind, marks)
 		if opts.is_empty():
@@ -314,11 +404,13 @@ static func extras(lifts: Array, before: Array, today: String, marks: Dictionary
 		var first = opts[0]
 		# The row's line (its tag names the muscle); the mission says more.
 		var why = "%s of %s sets in 7 days" % [Dosage._n(have), Dosage._n(float(t[0]))]
+		if have >= float(t[0]):
+			why = "To stay at %s sets a week" % Dosage._n(float(t[0]))
 		if missing:
 			why = "No %s in two weeks" % str(anchor.word) if need < 1.0 else why + ", no %s" % str(anchor.word)
 		out.append({"name": str(first.name), "score": 0.0, "why": why, "part": p, "pt": false, "kind": Missions.kind_of(str(first.name)), "variations": [str(first.name)],
 			"last": {"date": str(first.lastDate), "sets": first.last}, "since": -1, "gap": 0.0, "same": 0, "options": opts,
-			"dose": {"part": p, "sets": n, "have": have, "cover": float(cover.get(p, 0.0)), "need": need, "min": float(t[0]), "mode": str(t[2]), "anchor": missing,
+			"dose": {"part": p, "sets": n, "have": have, "cover": float(cover.get(p, 0.0)), "share": share, "need": need, "min": float(t[0]), "mode": str(t[2]), "anchor": missing,
 				"moves": anchor.moves.map(func(m): return Xp.normalize_exercise(str(m))) if missing else []}})
 		add_lift(cover, str(first.name), float(n))
 		for o in opts:

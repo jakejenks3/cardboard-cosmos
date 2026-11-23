@@ -973,6 +973,30 @@ is the Windows handoff.
     to be switched on). "" (From my log) is a choice and stays. `ShotHelper.demo_saved` and the
     walkthrough runner set "" so the walkthroughs start without one.
   - Tests: missions_test (options, families, stand-ins, six lifts, a once-done lift).
+- THE DAY'S PLAN COMES FROM THE WEEKLY SET TARGETS (2026-11-22, after the options: "that doesn't seem to
+  line up with getting enough volume... You planned out sets of volume for those areas based on my
+  priorities and was that ignored for this?... the plan should go based off that"). It had been: the
+  lifts from habit, the targets only a top-up when a muscle's week fell short, and none of it shown.
+  - `Dose.day_target(t, have, freq)`: a muscle being built has a SHARE to get on a day that trains it:
+    its weekly least / the days a week it is trained (`freq_of`: the 14 days before, 1 to 3), or what
+    the week lacks when that is more; never past its weekly most, never over `DAY_CAP` 8.
+    `Dose.extras` adds a movement when the day's usual lifts leave a muscle a set or more under that
+    share (it used to wait until the week itself was short), not when that would pass the most.
+  - `Dose.day_dose(lifts, ...)` -> `plan.doseToday`: per muscle of the day {have (six days before),
+    today (the plan's sets: `planned_sets`, a half for "also works"), share, after, min, max, mode,
+    state}. The Today card's row (`DoseView.row`, `DoseView.cell`) is the plan's sum: "Chest 3 -> 10 /
+    10" = now, after today's plan, the weekly least; the colour is where the plan leaves it.
+  - Coming up: every day carries `week` ({part: sets in the seven days ending that evening}); a day
+    card has tags "Chest +7 -> 13/10" (meta `ahead_dose`); the sheet opens with "IF IT GOES AS PLANNED
+    · SETS A WEEK" (meta `ahead_week`: the average of the days' weeks, since one day's seven days dip
+    whenever a rest day falls in them). For that, `Missions.pretend_lift(..., with_new = true)` also
+    pretends an extra lift never done (8 reps, no weight; named in `invented`) and `_as_planned`
+    marks it new again in later plans (`planned` = its sets; shown as "4 sets", no weight to aim for).
+    PhonePush.forecast does not pretend new lifts.
+  - On a copy of the user's log the planned week came to chest 11.5, back 17.5, biceps 13, triceps
+    13 sets (all in range), shoulders 23 (over, mostly half sets from rows and presses), legs kept.
+  - A change to the plan must keep this true: what is planned has to add up to the targets, and the
+    screens have to show the sum. Tests: dose_test (day_target, freq_of, day_dose), ahead_test (week).
 - Also 2026-11-21: switching tabs kept the old tab's scroll position (the new screen's first build in
   `UiScreen` kept what it found); `main._refresh` now resets it before adding the screen (anchor walkthrough).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
