@@ -357,11 +357,15 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 		var orl = Kit.label("OR", 10, Pal.MUTED, true)
 		orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		more.add_child(orl)
+		# Each other way: a variation of the same movement by its own words, another
+		# movement by its name; one never done yet in the "new" colour.
+		var main_move = str(main.get("move", LiftNames.split(str(main.name)).move))
 		for o in opts.slice(1):
-			var same_move = str(o.move) == str(main.get("move", LiftNames.split(str(main.name)).move))
-			var text = str(o.variation) if same_move and str(o.variation) != "" else Missions.short_name(str(o.name))
-			var b = Kit.chip(text, false, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), Pal.LIFT, 11)
+			var same_move = str(o.move) == main_move
+			var text = str(o.variation) if same_move and str(o.variation) != "" else Missions.way_word(o, main_move)
+			var b = Kit.chip(text, false, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), Pal.SECOND if bool(o.new) else Pal.LIFT, 11)
 			b.tooltip_text = ("New to you: " if bool(o.new) else "") + Missions.short_name(str(o.name))
+			b.set_meta("lift_option", str(o.name))
 			more.add_child(b)
 		c.add(more)
 	return c

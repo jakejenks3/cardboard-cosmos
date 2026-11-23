@@ -901,7 +901,8 @@ is the Windows handoff.
   - `LiftTrend.next_target`: a weighted lift whose every working set is at `HIGH_REPS` 15 or more goes a
     step heavier and down to `DOWN_TO` 10 reps (`heavier: true`), always, focus or not: the aim used to
     be a 25th rep at a weight that is too light.
-  - The user's phone has to switch it on (Settings -> Training focus -> Upper body first); it was tried
+  - (It first had to be switched on in Settings; since later the same day it is on by default, see
+    "Options for every movement" below.) It was tried
     on a copy of the PC's log: push days get the press, pull and leg days nothing extra.
   - Tests: `tests/dose_test.gd`, more in lift_trend_test; walkthrough `tests/shots/focus.gd` (`new` data,
     makes its own log; also with `--fingers`).
@@ -940,6 +941,38 @@ is the Windows handoff.
 - A --script test that needs the App autoload must wait a frame and take `root.get_node_or_null("App")`
   (as doc_clear_test and todos_test do): `load("res://app/app.gd")` in `_init` fails to compile
   ("Identifier not found: Sfx"), and a test that errors there never quits. Run tests under `timeout`.
+- Options for every movement, and a fuller day (2026-11-22, a screenshot of Coming up with "or Shrug
+  (barbell)" under a lat pulldown and nothing under a GHD sit-up: "are there options like asked for,
+  because GHD is only at gym and the home cable is there for lat pulldown so that's why I needed
+  options... Want to display the movements and options for that movement"; and "will it only give me
+  4 strength exs?").
+  - `Missions.options_for` (at most `OPTIONS` 5), in order: the lift as done last; the player's other
+    variations of the movement (two, never a PT one); the same lift at the other place
+    (`other_place`: "... - Single arm home" <-> "... - Single arm gym", through `LiftNames.canon`);
+    with none of those, a library variation on other equipment (`other_gear`: a plain sit-up beside
+    the GHD one); then up to two movements of its FAMILY (`Missions.FAMILIES`, `family_of`: lat
+    pulldown / pull-up / chin-up; row / seated row...; fly / pullover; press / push-up / dip...), the
+    player's own first, then the library's on other equipment (`gear_of_lift`). One never done is
+    `new` with no sets. The old "another movement of the same body part they have done" is GONE: it
+    made a shrug a way to do a lat pulldown.
+  - `stands_in` / `same_of`: a library movement is stood in for by its family only (`same.known`,
+    `same.family`); a movement of the player's own, which has none, by the body part and kind as
+    before. So a push-up no longer ticks a chest fly row, and a shrug never a pulldown.
+  - `way_word(o, main_move)`: a way beside its movement's name ("dumbbell", "bodyweight" for a plain
+    one, "Pull-up"). Missions say "Or: home cable, Pullover (dumbbell)"; the morning text lists only
+    ways done before (an extra lift of the focus: all).
+  - Screens: the Today card's OR chips (meta `lift_option`); Coming up shows the MOVEMENT, then its
+    ways as tags (meta `lift_ways`): the one done last lit, "or", the others (never done yet: blue).
+  - A fuller day: `PLAN_LIFTS` 6 STRENGTH lifts; physical therapy no longer takes one of those
+    places (a PT lift ranking in the first six of everything is listed beside them, `PLAN_PT` 2 at
+    most; the PT row has them all). A lift done only ONCE has no usual gap: on a day of its own
+    kind (a split) it is planned as soon as it is two days old (it used to "rest" for half a week,
+    so a lift tried on the last pull day was missing from the next).
+  - The training focus is ON by default: `App.empty_saved()` settings have `focus: "upper"`, so a save
+    that never chose gets it (the user had asked for the overhaul and found nothing changed: it had
+    to be switched on). "" (From my log) is a choice and stays. `ShotHelper.demo_saved` and the
+    walkthrough runner set "" so the walkthroughs start without one.
+  - Tests: missions_test (options, families, stand-ins, six lifts, a once-done lift).
 - Also 2026-11-21: switching tabs kept the old tab's scroll position (the new screen's first build in
   `UiScreen` kept what it found); `main._refresh` now resets it before adding the screen (anchor walkthrough).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of

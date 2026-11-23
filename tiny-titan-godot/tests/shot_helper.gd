@@ -143,6 +143,8 @@ static func scroll_main(root: Node, y: int) -> void:
 ##   "year" – about ten months of steady training with body check-ins
 static func demo_saved(kind: String = "year") -> Dictionary:
 	var out = App.empty_saved()
+	# No training focus in the demo data: a walkthrough that wants one sets it.
+	out.settings["focus"] = ""
 	var today = Dates.today_key()
 	out.profile = {"name": "Jake", "skin": 1, "hairStyle": 1, "hairColor": 0, "createdAt": 1}
 	if kind == "new":

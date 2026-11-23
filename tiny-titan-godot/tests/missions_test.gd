@@ -271,14 +271,14 @@ func _init() -> void:
 	var vfly = vp.lifts.filter(func(l): return l.name == "Chest Fly - Gym cable")[0]
 	ok(vfly.variations == ["Chest Fly - Gym cable", "Chest Fly - Home cable"], "its variations, the latest first", vfly.variations)
 	var vfo = names(vfly.options)
-	ok(vfo == ["Chest Fly - Gym cable", "Chest Fly - Home cable", "Push-up"], "the ways: each variation as done, then another chest movement they have done", vfo)
-	ok(is_equal_approx(float(vfly.options[1].last[0].weightKg), 15.0) and is_equal_approx(float(vfly.options[0].last[0].weightKg), 25.0) and vfly.options.all(func(o): return not bool(o.new)), "each way with its own last time (home 15, gym 25)", vfly.options)
+	ok(vfo == ["Chest Fly - Gym cable", "Chest Fly - Home cable", "Pullover - Dumbbell"], "the ways: each variation as done, then a movement that does the same job (a pullover, not the push-ups done once)", vfo)
+	ok(is_equal_approx(float(vfly.options[1].last[0].weightKg), 15.0) and is_equal_approx(float(vfly.options[0].last[0].weightKg), 25.0) and not bool(vfly.options[0].new) and not bool(vfly.options[1].new) and bool(vfly.options[2].new) and vfly.options[2].last.is_empty(), "each way done before with its own last time (home 15, gym 25); the one never done is new and has none", vfly.options)
 	var vlat = names(vp.lifts.filter(func(l): return l.name == "Lateral Raise - Gym cable")[0].options)
 	ok(vlat[0] == "Lateral Raise - Gym cable" and vlat[1] == "Lateral Raise - Dumbbell", "lateral raises: the gym cable or dumbbells, as done", vlat)
 	var vdata = {"sessions": vlog, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}
 	var vday = Missions.daily(sat, vdata, state, [])
 	var vfm = find(vday, ":beat:chest fly - gym cable")
-	ok(vfm != null and vfm.title == "Beat it: Chest Fly" and vfm.lift == "Chest Fly - Gym cable" and str(vfm.desc).begins_with("Last time") and str(vfm.desc).contains("Or: Chest Fly (home cable), Push-up."), "the mission: last time on the gym cable, or the home cable, or push-ups", vfm.desc if vfm != null else null)
+	ok(vfm != null and vfm.title == "Beat it: Chest Fly" and vfm.lift == "Chest Fly - Gym cable" and str(vfm.desc).begins_with("Last time") and str(vfm.desc).contains("Or: home cable, Pullover (dumbbell)."), "the mission: last time on the gym cable, or the home cable, or a pullover", vfm.desc if vfm != null else null)
 	var beat_with = func(exs: Dictionary) -> Dictionary:
 		var d = vdata.duplicate()
 		d.sessions = vlog + [lift(sat, exs)]
@@ -287,13 +287,54 @@ func _init() -> void:
 		return {"fly": m.done, "lat": lm2.done if lm2 != null else null}
 	ok(beat_with.call({"Chest Fly - Home cable": [[12, 17.5], [12, 15]]}).fly, "more than last time on the home cable beats it (lighter than the gym cable, which has its own aim)")
 	ok(beat_with.call({"Chest Fly - Machine": [[10, 30]]}).fly, "a variation written the first time counts")
-	ok(beat_with.call({"Push-up": [[22, 0]]}).fly, "the other movement counts too")
+	ok(beat_with.call({"Pullover - Dumbbell": [[12, 15]]}).fly, "a movement standing in for it counts too")
+	ok(not beat_with.call({"Push-up": [[22, 0]]}).fly, "a press is not a fly: push-ups do not stand in for it")
 	ok(not beat_with.call({"Chest Fly - Home cable": [[10, 15]]}).fly and not beat_with.call({"Lateral Raise - Dumbbell": [[10, 8]]}).lat, "less than last time on the same way does not")
 	var vtext = Missions.morning_text(vp, vday, "kg")
-	ok(vtext.contains("Chest Fly (gym cable): ") and vtext.contains("
-  or Chest Fly (home cable): ") and vtext.contains("
-  or Push-up") and vtext.contains("
-  or Lateral Raise (dumbbell): "), "the morning message: every way, each with its own aim", vtext)
+	ok(vtext.contains("Chest Fly (gym cable): ") and vtext.contains("  or Chest Fly (home cable): ") and not vtext.contains("or Pullover") and vtext.contains("  or Lateral Raise (dumbbell): "), "the morning message: every way done before, each with its own aim (the new ones are on the card)", vtext)
+
+	# --- options whatever the equipment: the other place, other gear, a movement of the family ------
+	var hist = LiftLibrary.stats(vlog)
+	var opt_names = func(lift_name: String, avoid: Array) -> Array:
+		return Missions.options_for({"name": lift_name, "last": {"date": "", "sets": []}}, hist, avoid).map(func(o): return str(o.name))
+	ok(opt_names.call("Lat Pulldown - Single arm home", []) == ["Lat Pulldown - Single arm home", "Lat Pulldown - Single arm gym", "Pull-up", "Chin-up"], "a lift done at home: the same at the gym, then a pull-up and a chin-up", opt_names.call("Lat Pulldown - Single arm home", []))
+	ok(opt_names.call("Lat Pulldown - Single arm home", [Xp.normalize_exercise("Pull-up")]) == ["Lat Pulldown - Single arm home", "Lat Pulldown - Single arm gym", "Chin-up", "Straight-Arm Pulldown"], "a movement already in the plan is not offered as a way")
+	var glog = vlog + [lift("2026-11-18", {"Sit-up - GHD": [[8, 0]], "Shrug - Barbell": [[10, 60]], "Hip Flexor Thing": [[10, 0]]})]
+	var ghist = LiftLibrary.stats(glog)
+	var gopts = Missions.options_for({"name": "Sit-up - GHD", "last": {"date": "", "sets": []}}, ghist)
+	ok(gopts.map(func(o): return str(o.name)) == ["Sit-up - GHD", "Sit-up", "Crunch", "Leg Raise"] and not bool(gopts[0].new) and gopts.slice(1).all(func(o): return bool(o.new) and o.last.is_empty()), "a GHD sit-up (gym only): a plain sit-up, a crunch, a leg raise", gopts.map(func(o): return str(o.name)))
+	ok(Missions.way_word(gopts[1], "Sit-up") == "bodyweight" and Missions.way_word(gopts[2], "Sit-up") == "Crunch" and Missions.way_word(vfly.options[1], "Chest Fly") == "home cable", "a way in a word: the equipment of the plain one, the name of another movement, the variation")
+	var lat_opts = Missions.options_for({"name": "Lat Pulldown - Single arm home", "last": {"date": "", "sets": []}}, ghist)
+	ok(not lat_opts.any(func(o): return str(o.move) == "Shrug"), "a shrug done before is NOT a way to do a lat pulldown", lat_opts.map(func(o): return str(o.name)))
+	ok(Missions.options_for({"name": "Hip Flexor Thing", "last": {"date": "", "sets": []}}, ghist).map(func(o): return str(o.name)) == ["Hip Flexor Thing"], "a movement of the player's own has only itself")
+	ok(Missions.other_place("Tricep Pushdown - Gym rope") == "Tricep Pushdown - Home rope" and Missions.other_place("Chest Fly - Home cable") == "Chest Fly - Gym cable" and Missions.other_place("Squat - Barbell") == "" and Missions.other_place("Hip Flexor Thing - Home") == "", "the same lift at the other place, when its name says a place")
+	ok(Missions.other_gear(LiftNames.movement("Bicep Curl"), "Bicep Curl - Reclined", []) == "Bicep Curl - Barbell" and Missions.other_gear(LiftNames.movement("Sit-up"), "Sit-up", [Xp.normalize_exercise("Sit-up")]) == "Sit-up - GHD", "a variation on other equipment", [Missions.other_gear(LiftNames.movement("Bicep Curl"), "Bicep Curl - Reclined", []), Missions.other_gear(LiftNames.movement("Sit-up"), "Sit-up", [Xp.normalize_exercise("Sit-up")])])
+	ok(Missions.family_of("Lat Pulldown") == ["Pull-up", "Chin-up", "Straight-Arm Pulldown"] and Missions.family_of("Calf Raise").is_empty() and Missions.family_of("Hip Flexor Thing").is_empty(), "families of movements that do the same job")
+	var all_fam = []
+	var fam_bad = []
+	for fam in Missions.FAMILIES:
+		for m in fam:
+			if LiftNames.movement(str(m)) == null or all_fam.has(str(m)):
+				fam_bad.append(str(m))
+			all_fam.append(str(m))
+	ok(fam_bad.is_empty() and all_fam.size() > 60, "every family member is a library movement, in one family only", fam_bad)
+	var gsame = Missions.same_of("Lat Pulldown - Single arm home", vp)
+	ok(Missions.stands_in("Pull-up", gsame) and Missions.stands_in("Chin-up - Weighted", gsame) and not Missions.stands_in("Shrug - Barbell", gsame) and not Missions.stands_in("Seated Row", gsame), "a pull-up stands in for a lat pulldown; a shrug or a row does not")
+	var own_same = Missions.same_of("Hip Flexor Thing", vp)
+	ok(not bool(own_same.known) and own_same.family.is_empty(), "a movement of the player's own has no family (the body part decides, as before)")
+
+	# --- a fuller day: PT does not take a strength place, a lift done once comes back on its day ---
+	var big_pull = {"Bent Over Row - Barbell": [[8, 60]], "Lat Pulldown": [[10, 50]], "Bicep Curl - Dumbbell": [[10, 12]], "Seated Row": [[10, 40]], "Hammer Curl - Dumbbell": [[10, 12]], "Chin-up": [[6, 0]], "Neck 4 Way": [[20, 4]], "Wrist Curl": [[15, 8]]}
+	var blog = [lift("2026-11-12", big_pull), lift("2026-11-13", {"Chest Fly - Cable": [[12, 15]]}), lift("2026-11-14", {"Squat - Barbell": [[5, 100]]}),
+		lift("2026-11-15", big_pull), lift("2026-11-16", {"Chest Fly - Cable": [[12, 15]]}), lift("2026-11-17", {"Squat - Barbell": [[5, 100]]}),
+		lift("2026-11-18", big_pull), lift("2026-11-19", {"Chest Fly - Cable": [[12, 15]]}), lift("2026-11-20", {"Squat - Barbell": [[5, 100]]})]
+	var bmarks = {"neck 4 way": {"name": "Neck 4 Way", "perWeek": 7}, "wrist curl": {"name": "Wrist Curl", "perWeek": 7}}
+	var bp = Missions.day_plan(blog, sat, bmarks, {"split": "pull_push_legs"})
+	var strong_lifts = bp.lifts.filter(func(l): return not bool(l.pt))
+	ok(bp.kind == "pull" and strong_lifts.size() == Missions.PLAN_LIFTS and Missions.PLAN_LIFTS == 6, "a pull day with six strength lifts: all six are planned, physical therapy takes none of their places", names(bp.lifts))
+	var once = blog + [lift("2026-11-18", {"Shrug - Barbell": [[10, 60]]})]
+	ok(names(Missions.likely_lifts(once, sat, {}, "pull")).has("Shrug - Barbell"), "a lift done once on the last pull day is planned for the next one")
+	ok(not names(Missions.likely_lifts(blog + [lift("2026-11-20", {"Shrug - Barbell": [[10, 60]]})], sat, {}, "pull")).has("Shrug - Barbell") and not names(Missions.likely_lifts(once, sat, {}, "")).has("Shrug - Barbell"), "not the day after it was done, and not without a split (three days after a first time is too soon to call)")
 
 	# --- the morning message --------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg")

@@ -1240,9 +1240,14 @@ func apply_backup(backup: Dictionary) -> int:
 # ---------------------------------------------------------------------------
 
 static func empty_saved() -> Dictionary:
+	# The training focus (game/dose.gd) is ON unless switched off: a save that
+	# never chose gets "Upper body first" (the user asked for the plan to work
+	# that way and then found nothing had changed, 2026-11-22). "" = From my log.
+	var settings = TT.DEFAULT_SETTINGS.duplicate(true)
+	settings["focus"] = "upper"
 	return {
 		"profile": null,
-		"settings": TT.DEFAULT_SETTINGS.duplicate(true),
+		"settings": settings,
 		"sessions": [],
 		"claims": [],
 		"body": [],

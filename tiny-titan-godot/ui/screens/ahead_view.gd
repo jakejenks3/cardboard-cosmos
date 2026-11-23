@@ -91,17 +91,37 @@ static func _lift_row(l: Dictionary, wu: String) -> Control:
 	var left = Kit.vbox(1)
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The MOVEMENT first, then the ways to do it as tags: the one done last lit,
+	# the others after an "or" (one never done yet in the "new" colour).
 	var top = Kit.squeeze(6)
 	var sp = LiftNames.split(first_name)
-	top.add_child(Kit.soft_name(str(sp.move), 13, null, true, 170.0))
-	if str(sp.variation) != "":
-		top.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+	top.add_child(Kit.soft_name(str(sp.move), 14, null, true, 200.0))
 	if l.has("dose"):
 		top.add_child(Kit.vcenter(Kit.tag("FOR " + Dose.part_name(str(l.dose.part)).to_upper(), JourneyLifts.part_color(str(l.dose.part)), true, 10)))
 	left.add_child(top)
-	if opts.size() > 1:
-		var others = opts.slice(1).map(func(o): return str(o.variation).to_lower() if str(o.move) == str(sp.move) and str(o.variation) != "" else Missions.short_name(str(o.name)))
-		left.add_child(Kit.clip("or " + ", ".join(PackedStringArray(others)), 11, Pal.MUTED))
+	# The way done last in a word: its variation, or the equipment of a plain
+	# one ("cable", "bodyweight"); nothing for a lift with neither.
+	var main_word = str(sp.variation)
+	if main_word == "" and not opts.is_empty():
+		main_word = Missions.way_word(opts[0], str(sp.move))
+		if main_word == "plain":
+			main_word = ""
+		else:
+			main_word = main_word.capitalize()
+	if main_word != "" or opts.size() > 1:
+		var ways = Kit.flow(4)
+		ways.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ways.set_meta("lift_ways", first_name)
+		if main_word != "":
+			ways.add_child(Kit.tag(main_word, Pal.LIFT, true, 10))
+		if opts.size() > 1:
+			var orl = Kit.label("or", 10, Pal.MUTED, true)
+			orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			ways.add_child(orl)
+			for o in opts.slice(1):
+				var text = str(o.variation) if (str(o.move) == str(sp.move) and str(o.variation) != "") else Missions.way_word(o, str(sp.move))
+				ways.add_child(Kit.tag(text, Pal.with_alpha(Pal.SECOND, 0.85) if bool(o.new) else Pal.PANEL2, bool(o.new), 10))
+		left.add_child(ways)
 	row.add_child(left)
 	var aim = Kit.label(_aim(l, wu), 12, Pal.SECOND if (not opts.is_empty() and bool(opts[0].new)) else Pal.ACCENT, true)
 	aim.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

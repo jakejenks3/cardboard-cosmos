@@ -164,7 +164,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await _open_card()
 	sh = _sheet()
 	st = ShotHelper.all_text(sh) if sh != null else ""
-	check(st.contains("Rest day") and st.contains("hard days in a row by then") and st.contains("FOR CHEST") and st.contains("or incline dumbbell"), "the sheet: the rest day, the press for the chest and its other ways")
+	check(st.contains("Rest day") and st.contains("hard days in a row by then") and st.contains("FOR CHEST") and st.contains("Incline dumbbell") and st.contains("Dip") and st.contains("Pull-up"), "the sheet: the rest day, the press for the chest and its other ways, a pull-up beside the pulldown")
 	check(st.contains("Running") and st.contains("aim 5.5 km"), "and the run with the distance to aim for")
 	await ShotHelper.snap(tree, "ahead_5_sheet_focus")
 	if sh != null:

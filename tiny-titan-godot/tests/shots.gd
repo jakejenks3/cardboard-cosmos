@@ -14,7 +14,11 @@ func _ready() -> void:
 	var scenario_path = args[0] if args.size() > 0 else ""
 	var kind = args[1] if args.size() > 1 else "year"
 	if kind == "fresh":
-		App.replace_all(App.empty_saved())
+		# Walkthroughs start with no training focus ("From my log"); the ones about
+		# it pick one themselves.
+		var fresh = App.empty_saved()
+		fresh.settings["focus"] = ""
+		App.replace_all(fresh)
 	else:
 		App.replace_all(ShotHelper.demo_saved(kind))
 	var main = load("res://main.tscn").instantiate()
