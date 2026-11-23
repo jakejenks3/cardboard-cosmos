@@ -224,8 +224,10 @@ func rename_lift(old_name: String, new_name: String) -> Dictionary:
 	return {"ok": true, "sessions": n, "joined": joined, "name": want}
 
 
-## The to-do list (game/todos.gd), as stored. A plain list: nothing in the game
-## reads it, so a change only saves and redraws (no levels to work out again).
+## The to-do list (game/todos.gd), as stored. A plain list: no mission or plan
+## reads it, so a change only saves and redraws. The one exception is a tick
+## that pays its small bonus (set_todo_done): that is a claim, and the hero is
+## worked out again.
 func todos() -> Array:
 	if not (saved.get("todos") is Array):
 		saved["todos"] = []
@@ -255,13 +257,25 @@ func add_todo(text: String):
 	return t
 
 
-func set_todo_done(id: String, done: bool) -> void:
+## Tick an item off, or untick it. A tick pays a small bonus the first time
+## (Todos.bonus_for: once per item, a few a day) as a claim, so the XP and the
+## coins come from the replay; unticking takes nothing back. Returns the XP
+## it paid (0 for none).
+func set_todo_done(id: String, done: bool) -> int:
 	var t = _todo(id)
 	if t == null or bool(t.done) == done:
-		return
+		return 0
 	t.done = done
 	t.doneOn = today if done else ""
-	_todos_changed()
+	var xp = Todos.bonus_for(saved.claims, id, today) if done else 0
+	if xp <= 0:
+		_todos_changed()
+		return 0
+	var before = state
+	saved.claims.append({"id": Rng.uid("q"), "questId": Todos.claim_id(id), "xp": xp, "claimedAt": now_ms(), "date": today})
+	_commit()
+	announce_unlocks(before)
+	return xp
 
 
 func remove_todo(id: String) -> void:

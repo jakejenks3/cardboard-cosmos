@@ -106,6 +106,15 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(bool(App.todos()[1].done) and str(App.todos()[1].doneOn) == App.today and App.todos().map(func(t): return str(t.id)) == ids, "a tap ticks the item off; the list keeps its order")
 	check(absf(_row(_sheet(), ids[0]).global_position.y - y_first) < 1.5 and absf(_row(_sheet(), ids[2]).global_position.y - y_third) < 1.5, "no row moved when it was ticked")
 	check(ShotHelper.all_text(_sheet()).contains("2 open · 1 done"), "the sheet counts them: 2 open, 1 done")
+	# The tick paid its small bonus, once, as a claim; the sheet says how many are left today.
+	var bonus_claims = App.saved.claims.filter(func(c): return str(c.get("questId", "")) == "todo:" + ids[1])
+	check(int(App.state.xp.hero) == xp0 + Todos.BONUS_XP and bonus_claims.size() == 1 and int(bonus_claims[0].xp) == Todos.BONUS_XP, "the tick paid +%d XP, as a claim" % Todos.BONUS_XP)
+	var chips = {}
+	for id in ids:
+		for n in ShotHelper.walk(_row(_sheet(), id)):
+			if n.has_meta("todo_bonus"):
+				chips[id] = str(n.get_meta("todo_bonus"))
+	check(chips.get(ids[1], "") == "earned" and chips.get(ids[0], "") == "open" and chips.get(ids[2], "") == "open" and ShotHelper.all_text(_sheet()).contains("+%d XP for each one ticked off · %d of %d left today" % [Todos.BONUS_XP, Todos.BONUS_A_DAY - 1, Todos.BONUS_A_DAY]), "its row shows the bonus as earned, the open ones as still to be had, and the sheet counts what is left today (%s)" % str(chips))
 	await ShotHelper.snap(tree, "todo_3_sheet_ticked")
 	await _close_sheets()
 
@@ -124,6 +133,19 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.5)
 	card = _find("todo_card")
 	check(bool(App.todos()[0].done) and card != null and _all("todo_row", card).size() == 3 and ShotHelper.all_text(card).contains("1 open"), "ticked on the card: done, and its row stays until tomorrow")
+	check(int(App.state.xp.hero) == xp0 + 2 * Todos.BONUS_XP, "and it paid its bonus too")
+	# Unticked and ticked again: nothing is taken back, nothing is paid twice.
+	if card != null:
+		ShotHelper.reveal(_row(card, ids[0]))
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.click(tree, _row(_find("todo_card"), ids[0]))
+		await ShotHelper.wait(tree, 0.6)
+		var after_untick = int(App.state.xp.hero)
+		var was_open = not bool(App.todos()[0].done)
+		await ShotHelper.click(tree, _row(_find("todo_card"), ids[0]))
+		await ShotHelper.wait(tree, 0.6)
+		check(was_open and bool(App.todos()[0].done) and after_untick == xp0 + 2 * Todos.BONUS_XP and int(App.state.xp.hero) == xp0 + 2 * Todos.BONUS_XP, "unticked and ticked again: the XP stays as it was")
+	card = _find("todo_card")
 	if card != null:
 		ShotHelper.reveal(card)
 		await ShotHelper.frames(tree, 3)
@@ -170,5 +192,5 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.frames(tree, 3)
 		await ShotHelper.snap(tree, "todo_7_card_long")
 
-	check(int(App.state.xp.hero) == xp0 and App.sessions().size() == sessions0 and not App.quests().daily.any(func(m): return str(m.title).to_lower().contains("to do")), "none of it earned XP, logged anything or made a mission")
+	check(int(App.state.xp.hero) == xp0 + 2 * Todos.BONUS_XP and App.sessions().size() == sessions0 and not App.quests().daily.any(func(m): return str(m.title).to_lower().contains("to do")), "two ticks paid a small bonus each; nothing was logged and no mission was made")
 	print("TODO %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

@@ -1,6 +1,7 @@
 extends SceneTree
 ## Unit test for the to-do list (game/todos.gd), that a save keeps it
-## (App.parse_saved) and that two copies of a save merge it (SaveMerge).
+## (App.parse_saved), the small bonus a tick pays, and that two copies of a
+## save merge it (SaveMerge).
 ##   godot --headless --path . --script res://tests/todos_test.gd
 ## Prints TODOS: X/Y passed and exits with 1 when anything fails.
 
@@ -64,7 +65,37 @@ func _run() -> void:
 		ok(app.clear_done_todos() == 1 and app.todos().map(func(t): return str(t.id)) == [two.id] and app.clear_done_todos() == 0, "the done ones cleared: the open one is left")
 		var again = app.parse_saved(JSON.parse_string(JSON.stringify(app.saved)))
 		ok(again != null and again.todos.size() == 1 and again.todos[0].text == "Email the landlord", "and the list is in what gets saved", again.todos if again != null else null)
-		ok(int(app.state.xp.hero) == 0 and app.state.totals.sessions == 0, "none of it earns anything")
+		ok(int(app.state.xp.hero) == 3 * Todos.BONUS_XP and app.state.totals.sessions == 0 and app.saved.claims.size() == 3, "three items were ticked: three small bonuses, kept though the items are off the list again", [app.state.xp.hero, app.saved.claims.size()])
+
+		# --- the small bonus for a tick: once per item, a few a day -------------------------------
+		var day = "2026-11-23"
+		ok(Todos.bonus_for([], "a", day) == Todos.BONUS_XP and Todos.claim_id("a") == "todo:a" and Todos.left_on([], day) == Todos.BONUS_A_DAY, "a first tick pays the bonus")
+		var paid_a = [{"id": "q1", "questId": "todo:a", "xp": 20, "claimedAt": 1, "date": day}]
+		ok(Todos.paid(paid_a, "a") and not Todos.paid(paid_a, "b") and Todos.bonus_for(paid_a, "a", day) == 0 and Todos.bonus_for(paid_a, "b", day) == Todos.BONUS_XP and Todos.bonus_for(paid_a, "a", "2026-11-24") == 0, "an item pays once, whatever the day")
+		var five = []
+		for n in range(Todos.BONUS_A_DAY):
+			five.append({"id": "q%d" % n, "questId": "todo:x%d" % n, "xp": 20, "claimedAt": n, "date": day})
+		five.append({"id": "qm", "questId": "t:%s:show" % day, "xp": 150, "claimedAt": 9, "date": day})
+		ok(Todos.paid_on(five, day) == Todos.BONUS_A_DAY and Todos.left_on(five, day) == 0 and Todos.bonus_for(five, "new", day) == 0 and Todos.bonus_for(five, "new", "2026-11-24") == Todos.BONUS_XP, "five a day and no more; a mission's claim is not counted; the next day pays again")
+		app.replace_all(app.empty_saved())
+		var items = []
+		for n in range(8):
+			items.append(app.add_todo("Thing %d" % n))
+		var xp_first = app.set_todo_done(str(items[0].id), true)
+		ok(xp_first == Todos.BONUS_XP and int(app.state.xp.hero) == Todos.BONUS_XP and int(app.state.coins.earned) == 2 and app.saved.claims.size() == 1 and str(app.saved.claims[0].questId) == "todo:" + str(items[0].id) and str(app.saved.claims[0].date) == app.today, "ticking one off: 20 XP and 2 coins, as a claim of today", [xp_first, app.state.xp.hero, app.state.coins])
+		ok(app.set_todo_done(str(items[0].id), false) == 0 and app.set_todo_done(str(items[0].id), true) == 0 and int(app.state.xp.hero) == Todos.BONUS_XP and app.saved.claims.size() == 1, "unticking takes nothing back, ticking again pays nothing more")
+		var got = []
+		for n in range(1, 7):
+			got.append(app.set_todo_done(str(items[n].id), true))
+		ok(got == [20, 20, 20, 20, 0, 0] and int(app.state.xp.hero) == Todos.BONUS_A_DAY * Todos.BONUS_XP and app.todos().filter(func(t): return bool(t.done)).size() == 7, "five bonuses a day: the sixth and seventh tick still tick, and pay nothing", got)
+		var real_today = app.today
+		app.today = Dates.add_days(real_today, 1)
+		ok(app.set_todo_done(str(items[7].id), true) == Todos.BONUS_XP and app.set_todo_done(str(items[5].id), false) == 0 and app.set_todo_done(str(items[5].id), true) == Todos.BONUS_XP, "the next day pays again, also for one ticked past yesterday's five (unticked and ticked again)")
+		app.today = real_today
+		app.clear_done_todos()
+		ok(app.todos().is_empty() and app.saved.claims.size() == 7 and int(app.state.xp.hero) == 7 * Todos.BONUS_XP, "clearing the list leaves what was earned", [app.todos().size(), app.saved.claims.size(), app.state.xp.hero])
+		var kept = app.parse_saved(JSON.parse_string(JSON.stringify(app.saved)))
+		ok(kept != null and kept.claims.size() == 7, "and the claims are in what gets saved")
 
 	# Two copies of a save: an item added on each, one ticked on one side, one removed on the other.
 	var base = {"updatedAt": 10, "sessions": [], "todos": [list[0], list[1], list[3]]}

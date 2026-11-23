@@ -937,6 +937,18 @@ is the Windows handoff.
   key at the bottom). Nothing may move under the finger: a ticked item stays in its place, the status
   line is always there, the box is at the bottom of a sheet that grows upward (`_keep_form` once it
   scrolls), and after an item is taken off taps are ignored for `QUIET_MS`. Keep it a plain list.
+  - A SMALL BONUS FOR A TICK (2026-11-23, "Add some small bonuses for doing to do list tasks, changed my
+    mind about that"), so "no XP" above no longer holds. Ticking an item off pays `Todos.BONUS_XP` 20
+    hero XP (and so 2 coins), ONCE per item and for at most `BONUS_A_DAY` 5 items a day; unticking takes
+    nothing back and ticking again pays nothing more. It is a claim (`saved.claims`, questId
+    "todo:<item id>", like a sent project), so the XP and coins come from the replay and stay when the
+    item is taken off the list. `Todos.bonus_for(claims, id, day)`, `paid`, `paid_on`, `left_on`;
+    `App.set_todo_done` returns the XP paid and only a tick that pays works the hero out again
+    (`_commit`, `announce_unlocks`). Still no mission, streak or plan reads the list. Screen: every row
+    has a "+20 XP" chip in a slot that is always there (meta `todo_bonus` = open / earned / none: bright,
+    quiet, unseen), the XP rises from the row (`TodoView._tap_fx`, called BEFORE the list changes; the
+    row reaches the tap as its FIRST argument, since a later `bind` goes in front), and the sheet has a
+    line "+20 XP for each one ticked off · N of 5 left today" (meta `todo_pays`). Keep it small.
   Tests: `tests/todos_test.gd`; walkthrough `tests/shots/todo.gd` (year data).
 - A --script test that needs the App autoload must wait a frame and take `root.get_node_or_null("App")`
   (as doc_clear_test and todos_test do): `load("res://app/app.gd")` in `_init` fails to compile
