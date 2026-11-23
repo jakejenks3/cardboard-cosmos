@@ -504,7 +504,7 @@ func _trophy_tile(r: Dictionary) -> Control:
 			tile.add(Kit.bar(r.ratio, col, 5))
 		else:
 			tile.add(Kit.bar(0.0, Pal.ACCENT, 5))
-	var tip = "Keep playing to discover it." if hidden else Icons.strip_emoji(a.desc)
+	var tip = "Keep playing to discover it." if hidden else Units.text(Icons.strip_emoji(a.desc), App.settings())
 	if p != null and not hidden:
 		tip += "\n" + Fmt.fmt_progress(p, App.settings())
 	tile.tooltip_text = tip
@@ -521,7 +521,8 @@ static func open_trophy(r: Dictionary) -> void:
 	var hidden = u == null and a.get("secret", false)
 	var s = Kit.sheet("Secret trophy" if hidden else Icons.strip_emoji(a.name))
 	s.box.add_child(AdventureScreen.trophy_plate(r, 88))
-	var d = Kit.muted_para("Keep playing to discover it." if hidden else Icons.strip_emoji(a.desc), 15)
+	var d = Kit.muted_para("Keep playing to discover it." if hidden else Units.text(Icons.strip_emoji(a.desc), App.settings()), 15)
+	d.set_meta("trophy_desc", str(a.id))
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	s.box.add_child(d)
 	var chips = Kit.flow(8)

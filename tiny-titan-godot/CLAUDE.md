@@ -1168,6 +1168,32 @@ is the Windows handoff.
   - Tests: `tests/sides_test.gd`; walkthrough `tests/shots/sides.gd` (year data, also with
     `--fingers`). `Kit.section_title` is drawn in the pixel font: `ShotHelper.all_text` does not see
     it, so check a meta.
+- The player's units where the rules write kg and km (2026-11-23, after I pointed out that the record
+  cards said kg to a player who logs in lb: "Yeah always lbs"). `game/units.gd` (`Units`, pure).
+  - The ported rules count in kg and km and their TEXTS say so: the results reel's record cards
+    ("104.3 kg (was 102 kg)", "Longest run! 21.1 km", "Fastest pace (5 km+)!"), the XP labels ("12,340
+    kg volume", "5.2 km", "80 m climbed"), the trophies ("Lift 100 kg in a set."), what unlocks gear and
+    companions ("Run 100 km lifetime"). Those texts are NOT changed (parity compares them); the SCREENS
+    show them through `Units`, by `settings.weightUnit` and `settings.distanceUnit` each on its own. A
+    kg and km player sees everything as before.
+  - `Units.text(s, settings)`: a text of the rules with its kg, km, km/h, "m:ss /km" and metres of
+    elevation ("N m of elevation", "N m climbed") in the player's units. Numbers are as exact as a
+    threshold needs ("Run 13.11 mi in one go.", "Lift 132.3 lb in a set.", "Lift 2,204,623 lb
+    lifetime."); a text that says "exactly" (the on-the-nose trophies) is left alone; "Ride 160 km (100
+    miles)" reads "Ride 100 mi" (`WHOLE`). Used for a trophy's words (the cabinet's tile and sheet, meta
+    `trophy_desc`; the reel's trophy card), `Items.unlock_hint`, a companion's hint, flavour lines, the
+    Almost there rows (`goal.sub`), the reel's XP tooltip.
+  - `Units.records(events, before.prs, state.prs, settings)` (in `App.commit_sessions`, before
+    `Sides.fix_estimates`): the reel's record cards written again FROM THE RECORDS, so 230 lb is not
+    229.9 from a kg rounded to one decimal: a lift's weight and estimate, the heaviest hang, the
+    longest run and ride, the fastest pace (its title too: "Fastest pace (3.11 mi+)!") and ride. Cards
+    are found by the rules' own titles. `Sides.fix_estimates` writes its one-side card in the unit too.
+  - `Units.xp_label(session, label, settings)`: a session's XP chips (`SessionView`) from the
+    session's own numbers (a lift's volume, a run's distance and climb, a vest walk's load).
+  - A NEW text with a weight or a distance must be made with `Fmt.*` and the settings, never with a
+    unit typed into the string; a text of the rules shown somewhere new goes through `Units.text`.
+  - Tests: `tests/units_test.gd` (it also sweeps every trophy, gear hint and companion hint for a kg
+    or km left over); walkthrough `tests/shots/units.gd` (year data).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1336,6 +1362,7 @@ godot --headless --path . --script res://tests/ahead_test.gd
 godot --headless --path . --script res://tests/todos_test.gd
 godot --headless --path . --script res://tests/run_splits_test.gd
 godot --headless --path . --script res://tests/sides_test.gd
+godot --headless --path . --script res://tests/units_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1366,6 +1393,7 @@ ahead (the Coming up card and sheet: the next days as they will probably go, and
 todo (the to-do list: the card, the sheet, adding without the Add key moving; year data),
 splits (a run's best splits: the fields that come with the distance, the sheet, Journey, the record; year data),
 sides (reps logged as both sides added up: the lift page's switch, the Log tab's L+R key, the Today aim; year data),
+units (pounds and miles where the rules write kg and km: record cards, XP chips, trophies; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -1396,8 +1424,12 @@ scenario that sets `App.cloud._cfg` and calls `sync_now`, and open the web app w
 - A lift logged as both sides added up (Sides) is still ONE lift to the rules: its records and the
   Journey page's four strongest lifts go by the reps as typed. An older day typed a side (before
   the player started adding both arms up) is read as a total like the rest: it has to be edited.
-- A lift record's card in the results reel is worded by the ported rules in kg, whatever the
-  player's unit.
+- The race trophies and gear go by metres (5,000, 10,000, 21,097, 42,195): a run typed as 3.1, 6.2,
+  13.1 or 26.2 miles is 11 to 30 m short of them and does not unlock them (3.11, 6.22, 13.11 and
+  26.22 do). `RunSplits` does count such a run as that distance for its best times. Found
+  2026-11-23 and put to the user; the rules were not changed.
+- Chronicle titles, a boss's lines and other flavour that names a unit in WORDS ("kilometre
+  thirty-two") stay as written.
 - A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules
   have no timed sets.
 - Switching "Physical therapy" on a lift's page does not redraw the view above it (the

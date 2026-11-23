@@ -46,7 +46,7 @@ static func item_origin(it: Dictionary, owned) -> Dictionary:
 ## Where an owned companion came from: {"icon", "title", "sub"}.
 static func pet_origin(p: Dictionary, owned) -> Dictionary:
 	var at = str(owned.get("at", "")) if owned is Dictionary else ""
-	return {"icon": "paw", "title": "Joined you: %s" % Icons.strip_emoji(str(p.hint)), "sub": Dates.format_date(at, DATE_FMT) if at != "" else ""}
+	return {"icon": "paw", "title": "Joined you: %s" % Units.text(Icons.strip_emoji(str(p.hint)), App.settings()), "sub": Dates.format_date(at, DATE_FMT) if at != "" else ""}
 
 
 ## "[icon] Found as loot / Nov 14, 2026, after a climbing session".
@@ -119,13 +119,13 @@ static func hover_item(it: Dictionary, hint: String = "") -> Control:
 			need = "%s coins: %s more to go" % [Xp.fmt_int(check.price), Xp.fmt_int(int(check.price) - App.coins())]
 		v.add_child(origin_row({"icon": "bag", "title": "For sale in the shop", "sub": need}))
 	else:
-		v.add_child(origin_row({"icon": "lock", "title": "Not found yet", "sub": Icons.strip_emoji(Items.unlock_hint(it))}))
+		v.add_child(origin_row({"icon": "lock", "title": "Not found yet", "sub": Units.text(Icons.strip_emoji(Items.unlock_hint(it)), App.settings())}))
 		var prog = Items.unlock_progress(it, state)
 		if prog != null:
 			v.add_child(Parts.progress_line(prog, rc))
 	v.add_child(effect_block(it.get("perk"), "No bonus: worn for the look" if owned != null else "No bonus: just for the look"))
 	if known and str(it.get("flavor", "")) != "":
-		v.add_child(Kit.muted_para("\"%s\"" % Icons.strip_emoji(str(it.flavor)), 11))
+		v.add_child(Kit.muted_para("\"%s\"" % Units.text(Icons.strip_emoji(str(it.flavor)), App.settings()), 11))
 	if hint != "":
 		v.add_child(Kit.label(hint, 10, Pal.with_alpha(Pal.MUTED, 0.7)))
 	return v
@@ -145,12 +145,12 @@ static func hover_pet(p: Dictionary, hint: String = "") -> Control:
 	if owned:
 		v.add_child(origin_row(pet_origin(p, state.pets.get(p.id))))
 	else:
-		v.add_child(origin_row({"icon": "lock", "title": "Not met yet", "sub": Icons.strip_emoji(str(p.hint))}))
+		v.add_child(origin_row({"icon": "lock", "title": "Not met yet", "sub": Units.text(Icons.strip_emoji(str(p.hint)), App.settings())}))
 		if p.has("progress"):
 			v.add_child(Parts.progress_line(p.progress.call(state), rc))
 	v.add_child(effect_block(p.get("perk"), "No bonus"))
 	if owned and str(p.get("flavor", "")) != "":
-		v.add_child(Kit.muted_para("\"%s\"" % Icons.strip_emoji(str(p.flavor)), 11))
+		v.add_child(Kit.muted_para("\"%s\"" % Units.text(Icons.strip_emoji(str(p.flavor)), App.settings()), 11))
 	if hint != "":
 		v.add_child(Kit.label(hint, 10, Pal.with_alpha(Pal.MUTED, 0.7)))
 	return v
@@ -215,7 +215,7 @@ static func open_item(it: Dictionary) -> void:
 		desc = "%s. Drops after sessions; loot luck helps." % Items.unlock_hint(it)
 	else:
 		desc = "Unlock: %s" % Items.unlock_hint(it)
-	info.add_child(Kit.muted_para(Icons.strip_emoji(desc), 14))
+	info.add_child(Kit.muted_para(Units.text(Icons.strip_emoji(desc), App.settings()), 14))
 	if for_sale:
 		info.add_child(Kit.muted("Tap the hero to see it flex", 11))
 	elif owned == null:
@@ -317,7 +317,7 @@ static func open_pet(p: Dictionary) -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	info.add_child(_chips(p.rarity, [["paw", p.species if owned else "???"]], p.get("perk")))
-	info.add_child(Kit.muted_para(Icons.strip_emoji(p.flavor if owned else "Unlock: %s" % p.hint), 14))
+	info.add_child(Kit.muted_para(Units.text(Icons.strip_emoji(p.flavor if owned else "Unlock: %s" % p.hint), App.settings()), 14))
 	if not owned and p.has("progress"):
 		info.add_child(Parts.progress_line(p.progress.call(state), rc))
 	elif owned:

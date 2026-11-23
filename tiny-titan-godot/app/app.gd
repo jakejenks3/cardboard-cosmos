@@ -714,6 +714,8 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 		events = Diff.diff_states(before, state, fresh[0])
 	else:
 		events = Diff.diff_bulk(before, state, fresh)
+	# The rules word their record cards in kg and km: in the player's units.
+	events = Units.records(events, before.prs, state.prs, settings())
 	# (a lift logged as both sides added up: its estimate goes by one side)
 	var fresh_ids = fresh.map(func(s): return s.id)
 	events = Sides.fix_estimates(events, fresh, saved.sessions.filter(func(s): return not fresh_ids.has(s.id)), settings())

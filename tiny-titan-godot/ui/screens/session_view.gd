@@ -217,13 +217,8 @@ static func open(session: Dictionary) -> void:
 	var earned = Xp.base_session_xp(session)
 	var parts = Kit.flow(6)
 	for p in earned.get("parts", []):
-		var label = Icons.strip_emoji(str(p.label))
-		if d == "lift" and label.ends_with(" kg volume"):
-			# The rules count in kg; the player may think in pounds.
-			var vol = 0.0
-			for ex in session.get("exercises", []):
-				vol += float(LiftTrend.day(done_sets(ex)).volumeKg)
-			label = "%s volume" % Fmt.fmt_big_kg(vol, wu)
+		# The rules count in kg and km; the player may think in pounds and miles.
+		var label = Units.xp_label(session, Icons.strip_emoji(str(p.label)), App.settings())
 		parts.add_child(Kit.icon_chip("", "%s  +%s" % [label, Xp.fmt_int(p.xp)], Pal.deep(Pal.ACCENT), "", Pal.TEXT))
 	if parts.get_child_count() > 0:
 		box.add_child(parts)

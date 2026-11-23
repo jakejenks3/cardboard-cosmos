@@ -214,6 +214,10 @@ static func fix_estimates(events: Array, fresh: Array, before: Array, settings: 
 				was = maxf(was, side_e1rm(h.get("sets", [])))
 		if was > 0.0 and float(now[hit]) > was + 1e-6:
 			var fixed = ev.duplicate()
-			fixed["detail"] = "%s kg (was %s kg), going by one side" % [Diff._trim(float(now[hit])), Diff._trim(was)]
+			var wu = Units.weight_unit(settings)
+			if wu == "kg":
+				fixed["detail"] = "%s kg (was %s kg), going by one side" % [Diff._trim(float(now[hit])), Diff._trim(was)]
+			else:
+				fixed["detail"] = "%s (was %s), going by one side" % [Fmt.fmt_weight(float(now[hit]), wu), Fmt.fmt_weight(was, wu)]
 			out.append(fixed)
 	return out

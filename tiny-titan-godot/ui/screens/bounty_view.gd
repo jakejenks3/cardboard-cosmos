@@ -186,7 +186,7 @@ static func open() -> void:
 			rhead.add_child(Kit.clip(it.name, 14, null, true))
 			rhead.add_child(Kit.rarity_badge(it.rarity))
 			rmain.add_child(rhead)
-			rmain.add_child(Kit.muted(Items.unlock_hint(it), 11))
+			rmain.add_child(Kit.muted(Units.text(Items.unlock_hint(it), App.settings()), 11))
 			rmain.add_child(Parts.progress_line(nxt[i].progress, rc))
 			rrow.add_child(rmain)
 			rcard.add(rrow)

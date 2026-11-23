@@ -199,7 +199,7 @@ func _breakdown() -> String:
 		return ""
 	var bits = PackedStringArray()
 	for p in _xp_ev.parts:
-		bits.append("%s +%s" % [Icons.strip_emoji(p.label), Xp.fmt_int(p.xp)])
+		bits.append("%s +%s" % [Units.text(Icons.strip_emoji(p.label), App.settings()), Xp.fmt_int(p.xp)])
 	if int(_xp_ev.prBonus) > 0:
 		bits.append("PR bonus +%s" % Xp.fmt_int(_xp_ev.prBonus))
 	if float(_xp_ev.get("bonusPct", 0)) > 0.0:
@@ -690,8 +690,8 @@ func _build_card(ev: Dictionary, animate: bool):
 			kick.add_child(Parts.xp_chip(a.xp, 10))
 			c.main.add_child(kick)
 			c.main.add_child(_title_l(Icons.strip_emoji(a.name)))
-			c.main.add_child(_sub(Icons.strip_emoji(a.desc)))
-			c.panel.tooltip_text = Icons.strip_emoji(a.desc)
+			c.main.add_child(_sub(Units.text(Icons.strip_emoji(a.desc), App.settings())))
+			c.panel.tooltip_text = Units.text(Icons.strip_emoji(a.desc), App.settings())
 			return _finish(c, _icon_cell(Icons.for_emoji(a.icon), tc))
 		"item":
 			return _item_card(ev)
@@ -928,7 +928,7 @@ func _item_card(ev: Dictionary):
 	var c = _rcard(rc, legendary)
 	if legendary:
 		_glow_loop(c.panel)
-	c.panel.tooltip_text = it.flavor
+	c.panel.tooltip_text = Units.text(str(it.flavor), App.settings())
 	var kick = Kit.hbox(6)
 	kick.add_child(_kicker("LOOT" if ev.how == "drop" else "UNLOCKED", rc))
 	kick.add_child(Kit.label(str(it.rarity).to_upper(), 10, rc, true))
@@ -958,7 +958,7 @@ func _pet_card(ev: Dictionary):
 	var c = _rcard(rc, legendary)
 	if legendary:
 		_glow_loop(c.panel)
-	c.panel.tooltip_text = pet.flavor
+	c.panel.tooltip_text = Units.text(str(pet.flavor), App.settings())
 	var kick = Kit.hbox(6)
 	kick.add_child(_kicker("NEW COMPANION", rc))
 	c.main.add_child(kick)

@@ -97,7 +97,7 @@ static func goal_row(goal: Dictionary) -> Control:
 	head.add_child(Kit.tag(KIND_LABEL.get(goal.kind, ""), Pal.PANEL2, false, 10))
 	main.add_child(head)
 	main.add_child(Kit.bar(goal.ratio, color, 8))
-	main.add_child(Kit.clip("%s  ·  %s" % [Fmt.fmt_progress(goal.progress, App.settings()), Icons.strip_emoji(goal.sub)], 11, Pal.MUTED))
+	main.add_child(Kit.clip("%s  ·  %s" % [Fmt.fmt_progress(goal.progress, App.settings()), Units.text(Icons.strip_emoji(goal.sub), App.settings())], 11, Pal.MUTED))
 	row.add_child(main)
 	row.add_child(Kit.vcenter(PixelFont.rect("%d%%" % int(floor(float(goal.ratio) * 100.0)), 2, color)))
 	card.add(row)
@@ -109,7 +109,7 @@ static func goal_row(goal: Dictionary) -> Control:
 static func goal_tile(goal: Dictionary) -> Control:
 	var color = Pal.disc(goal.discipline) if goal.get("discipline") != null else Pal.ACCENT
 	var card = Kit.card(4, Callable(), 8)
-	card.tooltip_text = "%s\n%s\n%s" % [Icons.strip_emoji(goal.title), Icons.strip_emoji(goal.sub), Fmt.fmt_progress(goal.progress, App.settings())]
+	card.tooltip_text = "%s\n%s\n%s" % [Icons.strip_emoji(goal.title), Units.text(Icons.strip_emoji(goal.sub), App.settings()), Fmt.fmt_progress(goal.progress, App.settings())]
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	var ring = Ring.new()
 	ring.setup(goal.ratio, color, 58.0, Icons.rect(Icons.for_emoji(goal.icon), 30))
