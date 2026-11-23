@@ -111,7 +111,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(text.contains("YOUR FOCUS ADDS") and text.contains("FOR CHEST") and text.contains("ADD · %d SETS" % int(plan.lifts[0].dose.sets)) and text.contains("Bench Press"), "the Today card says so, before the usual lifts")
 	check(_find("dose_row") != null and text.contains("LAST 7 DAYS · SETS") and text.contains("Chest") and text.contains("Triceps"), "the weekly sets of the day's muscles are on the card")
 	check(_find("rest_row") == null and not bool(plan.rest.due), "no rest day yet (a day off three days ago)")
-	check(text.contains("aim 5.5 km"), "the run aims a little further than the last one")
+	check(text.contains("aim 5.5 km") and text.contains("Your run day") and text.contains("or quicker than 6:00 /km over 3.8 km"), "the run day: a little further than the last one, or quicker")
 	await ShotHelper.snap(tree, "focus_1_home")
 	var first = null
 	for n in ShotHelper.walk(main):
@@ -122,6 +122,13 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		ShotHelper.reveal(first)
 		await ShotHelper.frames(tree, 3)
 		await ShotHelper.snap(tree, "focus_1b_press_row")
+	# The run day row, at the end of the card.
+	for n in ShotHelper.walk(main):
+		if n is Card and ShotHelper.all_text(n).begins_with("Running") and ShotHelper.all_text(n).contains("Your run day"):
+			ShotHelper.reveal(n)
+			await ShotHelper.frames(tree, 3)
+			await ShotHelper.snap(tree, "focus_1c_run_row")
+			break
 
 	# The sheet behind the row.
 	var row = _find("dose_row")
@@ -143,7 +150,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	App.go("adventure", "quests")
 	await ShotHelper.wait(tree, 0.8)
 	var at = ShotHelper.all_text(main)
-	check(at.contains("Chest: add a press") and at.contains("Run a little further") and at.contains("Dosed right") and at.contains("Long run"), "missions: the press, the run, and the week's two")
+	check(at.contains("Chest: add a press") and at.contains("Run a little further") and at.contains("Run a little faster") and at.contains("Dosed right") and not at.contains("Long run"), "missions: the press, the run's two goals, the week's Dosed right")
 	await ShotHelper.snap(tree, "focus_3_missions")
 
 	# Do the press: its box ticks, its mission is done.
@@ -177,7 +184,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	SettingsSheet.open()
 	await ShotHelper.wait(tree, 0.6)
 	var sec = _find("focus_section", _sheet())
-	check(sec != null and ShotHelper.find_button(_sheet(), "Upper body first") != null and ShotHelper.find_button(_sheet(), "From my log") != null and ShotHelper.all_text(_sheet()).contains("Build up my weekly run"), "Settings has Training focus, with the run switch")
+	check(sec != null and ShotHelper.find_button(_sheet(), "Upper body first") != null and ShotHelper.find_button(_sheet(), "From my log") != null and ShotHelper.all_text(_sheet()).contains("Build up my weekly run") and ShotHelper.all_text(_sheet()).contains("Run day") and _find("run_days", _sheet()) != null, "Settings has Training focus, with the run switch and the run day")
 	if sec != null:
 		ShotHelper.reveal(sec)
 		await ShotHelper.frames(tree, 4)

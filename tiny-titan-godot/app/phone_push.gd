@@ -79,21 +79,7 @@ static func _lifted_on(sessions: Array, day: String) -> bool:
 ## Does the player usually lift on this weekday: on half or more of the last
 ## HABIT_WEEKS same weekdays since their first workout (true with under two to go by).
 static func lift_likely(sessions: Array, day: String) -> bool:
-	var first = ""
-	for s in sessions:
-		var d = str(s.get("date", ""))
-		if d != "" and (first == "" or d < first):
-			first = d
-	var seen = 0
-	var hit = 0
-	for w in range(1, HABIT_WEEKS + 1):
-		var d2 = Dates.add_days(day, -7 * w)
-		if first == "" or d2 < first:
-			break
-		seen += 1
-		if _lifted_on(sessions, d2):
-			hit += 1
-	return seen < 2 or hit * 2 >= seen
+	return Missions.lift_habit(sessions, day)
 
 
 ## The sessions as they will probably be on the morning of `day`: the real
@@ -108,25 +94,9 @@ static func forecast(saved: Dictionary, today: String, day: String) -> Array:
 	var x = today
 	while x < day:
 		if not _lifted_on(out, x) and lift_likely(real, x):
-			var plan = Missions.day_plan(out, x, marks, st)
-			var last = LiftHistory.last_performances(out)
-			var names = []
-			for l in plan.lifts:
-				var opts = l.get("options", [])
-				names.append(str(opts[0].name) if not opts.is_empty() else str(l.name))
-			for r in plan.pt:
-				names.append(str(r.name))
-			var exercises = []
-			var have = {}
-			for nm in names:
-				var k = Xp.normalize_exercise(nm)
-				var lp = last.get(k)
-				if lp == null or have.has(k):
-					continue
-				have[k] = true
-				exercises.append({"name": str(lp.name), "sets": lp.sets.duplicate(true)})
-			if not exercises.is_empty():
-				out.append({"id": "pretend-" + x, "discipline": "lift", "date": x, "createdAt": when(x, "12:00", 0) * 1000, "source": "manual", "exercises": exercises})
+			var pretend = Missions.pretend_lift(out, x, Missions.day_plan(out, x, marks, st))
+			if pretend != null:
+				out.append(pretend)
 		x = Dates.add_days(x, 1)
 	return out
 

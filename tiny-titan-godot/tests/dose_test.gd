@@ -191,10 +191,46 @@ func _init() -> void:
 	ok(find(day_off, ":run") != null and find(day_off, ":run").title == "Get the miles in", "without a focus it is the usual distance")
 	var wk = Dates.week_key(today)
 	var week = Missions.weekly(wk, today, data, state, [])
-	var lr = find(week, ":longrun")
-	ok(lr != null and is_equal_approx(float(lr.target), 5500.0) and is_equal_approx(float(lr.progress), 0.0) and find(Missions.weekly(wk, today, data_off, state, []), ":longrun") == null, "a Long run mission for the week", lr)
-	var ran = log + [{"id": "r2", "discipline": "run", "date": today, "createdAt": 1700000002000, "source": "manual", "distanceM": 5600.0, "durationSec": 2000}]
-	ok(find(Missions.weekly(wk, today, {"sessions": ran, "pt": marks, "settings": st, "reading": [], "now": today}, state, []), ":longrun").done and is_equal_approx(float(find(Missions.weekly(wk, today, {"sessions": ran, "pt": marks, "settings": st, "reading": [], "now": today}, state, []), ":longrun").target), 5500.0), "run it: done, and the target has not moved")
+	ok(find(week, ":longrun") == null and not week.any(func(m): return str(m.title).to_lower().contains("run")), "no run mission for the week: the run's goals are on its day only", week.map(func(m): return str(m.title)))
+	# The second goal of the run's day: a quicker pace than last time (5 km in 30:00 = 6:00 a km) over 3.8 km or more.
+	var pace_m = find(day, ":pace")
+	ok(is_equal_approx(float(g.paceSec), 360.0) and is_equal_approx(float(g.paceM), 3800.0), "the last run's pace, and the least distance it has to be beaten over", g)
+	ok(pace_m != null and pace_m.title == "Run a little faster" and str(pace_m.desc).begins_with("At least 3.8 km at a quicker pace than last time (6:00 /km).") and not pace_m.done and find(day_off, ":pace") == null, "a pace goal beside the distance goal", pace_m)
+	var with_run = func(m: float, secs: int) -> Array:
+		var s = {"id": "r2", "discipline": "run", "date": today, "createdAt": 1700000002000, "source": "manual", "distanceM": m}
+		if secs > 0:
+			s["durationSec"] = secs
+		return Missions.daily(today, {"sessions": log + [s], "pt": marks, "settings": st, "reading": [], "now": today}, state, [])
+	var far_slow = with_run.call(5600.0, 2100)
+	ok(find(far_slow, ":run").done and not find(far_slow, ":pace").done, "further but slower: the distance goal only")
+	var near_fast = with_run.call(4000.0, 1400)
+	ok(not find(near_fast, ":run").done and find(near_fast, ":pace").done, "shorter but quicker: the pace goal only")
+	var both = with_run.call(5600.0, 1960)
+	ok(find(both, ":run").done and find(both, ":pace").done, "further and quicker: both")
+	ok(not find(with_run.call(3000.0, 900), ":pace").done and not find(with_run.call(6000.0, 0), ":pace").done and find(with_run.call(6000.0, 0), ":run").done, "too short, or not timed: no pace goal; a run with no time still counts its distance")
+	ok(far_slow.map(func(m): return str(m.id)) == day.map(func(m): return str(m.id)), "logging the run does not change the missions of the day")
+
+	# --- the run's day ---------------------------------------------------------------------------------------
+	ok(Dose.run_day(log, {}, today) == 0 and Dose.run_day(log, {"runDay": 3}, today) == 3 and Dose.run_day(log, {"runDay": 3.0}, today) == 3 and Dose.run_day(log, {"runDay": -1}, today) == 0 and Dose.run_day([], {}, today) == -1, "the run day: the one picked, else the weekday of the runs (a Monday here), else none")
+	var two_days = log + [{"id": "r3", "discipline": "run", "date": "2026-11-19", "distanceM": 3000.0}, {"id": "r4", "discipline": "run", "date": "2026-11-12", "distanceM": 3000.0}]
+	ok(Dose.run_day(two_days, {}, today) == 3, "most runs on a Thursday: Thursday")
+	var tue = "2026-11-24"
+	var no_run_tue = Missions.day_plan(log, tue, marks, st)
+	var tue_day = Missions.daily(tue, {"sessions": log, "pt": marks, "settings": st, "reading": [], "now": tue}, state, [])
+	ok(no_run_tue.run == null and not bool(no_run_tue.runToday) and not no_run_tue.others.any(func(o): return str(o.discipline) == "run") and find(tue_day, ":run") == null and find(tue_day, ":pace") == null, "on any other day there is no run on the card and no run mission, however long ago the last one was", [no_run_tue.others, tue_day.map(func(m): return str(m.id))])
+	ok(Missions.day_plan(log, tue, marks, off).others.any(func(o): return str(o.discipline) == "run"), "(without a focus a run that is due still shows, as before)")
+	var st_tue = st.duplicate()
+	st_tue["runDay"] = 1
+	var run_tue = Missions.day_plan(log, tue, marks, st_tue)
+	ok(bool(run_tue.runToday) and str(run_tue.others[0].discipline) == "run" and str(run_tue.others[0].why) == "Your run day" and run_tue.run != null and not bool(Missions.day_plan(log, today, marks, st_tue).runToday), "Tuesday picked as the run day: the run is on Tuesday, and not on Monday", run_tue.others)
+	var no_runs = log.filter(func(s): return str(s.discipline) != "run")
+	var first_run = Missions.daily(today, {"sessions": no_runs, "pt": marks, "settings": {"focus": "upper", "split": "pull_push_legs", "runDay": 0}, "reading": [], "now": today}, state, [])
+	ok(find(first_run, ":run") != null and find(first_run, ":run").title == "Run day" and find(first_run, ":pace") == null and not bool(Missions.day_plan(no_runs, today, marks, st).runToday), "no run yet: with a day picked the mission is to log one; without, there is no run day", first_run.map(func(m): return str(m.title)))
+	# The climb of the day keeps its own mission beside the run's.
+	var mon_climbs = log + [{"id": "c9", "discipline": "climb", "date": "2026-11-16", "createdAt": 1700000000900, "source": "manual", "climbs": [{"grade": 3, "result": "send", "count": 4}]}, {"id": "c8", "discipline": "climb", "date": "2026-11-09", "createdAt": 1700000000800, "source": "manual", "climbs": [{"grade": 3, "result": "send", "count": 4}]}]
+	var both_day = Missions.daily(today, {"sessions": mon_climbs, "pt": marks, "settings": st, "reading": [], "now": today}, state, [])
+	ok(find(both_day, ":climb") != null and find(both_day, ":run") != null and find(both_day, ":pace") != null, "a climbing Monday: the climb mission and both run goals", both_day.map(func(m): return str(m.id)))
+
 
 	# --- the week: every muscle being built on target at once ------------------------------------------
 	var dz = find(week, ":dose")

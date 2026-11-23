@@ -49,6 +49,10 @@ const RUN_UP = 1.1
 const RUN_SAME_AFTER = 10
 const RUN_BACK_AFTER = 21
 const RUN_BACK = 0.8
+## The pace goal counts over at least this share of the last run's distance.
+const RUN_PACE_SHARE = 0.75
+## How far back runs are looked at to find the run day.
+const RUN_DAY_LOOK = 56
 
 const PARTS = ["chest", "back", "shoulders", "biceps", "triceps", "forearms", "core", "quads", "hamstrings", "glutes", "calves"]
 const PLANS = {
@@ -404,7 +408,51 @@ static func run_goal(sessions: Array, ref: String, du: String):
 	var factor = RUN_UP if step == "up" else (1.0 if step == "same" else RUN_BACK)
 	var unit_m = 1609.344 if du == "mi" else 1000.0
 	var target = roundf(float(last.distanceM) * factor / unit_m * 10.0) / 10.0 * unit_m
-	return {"targetM": target, "lastM": float(last.distanceM), "lastDate": str(last.date), "gap": gap, "step": step}
+	# The other goal, speed: last time's pace (seconds a km; 0 when its time was
+	# not logged) over at least RUN_PACE_SHARE of its distance.
+	var secs = float(last.get("durationSec", 0))
+	var pace = secs / (float(last.distanceM) / 1000.0) if secs > 0.0 else 0.0
+	var least = maxf(unit_m, roundf(float(last.distanceM) * RUN_PACE_SHARE / unit_m * 10.0) / 10.0 * unit_m)
+	return {"targetM": target, "lastM": float(last.distanceM), "lastDate": str(last.date), "gap": gap, "step": step, "paceSec": pace, "paceM": least}
+
+
+## Does a run beat the pace goal of `g` (run_goal): far enough, timed, quicker?
+static func run_quick(s: Dictionary, g: Dictionary) -> bool:
+	var m = float(s.get("distanceM", 0.0))
+	var secs = float(s.get("durationSec", 0))
+	if float(g.get("paceSec", 0.0)) <= 0.0 or secs <= 0.0 or m < float(g.paceM) - 1.0:
+		return false
+	return secs / (m / 1000.0) < float(g.paceSec)
+
+
+## The weekday of the weekly run (0 = Monday ... 6 = Sunday): the one the
+## player picked (settings.runDay, 0 to 6), else the weekday most of their runs
+## of the RUN_DAY_LOOK days before `today` were on (the latest on a tie), else
+## -1. Run goals show on that day ONLY (the user, 2026-11-22: "make sure run
+## goals only show up on Monday... I specially will only run Mondays").
+static func run_day(sessions: Array, settings: Dictionary, today: String) -> int:
+	var picked = settings.get("runDay")
+	if (picked is int or picked is float) and int(picked) >= 0 and int(picked) <= 6:
+		return int(picked)
+	var count = {}
+	var last_of = {}
+	var from = Dates.add_days(today, -RUN_DAY_LOOK)
+	for s in sessions:
+		var d = str(s.get("date", ""))
+		if str(s.get("discipline", "")) != "run" or d >= today or d < from:
+			continue
+		var w = Dates.weekday_index(d)
+		count[w] = int(count.get(w, 0)) + 1
+		if not last_of.has(w) or d > str(last_of[w]):
+			last_of[w] = d
+	var best = -1
+	for w in count:
+		if best < 0 or int(count[w]) > int(count[best]) or (int(count[w]) == int(count[best]) and str(last_of[w]) > str(last_of[best])):
+			best = w
+	return best
+
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 ## A run goal in a few words: "10% further than Nov 16 (3.3 mi)".

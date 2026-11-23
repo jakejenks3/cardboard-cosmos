@@ -495,6 +495,11 @@ is the Windows handoff.
   The rest waits for the review. The note is read again every RECHECK_SEC (10 min) while
   the game is open (with Auto-check). The inbox walkthrough turns it off for the review
   and checks it at the end.
+- (2026-11-22: how you feel is now ONLY A MARK. The user: "I don't want to change the goals based on
+  feeling strong, okay etc. want to mark it still but don't have it change goals, it's fine not to hit
+  goals sometimes." `Missions.easy_day`, `easy_sets`, `lighter_week_due` and the Today card's lighter
+  week card are gone, `settings.deloadUntil` is ignored, the note's phone logger no longer starts
+  lighter on a tired day. `Missions.feel_of` and the Feeling row stay. The next bullet is how it was.)
 - How you feel (2026-11-21): `settings.feels` = {date: 1 tired, 2 okay, 3 strong}. Set by the
   morning push's three ntfy "http" buttons (`MorningAlert.send(..., feel)`: `feel_link` =
   the script link with the token; the script's `?feel=` keeps it in its properties), the
@@ -871,15 +876,28 @@ is the Windows handoff.
   - Missions: `t:<date>:dose:<part>` ("Chest: add a press", "More for your triceps"; target = the sets,
     250 XP); Beat it goes to "build" lifts first (a leg day's two go to its leg lifts); after `REST_AFTER` 5 hard days in a row (`Dose.is_hard`: a
     walk, PT and stretches are not) the day's first mission is `t:<date>:rest` IN PLACE of Show up, done
-    once the day is over (`data.now`, from `App.mission_data`; claimed from "From yesterday"); the run
-    mission aims at `Dose.run_goal` (10% past the last run within 10 days, the same after a longer gap,
-    80% after 21 days; `settings.runGoal`, on with a focus); weekly `tw:<wk>:dose` "Dosed right" (every
-    build muscle on target at once, any day of the week) and `tw:<wk>:longrun`.
+    once the day is over (`data.now`, from `App.mission_data`; claimed from "From yesterday"); weekly
+    `tw:<wk>:dose` "Dosed right" (every build muscle on target at once, any day of the week). The run:
+    see "The run has its own day" below.
   - Screens: `ui/screens/dose_view.gd` (`DoseView.row(plan)` on the Today card, meta `dose_row`: the
     day's muscles, sets of 7 days against the least; `open()` the sheet: every muscle, what counted,
     rest, the next run). Today card: "YOUR FOCUS ADDS" rows before "PROBABLY TODAY" (a "FOR CHEST" tag,
     "ADD · N SETS", the other ways as chips), a rest banner (meta
-    `rest_row`), "aim 3.6 mi" on the run row. The morning text says the same.
+    `rest_row`). The morning text says the same.
+  - The run has its own day (2026-11-22, "make sure run goals only show up on Monday, giving them a few
+    goals if needed like mileage or speed. Don't want them on most days because I specially will only
+    run Mondays"). With the run being built up (`Dose.run_on`: a focus and `settings.runGoal`, on by
+    default) `Dose.run_day(sessions, settings, today)` = `settings.runDay` (0 Monday .. 6 Sunday; Settings
+    -> Training focus -> Run day chips, meta `run_days`) or, on "Auto" (-1), the weekday most runs of the
+    last 56 days were on. `day_plan` then takes "run" OUT of `plan.others` on every other day (however
+    overdue) and puts it first on the run day (`plan.runToday`, `plan.run` = `Dose.run_goal`, null on
+    other days: 10% past the last run within 10 days, the same after a longer gap, 80% after 21 days,
+    plus `paceSec` / `paceM`). That day has two run missions to pick from: `t:<date>:run` "Run a little
+    further" (the distance; "Run day: log a run" with none to go by) and `t:<date>:pace` "Run a little
+    faster" (`Dose.run_quick`: at least 75% of the last distance at a quicker pace; only when the last
+    run was timed). The day's other activity (a climb) keeps its own mission. There is NO weekly run
+    mission (a "Long run" one was built and taken out: it showed all week). Without a focus runs are
+    as before (by habit).
   - `LiftTrend.next_target`: a weighted lift whose every working set is at `HIGH_REPS` 15 or more goes a
     step heavier and down to `DOWN_TO` 10 reps (`heavier: true`), always, focus or not: the aim used to
     be a 25th rep at a weight that is too light.
@@ -887,6 +905,41 @@ is the Windows handoff.
     on a copy of the PC's log: push days get the press, pull and leg days nothing extra.
   - Tests: `tests/dose_test.gd`, more in lift_trend_test; walkthrough `tests/shots/focus.gd` (`new` data,
     makes its own log; also with `--fingers`).
+- Coming up, the days ahead (2026-11-22, "preview the next few days, so I can look ahead and make
+  decisions on what lifts... and just to mentally prepare and get excited without messing with any
+  inputting of data yet"). `Missions.ahead(sessions, today, marks, settings, days = AHEAD_DAYS 6)` ->
+  [{date, plan, rest, lift, others}]: from today on each day's plan is PRETENDED done
+  (`pretend_lift`: its lifts and PT as last time, a lift never done left out; `pretend_other`: the last
+  climb / run / ride again, a run at the plan's aim), unless it is a rest day (a focus's rest due:
+  nothing is pretended) or already logged, and the next day's plan is made from that: the split goes
+  on, rest comes due, a muscle that got its sets stops asking. `lift` needs `lift_habit` (the weekday
+  rule that was PhonePush.lift_likely; PhonePush.forecast now calls these two). Another activity
+  counts on its weekday or once its usual gap has passed (score 1 or more) and not within half its gap
+  of the last one (`_too_soon`), so a weekly run is not shown a day early and then again. Nothing is
+  stored and no session is made. `App.ahead()` caches it (cleared with the plan); it costs about seven
+  day plans (48 ms on the PC for 184 sessions: on the phone several times that, once per change of
+  the log). `ui/screens/ahead_view.gd` (`AheadView.card()` under the Today card, meta `ahead_card`:
+  the next 4 days in a word each, `Missions.ahead_word`; `open()` the sheet: a card a day, meta
+  `ahead_day`, lift rows that open the lift's page, the other ways under an extra lift, "Try:", PT,
+  the climb or run, a rest day). Read only on purpose: no ticks, no Start key, no picking a day's kind.
+  Tests: `tests/ahead_test.gd`; walkthrough `tests/shots/ahead.gd` (year data, then a log of its own
+  with a focus).
+- A to-do list, apart from the game (2026-11-22, "A separate section for random things I need to do. I
+  usually do them in my notes... doesn't need to connect. Goals or points or anything, just to keep a
+  list and check boxes"). `game/todos.gd` (`Todos`, pure). STORED: `saved.todos` = [{id, text, done, at,
+  doneOn}] in the order added (kept by `App.parse_saved`, merged record by record: in
+  `SaveMerge.RECORD_LISTS`). Nothing in the game reads it: no XP, no mission, no streak, and a change
+  only saves and redraws (`App.add_todo`, `set_todo_done`, `remove_todo`, `clear_done_todos`: no
+  `_recompute`). `ui/screens/todo_view.gd` (`TodoView.card()` on the Hero tab after Coming up, meta
+  `todo_card`: the open items and the ones ticked TODAY, `Todos.shown`, at most `CARD_ROWS` 3, a tap
+  ticks one; `open()` the sheet: every item, a cross to take one off, "Clear done", the box and Add
+  key at the bottom). Nothing may move under the finger: a ticked item stays in its place, the status
+  line is always there, the box is at the bottom of a sheet that grows upward (`_keep_form` once it
+  scrolls), and after an item is taken off taps are ignored for `QUIET_MS`. Keep it a plain list.
+  Tests: `tests/todos_test.gd`; walkthrough `tests/shots/todo.gd` (year data).
+- A --script test that needs the App autoload must wait a frame and take `root.get_node_or_null("App")`
+  (as doc_clear_test and todos_test do): `load("res://app/app.gd")` in `_init` fails to compile
+  ("Identifier not found: Sfx"), and a test that errors there never quits. Run tests under `timeout`.
 - Also 2026-11-21: switching tabs kept the old tab's scroll position (the new screen's first build in
   `UiScreen` kept what it found); `main._refresh` now resets it before adding the screen (anchor walkthrough).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
@@ -1033,6 +1086,8 @@ godot --headless --path . --script res://tests/sync_test.gd
 godot --headless --path . --script res://tests/phone_push_test.gd
 godot --headless --path . --script res://tests/dosage_test.gd
 godot --headless --path . --script res://tests/dose_test.gd
+godot --headless --path . --script res://tests/ahead_test.gd
+godot --headless --path . --script res://tests/todos_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1059,6 +1114,8 @@ workout (Start workout from the Today card, the kept draft, hold seconds, finger
 phone (rename a lift, small backups, the phone's own morning message: see above, year data),
 long_names (long lift names on every screen that lists lifts: nothing wider than the column, year data),
 focus (the training focus: an added press, weekly sets, rest day, a leg day left alone, Settings; `new` data),
+ahead (the Coming up card and sheet: the next days as they will probably go; year data),
+todo (the to-do list: the card, the sheet, adding without the Add key moving; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -1139,8 +1196,15 @@ scenario that sets `App.cloud._cfg` and calls `sync_now`, and open the web app w
 - Source of truth is GitHub: `jakejenks3/cardboard-cosmos`, branch
   `claude/strava-fitness-gamification-9nu1t4`, draft PR #1, folder `tiny-titan-godot/`.
   The repo root is a different game: never touch it.
-- This local folder is an unzipped copy, not a git clone (checked 2026-11-15). Ask the
-  user before pushing anything.
+- This local folder is an unzipped copy, not a git clone (checked 2026-11-15).
+- Pushing the source needs no asking any more (2026-11-22: asked "yes for these, or yes and always
+  push source after publishing from now on?", the user answered "Always push"). After a change is
+  tested and the phone app is published, commit it in the clone and `git push` the branch, then say
+  so. It covers this branch only; anything else on GitHub (another branch, the repo root, a force
+  push, the PR itself) is still asked first.
 - Commits are made in a clone at `C:\Users\jdjen\Documents\cardboard-cosmos` (same branch):
   copy the changed files into its `tiny-titan-godot/` folder (keep the clone's own
-  `project.godot`; skip `.godot/` and `shots-today/`) and commit there.
+  `project.godot`; skip `.godot/` and `shots-today/`) and commit there. `export_presets.cfg` is
+  ignored by the repo's root `.gitignore`: add it with `git add -f` (it holds no secret). Before
+  committing, look through what is staged for links, tokens, the ntfy topic, an email address or
+  names taken from the user's own log; tests use made-up names.

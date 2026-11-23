@@ -355,6 +355,19 @@ func _build_focus() -> void:
 		row.add_child(l)
 		row.add_child(Kit.vcenter(Kit.switch(Dose.run_on(st), _on_run_goal, "Grow the weekly run a little at a time")))
 		card.add(row)
+		if Dose.run_on(st):
+			# The run's day: its goals show on that day only.
+			var picked = st.get("runDay")
+			var own = int(picked) if ((picked is int or picked is float) and int(picked) >= 0 and int(picked) <= 6) else -1
+			var auto_day = Dose.run_day(App.sessions(), {}, Dates.add_days(App.today, 1))
+			var days = Kit.flow(4)
+			days.set_meta("run_days", true)
+			days.add_child(Kit.chip("Auto" + ((" (%s)" % str(Dose.WEEKDAYS[auto_day]).left(3)) if auto_day >= 0 else ""), own < 0, _on_setting.bind(-1, "runDay"), Pal.RUN, 12))
+			for i in range(7):
+				days.add_child(Kit.chip(str(Dose.WEEKDAYS[i]).left(3), own == i, _on_setting.bind(i, "runDay"), Pal.RUN, 12))
+			card.add(Kit.label("Run day", 13, null, true))
+			card.add(days)
+			card.add(Kit.para("Run goals (a distance to reach, a pace to beat) show on this day only. Auto is the day you usually run.", 11, Pal.MUTED))
 		var see = Kit.button("See my weekly sets", "secondary", DoseView.open, "sm")
 		see.set_meta("see_dose", true)
 		card.add(see)

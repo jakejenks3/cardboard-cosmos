@@ -87,6 +87,12 @@ func build() -> void:
 	# First on the page, to read before the workout (also sent to the phone in
 	# the morning: MorningAlert).
 	add_child(TodayView.card())
+	# The days after it, to look ahead (nothing in it is logged).
+	var coming = AheadView.card()
+	if coming != null:
+		add_child(coming)
+	# A plain to-do list, apart from the game (game/todos.gd).
+	add_child(TodoView.card())
 	var yesterday = App.quests().get("yesterday", [])
 	if not yesterday.is_empty():
 		add_child(Kit.section_title("From yesterday"))

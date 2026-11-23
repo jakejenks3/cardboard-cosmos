@@ -63,6 +63,7 @@ var cloud = null
 
 var _quests = null
 var _plan = null
+var _ahead = null
 var _photo_cache = {}
 ## Set when the save file could not be written (shown once to the player).
 var _write_failed = false
@@ -221,6 +222,64 @@ func rename_lift(old_name: String, new_name: String) -> Dictionary:
 				names[k] = want
 	_commit()
 	return {"ok": true, "sessions": n, "joined": joined, "name": want}
+
+
+## The to-do list (game/todos.gd), as stored. A plain list: nothing in the game
+## reads it, so a change only saves and redraws (no levels to work out again).
+func todos() -> Array:
+	if not (saved.get("todos") is Array):
+		saved["todos"] = []
+	return saved.todos
+
+
+func _todo(id: String):
+	for t in todos():
+		if str(t.id) == id:
+			return t
+	return null
+
+
+func _todos_changed() -> void:
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## Add an item. Returns it, or null when there are no words in it.
+func add_todo(text: String):
+	if Todos.clean(text) == "":
+		return null
+	var t = Todos.new_item(text, now_ms())
+	todos().append(t)
+	_todos_changed()
+	return t
+
+
+func set_todo_done(id: String, done: bool) -> void:
+	var t = _todo(id)
+	if t == null or bool(t.done) == done:
+		return
+	t.done = done
+	t.doneOn = today if done else ""
+	_todos_changed()
+
+
+func remove_todo(id: String) -> void:
+	var t = _todo(id)
+	if t == null:
+		return
+	todos().erase(t)
+	_todos_changed()
+
+
+## Take every ticked item off the list. Returns how many went.
+func clear_done_todos() -> int:
+	var n = Todos.done_count(todos())
+	if n == 0:
+		return 0
+	saved.todos = todos().filter(func(t): return not bool(t.done))
+	_todos_changed()
+	return n
 
 
 ## Climbing projects (game/projects.gd), as stored: open, sent and set aside.
@@ -443,6 +502,14 @@ func plan() -> Dictionary:
 	if _plan == null:
 		_plan = Missions.day_plan(saved.sessions, today, pt(), saved.settings)
 	return _plan
+
+
+## The next days as they will probably go (Missions.ahead; cached). Read only:
+## nothing of it is stored.
+func ahead() -> Array:
+	if _ahead == null:
+		_ahead = Missions.ahead(saved.sessions, today, pt(), saved.settings)
+	return _ahead
 
 
 ## How many finished quests are waiting to be claimed.
@@ -1188,6 +1255,7 @@ static func empty_saved() -> Dictionary:
 		"inbox": {"source": "", "imported": {}, "lastChecked": 0, "auto": true, "names": {}},
 		"pt": {},
 		"projects": [],
+		"todos": [],
 	}
 
 
@@ -1218,6 +1286,7 @@ static func parse_saved(raw):
 				out.purchases.append({"id": str(p.get("id", "")), "itemId": p.itemId, "cost": int(p.cost), "at": int(p.at), "date": str(p.get("date", ""))})
 	out.reading = Reading.parse_log(o.get("reading"))
 	out.projects = Projects.parse(o.get("projects"))
+	out.todos = Todos.parse(o.get("todos"))
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)
 	if o.get("activePet") is String:
@@ -1337,6 +1406,7 @@ func _recompute() -> void:
 	perks = Perks.compute_perks(state, saved.loadout, saved.get("activePet"))
 	_quests = null
 	_plan = null
+	_ahead = null
 	Art.mood = Recovery.mood(saved.sessions, today)
 	# The gym shows today's kind of day (the split's), else a climb day.
 	var pl = plan()

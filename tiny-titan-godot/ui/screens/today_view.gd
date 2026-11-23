@@ -39,8 +39,6 @@ static func card() -> Control:
 	if focus and bool(plan.rest.due) and not Dose.hard_on(App.sessions(), App.pt(), App.today):
 		c.add(_rest_row(plan.rest))
 	c.add(_feel_row())
-	if Missions.lighter_week_due(App.settings(), App.today):
-		c.add(_lighter_week_row())
 	if App.sessions().any(func(s): return str(s.get("discipline", "")) == "lift"):
 		c.add(RecoveryView.row())
 	if focus:
@@ -168,13 +166,12 @@ static func _open_chest(m: Dictionary, chest: Control, card: Control) -> void:
 	App.claim_quest(m)
 
 
-## How do you feel today? Tired makes the Beat it missions an easy day,
-## Strong aims one step further (Missions.feel_of).
+## How do you feel today? A mark for the day and nothing else: no goal changes
+## with it (Missions.feel_of).
 static func _feel_row() -> Control:
 	var h = Kit.hbox(6)
 	var f = Missions.feel_of(App.settings(), App.today)
-	var easy_week = str(App.settings().get("deloadUntil", "")) >= App.today
-	var l = Kit.label("Lighter week" if easy_week else "Feeling", 12, Pal.MUTED, true)
+	var l = Kit.label("Feeling", 12, Pal.MUTED, true)
 	l.custom_minimum_size = Vector2(64, 0)
 	h.add_child(Kit.vcenter(l))
 	for pair in [[1, "Tired", Pal.SECOND], [2, "Okay", Pal.PANEL2], [3, "Strong", Pal.GOOD]]:
@@ -190,7 +187,7 @@ static func _set_feel(v: int) -> void:
 	var m = feels.duplicate() if feels is Dictionary else {}
 	m[App.today] = v
 	App.update_settings({"feels": m})
-	App.toast(["", "Easy day: lighter targets, any way counts", "As planned", "Feeling strong: aiming a step further"][v], "info", "muscle")
+	App.toast("Marked: %s. Your goals stay as they are." % ["", "tired", "okay", "strong"][v], "info", "muscle")
 
 
 ## Enough hard days in a row (training focus): take today off.
@@ -210,27 +207,6 @@ static func _rest_row(rest: Dictionary) -> Control:
 	h.add_child(v)
 	c.add(h)
 	return c
-
-
-## Tired two of the last three days: a lighter week, one tap.
-static func _lighter_week_row() -> Control:
-	var c = Kit.card(0, Callable(), 8)
-	c.accent(Pal.SECOND)
-	var h = Kit.hbox(8)
-	var v = Kit.vbox(1)
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(Kit.label("TIRED A LOT LATELY", 10, Pal.SECOND, true))
-	v.add_child(Kit.clip("A lighter week? Targets 10% down for 7 days", 12, Pal.TEXT, true))
-	h.add_child(v)
-	h.add_child(Kit.vcenter(Kit.button("Lighter week", "secondary", _start_lighter_week, "sm")))
-	c.add(h)
-	return c
-
-
-static func _start_lighter_week() -> void:
-	Sfx.tick()
-	App.update_settings({"deloadUntil": Dates.add_days(App.today, 6)})
-	App.toast("Lighter week until %s" % Dates.format_date(Dates.add_days(App.today, 6), {"weekday": "short", "month": "short", "day": "numeric"}), "good", "check")
 
 
 ## The training split: a chip per kind of the cycle (today's lit). Tapping
@@ -523,8 +499,12 @@ static func _other_row(o: Dictionary) -> Control:
 	var said = "usually %s" % usual
 	var run_goal = App.plan().get("run")
 	if d == "run" and run_goal != null:
-		# The weekly run is being built up (training focus).
+		# The weekly run on its day (training focus): further, or quicker.
 		said = "aim %s" % Fmt.fmt_distance(float(run_goal.targetM), App.distance_unit())
+		if float(run_goal.paceSec) > 0.0:
+			v.add_child(Kit.clip("or quicker than %s over %s" % [Fmt.fmt_pace(float(run_goal.paceSec), App.distance_unit()), Fmt.fmt_distance(float(run_goal.paceM), App.distance_unit())], 11, Pal.MUTED))
+	elif d == "run" and bool(App.plan().get("runToday", false)):
+		said = "log a run"
 	var u = Kit.label(said, 12, Pal.TEXT, true)
 	row.add_child(Kit.vcenter(u))
 	row.add_child(_tick(_did_today(d)))

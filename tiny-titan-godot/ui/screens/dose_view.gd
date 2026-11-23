@@ -121,11 +121,15 @@ static func open() -> void:
 		rest_text = "%d hard days in a row: today is a rest day." % int(rest.run)
 	sh.box.add_child(_line("moon", rest_text))
 	if Dose.run_on(st):
-		var g = Dose.run_goal(App.sessions(), Dates.add_days(App.today, 1), App.distance_unit())
+		var tomorrow = Dates.add_days(App.today, 1)
+		var g = Dose.run_goal(App.sessions(), tomorrow, App.distance_unit())
+		var rd = Dose.run_day(App.sessions(), st, tomorrow)
+		var day_words = ("Run day: %s. " % str(Dose.WEEKDAYS[rd])) if rd >= 0 else "Pick your run day in Settings. "
 		if g == null:
-			sh.box.add_child(_line("run", "Log a run and the next one gets a distance to aim for."))
+			sh.box.add_child(_line("run", day_words + "Log a run and the next one gets goals. They show on that day only."))
 		else:
-			sh.box.add_child(_line("run", "Next run: %s. %s." % [Fmt.fmt_distance(float(g.targetM), App.distance_unit()), Dose.run_why(g, App.distance_unit())]))
+			var quicker = (", or quicker than %s" % Fmt.fmt_pace(float(g.paceSec), App.distance_unit())) if float(g.paceSec) > 0.0 else ""
+			sh.box.add_child(_line("run", "%sNext run: %s%s. %s. Run goals show on that day only." % [day_words, Fmt.fmt_distance(float(g.targetM), App.distance_unit()), quicker, Dose.run_why(g, App.distance_unit())]))
 	sh.box.add_child(Kit.para("A set of a lift counts 1 for its main muscle and a half for the muscles it also works. A climbing session counts %s sets for the forearms and nothing for the back: climbing is fingers far more than pulling. Physical therapy and stretches count for nothing here. Change the focus in Settings, under Training focus." % Dosage._n(float(Dose.CLIMB_SETS.forearms)), 11, Pal.MUTED))
 	var ok = Kit.button("Got it", "primary", sh.close, "lg")
 	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -6,7 +6,7 @@ extends RefCounted
 ## `theirs`. Nothing anybody logged is lost:
 ##
 ##   - lists of records with an `id` (sessions, check-ins, claims, purchases,
-##     projects) are merged record by record: one added on either side is kept;
+##     projects, to-dos) are merged record by record: one added on either side is kept;
 ##     one deleted on one side and left alone on the other goes; one deleted on
 ##     one side and changed on the other is KEPT (a change outweighs a delete);
 ##     one changed on both sides takes the side whose save is newer;
@@ -22,7 +22,7 @@ extends RefCounted
 ## turns them into that first, so 3 and 3.0 are the same.
 
 ## Lists of records merged by their `id`.
-const RECORD_LISTS = ["sessions", "body", "claims", "purchases", "projects"]
+const RECORD_LISTS = ["sessions", "body", "claims", "purchases", "projects", "todos"]
 
 ## Stands for "not there" while comparing.
 const NONE = "§tiny-titan:none§"

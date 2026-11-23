@@ -193,8 +193,6 @@ function startValues(it) {
   const a = aimOf(it);
   if (isHold(it)) return {w: num(last ? last.w : it.w) || a.hold || 30, reps: 1};
   let w = last ? num(last.w) : (num(it.w) !== null ? num(it.w) : (a.weight || 0));
-  // Tired today: about 10% lighter to start with (rounded to a step).
-  if (!last && Number(S.feel) === 1 && w > 0) w = Math.max(step(), Math.round(w * 0.9 / step()) * step());
   const reps = last ? num(last.v) : (a.reps || 10);
   return {w: w || 0, reps: reps || 10};
 }
