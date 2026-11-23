@@ -45,7 +45,15 @@ const GROUP = {"back": "back", "chest": "chest", "shoulders": "shoulders", "bice
 	"forearms": "arms", "quads": "legs", "hamstrings": "legs", "glutes": "legs", "calves": "legs", "core": "core", "full": "full"}
 const GROUP_NAMES = {"back": "Back day", "chest": "Chest day", "shoulders": "Shoulder day", "arms": "Arm day",
 	"legs": "Leg day", "core": "Core day", "full": "Full body day"}
-const OTHER = ["climb", "run", "ride", "misc"]
+## Cycling and the misc activities (a weighted vest walk) are NOT here: the
+## player does them now and then, so they are never planned, never a goal of
+## a day or a week and never in the look-ahead (the user, 2026-11-23: "Move
+## cycling and weighted vest walks completely to their own little
+## miscellaneous area, don't have them as daily goals"). They are logged from
+## the Log tab's Miscellaneous section and count as before once logged.
+const OTHER = ["climb", "run"]
+## Calls for a day (settings.dayCalls) older than this many days are dropped.
+const CALLS_KEPT = 30
 
 ## The kinds of day in a split and the body parts that make each one. Forearms,
 ## core, mobility and full-body work belong to none: they go with any day.
@@ -218,6 +226,61 @@ static func split_name(split: String) -> String:
 		if str(s.id) == split:
 			return str(s.name)
 	return str(SPLITS[0].name)
+
+
+# ---------------------------------------------------------------------------
+# The player's call for a day: rest, or lift
+# ---------------------------------------------------------------------------
+# settings.dayCalls = {date: "rest" | "lift"} (the user, 2026-11-23: "Need to
+# be able to easily adjust strength days and rest days and move them back a
+# day... feeling sore today so want to use today as rest day from strength,
+# so I'll still run and do PT, but want to easily be able to push back the
+# split one day").
+#   "rest": no strength work that day. Its lifts are not planned (physical
+#           therapy, the run and the climb stay). Nothing has to be moved by
+#           hand: the split goes by the last day really lifted, so the day's
+#           lifts are the next lift day's and every day after follows.
+#   "lift": lift that day although a rest day is due by the count
+#           (Dose.REST_AFTER lifting days in a row) or it is a weekday the
+#           player rarely lifts on (the look-ahead).
+# No call: the rules decide. Lifting on a rest day makes it a lift day again.
+
+## "rest", "lift" or "" for `date`.
+static func call_of(settings: Dictionary, date: String) -> String:
+	var calls = settings.get("dayCalls", {})
+	if not (calls is Dictionary):
+		return ""
+	var c = str(calls.get(date, ""))
+	return c if (c == "rest" or c == "lift") else ""
+
+
+## settings.dayCalls with `date` called `want` ("rest" | "lift"). A call that
+## only says what the day is anyway (`rule`: "rest" | "lift", the day without
+## a call) is dropped instead, and so are calls older than CALLS_KEPT days.
+static func with_call(settings: Dictionary, date: String, want: String, rule: String, today: String) -> Dictionary:
+	var out = {}
+	var calls = settings.get("dayCalls", {})
+	if calls is Dictionary:
+		var oldest = Dates.add_days(today, -CALLS_KEPT)
+		for d in calls:
+			if str(d) >= oldest and (str(calls[d]) == "rest" or str(calls[d]) == "lift"):
+				out[str(d)] = str(calls[d])
+	if want == rule or not (want == "rest" or want == "lift"):
+		out.erase(date)
+	else:
+		out[date] = want
+	return out
+
+
+## On a rest day: what waits ("Pull day", "The lifts") and the whole line for
+## the card ("Pull day moves to tomorrow").
+static func off_what(plan: Dictionary) -> String:
+	var label = str(plan.get("label", ""))
+	return label if label != "" else "The lifts"
+
+
+static func off_moves(plan: Dictionary, to: String = "tomorrow") -> String:
+	return "%s move%s to %s" % [off_what(plan), "s" if str(plan.get("label", "")) != "" else "", to]
 
 
 ## The kind of one day's lifting in a split: the kind most of its working
@@ -820,7 +883,15 @@ static func likely_others(sessions: Array, today: String) -> Array:
 ##  "split", "cycle", "kind" (the split's kind of today, or ""), "after",
 ##  "afterDate", "picked" (see day_kind)}. With a split, `group` is the kind.
 ## Each lift also has "options" (options_for; never empty, itself first).
-## `settings`: split, dayPick.
+## "off": today is a REST DAY, a rest from lifting: the player's call
+## (settings.dayCalls, see call_of) or, with a training focus, Dose.REST_AFTER
+## lifting days in a row before it ("rest": {"run", "today", "due" (= off),
+## "auto" (due by the count), "call"}). The strength lifts, the extras of the
+## focus and the movement to try are then NOT in the plan (`set_aside` says
+## how many strength lifts were left out); physical therapy, the run and the
+## climb stay, and `kind` / `label` still name the day that waits. Strength
+## work logged today makes it a lift day again, whatever was called.
+## `settings`: split, dayPick, dayCalls.
 static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, settings: Dictionary = {}) -> Dictionary:
 	var before = sessions.filter(func(s): return str(s.get("date", "")) < today)
 	var split = str(settings.get("split", "auto"))
@@ -855,6 +926,16 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		for g in first_seen:
 			if group == "" or int(count[g]) > int(count[group]):
 				group = g
+	# A rest day (see the top): called, or due by the count. Only the physical
+	# therapy stays of the day's lifts.
+	var call = call_of(settings, today)
+	var chain = Dose.rest(before, marks, today)
+	var auto = Dose.plan_id(settings) != "" and bool(chain.due)
+	var off = (call == "rest" or (auto and call != "lift")) and not Dose.hard_on(sessions, marks, today)
+	var set_aside = 0
+	if off:
+		set_aside = lifts.filter(func(l): return not bool(l.pt)).size()
+		lifts = lifts.filter(func(l): return bool(l.pt))
 	# A training focus (game/dose.gd): the extra lifts the day's muscles still
 	# need, and what each lift is for ("build" or "keep"). The extras go first
 	# (the heavy press before the flyes), and nothing else in the plan offers
@@ -863,7 +944,8 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	var avoid = lifts.map(func(l): return Xp.normalize_exercise(str(LiftNames.split(str(l.name)).move)))
 	var extra = []
 	if Dose.plan_id(settings) != "":
-		extra = Dose.extras(lifts, before, today, marks, settings, kind, group, hist, avoid)
+		if not off:
+			extra = Dose.extras(lifts, before, today, marks, settings, kind, group, hist, avoid)
 		for x in extra:
 			x["mode"] = str(x.dose.mode)
 			for o in x.options:
@@ -873,7 +955,7 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		for l in lifts:
 			l["mode"] = "" if bool(l.pt) else Dose.mode_of(settings, str(l.name))
 	var new = null
-	if group != "":
+	if group != "" and not off:
 		# Never done before today (what is done today keeps the day's pick).
 		var done = {}
 		for s in before:
@@ -954,14 +1036,18 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	return {"date": today, "lifts": extra + lifts, "group": group, "label": label, "new": new,
 		"pt": pt, "others": others, "split": split if not cycle.is_empty() else "auto",
 		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked, "moves": avoid, "marks": marks,
-		"focus": focus, "rest": Dose.rest(before, marks, today) if focus != "" else {"run": 0, "today": false, "due": false},
+		"focus": focus, "off": off, "call": call, "set_aside": set_aside,
+		"rest": {"run": int(chain.run), "today": bool(chain.today), "due": off, "auto": auto, "call": call},
 		"run": run_goal, "runToday": run_today,
-		"doseToday": Dose.day_dose(extra + lifts, before, today, marks, settings, kind, group) if focus != "" else []}
+		"doseToday": Dose.day_dose(extra + lifts, before, today, marks, settings, kind, group) if (focus != "" and not off) else []}
 
 
 ## One line on why today is that kind of day: "Yesterday was a pull day",
 ## "Your pick for today", "" without a split.
 static func kind_why(plan: Dictionary) -> String:
+	if bool(plan.get("off", false)):
+		var lead = "Your call" if str(plan.rest.call) == "rest" else "%d lifting days in a row" % int(plan.rest.run)
+		return "%s: %s" % [lead, off_moves(plan).left(1).to_lower() + off_moves(plan).substr(1)]
 	if str(plan.get("kind", "")) == "":
 		return ""
 	if bool(plan.get("picked", false)):
@@ -1037,11 +1123,13 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	var todays = sessions.filter(func(s): return str(s.get("date", "")) == today)
 	var out = []
 	var focus = str(plan.get("focus", "")) != ""
-	if focus and bool(plan.rest.due):
-		# Enough days in a row: the day's first mission is to rest. It counts once
-		# the day is over (`data.now` is the real today), from "From yesterday".
+	if bool(plan.get("off", false)):
+		# A rest day (the player's call, or enough lifting days in a row): the
+		# day's first mission is to rest from lifting. It counts once the day is
+		# over (`data.now` is the real today), from "From yesterday".
 		var over = str(data.get("now", today)) > today
-		out.append(_mission("t:%s:rest" % today, "daily", today, "Rest day", "%d days in a row. No hard workout today: a walk, physical therapy and stretches are fine. It counts once the day is over." % int(plan.rest.run), "moon", null,
+		var lead = "Your call." if str(plan.rest.call) == "rest" else "%d lifting days in a row." % int(plan.rest.run)
+		out.append(_mission("t:%s:rest" % today, "daily", today, "Rest day", "%s No lifting today: your run, a climb, a walk, physical therapy and stretches are all fine. %s for your next lift day. It counts once the day is over." % [lead, "%s wait%s" % [off_what(plan), "s" if str(plan.get("label", "")) != "" else ""]], "moon", null,
 			1, 1 if (over and not Dose.hard_on(sessions, marks, today)) else 0, "", 150, claims, {"rest": true}))
 	else:
 		out.append(_mission("t:%s:show" % today, "daily", today, "Show up", "Log any workout today.", "flame", null, 1, todays.size(), "sessions", 150, claims))
@@ -1413,20 +1501,28 @@ static func pretend_other(log: Array, day: String, o: Dictionary, plan: Dictiona
 
 
 ## The next `days` days as they will probably go when every day before goes as
-## planned: [{"date", "plan" (day_plan of that morning), "rest" (a rest day is
-## due: nothing is pretended on it), "lift" (a lift is likely: a weekday the
-## player lifts on, with lifts to plan), "others" (the likely climb, run...),
+## planned: [{"date", "plan" (day_plan of that morning), "rest" (a rest day,
+## a rest from lifting: plan.off; only its PT, run and climb are pretended),
+## "lift" (a lift day: a weekday the player lifts on, or one they called
+## "lift", with lifts to plan), "others" (the likely climb, run...),
 ## "week" ({part: its sets in the seven days ending that evening, the day done
-## as planned}; {} without a training focus)}].
+## as planned}; {} without a training focus), "call" (the player's call for
+## the day, see call_of), "rule" ("rest" | "lift": what the day is without a
+## call, for with_call), "can_lift" (it has strength lifts to plan)}].
 ## From today on, each day's plan is pretended done (pretend_lift,
-## pretend_other) unless it is a rest day or already logged, and the next
-## day's plan is made from that: the split goes on, a muscle that got its sets
-## stops asking, rest comes due. Nothing is stored and no session is made.
+## pretend_other) unless already logged, and the next day's plan is made from
+## that: the split goes on, a muscle that got its sets stops asking, rest
+## comes due. A day called "rest" hands its lifts to the day after, which is
+## then a lift day whatever its weekday (`carried`: the card says "moves to
+## tomorrow", and a player who lifts on Mondays and Fridays means tomorrow
+## too), and every day after it follows. Nothing is stored and no session is
+## made.
 static func ahead(sessions: Array, today: String, marks: Dictionary = {}, settings: Dictionary = {}, days: int = AHEAD_DAYS) -> Array:
 	var out = []
 	var log = sessions.duplicate()
 	var invented = {}
 	var focus = Dose.plan_id(settings) != ""
+	var carried = false
 	for i in range(days + 1):
 		var day = Dates.add_days(today, i)
 		var plan = day_plan(log, day, marks, settings)
@@ -1435,36 +1531,42 @@ static func ahead(sessions: Array, today: String, marks: Dictionary = {}, settin
 		for s in log:
 			if str(s.get("date", "")) == day:
 				logged[str(s.get("discipline", ""))] = true
-		var rest = bool(plan.get("rest", {}).get("due", false)) and not Dose.hard_on(log, marks, day)
-		var lift = not rest and lift_habit(sessions, day) and plan.lifts.any(func(l): return not bool(l.pt))
+		var rest = bool(plan.get("off", false))
+		var call = str(plan.get("call", ""))
+		var habit = lift_habit(sessions, day)
+		var can_lift = int(plan.get("set_aside", 0)) > 0 or plan.lifts.any(func(l): return not bool(l.pt))
+		var lift = not rest and (habit or call == "lift" or carried) and can_lift
 		# Another activity counts on its weekday or once its usual gap has passed
 		# (score 1 or more: a run that is "nearly due" a day early does not), and
 		# not right after the last one: one run a week is not two days running.
+		# A rest day is a rest from lifting: the run and the climb stay on it.
 		var others = []
-		if not rest:
-			for o in plan.others:
-				if others.size() < 2 and float(o.get("score", 0.0)) >= 1.0 and not _too_soon(log, str(o.discipline), day):
-					others.append(o)
-		if not rest:
-			if lift and not logged.has("lift"):
-				var p = pretend_lift(log, day, plan, true)
-				if p != null:
-					for nm in p.get("invented", []):
-						invented[Xp.normalize_exercise(str(nm))] = true
-					log.append(p)
-			for o in others:
-				if logged.has(str(o.discipline)):
-					continue
-				var q = pretend_other(log, day, o, plan)
-				if q != null:
-					log.append(q)
+		for o in plan.others:
+			if others.size() < 2 and float(o.get("score", 0.0)) >= 1.0 and not _too_soon(log, str(o.discipline), day):
+				others.append(o)
+		# A lift day: its lifts and PT. A rest day: what is left of the plan, the PT.
+		if (lift or rest) and not logged.has("lift"):
+			var p = pretend_lift(log, day, plan, true)
+			if p != null:
+				for nm in p.get("invented", []):
+					invented[Xp.normalize_exercise(str(nm))] = true
+				log.append(p)
+		for o in others:
+			if logged.has(str(o.discipline)):
+				continue
+			var q = pretend_other(log, day, o, plan)
+			if q != null:
+				log.append(q)
 		if i > 0:
 			var week = {}
 			if focus:
 				var w = Dose.window(log, marks, settings, day)
 				for part in w.parts:
 					week[part] = float(w.parts[part].total)
-			out.append({"date": day, "plan": plan, "rest": rest, "lift": lift, "others": others, "week": week})
+			out.append({"date": day, "plan": plan, "rest": rest, "lift": lift, "others": others, "week": week,
+				"call": call, "rule": "lift" if ((habit or carried) and not bool(plan.rest.auto)) else "rest", "can_lift": can_lift})
+		# A day called rest hands its lifts to the day after.
+		carried = rest and call == "rest" and int(plan.get("set_aside", 0)) > 0
 	return out
 
 
@@ -1532,9 +1634,10 @@ static func evening_text(plan: Dictionary, sessions: Array, today: String, perfe
 static func morning_text(plan: Dictionary, daily_missions: Array, wu: String, du: String = "km") -> String:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var lines = []
-	if bool(plan.get("rest", {}).get("due", false)):
-		lines.append("Rest day: %d days in a row. A walk, PT and stretches are fine." % int(plan.rest.run))
-	if str(plan.get("kind", "")) != "":
+	if bool(plan.get("off", false)):
+		var lead = "your call" if str(plan.rest.call) == "rest" else "%d lifting days in a row" % int(plan.rest.run)
+		lines.append("Rest day from lifting: %s. %s. Your run, a walk, PT and stretches are fine." % [lead, off_moves(plan)])
+	elif str(plan.get("kind", "")) != "":
 		lines.append("%s. %s." % [str(plan.label), kind_why(plan)])
 	elif str(plan.label) != "":
 		lines.append("Probably a %s." % str(plan.label).to_lower())

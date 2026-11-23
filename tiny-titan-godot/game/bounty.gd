@@ -135,9 +135,16 @@ static func hp_for(wk: String, first: String, weeks: Dictionary) -> int:
 	return maxi(FLOOR_HP, _round_to(float(total) / float(n) * TARGET_FACTOR, 50))
 
 
+## From this Monday on no monster is weak to a discipline kept in the
+## Miscellaneous area (cycling: Misc.SIDE). A weakness reads as "do this for
+## more damage", and cycling is no goal any more. The weeks before keep the
+## weakness they had, so no past bounty changes.
+const SIDE_OUT_FROM = "2026-11-23"
+
 ## The discipline a week's monster is weak to: one trained in the weeks before
 ## (else the first one trained that week, else none yet), picked by the week.
 static func weak_for(wk: String, weeks: Dictionary):
+	var pick_from: Array = TT.DISCIPLINES if wk < SIDE_OUT_FROM else Misc.MAIN
 	var used: Dictionary = {}
 	var w: String = wk
 	for k in range(WEAK_LOOKBACK_WEEKS):
@@ -146,14 +153,14 @@ static func weak_for(wk: String, weeks: Dictionary):
 			for d in weeks[w].discs:
 				used[d] = true
 	var pool: Array = []
-	for d in TT.DISCIPLINES:
+	for d in pick_from:
 		if used.has(d):
 			pool.append(d)
 	if pool.is_empty():
-		# The first of the four disciplines trained that week (a misc activity is never a weakness).
+		# The first of the disciplines trained that week (a misc activity is never a weakness).
 		if weeks.has(wk):
 			for x in weeks[wk].list:
-				if TT.DISCIPLINES.has(x.disc):
+				if pick_from.has(x.disc):
 					return x.disc
 		return null
 	return pool[Rng.hash_string("bounty-weak:" + wk) % pool.size()]

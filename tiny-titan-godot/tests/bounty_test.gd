@@ -238,5 +238,13 @@ func _init() -> void:
 			{"date": "2026-11-18", "t": 3, "id": "b", "disc": "lift", "xp": 1000, "muscles": {bpart: 2}}]}}
 	var brec = Bounty._record(bwk, "2026-11-09", bweeks)
 	ok(str(brec.weakPart) == bpart and (brec.weak == "lift" or int(brec.damage) == 2500), "3 sets of the weak muscles: x1.5; 2 sets: x1 (%s, damage %d)" % [str(brec.weak), int(brec.damage)])
+	# --- cycling is no weakness from 2026-11-23 on (it is kept in the Miscellaneous area) -------
+	var rides = {}
+	for wk0 in ["2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30"]:
+		rides[wk0] = {"xp": 100, "discs": {"ride": true}, "list": [{"date": wk0, "t": 0, "id": "x" + wk0, "disc": "ride", "xp": 100}]}
+	ok(Bounty.weak_for("2026-11-16", rides) == "ride" and Bounty.weak_for("2026-11-23", rides) == null and Bounty.weak_for("2026-12-07", rides) == null, "a rider: the weeks before keep their weakness to cycling, from Nov 23 on no monster has it", [Bounty.weak_for("2026-11-16", rides), Bounty.weak_for("2026-11-23", rides)])
+	var mixed = rides.duplicate(true)
+	mixed["2026-11-16"].discs["lift"] = true
+	ok(Bounty.weak_for("2026-11-23", mixed) == "lift", "with a lift in the weeks before, the weakness is lifting", Bounty.weak_for("2026-11-23", mixed))
 	print("BOUNTY: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

@@ -66,6 +66,12 @@ func _init() -> void:
 	var off = {"weightUnit": "kg", "distanceUnit": "km", "split": "pull_push_legs", "weeklyGoal": 3}
 	var st = off.duplicate()
 	st["focus"] = "upper"
+	# Seven lifting days in a row before today: a rest day is due by the count.
+	# `rs` is that day as the rules have it (a rest day, tested under "rest");
+	# `st` is the same day called a lift day by the player, which most of this
+	# test is about.
+	var rs = st.duplicate()
+	st["dayCalls"] = {today: "lift"}
 	var state = {"levels": {"hero": {"level": 10}}, "sessionXp": {}, "body": {"entries": 0}}
 
 	# --- the focus and the window --------------------------------------------------------
@@ -127,19 +133,47 @@ func _init() -> void:
 
 	# --- rest ------------------------------------------------------------------------------------------
 	var rest = Dose.rest(log, marks, today)
-	ok(int(rest.run) == 7 and bool(rest.due) and not bool(rest.today) and bool(plan.rest.due), "seven hard days in a row: a rest day is due", rest)
+	ok(int(rest.run) == 7 and bool(rest.due) and not bool(rest.today), "seven lifting days in a row: a rest day is due", rest)
+	ok(bool(plan.rest.auto) and not bool(plan.off) and not bool(plan.rest.due) and str(plan.call) == "lift", "called a lift day: the plan is a lift day although rest is due by the count", plan.rest)
+	# The same day as the rules have it: a rest from lifting.
+	var rplan = Missions.day_plan(log, today, marks, rs)
+	ok(bool(rplan.off) and bool(rplan.rest.due) and bool(rplan.rest.auto) and str(rplan.rest.call) == "" and int(rplan.rest.run) == 7, "no call: a rest day", rplan.rest)
+	ok(rplan.lifts.is_empty() and rplan.new == null and rplan.doseToday.is_empty() and int(rplan.set_aside) == 4 and str(rplan.kind) == "push" and str(rplan.label) == "Push day", "a rest day plans no strength lift, no extra, nothing new; it still knows which day waits", [rplan.lifts.map(func(l): return str(l.name)), rplan.set_aside, rplan.kind])
+	ok(rplan.others.any(func(o): return str(o.discipline) == "run") and bool(rplan.runToday), "the run stays on a rest day: it is a rest from lifting")
+	ok(Missions.kind_why(rplan) == "7 lifting days in a row: push day moves to tomorrow" and Missions.off_moves(rplan) == "Push day moves to tomorrow" and Missions.off_moves({"label": ""}) == "The lifts move to tomorrow", "and says what moves", Missions.kind_why(rplan))
+	# The player's own call, on a day no rest is due: the same, and the day after picks the lifts up.
+	var c20 = rs.duplicate()
+	c20["dayCalls"] = {"2026-11-20": "rest"}
+	var p20 = Missions.day_plan(log.filter(func(s): return str(s.date) < "2026-11-20"), "2026-11-20", marks, c20)
+	var p20_free = Missions.day_plan(log.filter(func(s): return str(s.date) < "2026-11-20"), "2026-11-20", marks, rs)
+	ok(bool(p20.off) and not bool(p20.rest.auto) and str(p20.rest.call) == "rest" and p20.lifts.is_empty() and not bool(p20_free.off) and str(p20.kind) == str(p20_free.kind) and Missions.kind_why(p20).begins_with("Your call: "), "a day called rest: no lifts, whatever the count says", [p20.rest, p20.kind])
+	var p21 = Missions.day_plan(log.filter(func(s): return str(s.date) < "2026-11-20"), "2026-11-21", marks, c20)
+	ok(str(p21.kind) == str(p20_free.kind) and not bool(p21.off) and p21.lifts.filter(func(l): return not l.has("dose")).map(func(l): return str(l.name)) == p20_free.lifts.filter(func(l): return not l.has("dose")).map(func(l): return str(l.name)), "the day after has the lifts the rest day set aside: the split moved a day", [p21.kind, p21.lifts.map(func(l): return str(l.name))])
+	var lifted20 = log.filter(func(s): return str(s.date) < "2026-11-20") + [lift("2026-11-20", {"Chest Fly - Cable": three(12, 15)})]
+	ok(not bool(Missions.day_plan(lifted20, "2026-11-20", marks, c20).off), "lifting on a day called rest makes it a lift day again")
+	var ran20 = log.filter(func(s): return str(s.date) < "2026-11-20") + [{"id": "r20", "discipline": "run", "date": "2026-11-20", "createdAt": 1700000009000, "source": "manual", "distanceM": 5000.0, "durationSec": 1800}, climb("2026-11-20")]
+	ok(bool(Missions.day_plan(ran20, "2026-11-20", marks, c20).off) and not Dose.hard_on(ran20, marks, "2026-11-20") and int(Dose.rest(ran20, marks, "2026-11-21").run) == 0, "a run and a climb on it do not: they are no lifting, and the count of days in a row starts again", Dose.rest(ran20, marks, "2026-11-21"))
+	# The calls themselves.
+	ok(Missions.call_of(c20, "2026-11-20") == "rest" and Missions.call_of(c20, "2026-11-21") == "" and Missions.call_of({}, today) == "" and Missions.call_of({"dayCalls": {today: "nonsense"}}, today) == "", "a call is rest, lift or nothing")
+	var wc = Missions.with_call({"dayCalls": {"2026-10-01": "rest", "2026-11-22": "lift"}}, today, "rest", "lift", today)
+	ok(wc == {"2026-11-22": "lift", today: "rest"}, "a new call is added, one older than a month is dropped", wc)
+	ok(Missions.with_call({"dayCalls": wc}, today, "lift", "lift", today) == {"2026-11-22": "lift"} and Missions.with_call({}, today, "rest", "rest", today).is_empty(), "a call that only says what the day is anyway is not kept")
 	var until = func(d: String): return log.filter(func(s): return str(s.date) < d)
 	ok(not bool(Dose.rest(until.call("2026-11-20"), marks, "2026-11-20").due) and int(Dose.rest(until.call("2026-11-20"), marks, "2026-11-20").run) == 4 and bool(Dose.rest(until.call("2026-11-21"), marks, "2026-11-21").due), "four in a row is not yet; five is", [Dose.rest(until.call("2026-11-20"), marks, "2026-11-20"), Dose.rest(until.call("2026-11-21"), marks, "2026-11-21")])
 	ok(not bool(Dose.rest(done3, marks, today).due) and int(Dose.rest(done3, marks, today).run) == 8, "training anyway: not due any more, and the run goes on")
-	var rm = find(day, ":rest")
-	ok(rm != null and find(day, ":show") == null and day[0].id == rm.id and not rm.done and str(rm.desc).begins_with("7 days in a row."), "the day's first mission is to rest, in place of showing up", day.map(func(m): return str(m.id)))
+	ok(find(day, ":rest") == null and find(day, ":show") != null, "called a lift day: showing up is the first mission, not resting")
+	var rdata = {"sessions": log, "pt": marks, "settings": rs, "reading": [], "now": today}
+	var rday = Missions.daily(today, rdata, state, [])
+	var rm = find(rday, ":rest")
+	ok(rm != null and find(rday, ":show") == null and rday[0].id == rm.id and not rm.done and str(rm.desc).begins_with("7 lifting days in a row. No lifting today") and str(rm.desc).contains("Push day waits for your next lift day"), "a rest day: the first mission is to rest, in place of showing up", rday.map(func(m): return str(m.id)))
+	ok(not rday.any(func(m): return str(m.id).contains(":beat:") or str(m.id).contains(":dose:") or str(m.id).ends_with(":new")) and find(rday, ":run") != null, "and no lift is asked for; the run still is", rday.map(func(m): return str(m.id)))
 	var easy_day = log + [lift(today, {"Neck 4 Way": three(20, 4), "Pec Stretch": [[1, 0, 30]]}), {"id": "w1", "discipline": "misc", "kind": "vest_walk", "date": today, "distanceM": 3000.0, "loadKg": 10.0}]
 	var pt_marks = {"neck 4 way": {"name": "Neck 4 Way", "perWeek": 3}}
-	ok(not Dose.hard_on(easy_day, pt_marks, today) and Dose.hard_on(done3, marks, today) and Dose.hard_on(log, marks, "2026-11-21"), "a walk, PT and stretches are not a hard day; a lift or a climb is")
-	var next_day = {"sessions": easy_day, "pt": pt_marks, "settings": st, "reading": [], "now": "2026-11-24"}
+	ok(not Dose.hard_on(easy_day, pt_marks, today) and Dose.hard_on(done3, marks, today) and Dose.hard_on(log, marks, "2026-11-21") and not Dose.hard_on([climb("2026-12-01")], marks, "2026-12-01"), "a walk, PT, stretches, a climb are no lifting; a lift is")
+	var next_day = {"sessions": easy_day, "pt": pt_marks, "settings": rs, "reading": [], "now": "2026-11-24"}
 	ok(find(Missions.daily(today, next_day, state, []), ":rest").done, "the day after: rested (a walk and PT only), the mission is done")
 	next_day.sessions = done3
-	ok(not find(Missions.daily(today, next_day, state, []), ":rest").done, "trained anyway: not done")
+	ok(find(Missions.daily(today, next_day, state, []), ":rest") == null and find(Missions.daily(today, next_day, state, []), ":show") != null, "lifted anyway: it was a lift day after all, with no rest mission")
 	next_day.sessions = easy_day
 	next_day.now = today
 	ok(not find(Missions.daily(today, next_day, state, []), ":rest").done, "not before the day is over")
@@ -256,7 +290,9 @@ func _init() -> void:
 
 	# --- the morning message ---------------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg", "km")
-	ok(text.begins_with("Rest day: 7 days in a row.") and text.contains("For your chest, 3 sets: Bench Press (barbell, new)") and text.contains("  or Bench Press (incline dumbbell, new)") and text.contains("Running: aim for 5.5 km"), "the morning message: rest, the press and its other ways, the run", text)
+	ok(text.begins_with("Push day. ") and text.contains("For your chest, 3 sets: Bench Press (barbell, new)") and text.contains("  or Bench Press (incline dumbbell, new)") and text.contains("Running: aim for 5.5 km"), "the morning message: the day, the press and its other ways, the run", text)
+	var rtext = Missions.morning_text(rplan, rday, "kg", "km")
+	ok(rtext.begins_with("Rest day from lifting: 7 lifting days in a row. Push day moves to tomorrow.") and not rtext.contains("For your chest") and not rtext.contains("Chest Fly") and rtext.contains("Running: aim for 5.5 km"), "on a rest day: the rest, what moves, the run, and no lift", rtext)
 	ok(not Missions.morning_text(plain, day_off, "kg", "km").contains("For your") and not Missions.morning_text(plain, day_off, "kg", "km").contains("Rest day"), "without a focus it is as before")
 	var lt = Missions.morning_text(lp, ld, "kg", "km")
 	ok(lt.contains("Squat (barbell): 3×5 @ 102.5 kg"), "a leg lift's aim is one step more, as for any lift", lt)

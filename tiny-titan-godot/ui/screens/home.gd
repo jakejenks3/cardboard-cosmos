@@ -209,9 +209,10 @@ func build() -> void:
 	if pj_card != null:
 		add_child(pj_card)
 
-	# --- the four disciplines: one bright tile each ---------------------------
-	var tiles = Kit.grid(4, 8)
-	for d in TT.DISCIPLINES:
+	# --- the main disciplines: one bright tile each (cycling is kept in the
+	# Miscellaneous area: Misc.MAIN) -------------------------------------------
+	var tiles = Kit.grid(Misc.MAIN.size(), 8)
+	for d in Misc.MAIN:
 		tiles.add_child(Parts.stat_tile(d, s.levels[d]))
 	add_child(tiles)
 

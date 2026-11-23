@@ -336,7 +336,8 @@ func _build_focus() -> void:
 		"Pick what you are training for. Every muscle then has a number of sets it should get in a week, and the Today card shows how many it got in the last 7 days.",
 		"On a day that trains a muscle that is short, the plan adds one more lift for it, with several to pick from for whatever equipment is there. A chest with no press gets a press first.",
 		"Muscles that are only kept (the legs, with \"Upper body first\") never get sets added. Their lifts still have goals to beat.",
-		"After 5 hard days in a row the day's first mission is a rest day. A climbing session counts for the forearms only, not for the back.",
+		"After 5 lifting days in a row the day is a rest day: a rest from lifting, so your run, a climb and physical therapy are still fine on it. The Rest chip on the Today card makes any day a rest day (or a rest day a lift day), and the days after follow.",
+		"A climbing session counts for the forearms only, not for the back.",
 		"\"From my log\" switches all of this off.",
 	]))
 	card.set_meta("focus_section", true)

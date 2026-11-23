@@ -44,6 +44,17 @@ const KINDS = {
 }
 ## The order the kinds are offered in.
 const ORDER = ["vest_walk"]
+## The disciplines a screen lists as MAIN sections (the Log tab's big keys,
+## the Hero tab's level tiles, a card each in Journey -> Stats), and the ones
+## kept with the misc activities in a small Miscellaneous area instead (the
+## user, 2026-11-23: "Move cycling and weighted vest walks completely to
+## their own little miscellaneous area, don't have them as daily goals or as
+## a main section anywhere, just as something I still can add or track but
+## very sporadically"). Cycling is still one of the four disciplines for the
+## rules: its level, records, trophies and gear are untouched, and a ride
+## counts exactly as before once it is logged.
+const MAIN = ["lift", "climb", "run"]
+const SIDE = ["ride"]
 ## A kind this version does not know (a save from a newer one): time still counts.
 const UNKNOWN = {"name": "Activity", "short": "Activity", "icon": "misc", "tip": "", "fields": [], "loadName": "Load",
 	"words": [], "loadWord": "",

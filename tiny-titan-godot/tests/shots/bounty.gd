@@ -181,6 +181,11 @@ func run(m: Node, t: SceneTree) -> void:
 	# Pretend it is the Tuesday after: last week's recap is offered, once.
 	var real_today = App.today
 	App.today = Dates.add_days(Dates.week_key(real_today), 8)
+	# When that Tuesday is in the first week of a month, last month's recap is
+	# offered before last week's: take it as opened (the check failed in the
+	# last week of November).
+	if int(App.today.substr(8, 2)) <= 7:
+		App.mark_recap_seen("month", Recap.shift("month", App.today.substr(0, 7), -1))
 	App._recompute()
 	App.changed.emit()
 	await ShotHelper.wait(tree, 0.6)

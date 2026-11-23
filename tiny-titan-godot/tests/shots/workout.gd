@@ -67,6 +67,14 @@ func _index_of(form, part: String) -> int:
 func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
+	# The demo player trains by the weekday (lifts on Mondays and Fridays, a run
+	# on Tuesdays...): take out what it did on this weekday, today included, so
+	# the day's plan is this walkthrough's own whatever day it runs on.
+	var clean = App.saved.duplicate(true)
+	var this_wd = Dates.weekday_index(App.today)
+	clean.sessions = clean.sessions.filter(func(s): return Dates.weekday_index(str(s.date)) != this_wd)
+	App.replace_all(clean)
+	await ShotHelper.wait(tree, 0.6)
 	App.update_settings({"weightUnit": "lb"})
 	# Lifts done on this weekday the last two weeks (a bench, and a stretch that
 	# is held), so today has likely lifts whatever day this runs on.

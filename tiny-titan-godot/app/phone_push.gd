@@ -93,7 +93,8 @@ static func forecast(saved: Dictionary, today: String, day: String) -> Array:
 	var out = real.duplicate()
 	var x = today
 	while x < day:
-		if not _lifted_on(out, x) and lift_likely(real, x):
+		# A lift day: by the weekday, called one, or the day after a day called rest (its lifts moved here).
+		if not _lifted_on(out, x) and (lift_likely(real, x) or Missions.call_of(st, x) == "lift" or Missions.call_of(st, Dates.add_days(x, -1)) == "rest"):
 			var pretend = Missions.pretend_lift(out, x, Missions.day_plan(out, x, marks, st))
 			if pretend != null:
 				out.append(pretend)

@@ -152,7 +152,11 @@ func run(m: Node, t: SceneTree) -> void:
 		check(App.saved.claims.size() == claims0, "and a stray mouse click presses nothing")
 
 	# --- the page follows the finger in parts of a unit --------------------------------
-	sc.scroll_vertical = 0
+	# (Back to the very top through TouchScroll: the glide above may have stopped
+	# between two units, and setting scroll_vertical alone leaves that part of a
+	# unit in place. It only showed on a day the page was long enough for the
+	# glide to stop before its end.)
+	ts._scroll_to(sc, 1, 0.0)
 	await ShotHelper.frames(tree, 3)
 	_down(Vector2(300, 600))
 	await tree.process_frame

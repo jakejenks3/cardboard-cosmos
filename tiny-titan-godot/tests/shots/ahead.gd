@@ -164,7 +164,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await _open_card()
 	sh = _sheet()
 	st = ShotHelper.all_text(sh) if sh != null else ""
-	check(st.contains("Rest day") and st.contains("hard days in a row by then") and st.contains("Bench Press") and st.contains("Pull-up"), "the sheet: the rest day, the press on the next push day, a pull-up beside the pulldown")
+	check(st.contains("Rest day") and st.contains("lifting days in a row by then") and st.contains("Bench Press") and st.contains("Pull-up"), "the sheet: the rest day, the press on the next push day, a pull-up beside the pulldown")
 	# The plan in numbers: the week it leads to, and what each day gives its muscles.
 	var week_card = _find("ahead_week", sh)
 	var wt = ShotHelper.all_text(week_card) if week_card != null else ""
@@ -180,5 +180,46 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		ShotHelper.scroll_main(sh, 800)
 		await ShotHelper.wait(tree, 0.3)
 		await ShotHelper.snap(tree, "ahead_5b_sheet_focus_lower")
+	# --- a key on every day: Rest moves the day's lifts, and all after them, a day ---------------
+	if sh != null:
+		ShotHelper.scroll_main(sh, 0)
+		await ShotHelper.wait(tree, 0.3)
+		var n_sessions = App.sessions().size()
+		var first = days[0]
+		var keys = _all("ahead_call", sh)
+		var key = null
+		for k in keys:
+			if str(k.get_meta("ahead_call")) == "%s:rest" % str(first.date):
+				key = k
+		check(bool(first.lift) and key != null and keys.size() == days.filter(func(a): return bool(a.lift) or bool(a.can_lift)).size(), "every day has a Rest or a Lift key (%d keys)" % keys.size())
+		if key != null:
+			ShotHelper.reveal(key)
+			await ShotHelper.frames(tree, 3)
+			var at = key.get_global_rect().position
+			var size0 = key.size
+			var kind0 = str(first.plan.kind)
+			await ShotHelper.click(tree, key)
+			await ShotHelper.wait(tree, 0.8)
+			var after = App.ahead()
+			var words2 = after.map(func(a): return str(Missions.ahead_word(a).text))
+			print("AHEAD after rest ", words2)
+			check(bool(after[0].rest) and str(after[0].call) == "rest" and str(after[1].plan.kind) == kind0 and bool(after[1].lift), "Rest on tomorrow: it is a rest day, and its %s day is the day after" % kind0)
+			check(Missions.call_of(App.settings(), str(first.date)) == "rest" and App.sessions().size() == n_sessions, "the call is kept in the settings; nothing is logged")
+			var back = null
+			for k in _all("ahead_call", sh):
+				if str(k.get_meta("ahead_call")) == "%s:lift" % str(first.date):
+					back = k
+			print("AHEAD key ", at, " ", size0, " -> ", back.get_global_rect().position if back != null else null, " ", back.size if back != null else null)
+			check(back != null and back.get_global_rect().position.distance_to(at) < 2.0 and ShotHelper.all_text(sh).contains("Your call: a rest from lifting"), "the sheet is rebuilt in place: the key, now Lift, is where the cursor is")
+			await ShotHelper.snap(tree, "ahead_6_called_rest")
+			# And back again, once the quiet moment after a tap is over.
+			await ShotHelper.wait(tree, 0.6)
+			if back != null:
+				await ShotHelper.click(tree, back)
+				await ShotHelper.wait(tree, 0.8)
+				check(App.ahead().map(func(a): return str(Missions.ahead_word(a).text)) == words and (App.settings().get("dayCalls", {}) as Dictionary).is_empty(), "Lift: the days are as they were, and no call is left")
+	await _close_sheets()
+	card = _find("ahead_card")
+	check(card != null, "the Hero tab's card is still there after the calls")
 	await _close_sheets()
 	print("AHEAD %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

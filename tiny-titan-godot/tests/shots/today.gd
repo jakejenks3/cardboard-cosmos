@@ -63,6 +63,14 @@ func _ticks() -> Array:
 func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
+	# The demo player trains by the weekday (lifts on Mondays and Fridays, a run
+	# on Tuesdays...): take out what it did on this weekday, today included, so
+	# the day's plan is this walkthrough's own whatever day it runs on.
+	var clean = App.saved.duplicate(true)
+	var this_wd = Dates.weekday_index(App.today)
+	clean.sessions = clean.sessions.filter(func(s): return Dates.weekday_index(str(s.date)) != this_wd)
+	App.replace_all(clean)
+	await ShotHelper.wait(tree, 0.6)
 	App.update_settings({"weightUnit": "lb"})
 	# A lift done on this weekday the last two weeks, so today has a likely lift
 	# whatever day the walkthrough runs on (the demo player lifts Mondays and Fridays).
@@ -92,6 +100,35 @@ func run(m: Node, t: SceneTree) -> void:
 	check(not beats.is_empty() and q.daily.all(func(x): return str(x.unit) != "min") and q.weekly.all(func(x): return str(x.unit) != "min"), "missions to beat a lift, and none about minutes (%s)" % str(q.daily.map(func(x): return x.title)))
 	check(said.contains("Beat it: "), "the missions are on the Hero tab")
 	await ShotHelper.snap(tree, "today_1_hero")
+	# Without a training split the day has two chips, Lift and Rest: a rest day
+	# (a rest from lifting) is one tap, and one more takes it back.
+	var rest_chip = null
+	for n in ShotHelper.walk(main):
+		if n.has_meta("rest_chip"):
+			rest_chip = n
+	check(rest_chip != null and plan.cycle.is_empty() and not bool(plan.off), "no split: the day's chips are Lift and Rest")
+	if rest_chip != null:
+		ShotHelper.reveal(rest_chip)
+		await ShotHelper.frames(tree, 3)
+		for n in ShotHelper.walk(main):
+			if n.has_meta("rest_chip"):
+				rest_chip = n
+		var chip_y = rest_chip.get_global_rect().position.y
+		await ShotHelper.click(tree, rest_chip)
+		await ShotHelper.wait(tree, 0.7)
+		var off_plan = App.plan()
+		var off_text = ShotHelper.all_text(main)
+		check(bool(off_plan.off) and str(off_plan.rest.call) == "rest" and off_plan.lifts.all(func(l): return bool(l.pt)) and off_plan.new == null and off_text.contains("REST DAY · YOUR CALL") and off_text.contains("%s moves to tomorrow" % str(plan.label)), "Rest: a rest day by the player's call, no lift on the card, and it says the %s moves to tomorrow" % str(plan.label).to_lower())
+		check(App.quests().daily[0].get("rest", false) and not App.quests().daily.any(func(x): return str(x.id).contains(":beat:")) and not off_text.contains("Beat it: "), "the missions follow: rest first, nothing to beat")
+		for n in ShotHelper.walk(main):
+			if n.has_meta("rest_chip"):
+				rest_chip = n
+		check(absf(rest_chip.get_global_rect().position.y - chip_y) < 1.0, "the chip stays under the cursor")
+		await ShotHelper.snap(tree, "today_1b_rest_day")
+		await ShotHelper.click(tree, rest_chip)
+		await ShotHelper.wait(tree, 0.7)
+		check(not bool(App.plan().off) and (App.settings().get("dayCalls", {}) as Dictionary).is_empty() and ShotHelper.all_text(main).contains("Beat it: "), "Rest again: a lift day as before")
+		await _home()
 	var t0 = _ticks()
 	var t_base = t0.count(true)
 	check(t0.size() >= plan.lifts.size() + 1 and not t0.slice(0, plan.lifts.size()).has(true), "every Today row ends in a box; the lifts not done yet are empty (%s; the demo rides today)" % str(t0))

@@ -190,6 +190,9 @@ static func _has_reps(sets: Array) -> bool:
 
 ## Collapsed picker: about two rows of chips.
 const CHIPS_COLLAPSED = 6
+## The widest a movement and a variation are written on an exercise key.
+const CHIP_MOVE_W = 150.0
+const CHIP_VARIATION_W = 120.0
 
 ## One exercise: a title line (name · BW · remove), one muted "Last … · Best …"
 ## line, one tight row per set (n · reps × weight unit · trend · remove) and a
@@ -536,11 +539,14 @@ func _ex_chip(s: Dictionary) -> Button:
 	var h = Kit.hbox(5)
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	var sp = LiftNames.split(str(s.name))
-	var nm = Kit.label(str(sp.move), 12, Pal.TEXT, true)
+	# The movement and the variation are cut off with "…" past a width: a key
+	# with a long variation ("Single arm incline home cable") was wider than
+	# the card, and one key too wide widens the whole page.
+	var nm = Kit.clip_fit(str(sp.move), 12, Pal.TEXT, true, CHIP_MOVE_W)
 	nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(nm)
 	if str(sp.variation) != "":
-		var vl = Kit.label(str(sp.variation), 11, Pal.MUTED)
+		var vl = Kit.clip_fit(str(sp.variation), 11, Pal.MUTED, false, CHIP_VARIATION_W)
 		vl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		h.add_child(vl)
 	if lp != null:
@@ -551,8 +557,9 @@ func _ex_chip(s: Dictionary) -> Button:
 			h.add_child(tl)
 	var b = LogWidgets.key(str(s.name), Pal.PANEL2, h, add_exercise.bind(str(s.name)), 9, 4, 1, Pal.LIFT if lp != null else Pal.LINE)
 	b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	b.tooltip_text = str(s.name)
 	if lp != null:
-		b.tooltip_text = "Last top set: %s" % LiftHistory.top_set_label(lp.sets, func(kg): return Fmt.kg_to_unit(float(kg), wu))
+		b.tooltip_text = "%s\nLast top set: %s" % [str(s.name), LiftHistory.top_set_label(lp.sets, func(kg): return Fmt.kg_to_unit(float(kg), wu))]
 	return b
 
 

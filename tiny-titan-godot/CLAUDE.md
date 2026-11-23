@@ -997,6 +997,91 @@ is the Windows handoff.
     13 sets (all in range), shoulders 23 (over, mostly half sets from rows and presses), legs kept.
   - A change to the plan must keep this true: what is planned has to add up to the targets, and the
     screens have to show the sum. Tests: dose_test (day_target, freq_of, day_dose), ahead_test (week).
+- Rest days are the player's to move (2026-11-23, "Need to be able to easily adjust strength days and
+  rest days and move them back a day... feeling sore today so want to use today as rest day from
+  strength, so I'll still run and do PT, but want to easily be able to push back the split one day,
+  moving today's planned strength to tomorrow and having everything move back accordingly 1 day").
+  - A REST DAY IS A REST FROM LIFTING, nothing more. `Dose.is_hard` / `hard_on` now mean strength work
+    only (a lift with more than PT and stretches); a run, a ride, a climb, a walk and PT are fine on a
+    rest day and a day with only those is a day off in the count (`Dose.rest`: LIFTING days in a row).
+    This replaces "5 hard days in a row" above, where runs and climbs counted.
+  - `settings.dayCalls` = {date: "rest" | "lift"} (`Missions.call_of`; `with_call(settings, date, want,
+    rule, today)` drops a call that only says what the day is anyway and calls older than `CALLS_KEPT`
+    30 days). "rest" = no strength work that day; "lift" = lift although a rest day is due by the count
+    or (look-ahead) it is a weekday the player rarely lifts on.
+  - NOTHING IS MOVED BY HAND: the split goes by the last day really lifted (`day_kind`), so a day
+    without lifting leaves its lifts to the next lift day and every day after follows. A rest day
+    also starts the count again, so a rest called today takes the place of the one that was due
+    later (Mon pull / Tue rest becomes Mon rest / Tue pull; to rest on both, call both).
+  - `Missions.day_plan`: `plan.off` (a rest day: the call, or with a focus `plan.rest.auto`, unless
+    called "lift"; strength work logged that day makes it a lift day again), `plan.call`,
+    `plan.set_aside` (strength lifts left out), `plan.rest` = {run, today, due (= off), auto, call}.
+    On an off day `plan.lifts` holds only the PT, there are no extras, no "try something new", no
+    `doseToday`; `others` (the run on its day, the climb) and `pt` stay; `kind` / `label` still name
+    the day that waits (`off_what`, `off_moves`: "Push day moves to tomorrow"; `kind_why` says it).
+    An auto rest day used to keep its lifts on the card under the banner: it no longer does.
+  - Missions: on an off day `t:<date>:rest` is first IN PLACE of Show up ("Your call." or "N lifting
+    days in a row."; done once the day is over without lifting), and no Beat it / dose / new mission.
+    `morning_text` opens with "Rest day from lifting: ..." and lists no lift.
+  - `Missions.ahead`: a day is `rest` when its plan is off; `lift` when not off and (the weekday habit
+    or called "lift") and `can_lift`. Each day carries `call`, `rule` ("rest" | "lift": what it is
+    without a call) and `can_lift`. On a rest day the PT and the others ARE pretended (it used to
+    pretend nothing). A day CALLED rest hands its lifts to the day after (`carried`), which is then
+    a lift day whatever its weekday: the card says "moves to tomorrow", and that has to hold for a
+    player who lifts on Mondays and Fridays too. `PhonePush.forecast` takes a day called "lift",
+    and the day after one called "rest", as a lift day.
+  - Screens: the Today card's chip row is `TodayView._day_row`: the split's kinds and "Rest" (meta
+    `rest_chip`; without a split: Lift and Rest). Rest tapped again, a kind, or the banner's "Lift
+    today" (meta `lift_today`) makes it a lift day again; `_call_day`, `_pick_kind`. The header tag
+    reads "Rest day"; the banner (`_rest_row(plan)`, meta `rest_row`) says "REST DAY · YOUR CALL" or
+    "· N DAYS IN A ROW", what moves, and that the run, PT and a walk are fine. Coming up
+    (`AheadView`): every day card has a key in a slot of one width (`KEY_W`; a button with an icon
+    sets its own width), "Rest" on a lift day, "Lift" on a rest day or a day off (meta `ahead_call` =
+    "<date>:<want>"); `_call` stores it and `_fill(sh)` rebuilds the sheet in place (the box never
+    gets shorter while it is open; taps are ignored for `QUIET_MS` after one, since the opposite key
+    is then under the finger). Coming up is no longer read only in this one respect.
+  - Tests: dose_test (the off plan, calls, with_call, the rest mission, the morning text), ahead_test
+    (calls move the split a day; a day off called a lift day), walkthroughs focus and ahead.
+- Cycling and vest walks are in a Miscellaneous corner (2026-11-23, "Move cycling and weighted vest
+  walks completely to their own little miscellaneous area, don't have them as daily goals or as a main
+  section anywhere, just as something I still can add or track but very sporadically").
+  - Never a goal: `Missions.OTHER` is ["climb", "run"], so a ride or a vest walk is never in
+    `plan.others`, never a daily or weekly mission, never in Coming up or the morning text, however
+    often it was done. From the week of 2026-11-23 on no bounty monster is weak to cycling
+    (`Bounty.SIDE_OUT_FROM`; the weeks before keep their weakness, so no past bounty changed).
+  - Never a main section: `Misc.MAIN` = ["lift", "climb", "run"] is what a screen lists (the Log tab's
+    three big keys, the Hero tab's three level tiles); `Misc.SIDE` = ["ride"]. The Log tab ends in
+    "Miscellaneous": small keys for Cycling (meta `side_tile`) and each misc kind (`_small_tile`, meta
+    `misc_tile`, the kind's short name). Journey -> Stats ends in "Miscellaneous" (meta `misc_area`):
+    one line per activity ever logged (`_side_row`, meta `side_row` = "ride" | "misc:<kind>") that
+    opens a sheet with its numbers (`_open_side`: the old cycling / vest walk card, the cycling level)
+    and "Log one". Gone from the main screens: the cycling card, the "Longest ride" then-and-now
+    chip and trophy-room plaque, the "ridden" fact. `App.next_goals` (the Hero tab's "Almost
+    there") leaves out the goals of a `Misc.SIDE` discipline (the ported `NextUp` is untouched, for
+    parity); the trophy cabinet's Cycling chip goes last.
+  - The RULES are untouched: cycling is still one of `TT.DISCIPLINES` (level, records, trophies, gear,
+    campaign bosses weak to it, parity), a ride or a walk earns exactly what it did, shows in the
+    history, the week card, recaps and the reel, and still counts as load in the muscle map. A new
+    main list must loop over `Misc.MAIN`, not `TT.DISCIPLINES`.
+  - Tests: ahead_test (rides and walks never planned), bounty_test, walkthrough misc.
+- Also 2026-11-23, found by running the walkthroughs on a Monday:
+  - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
+    ("Single arm incline home cable") made the key, the card and so the page wider than the window
+    (470 of 440 px). The movement and the variation are now `Kit.clip_fit` labels
+    (`LogLiftEditor.CHIP_MOVE_W` 150, `CHIP_VARIATION_W` 120). It only showed on a day the demo
+    player had already done the long-named lift, so the long_names walkthrough should also be run
+    at normal size, not only with `--fingers`.
+  - The bounty walkthrough pretends it is the Tuesday of next week to see last week's recap offered;
+    when that Tuesday is in the first week of a month the month's recap comes first. It now takes
+    that one as opened.
+  - The touch walkthrough set `scroll_vertical = 0` before checking that the page follows the finger
+    in parts of a unit; the glide before it had stopped between two units (the page was long enough
+    for it not to reach the end), and that part of a unit stayed (`tt_fine`). It now goes back to
+    the top with `ts._scroll_to`.
+  - The demo player trains by the weekday (lifts on Mondays and Fridays), and `ShotHelper.demo_saved`
+    logs today too. The `today` and `workout` walkthroughs failed on those days (rows already ticked,
+    "Continue workout", the plan full of the demo's own lifts): both now take out the demo's sessions
+    of today's weekday first. A walkthrough about the day's plan must do the same.
 - Also 2026-11-21: switching tabs kept the old tab's scroll position (the new screen's first build in
   `UiScreen` kept what it found); `main._refresh` now resets it before adding the screen (anchor walkthrough).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
@@ -1170,8 +1255,8 @@ touch (fingers: flick, glide, stop, tap, hold, drags from keys and text boxes, y
 workout (Start workout from the Today card, the kept draft, hold seconds, finger sizes, year data),
 phone (rename a lift, small backups, the phone's own morning message: see above, year data),
 long_names (long lift names on every screen that lists lifts: nothing wider than the column, year data),
-focus (the training focus: an added press, weekly sets, rest day, a leg day left alone, Settings; `new` data),
-ahead (the Coming up card and sheet: the next days as they will probably go; year data),
+focus (the training focus: an added press, weekly sets, a rest day and the Rest chip / Lift today, a leg day left alone, Settings; `new` data),
+ahead (the Coming up card and sheet: the next days as they will probably go, and a day's Rest / Lift key; year data),
 todo (the to-do list: the card, the sheet, adding without the Add key moving; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 

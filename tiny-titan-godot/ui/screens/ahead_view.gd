@@ -5,8 +5,18 @@ extends RefCounted
 ## with every day as it will probably go: its kind, the lifts with what to aim
 ## for and the other ways to do them, the lift a training focus adds, the
 ## movement to try, the PT, the likely climb or run, a rest day when one is
-## due. It is a look, to plan and look forward: nothing in it is logged,
-## ticked or stored, and it moves with what is really done.
+## due. It is a look, to plan and look forward: nothing in it is logged or
+## ticked, and it moves with what is really done.
+## The one thing that can be set here is what a day IS (Missions.call_of):
+## every day has a key, Rest on a lift day (its lifts move to the next lift
+## day and every day after follows) and Lift on a rest day or a day off.
+
+## After a key was tapped the sheet is rebuilt, and the opposite key now sits
+## where the finger is: taps are ignored for this long.
+const QUIET_MS = 450
+static var _quiet_until = 0
+## The width of a day's Rest / Lift key.
+const KEY_W = 88
 
 ## Days on the Hero tab's card (the sheet has Missions.AHEAD_DAYS).
 const STRIP_DAYS = 4
@@ -143,7 +153,7 @@ static func _line(icon: String, text: String, color = null) -> Control:
 
 
 ## One day of the look-ahead.
-static func _day_card(a: Dictionary, wu: String, du: String) -> Control:
+static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Control:
 	var plan = a.plan
 	var w = Missions.ahead_word(a)
 	var col = _color(str(w.what))
@@ -160,6 +170,18 @@ static func _day_card(a: Dictionary, wu: String, du: String) -> Control:
 	head.add_child(names)
 	var label = "Rest day" if bool(a.rest) else (str(plan.label) if (bool(a.lift) and str(plan.label) != "") else ("Lift" if bool(a.lift) else str(w.text)))
 	head.add_child(Kit.vcenter(Kit.tag(label, col, true, 12)))
+	# The player's call for the day: Rest on a lift day, Lift on any other.
+	if sh != null and (bool(a.lift) or bool(a.get("can_lift", false))):
+		var want = "rest" if bool(a.lift) else "lift"
+		var key = Kit.button("Rest" if want == "rest" else "Lift", "secondary", _call.bind(sh, a, want), "sm", "moon" if want == "rest" else "lift")
+		key.tooltip_text = "No lifting that day: its lifts move to the next lift day, and the days after follow" if want == "rest" else "Lift that day"
+		key.set_meta("ahead_call", "%s:%s" % [str(a.date), want])
+		# Both keys in a slot of one width (a button with an icon sets its own):
+		# after a tap the other key is exactly where this one was.
+		var slot = MarginContainer.new()
+		slot.custom_minimum_size = Vector2(KEY_W, 0)
+		slot.add_child(key)
+		head.add_child(Kit.vcenter(slot))
 	c.add(head)
 	# What the day's plan gives each of its muscles, and where the week then
 	# stands against its target (a training focus).
@@ -176,8 +198,8 @@ static func _day_card(a: Dictionary, wu: String, du: String) -> Control:
 				tags.add_child(Kit.tag(text, Pal.PANEL2, false, 10))
 		c.add(tags)
 	if bool(a.rest):
-		c.add(_line("moon", "%d hard days in a row by then" % int(plan.rest.run), Pal.SECOND))
-		c.add(Kit.clip("A walk, PT and stretches are fine. The lifts move to the day after.", 11, Pal.MUTED))
+		c.add(_line("moon", "Your call: a rest from lifting" if str(a.get("call", "")) == "rest" else "%d lifting days in a row by then" % int(plan.rest.run), Pal.SECOND))
+		c.add(Kit.clip("%s. A run, PT and a walk are fine." % Missions.off_moves(plan, "the day after"), 11, Pal.MUTED))
 	elif bool(a.lift):
 		for l in plan.lifts:
 			if not bool(l.pt):
@@ -234,18 +256,40 @@ static func _week_card(days: Array):
 ## The sheet: every day of the look-ahead.
 static func open() -> void:
 	Sfx.tick()
-	var days = App.ahead()
 	var sh = Kit.sheet("Coming up")
+	_fill(sh)
+	sh.open()
+
+
+## (Re)build the sheet. It never gets shorter while it is open, so a key
+## tapped near its end stays under the finger when a day loses its lifts.
+static func _fill(sh) -> void:
+	if sh.box.is_inside_tree():
+		sh.box.custom_minimum_size.y = maxf(sh.box.custom_minimum_size.y, sh.box.size.y)
+	for ch in sh.box.get_children():
+		sh.box.remove_child(ch)
+		ch.queue_free()
+	var days = App.ahead()
 	if not _any(days):
 		sh.box.add_child(Kit.para("Not enough workouts yet to look ahead. After a few weeks this shows what the next days will probably be.", 13, Pal.MUTED))
 	else:
-		sh.box.add_child(Kit.para("The next days if each one goes as planned. Nothing here is logged, and it moves with what you really do.", 12, Pal.MUTED))
+		sh.box.add_child(Kit.para("The next days if each one goes as planned. Tap Rest on a day to take it off lifting: its lifts move to the next lift day and everything after follows. Nothing here is logged.", 12, Pal.MUTED))
 		var week = _week_card(days)
 		if week != null:
 			sh.box.add_child(week)
 		for a in days:
-			sh.box.add_child(_day_card(a, App.weight_unit(), App.distance_unit()))
+			sh.box.add_child(_day_card(a, App.weight_unit(), App.distance_unit(), sh))
 	var ok = Kit.button("Got it", "primary", sh.close, "lg")
 	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sh.box.add_child(ok)
-	sh.open()
+
+
+## Call a day of the look-ahead a rest day or a lift day, and show what that
+## does to the days after it.
+static func _call(sh, a: Dictionary, want: String) -> void:
+	if Time.get_ticks_msec() < _quiet_until:
+		return
+	_quiet_until = Time.get_ticks_msec() + QUIET_MS
+	Sfx.tick()
+	App.update_settings({"dayCalls": Missions.with_call(App.settings(), str(a.date), want, str(a.get("rule", "")), App.today)})
+	_fill(sh)

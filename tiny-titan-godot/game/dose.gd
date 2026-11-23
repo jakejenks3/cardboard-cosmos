@@ -42,7 +42,7 @@ extends RefCounted
 const DAYS = 7
 ## Sets a climbing session is worth: the forearms (fingers) only, see the top.
 const CLIMB_SETS = {"forearms": 4.0}
-## A rest day is due after this many days in a row with a hard session.
+## A rest day (a rest from lifting) is due after this many lifting days in a row.
 const REST_AFTER = 5
 const ANCHOR_DAYS = 14
 ## The days looked at for how often a muscle is trained, and the most sets a
@@ -449,25 +449,30 @@ static func extra_done(l: Dictionary, sessions: Array, date: String, same: Dicti
 # Rest and the weekly run
 # ---------------------------------------------------------------------------
 
-## Does a session load the body: any climb, run or ride, and a lift with more
-## in it than physical therapy and stretches. A walk does not.
+## Is a session strength work: a lift with more in it than physical therapy
+## and stretches. A REST DAY IS A REST FROM LIFTING (the user, 2026-11-23:
+## "use today as rest day from strength, so I'll still run and do PT"): a run,
+## a ride, a climb, a walk, PT and stretches are all fine on one, and a day
+## with only those is a day off in the count of lifting days in a row. (Until
+## then any climb, run or ride counted as a hard day too.)
 static func is_hard(s: Dictionary, marks: Dictionary) -> bool:
-	var disc = str(s.get("discipline", ""))
-	if disc == "lift":
-		for ex in s.get("exercises", []):
-			if not LiftTrend.real_sets(ex.get("sets", [])).is_empty() and not Dosage.is_mobility(ex, marks):
-				return true
+	if str(s.get("discipline", "")) != "lift":
 		return false
-	return disc == "climb" or disc == "run" or disc == "ride"
+	for ex in s.get("exercises", []):
+		if not LiftTrend.real_sets(ex.get("sets", [])).is_empty() and not Dosage.is_mobility(ex, marks):
+			return true
+	return false
 
 
+## Was there strength work on `date`?
 static func hard_on(sessions: Array, marks: Dictionary, date: String) -> bool:
 	return sessions.any(func(s): return str(s.get("date", "")) == date and is_hard(s, marks))
 
 
-## {"run": hard days in a row up to `today` (today's own counts once it has
-## one), "today": a hard session is logged today, "due": a rest day is due
-## today (REST_AFTER in a row before it, and nothing hard yet)}.
+## {"run": lifting days in a row up to `today` (today's own counts once it has
+## one), "today": strength work is logged today, "due": a rest day is due
+## today by the count (REST_AFTER in a row before it, and no lifting yet)}.
+## The player's own call for a day comes on top (Missions.day_plan: `off`).
 static func rest(sessions: Array, marks: Dictionary, today: String) -> Dictionary:
 	var days = {}
 	for s in sessions:

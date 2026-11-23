@@ -395,7 +395,10 @@ func _trophies(state: Dictionary) -> void:
 	# --- filter chips -----------------------------------------------------------
 	var chips = Kit.flow(6)
 	chips.add_child(Kit.chip("All", _filter == "all", _set_filter.bind("all")))
-	for g in Achievements.groups():
+	# Cycling's trophies are still there to earn; its chip goes last (Misc.SIDE).
+	var groups = Achievements.groups()
+	groups = groups.filter(func(g): return not Misc.SIDE.has(str(g.id))) + groups.filter(func(g): return Misc.SIDE.has(str(g.id)))
+	for g in groups:
 		var ch = Kit.chip(g.name, _filter == g.id, _set_filter.bind(g.id))
 		ch.icon = Icons.tex(Icons.for_emoji(g.icon))
 		ch.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

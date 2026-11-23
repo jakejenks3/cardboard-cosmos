@@ -105,8 +105,6 @@ static func _plaques() -> Control:
 	var prs = App.state.get("prs", {})
 	if float(prs.get("longestRunM", 0.0)) > 0.0:
 		items.append(["run", "Longest run", Fmt.fmt_distance(float(prs.longestRunM), du), Pal.RUN])
-	if float(prs.get("longestRideM", 0.0)) > 0.0:
-		items.append(["ride", "Longest ride", Fmt.fmt_distance(float(prs.longestRideM), du), Pal.RIDE])
 	if prs.get("climbMaxSend") != null:
 		items.append(["climb", "Hardest send", Xp.grade_label(int(prs.climbMaxSend)), Pal.CLIMB])
 	if prs.get("longestHangSec") != null and float(prs.longestHangSec) > 0.0:

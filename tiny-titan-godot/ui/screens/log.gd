@@ -110,21 +110,27 @@ func build() -> void:
 
 func _build_picker() -> void:
 	add_child(Kit.section_title("Log a workout"))
-	var grid = Kit.grid(2, 10)
-	for d in TT.DISCIPLINES:
+	var grid = Kit.grid(Misc.MAIN.size(), 10)
+	for d in Misc.MAIN:
 		grid.add_child(_picker_tile(d))
 	add_child(grid)
 	add_child(_body_tile())
-	# Miscellaneous: activities outside the four disciplines (game/misc.gd).
+	# Reading is not a workout: its key opens the reading sheet (game/reading.gd).
+	add_child(_reading_tile())
+	# Miscellaneous: what is done now and then, in small keys at the end.
+	# Cycling (Misc.SIDE) and the activities outside the four disciplines
+	# (game/misc.gd: a weighted vest walk).
 	var mhead = Kit.section_title("Miscellaneous")
 	mhead.set_meta("misc_section", true)
 	add_child(mhead)
-	var misc = Kit.grid(1 if Misc.ORDER.size() == 1 else 2, 10)
+	var misc = Kit.grid(2, 10)
+	for d in Misc.SIDE:
+		var st = _small_tile(str(TT.DISCIPLINE_META[d].name), d, Pal.disc(d), d, str(PICKER_TIP[d]))
+		st.set_meta("side_tile", d)
+		misc.add_child(st)
 	for k in Misc.ORDER:
 		misc.add_child(_misc_tile(k))
 	add_child(misc)
-	# Reading is not a workout: its key opens the reading sheet (game/reading.gd).
-	add_child(_reading_tile())
 	# Workouts jotted in the phone note (app/inbox.gd): the PC reads the note (a
 	# browser cannot fetch a Google Doc), so the phone app has no such key.
 	if not OS.has_feature("web"):
@@ -171,19 +177,26 @@ func _body_tile() -> Button:
 	return b
 
 
-## A misc activity's key, in the misc colour: its icon, its name and what it takes.
+## A misc activity's key, in the misc colour: its icon and its short name.
 func _misc_tile(kind: String) -> Button:
 	var m = Misc.meta(kind)
-	var h = Kit.hbox(12)
+	var b = _small_tile(str(m.short), str(m.icon), Pal.MISC, "%s:%s" % [TT.MISC, kind], "%s: %s" % [str(m.name), str(m.tip).to_lower()])
+	b.set_meta("misc_tile", kind)
+	return b
+
+
+## A small key of the Miscellaneous section: an activity done now and then.
+func _small_tile(title: String, icon: String, col: Color, target: String, tip: String) -> Button:
+	var h = Kit.hbox(8)
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_child(Icons.rect(str(m.icon), 34))
-	var t = LogWidgets.on_face(Kit.label(str(m.name), 18, null, true))
+	h.add_child(Icons.rect(icon, 32))
+	var t = LogWidgets.on_face(Kit.label(title, 15, null, true))
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(t)
-	var b = LogWidgets.key(str(m.name), Pal.MISC, h, _pick.bind("%s:%s" % [TT.MISC, kind]), 12, 10, 2, Pal.MISC.lightened(0.3))
-	b.custom_minimum_size.y = 64
+	var b = LogWidgets.key(title, col, h, _pick.bind(target), 10, 8, 2, col.lightened(0.3))
+	b.custom_minimum_size.y = 52
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.tooltip_text = str(m.tip)
+	b.tooltip_text = tip
 	return b
 
 

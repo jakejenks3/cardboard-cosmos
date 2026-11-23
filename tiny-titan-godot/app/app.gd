@@ -523,7 +523,17 @@ func claimable_quests() -> int:
 
 
 func next_goals(limit: int = 4) -> Array:
-	return NextUp.next_goals(state, limit)
+	# Not the goals of a discipline kept in the Miscellaneous area (cycling,
+	# Misc.SIDE): it is done now and then and is nothing to chase. The ported
+	# NextUp is left as it is (the parity tests compare it).
+	var out = []
+	for g in NextUp.next_goals(state, 100000):
+		if g.get("discipline") != null and Misc.SIDE.has(str(g.discipline)):
+			continue
+		out.append(g)
+		if out.size() >= limit:
+			break
+	return out
 
 
 ## True when the data folder was redirected with TINY_TITAN_DATA (the automated tests).

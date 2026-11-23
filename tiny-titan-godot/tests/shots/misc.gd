@@ -105,8 +105,13 @@ func run(m: Node, t: SceneTree) -> void:
 		if n is Control and n.has_meta("misc_section"):
 			section = n
 	check(section != null, "the Log picker has a Miscellaneous section")
-	var key = ShotHelper.find_button(main, "Weighted vest walk")
-	check(key != null, "with the weighted vest walk in it")
+	var key = ShotHelper.find_button(main, "Vest walk")
+	check(key != null and key.has_meta("misc_tile"), "with the weighted vest walk in it")
+	# Cycling is kept there too, as a small key under the three main ones.
+	var ride_key = ShotHelper.find_button(main, "Cycling")
+	var run_key = ShotHelper.find_button(main, "Running")
+	check(ride_key != null and ride_key.has_meta("side_tile") and run_key != null and section != null and ride_key.global_position.y > section.global_position.y and run_key.global_position.y < section.global_position.y and ride_key.size.y < run_key.size.y, "cycling is a small key in the section too; lifting, climbing and running are the big ones")
+	check(ShotHelper.find_button(main, "Lifting") != null and ShotHelper.find_button(main, "Climbing") != null and absf(ShotHelper.find_button(main, "Lifting").global_position.y - run_key.global_position.y) < 1.0, "the three main keys share one row")
 	if key != null:
 		ShotHelper.reveal(key)
 	await shot("misc_picker")
@@ -188,14 +193,41 @@ func run(m: Node, t: SceneTree) -> void:
 	App.go("journey", "stats")
 	await ShotHelper.wait(tree, 0.8)
 	var card = null
+	var area = null
+	var own_card = false
 	for n in ShotHelper.walk(main):
-		if n is Control and n.has_meta("misc_card"):
+		if n is Control and n.has_meta("side_row") and str(n.get_meta("side_row")) == "misc:vest_walk":
 			card = n
-	check(card != null, "Journey, Stats has a vest walk card")
+		if n is Control and n.has_meta("misc_area"):
+			area = n
+		if n is Control and n.has_meta("misc_card"):
+			own_card = true
+	check(card != null and area != null and not own_card and card.global_position.y > area.global_position.y, "Journey, Stats: the vest walk is one line under Miscellaneous, with no card of its own")
 	if card != null:
 		ShotHelper.reveal(card)
-		check(ShotHelper.find_text(card, "20 lb") != null, "with the heaviest vest")
-	await shot("misc_stats")
+		await ShotHelper.frames(tree, 3)
+		await shot("misc_stats")
+		await ShotHelper.click(tree, card)
+		await ShotHelper.wait(tree, 0.7)
+		var numbers = _sheet()
+		check(numbers != null and ShotHelper.find_text(numbers, "20 lb") != null and ShotHelper.find_button(numbers, "Log one") != null, "a tap opens its numbers (the heaviest vest) and a key to log one")
+		await shot("misc_stats_sheet")
+		await _close_sheets()
+	# Cycling: the same, one line and a sheet (the demo year has rides).
+	var ride_row = null
+	for n in ShotHelper.walk(main):
+		if n is Control and n.has_meta("side_row") and str(n.get_meta("side_row")) == "ride":
+			ride_row = n
+	check(ride_row != null and ShotHelper.find_text(main, "Cycling") != null, "cycling is a line there too")
+	if ride_row != null:
+		ShotHelper.reveal(ride_row)
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.click(tree, ride_row)
+		await ShotHelper.wait(tree, 0.7)
+		var rs = _sheet()
+		check(rs != null and ShotHelper.all_text(rs).contains("Level") and ShotHelper.all_text(rs).contains("longest"), "its sheet has the level and the distances")
+		await shot("misc_ride_sheet")
+		await _close_sheets()
 	ShotHelper.scroll_main(main, 0)
 	await shot("misc_stats_chart")
 	App.go("journey", "chronicle")

@@ -27,17 +27,23 @@ static func card() -> Control:
 	words.add_child(t)
 	words.add_child(Kit.clip(Dates.format_date(App.today, {"weekday": "long", "month": "short", "day": "numeric"}), 12, Pal.MUTED, true))
 	head.add_child(words)
-	if str(plan.label) != "":
+	# A rest day (a rest from lifting: the player's call, or enough lifting days
+	# in a row) says so where the day's kind would be.
+	var off = bool(plan.get("off", false))
+	if off:
+		head.add_child(Kit.vcenter(Kit.tag("Rest day", Pal.SECOND, true, 13)))
+	elif str(plan.label) != "":
 		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 13)))
 	c.add(head)
 	if not plan.cycle.is_empty():
 		c.add(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
-		c.add(_split_row(plan))
-	# A training focus (game/dose.gd): a rest day when one is due, and the sets
-	# the day's muscles got this week.
+	# What today is, one tap to change it: the split's kinds and Rest.
+	if not plan.cycle.is_empty() or off or plan.lifts.any(func(l): return not bool(l.pt)):
+		c.add(_day_row(plan))
+	if off:
+		c.add(_rest_row(plan))
+	# A training focus (game/dose.gd): the sets the day's muscles got this week.
 	var focus = str(plan.get("focus", "")) != ""
-	if focus and bool(plan.rest.due) and not Dose.hard_on(App.sessions(), App.pt(), App.today):
-		c.add(_rest_row(plan.rest))
 	c.add(_feel_row())
 	if App.sessions().any(func(s): return str(s.get("discipline", "")) == "lift"):
 		c.add(RecoveryView.row())
@@ -45,7 +51,8 @@ static func card() -> Control:
 		c.add(DoseView.row(plan))
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
 	if nothing:
-		c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for.", 13, Pal.MUTED))
+		if not off:
+			c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for.", 13, Pal.MUTED))
 		return c
 	# What the focus adds (a muscle that is short this week) goes first: the
 	# heavy lift before the usual ones.
@@ -190,36 +197,55 @@ static func _set_feel(v: int) -> void:
 	App.toast("Marked: %s. Your goals stay as they are." % ["", "tired", "okay", "strong"][v], "info", "muscle")
 
 
-## Enough hard days in a row (training focus): take today off.
-static func _rest_row(rest: Dictionary) -> Control:
-	var c = Kit.card(0, DoseView.open, 8)
+## A rest day, a rest from lifting (the player's call, or enough lifting
+## days in a row): what waits for tomorrow, what is still fine today, and a
+## key to lift after all.
+static func _rest_row(plan: Dictionary) -> Control:
+	var rest = plan.rest
+	var c = Kit.card(0, Callable(), 8)
 	c.accent(Pal.SECOND)
 	c.set_meta("rest_row", true)
 	var h = Kit.hbox(8)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(Kit.vcenter(Icons.rect("moon", 24)))
 	var v = Kit.vbox(1)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.label("REST DAY · %d DAYS IN A ROW" % int(rest.run), 10, Pal.SECOND, true))
-	v.add_child(Kit.clip("Muscle is built while you rest", 13, Pal.TEXT, true))
-	v.add_child(Kit.clip("A walk, PT and stretches are fine", 11, Pal.MUTED))
+	v.add_child(Kit.label("REST DAY · YOUR CALL" if str(rest.get("call", "")) == "rest" else "REST DAY · %d DAYS IN A ROW" % int(rest.run), 10, Pal.SECOND, true))
+	v.add_child(Kit.clip(Missions.off_moves(plan), 13, Pal.TEXT, true))
+	v.add_child(Kit.clip("Your run, PT and a walk are still fine", 11, Pal.MUTED))
 	h.add_child(v)
+	var b = Kit.button("Lift today", "secondary", _call_day.bind("lift"), "sm", "lift")
+	b.tooltip_text = "Make today a lift day after all"
+	b.set_meta("lift_today", true)
+	h.add_child(Kit.vcenter(b))
 	c.add(h)
 	return c
 
 
-## The training split: a chip per kind of the cycle (today's lit). Tapping
-## another one plans today as that kind; tapping the one the split gave goes
-## back to it.
-static func _split_row(plan: Dictionary) -> Control:
+## What today is, one tap to change it: a chip per kind of the training split
+## (today's lit; another one plans today as that kind, the split's own goes
+## back to it) and one for a rest day. Without a split: Lift and Rest.
+## Rest = no lifting today (Missions.call_of): the day's lifts are tomorrow's
+## and the split follows, a day later. Tapping Rest again, a kind, or "Lift
+## today" on the banner makes it a lift day again.
+static func _day_row(plan: Dictionary) -> Control:
 	var v = Kit.vbox(4)
 	var chips = Kit.hbox(6)
+	var off = bool(plan.get("off", false))
+	if plan.cycle.is_empty():
+		var lb = Kit.chip("Lift", not off, _call_day.bind("lift"), Pal.LIFT, 13)
+		lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lb.tooltip_text = "Lift today"
+		chips.add_child(lb)
 	for k in plan.cycle:
-		var b = Kit.chip(str(Missions.KIND_SHORT[k]), str(k) == str(plan.kind), _pick_kind.bind(str(k)), Pal.LIFT, 13)
+		var b = Kit.chip(str(Missions.KIND_SHORT[k]), not off and str(k) == str(plan.kind), _pick_kind.bind(str(k)), Pal.LIFT, 13)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.tooltip_text = "Plan today as a %s" % str(Missions.KIND_NAMES[k]).to_lower()
 		chips.add_child(b)
+	var rb = Kit.chip("Rest", off, _call_day.bind("rest"), Pal.SECOND, 13)
+	rb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rb.tooltip_text = "No lifting today: the day's lifts move to tomorrow, and the days after follow"
+	rb.set_meta("rest_chip", true)
+	chips.add_child(rb)
 	# The split combo: lift days this week in the split's order.
 	var cb = Missions.combo(App.sessions(), App.today, plan.cycle, App.pt())
 	if int(cb.now) >= 2:
@@ -234,12 +260,41 @@ static func _pick_kind(kind: String) -> void:
 	Sfx.tick()
 	var st = App.settings()
 	var plan = App.plan()
-	if kind == str(plan.kind) and not bool(plan.picked):
+	var off = bool(plan.get("off", false))
+	if kind == str(plan.kind) and not bool(plan.picked) and not off:
 		return
-	# The kind the split itself gives today: the pick is dropped.
-	var own = Missions.day_kind(App.sessions(), App.today, plan.cycle, App.pt()).kind
-	App.update_settings({"dayPick": {} if kind == own else {"date": App.today, "kind": kind}})
+	var patch = {}
+	if off:
+		# A kind tapped on a rest day: a lift day after all.
+		patch["dayCalls"] = Missions.with_call(st, App.today, "lift", "rest" if bool(plan.rest.auto) else "lift", App.today)
+	if kind != str(plan.kind) or bool(plan.picked):
+		# The kind the split itself gives today: the pick is dropped.
+		var own = Missions.day_kind(App.sessions(), App.today, plan.cycle, App.pt()).kind
+		patch["dayPick"] = {} if kind == own else {"date": App.today, "kind": kind}
+	App.update_settings(patch)
 	App.toast("Today: %s" % str(Missions.KIND_NAMES[kind]).to_lower(), "info", "lift")
+
+
+## Call today a rest day (a rest from lifting) or a lift day. Rest tapped on
+## a rest day goes back to lifting.
+static func _call_day(want: String) -> void:
+	var plan = App.plan()
+	var off = bool(plan.get("off", false))
+	if want == "lift" and not off:
+		return
+	if want == "rest" and off:
+		want = "lift"
+	if want == "rest" and Dose.hard_on(App.sessions(), App.pt(), App.today):
+		Sfx.tick()
+		App.toast("You have lifted today: it stays a lift day", "info", "lift")
+		return
+	Sfx.tick()
+	App.update_settings({"dayCalls": Missions.with_call(App.settings(), App.today, want, "rest" if bool(plan.rest.auto) else "lift", App.today)})
+	var now = App.plan()
+	if want == "rest":
+		App.toast("Rest day. %s." % Missions.off_moves(now), "info", "moon")
+	else:
+		App.toast("Lifting today%s" % ((": " + str(now.label).to_lower()) if str(now.label) != "" else ""), "info", "lift")
 
 
 static func _kicker(text: String, tip: String) -> Control:

@@ -221,8 +221,6 @@ func _then_now_facts(sessions: Array, s: Dictionary, wu: String, du: String) -> 
 		out.append({"label": "Hardest send", "then": Xp.grade_label(first_send), "now": Xp.grade_label(max_send)})
 	if first_run > 0.0 and float(s.prs.longestRunM) > first_run:
 		out.append({"label": "Longest run", "then": Fmt.fmt_distance(first_run, du), "now": Fmt.fmt_distance(s.prs.longestRunM, du)})
-	if first_ride > 0.0 and float(s.prs.longestRideM) > first_ride:
-		out.append({"label": "Longest ride", "then": Fmt.fmt_distance(first_ride, du), "now": Fmt.fmt_distance(s.prs.longestRideM, du)})
 	var b = s.body
 	if b.firstWeightKg != null and b.latestWeightKg != null and b.firstWeightDate != b.latestWeightDate:
 		out.append({"label": "Body weight", "then": Fmt.fmt_weight(b.firstWeightKg, wu), "now": Fmt.fmt_weight(b.latestWeightKg, wu)})
@@ -410,7 +408,8 @@ func _build_stats() -> void:
 	add_child(hcard)
 
 	# --- in perspective: one tile per fact -----------------------------------------
-	var facts = FunFacts.fun_facts(s)
+	# (Not the distance ridden: cycling is kept in the Miscellaneous area.)
+	var facts = FunFacts.fun_facts(s).filter(func(f): return not str(f.detail).contains("ridden"))
 	if not facts.is_empty():
 		add_child(Kit.section_title("In perspective"))
 		var nums = []
@@ -435,20 +434,75 @@ func _build_stats() -> void:
 		if pace != null and float(pace) > 0.0:
 			best.append(value_chip("Best pace", Fmt.fmt_pace(pace, du), Pal.RUN))
 		add_child(_distance_card("run", t.runDistanceM, t.runElevationM, s.prs.longestRunM, du, best))
-	if int(by.ride) > 0:
-		var spd = s.prs.bestRideSpeedKmh
-		var best2 = []
-		if spd != null and float(spd) > 0.0:
-			best2.append(value_chip("Top speed", Fmt.fmt_speed(spd, du), Pal.RIDE))
-		add_child(_distance_card("ride", t.rideDistanceM, t.rideElevationM, s.prs.longestRideM, du, best2))
-	# Misc activities (game/misc.gd): one card per kind that was ever logged.
-	for k in Misc.ORDER:
-		var mt = Misc.totals(s, k)
-		if mt != null and int(mt.sessions) > 0:
-			add_child(_misc_card(k, mt, du))
 	# Reading (game/reading.gd), once any page was logged.
 	if Reading.pages(s) > 0:
 		add_child(_reading_card(s))
+	# Miscellaneous, last and small: cycling and the misc activities (a vest
+	# walk), each a line once it was ever logged; a tap opens its numbers.
+	var side = []
+	if int(by.ride) > 0:
+		side.append({"id": "ride", "icon": "ride", "badge": "ride", "name": str(TT.DISCIPLINE_META.ride.name), "color": Pal.RIDE, "n": int(by.ride), "m": float(t.rideDistanceM)})
+	for k in Misc.ORDER:
+		var mt = Misc.totals(s, k)
+		if mt != null and int(mt.sessions) > 0:
+			side.append({"id": "%s:%s" % [TT.MISC, k], "icon": str(Misc.meta(k).icon), "badge": TT.MISC, "name": str(Misc.meta(k).name), "color": Pal.MISC, "n": int(mt.sessions), "m": float(mt.distanceM)})
+	if not side.is_empty():
+		var mh = Kit.section_title("Miscellaneous")
+		mh.set_meta("misc_area", true)
+		add_child(mh)
+		for x in side:
+			add_child(_side_row(x, du))
+
+
+## An activity of the Miscellaneous area as one line: its icon, its name, how
+## often and how far in all. A tap opens its numbers (_open_side).
+func _side_row(x: Dictionary, du: String) -> Card:
+	var c = Kit.card(0, _open_side.bind(str(x.id)), 8)
+	c.set_meta("side_row", str(x.id))
+	c.tooltip_text = "%s: all its numbers" % str(x.name)
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Parts.disc_badge(str(x.badge), 32, str(x.icon))))
+	var nm = Kit.clip(str(x.name), 13, x.color, true)
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(Kit.vcenter(nm))
+	h.add_child(Kit.vcenter(Kit.label("%d time%s · %s" % [int(x.n), "" if int(x.n) == 1 else "s", Fmt.fmt_distance(float(x.m), du)], 12, Pal.MUTED, true)))
+	h.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
+	c.add(h)
+	return c
+
+
+## The numbers of one activity of the Miscellaneous area, and a key to log it.
+func _open_side(id: String) -> void:
+	Sfx.tick()
+	var s = App.state
+	var t = s.totals
+	var du = App.distance_unit()
+	var sh = null
+	if id == "ride":
+		sh = Kit.sheet(str(TT.DISCIPLINE_META.ride.name))
+		var spd = s.prs.bestRideSpeedKmh
+		var best = [value_chip("Level", str(int(s.levels.ride.level)), Pal.RIDE, "Your cycling level")]
+		if spd != null and float(spd) > 0.0:
+			best.append(value_chip("Top speed", Fmt.fmt_speed(spd, du), Pal.RIDE))
+		sh.box.add_child(_distance_card("ride", t.rideDistanceM, t.rideElevationM, s.prs.longestRideM, du, best))
+	else:
+		var kind = id.substr(TT.MISC.length() + 1)
+		sh = Kit.sheet(str(Misc.meta(kind).name))
+		sh.box.add_child(_misc_card(kind, Misc.totals(s, kind), du))
+	var add = Kit.button("Log one", "secondary", _log_side.bind(sh, id), "lg", "plus")
+	add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	add.set_meta("side_log", id)
+	sh.box.add_child(add)
+	var ok = Kit.button("Close", "ghost", sh.close, "lg")
+	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sh.box.add_child(ok)
+	sh.open()
+
+
+func _log_side(sh, id: String) -> void:
+	sh.close()
+	App.open_log(id)
 
 
 ## "1.2 blue whales" -> ["1.2", "blue whales"].
