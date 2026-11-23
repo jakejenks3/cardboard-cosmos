@@ -681,6 +681,7 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 		events = Diff.diff_bulk(before, state, fresh)
 	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null, settings()))
 	events = _with_extras(events, _project_events(fresh))
+	events = _with_extras(events, _split_events(fresh))
 	var ids = []
 	for s in fresh:
 		ids.append(s.id)
@@ -688,6 +689,21 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
 		res["replay"] = replay_moves(fresh[0])
 	result_ready.emit(res)
+
+
+## Record cards for the reel: a run's time over a distance (its best mile,
+## 5K... typed as a split, or the run itself) that beats the best before it
+## (game/run_splits.gd). A first time over a distance is no record yet.
+func _split_events(fresh: Array) -> Array:
+	var out = []
+	var fresh_ids = {}
+	for s in fresh:
+		fresh_ids[s.id] = true
+	var du = distance_unit()
+	for r in RunSplits.records(saved.sessions.filter(func(s): return not fresh_ids.has(s.id)), fresh):
+		out.append({"type": "pr", "icon": str(TT.DISCIPLINE_META.run.icon), "title": "%s!" % str(RunSplits.by_id(str(r.id)).best),
+			"detail": "%s (was %s) · %s" % [RunSplits.fmt_time(int(r.sec)), RunSplits.fmt_time(int(r.was)), Fmt.fmt_pace(RunSplits.pace(str(r.id), float(r.sec)), du)]})
+	return out
 
 
 ## The workout replay of a lift session (the results reel's hero acts it out):

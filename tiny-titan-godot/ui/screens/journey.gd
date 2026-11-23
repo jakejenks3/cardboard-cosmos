@@ -433,6 +433,13 @@ func _build_stats() -> void:
 		var best = []
 		if pace != null and float(pace) > 0.0:
 			best.append(value_chip("Best pace", Fmt.fmt_pace(pace, du), Pal.RUN))
+		# The best time over each distance: a run of that distance, or a best
+		# split typed for a longer one (game/run_splits.gd).
+		var split_bests = RunSplits.bests(sessions)
+		for dist in RunSplits.DISTS:
+			var sb = split_bests.get(str(dist.id))
+			if sb != null:
+				best.append(value_chip(str(dist.best), RunSplits.fmt_time(int(sb.sec)), Pal.RUN, "%s · %s" % [Dates.format_date(str(sb.date), {"month": "short", "day": "numeric", "year": "numeric"}), Fmt.fmt_pace(RunSplits.pace(str(dist.id), float(sb.sec)), du)]))
 		add_child(_distance_card("run", t.runDistanceM, t.runElevationM, s.prs.longestRunM, du, best))
 	# Reading (game/reading.gd), once any page was logged.
 	if Reading.pages(s) > 0:

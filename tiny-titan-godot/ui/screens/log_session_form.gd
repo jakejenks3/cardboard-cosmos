@@ -45,6 +45,8 @@ const HANG_EDGES = [10, 15, 20, 25, 30, 0]
 const HANG_SECS = [5, 7, 10, 15, 20]
 var distance: String = ""
 var elev: String = ""
+## A run's best splits as typed, {RunSplits id: text} (game/run_splits.gd).
+var splits: Dictionary = {}
 ## Misc activities: which one, and the weight carried in the player's unit ("" = none).
 var kind: String = ""
 var carried: String = ""
@@ -63,6 +65,12 @@ var _save_btn: Button = null
 var _cardio_template: Control = null
 var _chip_row: HBoxContainer = null
 var _pace_slot: HBoxContainer = null
+var _splits_card = null
+var _splits_box: VBoxContainer = null
+var _splits_ids: Array = []
+var _split_echo: Dictionary = {}
+var _whole_line: Label = null
+var _split_note: Label = null
 
 
 func _init(owner_screen, d: String, edit_session = null, misc_kind: String = "") -> void:
@@ -105,6 +113,11 @@ func _init(owner_screen, d: String, edit_session = null, misc_kind: String = "")
 				var lk = Misc.load_kg(editing) if d == TT.MISC else 0.0
 				if lk > 0.0:
 					carried = LogWidgets.trim_num(Fmt.kg_to_unit(lk, wu), 1)
+				if d == "run" and editing.get("splits") is Dictionary:
+					for id in editing.splits:
+						var sec = editing.splits[id]
+						if RunSplits.by_id(str(id)) != null and (sec is int or sec is float) and float(sec) > 0.0:
+							splits[str(id)] = RunSplits.fmt_time(sec)
 	_take_draft()
 	# The most recent session of this discipline (and kind), for one-tap "same as last time".
 	for s in App.sessions():
@@ -254,6 +267,15 @@ func draft() -> Dictionary:
 			s["distanceM"] = maxf(0.0, Fmt.unit_to_m(LogWidgets.num(distance), du))
 			var e = LogWidgets.num(elev)
 			s["elevationM"] = maxf(0.0, e if du == "km" else e / FT_PER_M)
+			if discipline == "run":
+				# The best splits typed, for the distances that fit in the run.
+				var sp = {}
+				for id in _split_ids(float(s.distanceM)):
+					var split_sec = RunSplits.parse_time(str(splits.get(id, "")))
+					if split_sec > 0:
+						sp[id] = split_sec
+				if not sp.is_empty():
+					s["splits"] = sp
 			if discipline == TT.MISC:
 				s["kind"] = kind
 				var lv = maxf(0.0, LogWidgets.num(carried))
@@ -421,6 +443,7 @@ func refresh() -> void:
 	if not valid:
 		sub = _invalid_hint()
 	_fill_pace(st)
+	_fill_splits(d)
 	LogWidgets.fill_xp_preview(_xp_box, est, Pal.disc(discipline), side, sub)
 
 
@@ -924,6 +947,31 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	_pace_slot = Kit.hbox(6)
 	c.add(_pace_slot)
 	parent.add_child(c)
+	# A run's best splits (game/run_splits.gd): the fields come by themselves
+	# once the distance has a mile, a 5K, a 10K... inside it (refresh fills them).
+	_splits_card = null
+	if discipline == "run":
+		_splits_card = Kit.card(6, Callable(), 12)
+		_splits_card.accent(col)
+		_splits_card.set_meta("splits_card", true)
+		var shead = Kit.hbox(6)
+		var stitle = Kit.label("BEST SPLITS IN THIS RUN", 10, col, true)
+		stitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		shead.add_child(stitle)
+		shead.add_child(Kit.label("optional", 10, Pal.MUTED))
+		_splits_card.add(shead)
+		_splits_box = Kit.vbox(6)
+		_splits_card.add(_splits_box)
+		_whole_line = Kit.clip("", 12, Pal.TEXT, true)
+		_whole_line.set_meta("split_whole", true)
+		_splits_card.add(_whole_line)
+		_split_note = Kit.clip("", 11, Pal.ACCENT2)
+		_split_note.set_meta("split_note", true)
+		_splits_card.add(_split_note)
+		_splits_ids = ["(not filled yet)"]
+		_split_echo = {}
+		_splits_card.visible = false
+		parent.add_child(_splits_card)
 	# Keyboard order: distance → h → m → s → elevation.
 	var link_focus = func():
 		if not (is_instance_valid(de) and de.is_inside_tree()):
@@ -935,6 +983,91 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 		if editing == null and distance == "" and de.get_viewport().gui_get_focus_owner() == null:
 			de.grab_focus()
 	link_focus.call_deferred()
+
+
+## The distances a best split is asked for in a run of `distance_m`: the ones
+## inside it for the player's unit, and any that already has a time.
+func _split_ids(distance_m: float) -> Array:
+	var has = []
+	for id in splits:
+		if str(splits[id]).strip_edges() != "":
+			has.append(str(id))
+	return RunSplits.offered(distance_m, du, has)
+
+
+## The split fields of a run: a row per distance inside it, and what the run
+## itself is ("Half marathon: 1:55:20"). The rows are refilled only when the
+## distances change, never while one of them is typed in; the words beside
+## each box (the time as read, its pace) are brought up to date every time.
+func _fill_splits(d: Dictionary) -> void:
+	if _splits_card == null or not is_instance_valid(_splits_card):
+		return
+	var dist_m = float(d.get("distanceM", 0.0))
+	var dur = float(d.get("durationSec", 0))
+	var ids = _split_ids(dist_m)
+	var whole = RunSplits.whole(dist_m)
+	_splits_card.visible = not ids.is_empty() or whole != ""
+	if ids != _splits_ids:
+		_splits_ids = ids
+		Kit.clear(_splits_box)
+		_split_echo = {}
+		for id in ids:
+			_splits_box.add_child(_split_row(str(id)))
+	var slow = false
+	for id in ids:
+		var echo = _split_echo.get(id)
+		if echo == null or not is_instance_valid(echo):
+			continue
+		var typed = str(splits.get(id, "")).strip_edges()
+		var sec = RunSplits.parse_time(typed)
+		if typed == "":
+			# What the run's average pace would make of it, to go by.
+			var avg = dur / dist_m * float(RunSplits.by_id(id).m) if (dur > 0.0 and dist_m > 0.0) else 0.0
+			echo.text = ("avg %s" % RunSplits.fmt_time(avg)) if avg > 0.0 else ""
+			echo.add_theme_color_override("font_color", Pal.MUTED)
+		elif sec <= 0:
+			echo.text = "? write 7.45"
+			echo.add_theme_color_override("font_color", Pal.ACCENT2)
+		else:
+			var is_slow = RunSplits.slower_than_run(id, float(sec), dist_m, dur)
+			slow = slow or is_slow
+			echo.text = "%s%s · %s" % [RunSplits.fmt_time(sec), " ?" if is_slow else "", Fmt.fmt_pace(RunSplits.pace(id, float(sec)), du)]
+			echo.add_theme_color_override("font_color", Pal.ACCENT2 if is_slow else Pal.disc(discipline))
+	if is_instance_valid(_whole_line):
+		if whole != "":
+			var wn = str(RunSplits.by_id(whole).name)
+			_whole_line.text = ("%s: %s, this run's own time" % [wn, RunSplits.fmt_time(dur)]) if dur > 0.0 else ("%s: add the run's time above" % wn)
+		_whole_line.visible = whole != ""
+	if is_instance_valid(_split_note):
+		_split_note.text = "? A best split cannot be slower than the run's average pace"
+		_split_note.visible = slow
+
+
+## One split: what it is, the box to type its time in, and the time as read.
+func _split_row(id: String) -> Control:
+	var dist = RunSplits.by_id(id)
+	var row = Kit.hbox(8)
+	row.set_meta("split_row", id)
+	var nm = Kit.clip(str(dist.ask), 14, Pal.TEXT, true)
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nm.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(nm)
+	var e = LogWidgets.num_input(str(splits.get(id, "")), "0.00", "split." + id, 84)
+	e.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	e.select_all_on_focus = true
+	e.tooltip_text = "%s in this run: minutes.seconds (7.45), or 1.02.03 with hours" % str(dist.ask)
+	e.text_changed.connect(func(t):
+		splits[id] = t
+		refresh())
+	row.add_child(e)
+	var echo = Kit.label("", 12, Pal.MUTED, true)
+	echo.custom_minimum_size = Vector2(134, 0)
+	echo.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	echo.clip_text = true
+	echo.set_meta("split_echo", id)
+	row.add_child(echo)
+	_split_echo[id] = echo
+	return row
 
 
 ## The weight row of a misc activity: the number, its unit, and quick picks

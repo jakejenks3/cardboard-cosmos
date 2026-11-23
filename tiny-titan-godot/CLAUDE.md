@@ -1093,6 +1093,35 @@ is the Windows handoff.
     history, the week card, recaps and the reel, and still counts as load in the muscle map. A new
     main list must loop over `Misc.MAIN`, not `TT.DISCIPLINES`.
   - Tests: ahead_test (rides and walks never planned), bounty_test, walkthrough misc.
+- Best splits inside a run (2026-11-23, "add an area to runs for certain splits within that run. So if I
+  run 13.1 miles, game will automatically know to add a field to input my best mile, 5k, 10k split etc.
+  Normal distances within that distance I ran"). `game/run_splits.gd` (`RunSplits`, pure).
+  - STORED on the run: `session.splits` = {id: seconds}, only what was typed, absent when none. The rules
+    do not read it (no XP, level or trophy), so parity is untouched. `DISTS`: 1k (asked of km players),
+    mile and 10mi (asked of mile players), 5k, 10k, half, full; a split stored under any id is shown.
+  - A run within `NEAR` 1% of a distance IS that distance (13.1 miles is a half marathon, 3.1 miles a
+    5K): `whole(distance_m)`. Its time is the run's own, with nothing to type (`of_session` adds it).
+    `offered(distance_m, du, also)` = the distances clearly inside the run (`fits`), for the player's
+    unit plus any that already has a time: 13.1 miles asks for the mile, 5K, 10K and 10 mile.
+  - `parse_time`: a phone's number pad has a dot and no colon, so "7:45", "7.45", "7 45" and "745" are
+    all 7:45; "1.02.03" / "10203" an hour more; one or two digits alone are minutes; seconds of 60 or
+    more are no time. `fmt_time`, `pace`, `rows(session)`, `bests(sessions)` ({id: {sec, date,
+    sessionId}}, of equal times the earlier), `records(before, fresh)` (only where there was a time to
+    beat), `slower_than_run` (a BEST split slower than the run's average pace is a typing slip).
+  - The run form (`LogSessionForm`: `splits` = {id: typed text}, `_split_ids`, `_fill_splits`,
+    `_split_row`): a card "BEST SPLITS IN THIS RUN" (meta `splits_card`, hidden until the distance has
+    one) under the distance, a row per distance (meta `split_row`; box fkey "split.<id>"), the time as
+    read and its pace beside the box (meta `split_echo`; empty: "avg 8:48", what the run's average
+    pace would make of it; "?" when it is no time or slower than the run), a line for what the run
+    itself is (meta `split_whole`), a note when one is too slow (meta `split_note`). `refresh` brings
+    the words up to date on every keystroke but refills the rows ONLY when the distances change, so a
+    box is never rebuilt while it is typed in. `draft()` keeps the times of the distances that still
+    fit, so making a run shorter drops what is no longer inside it. Only runs: not rides, not walks.
+  - Shown: a session's sheet (`SessionView.split_rows`, meta `split_rows`: time, pace, a BEST tag, the
+    run itself among them), Journey -> Stats' running card ("Fastest mile", "Fastest 5K"... chips), and
+    the results reel (`App._split_events`: a "pr" card "Fastest 5K!" with the time it beat).
+  - Tests: `tests/run_splits_test.gd`; walkthrough `tests/shots/splits.gd` (year data, also with
+    `--fingers`). `ShotHelper.walk` only sees what is on screen: a hidden card is not found.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1259,6 +1288,7 @@ godot --headless --path . --script res://tests/dosage_test.gd
 godot --headless --path . --script res://tests/dose_test.gd
 godot --headless --path . --script res://tests/ahead_test.gd
 godot --headless --path . --script res://tests/todos_test.gd
+godot --headless --path . --script res://tests/run_splits_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1287,6 +1317,7 @@ long_names (long lift names on every screen that lists lifts: nothing wider than
 focus (the training focus: an added press, weekly sets, no rest day by itself, the Rest chip / Lift today, a leg day left alone, Settings; `new` data),
 ahead (the Coming up card and sheet: the next days as they will probably go, and a day's Rest / Lift key; year data),
 todo (the to-do list: the card, the sheet, adding without the Add key moving; year data),
+splits (a run's best splits: the fields that come with the distance, the sheet, Journey, the record; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

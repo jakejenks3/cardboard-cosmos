@@ -200,6 +200,10 @@ static func open(session: Dictionary) -> void:
 			box.add_child(bits)
 		else:
 			bits.queue_free()
+		# A run's best splits (game/run_splits.gd).
+		var split_list = RunSplits.rows(session)
+		if not split_list.is_empty():
+			box.add_child(split_rows(split_list, session, du))
 
 	var notes = str(session.get("notes", "")).strip_edges() if session.get("notes") != null else ""
 	if notes != "":
@@ -233,6 +237,35 @@ static func open(session: Dictionary) -> void:
 	keys.add_child(Kit.button("Close", "ghost", sheet.close, "lg"))
 	box.add_child(keys)
 	sheet.open()
+
+
+## A run's best splits: a line each (the distance, its time, its pace), the
+## run itself among them when it is one of the distances, and a gold tag on
+## the ones that are the player's best over that distance.
+static func split_rows(list: Array, session: Dictionary, du: String) -> Control:
+	var bests = RunSplits.bests(App.sessions())
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.well(10, 8))
+	p.set_meta("split_rows", true)
+	var v = Kit.vbox(4)
+	v.add_child(Kit.label("BEST SPLITS IN THIS RUN", 10, Pal.RUN, true))
+	for r in list:
+		var h = Kit.hbox(8)
+		var nm = Kit.clip(str(r.name) + (" (the run)" if bool(r.whole) else ""), 13, Pal.TEXT, true)
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(nm)
+		var best = bests.get(str(r.id))
+		if best != null and str(best.sessionId) == str(session.get("id", "")):
+			h.add_child(Kit.vcenter(Kit.tag("BEST", Pal.ACCENT, true, 10)))
+		h.add_child(Kit.vcenter(Kit.label(RunSplits.fmt_time(int(r.sec)), 14, Pal.RUN, true)))
+		var pc = Kit.label(Fmt.fmt_pace(float(r.pace), du), 11, Pal.MUTED)
+		pc.custom_minimum_size = Vector2(74, 0)
+		pc.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		h.add_child(Kit.vcenter(pc))
+		v.add_child(h)
+	p.add_child(v)
+	return p
 
 
 static func _edit(sheet: Sheet, session: Dictionary) -> void:
