@@ -1099,8 +1099,10 @@ is the Windows handoff.
   - STORED on the run: `session.splits` = {id: seconds}, only what was typed, absent when none. The rules
     do not read it (no XP, level or trophy), so parity is untouched. `DISTS`: 1k (asked of km players),
     mile and 10mi (asked of mile players), 5k, 10k, half, full; a split stored under any id is shown.
-  - A run within `NEAR` 1% of a distance IS that distance (13.1 miles is a half marathon, 3.1 miles a
-    5K): `whole(distance_m)`. Its time is the run's own, with nothing to type (`of_session` adds it).
+  - A run from `SHORT` 0.25% under a distance to `NEAR` 1% past it IS that distance (13.1 miles is a
+    half marathon, 3.1 miles a 5K; 13.0 miles is not, see "A race distance counts from the miles it is
+    written as"): `whole(distance_m)`. Its time is the run's own, with nothing to type (`of_session`
+    adds it).
     `offered(distance_m, du, also)` = the distances clearly inside the run (`fits`), for the player's
     unit plus any that already has a time: 13.1 miles asks for the mile, 5K, 10K and 10 mile.
   - `parse_time`: a phone's number pad has a dot and no colon, so "7:45", "7.45", "7 45" and "745" are
@@ -1178,15 +1180,17 @@ is the Windows handoff.
     kg and km player sees everything as before.
   - `Units.text(s, settings)`: a text of the rules with its kg, km, km/h, "m:ss /km" and metres of
     elevation ("N m of elevation", "N m climbed") in the player's units. Numbers are as exact as a
-    threshold needs ("Run 13.11 mi in one go.", "Lift 132.3 lb in a set.", "Lift 2,204,623 lb
-    lifetime."); a text that says "exactly" (the on-the-nose trophies) is left alone; "Ride 160 km (100
+    threshold needs ("Ride 62.14 mi in one go.", "Lift 132.3 lb in a set.", "Lift 2,204,623 lb
+    lifetime."), but a race on foot is said in the miles it is written as ("Run 13.1 mi in one go.":
+    `RACE_MILES`, see the next block); a text that says "exactly" (the on-the-nose trophies) is left
+    alone; "Ride 160 km (100
     miles)" reads "Ride 100 mi" (`WHOLE`). Used for a trophy's words (the cabinet's tile and sheet, meta
     `trophy_desc`; the reel's trophy card), `Items.unlock_hint`, a companion's hint, flavour lines, the
     Almost there rows (`goal.sub`), the reel's XP tooltip.
   - `Units.records(events, before.prs, state.prs, settings)` (in `App.commit_sessions`, before
     `Sides.fix_estimates`): the reel's record cards written again FROM THE RECORDS, so 230 lb is not
     229.9 from a kg rounded to one decimal: a lift's weight and estimate, the heaviest hang, the
-    longest run and ride, the fastest pace (its title too: "Fastest pace (3.11 mi+)!") and ride. Cards
+    longest run and ride, the fastest pace (its title too: "Fastest pace (3.1 mi+)!") and ride. Cards
     are found by the rules' own titles. `Sides.fix_estimates` writes its one-side card in the unit too.
   - `Units.xp_label(session, label, settings)`: a session's XP chips (`SessionView`) from the
     session's own numbers (a lift's volume, a run's distance and climb, a vest walk's load).
@@ -1194,6 +1198,32 @@ is the Windows handoff.
     unit typed into the string; a text of the rules shown somewhere new goes through `Units.text`.
   - Tests: `tests/units_test.gd` (it also sweeps every trophy, gear hint and companion hint for a kg
     or km left over); walkthrough `tests/shots/units.gd` (year data).
+- A race distance counts from the miles it is written as (2026-11-23, afternoon). With the trophies
+  now reading in miles it showed that a run typed as 13.1 miles is 15 m short of the Half Marathon
+  trophy's 21,097 m. Asked whether runs typed as 3.1, 6.2, 13.1 and 26.2 miles should earn the race
+  trophies and gear, the user said "Yes". This IS a change to the ported rules, made on request.
+  - `RunSplits.SHORT` (0.25%) and `RunSplits.counted(distance_m)`: a run up to SHORT under one of
+    `RunSplits.DISTS` counts as that distance: 3.1 miles (4,989 m) is a 5K, 6.2 a 10K, 13.1 a half
+    marathon, 26.2 a marathon; 3.0, 6.1, 13.0 and 26.1 miles are not; in kilometres 4.99 counts and
+    4.98 does not. Any other value comes back as it went in (a whole number stays one). It is used
+    by the getters of the trophies `run_5k`, `run_10k`, `run_half`, `run_marathon`, of the gear
+    `race_bib`, `carbon_racers`, `marathon_medal`, and by the pace record in `Derive`
+    (`bestPaceSecPerKm`, runs of a 5K or more: so a 3.1 mile run counts for it and for the
+    `run_pace_*` trophies, at the pace it was really run). `prs.longestRunM` and every other record
+    stay as typed. Everything is replayed from the log, so such runs already logged earn their
+    trophies the next time the game works the hero out; nothing has to be entered again.
+  - NOT changed: sums ("Marathon Month", lifetime kilometres), the secret "exactly 5.00 km" trophy,
+    and every ride (a ride typed as 62.1 miles is still short of the 100 km trophy; cycling is a side
+    area and was not asked about).
+  - `RunSplits.whole` has the same lower edge (SHORT under, NEAR past), so a run the run form calls
+    a half marathon is one that earns the trophy. Before, 13.0 and 26.1 miles were "a half" and "a
+    marathon" for the best times.
+  - Words: `Units.RACE_MILES` says those four distances as 3.1 / 6.2 / 13.1 / 26.2 mi, only in a text
+    about ONE run (`Units._one_run`: "in one go", "km+", the marathon medal's line; never a ride, a
+    month or a lifetime, which stay exact: "26.22 mi"). units_test checks that every race trophy and
+    piece of race gear is earned by the miles its words say and not by a tenth of a mile less.
+  - Parity still passes: no fixture has a run in those few metres. Tests: run_splits_test (the rules
+    through `Derive.derive`), units_test; walkthrough units.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1424,10 +1454,9 @@ scenario that sets `App.cloud._cfg` and calls `sync_now`, and open the web app w
 - A lift logged as both sides added up (Sides) is still ONE lift to the rules: its records and the
   Journey page's four strongest lifts go by the reps as typed. An older day typed a side (before
   the player started adding both arms up) is read as a total like the rest: it has to be edited.
-- The race trophies and gear go by metres (5,000, 10,000, 21,097, 42,195): a run typed as 3.1, 6.2,
-  13.1 or 26.2 miles is 11 to 30 m short of them and does not unlock them (3.11, 6.22, 13.11 and
-  26.22 do). `RunSplits` does count such a run as that distance for its best times. Found
-  2026-11-23 and put to the user; the rules were not changed.
+- Ride trophies and gear go by metres with no slack: a ride typed as 62.1 miles is 60 m short of
+  the 100 km trophy (62.2 earns it). Runs were given the slack on 2026-11-23, rides were not asked
+  about.
 - Chronicle titles, a boss's lines and other flavour that names a unit in WORDS ("kilometre
   thirty-two") stay as written.
 - A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules

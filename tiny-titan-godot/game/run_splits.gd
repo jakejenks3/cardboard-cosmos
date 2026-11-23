@@ -8,8 +8,14 @@ extends RefCounted
 ## STORED on the run session: session.splits = {id: seconds}, only what was
 ## typed, absent when there is none. Nothing in the rules reads it (no XP, no
 ## level, no trophy), so the parity tests are untouched. A run that IS one of
-## the distances (13.1 miles is a half marathon, 3.1 miles a 5K: NEAR) has
-## that distance's time by itself, from its own duration, with nothing to type.
+## the distances (13.1 miles is a half marathon, 3.1 miles a 5K: SHORT, NEAR)
+## has that distance's time by itself, from its own duration, with nothing to
+## type.
+##
+## The RULES go by the same reading of a distance (`counted`): the race
+## trophies and gear and the fastest pace over a 5K. The user, 2026-11-23,
+## asked whether runs typed as 3.1, 6.2, 13.1 and 26.2 miles should earn them
+## though each is a few metres short of the metric distance: "Yes".
 ##
 ## Pure logic. The Log tab's run form offers the fields (LogSessionForm), a
 ## session's sheet lists them (SessionView), Journey -> Stats has the best of
@@ -27,8 +33,14 @@ const DISTS = [
 	{"id": "half", "m": 21097.5, "name": "Half marathon", "ask": "Best half", "best": "Fastest half marathon", "units": ["km", "mi"]},
 	{"id": "full", "m": 42195.0, "name": "Marathon", "ask": "Best marathon", "best": "Fastest marathon", "units": ["km", "mi"]},
 ]
-## A run this close to a distance IS that distance: 13.1 miles are 21.08 of
-## the half marathon's 21.0975 km, 3.1 miles 4.99 of a 5K's 5 km.
+## A run this little SHORT of a distance still counts as it. The miles a race
+## is written as are a few metres under the metric distance: 3.1 miles are
+## 4,989 m of a 5K's 5,000 (0.22% short), 6.2 miles 9,978 of 10,000, 13.1 miles
+## 21,082 of the half marathon's 21,097.5 (0.07%), 26.2 miles 42,165 of 42,195.
+## A tenth of a mile less (3.0, 6.1, 13.0, 26.1) is not the race.
+const SHORT = 0.0025
+## A run up to this much PAST a distance is still that distance (its time is
+## the distance's own); one further past has the distance inside it.
 const NEAR = 0.01
 
 
@@ -39,12 +51,30 @@ static func by_id(id: String):
 	return null
 
 
-## The distance a run of `distance_m` is (within NEAR of it), or "".
+## The distance a run of `distance_m` is (from SHORT under it to NEAR past
+## it), or "".
 static func whole(distance_m: float) -> String:
 	for d in DISTS:
-		if absf(distance_m - float(d.m)) <= float(d.m) * NEAR:
+		var m = float(d.m)
+		if distance_m >= m * (1.0 - SHORT) and distance_m <= m * (1.0 + NEAR):
 			return str(d.id)
 	return ""
+
+
+## What a run of `distance_m` counts as for a rule that asks for a distance
+## (the trophy for a half marathon, the gear for a 10K, the fastest pace over
+## a 5K): a run SHORT of one of the distances counts as that distance, any
+## other run as what it is (the very value passed in, so a whole number stays
+## one). The records themselves (the longest run) stay as they were typed.
+static func counted(distance_m):
+	if not (distance_m is int or distance_m is float):
+		return distance_m
+	var v = float(distance_m)
+	for d in DISTS:
+		var m = float(d.m)
+		if v < m and v >= m * (1.0 - SHORT):
+			return m
+	return distance_m
 
 
 ## Is this distance clearly inside a run of `distance_m` (so it has a best

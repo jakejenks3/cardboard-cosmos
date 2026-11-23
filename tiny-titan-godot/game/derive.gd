@@ -415,7 +415,8 @@ static func _apply_session(s: Dictionary, session: Dictionary) -> void:
 			_chron(s, {"date": date, "kind": "pr", "icon": "👟", "title": "Longest run", "val": {"n": st.distanceM, "unit": "m"}, "discipline": "run"})
 		prs.longestRunM = max(prs.longestRunM, st.distanceM)
 		prs.bestRunElevM = max(prs.bestRunElevM, st.elevationM)
-		if st.distanceM >= 5000 and st.paceSecPerKm != null:
+		# (a run typed as 3.1 miles is a 5K: RunSplits.counted; not in the port)
+		if RunSplits.counted(st.distanceM) >= 5000 and st.paceSecPerKm != null:
 			if prs.bestPaceSecPerKm == null or st.paceSecPerKm < prs.bestPaceSecPerKm:
 				if prs.bestPaceSecPerKm != null:
 					pr_total += 1

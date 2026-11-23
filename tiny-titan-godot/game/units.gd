@@ -20,12 +20,19 @@ extends RefCounted
 ##
 ## With kg and km as the player's units everything comes back unchanged.
 ## A text that says "exactly" (a run of exactly 5.00 km) is about that very
-## number and is left alone. Pure logic: tests/units_test.gd.
+## number and is left alone. A race on foot is said in the miles it is written
+## as (RACE_MILES). Pure logic: tests/units_test.gd.
 
 ## Texts that read better written out than converted.
 const WHOLE = {
 	"mi": {"Ride 160 km (100 miles) in one go.": "Ride 100 mi in one go."},
 }
+
+## A race on foot in miles, the way runners write it. A run of that many
+## miles counts as the race (RunSplits.counted), so "Run 5 km in one go." is
+## "Run 3.1 mi in one go." and not 3.11. Only in a text about ONE run
+## (`_one_run`): a month's or a lifetime's kilometres, and a ride's, are exact.
+const RACE_MILES = {"5": "3.1", "10": "6.2", "21.1": "13.1", "42.2": "26.2", "42.195": "26.2"}
 
 static var _rx_cache = {}
 
@@ -87,6 +94,16 @@ static func distance(m: float, du: String) -> String:
 	return "%s %s" % [_short(v, 2), du]
 
 
+## Is this text about one run measured against a race distance ("Run 5 km in
+## one go.", "... over 5 km+.", "Fastest pace (5 km+)!", the marathon medal's
+## "42.195 km. Every one of them earned.")?
+static func _one_run(s: String) -> bool:
+	var t = s.to_lower()
+	if t.contains("ride") or t.contains("lifetime") or t.contains("month"):
+		return false
+	return t.contains("in one go") or t.contains("km+") or t.begins_with("42.195 km")
+
+
 ## A text of the rules in the player's units.
 static func text(s: String, settings) -> String:
 	var wu = weight_unit(settings)
@@ -102,7 +119,8 @@ static func text(s: String, settings) -> String:
 		# Speed and pace first: what is left that says km is a distance.
 		out = _swap(out, "(\\d[\\d,]*(?:\\.\\d+)?) ?km/h", func(m): return Fmt.fmt_speed(_num(m.get_string(1)), du))
 		out = _swap(out, "(\\d+):(\\d\\d) ?/km", func(m): return Fmt.fmt_pace(float(int(m.get_string(1)) * 60 + int(m.get_string(2))), du))
-		out = _swap(out, "(\\d[\\d,]*(?:\\.\\d+)?) ?km\\b", func(m): return distance(_num(m.get_string(1)) * 1000.0, du))
+		var races = RACE_MILES if (du == "mi" and _one_run(s)) else {}
+		out = _swap(out, "(\\d[\\d,]*(?:\\.\\d+)?) ?km\\b", func(m): return ("%s mi" % str(races[m.get_string(1)])) if races.has(m.get_string(1)) else distance(_num(m.get_string(1)) * 1000.0, du))
 		out = _swap(out, "(\\d[\\d,]*(?:\\.\\d+)?) m(?= of elevation| climbed| ↑)", func(m): return Fmt.fmt_elevation(_num(m.get_string(1)), du))
 	return out
 

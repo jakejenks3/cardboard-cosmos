@@ -1,8 +1,9 @@
 extends RefCounted
 ## The player's units where the rules write kg and km (run with the "year"
 ## data, pounds and miles): the results reel's record cards after a heavier
-## bench and a longer run, the XP labels of a run's sheet, a trophy's words and
-## what unlocks a piece of gear. Prints CHECK lines.
+## bench and a longer run, the XP labels of a run's sheet, a run typed as 13.1
+## miles earning the Half Marathon trophy and its shoes, a trophy's words.
+## Prints CHECK lines.
 
 const LB = 0.45359237
 const MI = 1609.344
@@ -65,6 +66,16 @@ func _wait_record() -> bool:
 	return false
 
 
+## Wait until the reel shows a card with this text, for a picture of it.
+func _wait_text(text: String) -> bool:
+	for i in range(160):
+		await ShotHelper.wait(tree, 0.25)
+		if ShotHelper.find_text(main, text) != null:
+			await ShotHelper.wait(tree, 0.6)
+			return true
+	return false
+
+
 ## A trophy's row as the cabinet makes it (AdventureScreen.open_trophy takes one).
 func _trophy(id: String) -> Dictionary:
 	var a = Achievements.by_id(id)
@@ -110,7 +121,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var run_card = cards.filter(func(e): return str(e.title) == "Longest run!")
 	check(run_card.size() == 1 and str(run_card[0].detail).begins_with("%s mi (was " % Units._short(miles, 2)) and str(run_card[0].detail).ends_with(" mi)"), "the longest run reads in miles (%s)" % (str(run_card[0].detail) if run_card.size() == 1 else str(cards)))
 	var pace_card = cards.filter(func(e): return str(e.title).begins_with("Fastest pace"))
-	check(pace_card.is_empty() or (str(pace_card[0].title) == "Fastest pace (3.11 mi+)!" and str(pace_card[0].detail).contains("/mi")), "a pace record is per mile (%s)" % str(pace_card))
+	check(pace_card.is_empty() or (str(pace_card[0].title) == "Fastest pace (3.1 mi+)!" and str(pace_card[0].detail).contains("/mi")), "a pace record is per mile (%s)" % str(pace_card))
 	check(cards.all(func(e): return not str(e.detail).contains(" km") and not str(e.detail).contains("/km") and not str(e.title).contains(" km")), "no record card says km (%s)" % str(cards.map(func(e): return "%s: %s" % [e.title, e.detail])))
 	if await _wait_record():
 		await ShotHelper.snap(tree, "units_2_run_record")
@@ -129,19 +140,35 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await ShotHelper.snap(tree, "units_3_run_sheet")
 	await _close_sheets()
 
+	# --- a run typed as 13.1 miles is a half marathon: the trophy and the shoes ---------------------
+	check(not App.state.achievements.has("run_half") and not App.state.items.has("carbon_racers"), "the demo player has not run a half marathon yet")
+	App.commit_sessions([App.build_session({"discipline": "run", "date": App.today, "distanceM": 13.1 * MI, "elevationM": 0.0, "durationSec": 6900})], "Run")
+	await ShotHelper.frames(tree, 3)
+	var got = reels[reels.size() - 1].events
+	check(App.state.achievements.has("run_half") and got.any(func(e): return str(e.type) == "achievement" and str(e.get("id", "")) == "run_half"), "a run typed as 13.1 miles earns the Half Marathon trophy")
+	check(App.state.items.has("carbon_racers") and got.any(func(e): return str(e.type) == "item" and str(e.get("id", "")) == "carbon_racers"), "and the shoes that go with it")
+	check(is_equal_approx(float(App.state.prs.longestRunM), 13.1 * MI), "the longest run stays 13.1 miles, as typed (%s m)" % str(App.state.prs.longestRunM))
+	if await _wait_text("Half Marathon"):
+		await ShotHelper.snap(tree, "units_4_half_earned")
+	await _dismiss_reels()
+	# One tenth of a mile less would not have been one.
+	var short_of = Derive.derive({"sessions": [App.build_session({"discipline": "run", "date": App.today, "distanceM": 13.0 * MI, "elevationM": 0.0, "durationSec": 6900})], "claims": [], "body": [], "purchases": [], "weeklyGoal": 3, "today": App.today})
+	check(not short_of.achievements.has("run_half"), "13.0 miles is not a half marathon")
+
 	# --- a trophy and a piece of gear --------------------------------------------------------------
 	AdventureScreen.open_trophy(_trophy("lift_220"))
 	await ShotHelper.wait(tree, 0.8)
 	sh = _sheet()
 	var d = _find("trophy_desc", sh)
 	check(d != null and str(d.text) == "Lift 485 lb in a set.", "a trophy's words are in pounds (%s)" % (str(d.text) if d != null else "-"))
-	await ShotHelper.snap(tree, "units_4_trophy")
+	await ShotHelper.snap(tree, "units_5_trophy")
 	await _close_sheets()
 	AdventureScreen.open_trophy(_trophy("run_half"))
 	await ShotHelper.wait(tree, 0.8)
 	sh = _sheet()
 	d = _find("trophy_desc", sh)
-	check(d != null and str(d.text) == "Run 13.11 mi in one go.", "and in miles (%s)" % (str(d.text) if d != null else "-"))
+	check(d != null and str(d.text) == "Run 13.1 mi in one go.", "and a race in the miles it is written as (%s)" % (str(d.text) if d != null else "-"))
+	await ShotHelper.snap(tree, "units_6_half_trophy")
 	await _close_sheets()
 
 	# Back in kg and km everything reads as the rules wrote it.

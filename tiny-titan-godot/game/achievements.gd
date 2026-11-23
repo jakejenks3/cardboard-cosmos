@@ -277,10 +277,13 @@ static func _build() -> Array:
 			_c("hand_lucky_sevens", "Lucky Sevens", "Seven V7 sends in one session.", "💎", 777, "climb", func(s): return Achievements._hand_flag(s, "luckySevens"), true),
 
 			# --- running -----------------------------------------------------------
-			_g("run_5k", "Parkrun", "Run 5 km in one go.", "🏃", 100, "run", func(s): return s.prs.longestRunM, 5000, "m"),
-			_g("run_10k", "Ten K", "Run 10 km in one go.", "🏃", 200, "run", func(s): return s.prs.longestRunM, 10000, "m"),
-			_g("run_half", "Half Marathon", "Run 21.1 km in one go.", "🎽", 500, "run", func(s): return s.prs.longestRunM, 21097, "m"),
-			_g("run_marathon", "Marathon", "Run 42.2 km in one go.", "🏅", 1200, "run", func(s): return s.prs.longestRunM, 42195, "m"),
+			# The four race distances go by RunSplits.counted: a run typed as 3.1, 6.2,
+			# 13.1 or 26.2 miles is a few metres short of the metric distance and counts
+			# (the user's call, 2026-11-23; not in the port).
+			_g("run_5k", "Parkrun", "Run 5 km in one go.", "🏃", 100, "run", func(s): return RunSplits.counted(s.prs.longestRunM), 5000, "m"),
+			_g("run_10k", "Ten K", "Run 10 km in one go.", "🏃", 200, "run", func(s): return RunSplits.counted(s.prs.longestRunM), 10000, "m"),
+			_g("run_half", "Half Marathon", "Run 21.1 km in one go.", "🎽", 500, "run", func(s): return RunSplits.counted(s.prs.longestRunM), 21097, "m"),
+			_g("run_marathon", "Marathon", "Run 42.2 km in one go.", "🏅", 1200, "run", func(s): return RunSplits.counted(s.prs.longestRunM), 42195, "m"),
 			_g("run_total_100", "Century", "Run 100 km lifetime.", "🛣️", 300, "run", func(s): return s.totals.runDistanceM, 100000, "m"),
 			_g("run_total_500", "Road Warrior", "Run 500 km lifetime.", "🛣️", 600, "run", func(s): return s.totals.runDistanceM, 500000, "m"),
 			_g("run_total_1000", "Thousand K", "Run 1,000 km lifetime.", "🛣️", 1200, "run", func(s): return s.totals.runDistanceM, 1000000, "m"),

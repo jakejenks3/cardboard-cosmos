@@ -27,14 +27,16 @@ func _init() -> void:
 	ok(Units.text("Lift 60 kg in a set.", US) == "Lift 132.3 lb in a set." and Units.text("Lift 100 kg in a set.", US) == "Lift 220.5 lb in a set." and Units.text("Lift 220 kg in a set.", US) == "Lift 485 lb in a set.", "the plate trophies in pounds", Units.text("Lift 60 kg in a set.", US))
 	ok(Units.text("Move 10,000 kg in one session.", US) == "Move 22,046 lb in one session." and Units.text("Lift 1,000,000 kg lifetime.", US) == "Lift 2,204,623 lb lifetime." and Units.text("Move 1,000 kg in a single set (reps × weight).", US) == "Move 2,205 lb in a single set (reps × weight).", "big weights keep their commas", Units.text("Lift 1,000,000 kg lifetime.", US))
 	ok(Units.text("Hang +20 kg on a 20 mm edge.", US) == "Hang +44.1 lb on a 20 mm edge.", "a hang's added weight; the edge stays in millimetres", Units.text("Hang +20 kg on a 20 mm edge.", US))
-	ok(Units.text("Run 5 km in one go.", US) == "Run 3.11 mi in one go." and Units.text("Run 21.1 km in one go.", US) == "Run 13.11 mi in one go." and Units.text("Run 42.2 km in one go.", US) == "Run 26.22 mi in one go.", "run distances, exact enough to say what a threshold is", Units.text("Run 21.1 km in one go.", US))
+	ok(Units.text("Run 5 km in one go.", US) == "Run 3.1 mi in one go." and Units.text("Run 10 km in one go.", US) == "Run 6.2 mi in one go." and Units.text("Run 21.1 km in one go.", US) == "Run 13.1 mi in one go." and Units.text("Run 42.2 km in one go.", US) == "Run 26.2 mi in one go.", "a race on foot in the miles it is written as (a run of that many miles counts)", Units.text("Run 21.1 km in one go.", US))
+	ok(Units.text("Run 42.2 km within one calendar month.", US) == "Run 26.22 mi within one calendar month." and Units.text("Ride 10 km in one go.", US) == "Ride 6.21 mi in one go." and Units.text("Run 5 km lifetime.", US) == "Run 3.11 mi lifetime." and Units.text("Run 8 km in one go.", US) == "Run 4.97 mi in one go.", "the kilometres of a month or a lifetime, of a ride, and a distance that is no race stay exact", Units.text("Run 42.2 km within one calendar month.", US))
+	ok(Units.text("42.195 km. Every one of them earned.", US) == "26.2 mi. Every one of them earned." and Units.text("Run 5 km in one go.", {"weightUnit": "lb", "distanceUnit": "km"}) == "Run 5 km in one go.", "the line of the marathon medal; a kilometre player reads 5 km")
 	ok(Units.text("Ride 500 km lifetime.", US) == "Ride 310.7 mi lifetime." and Units.text("Ride 5,000 km lifetime.", US) == "Ride 3,107 mi lifetime." and Units.text("Ride 100 km in one go.", US) == "Ride 62.14 mi in one go.", "longer distances with fewer decimals", Units.text("Ride 500 km lifetime.", US))
 	ok(Units.text("Ride 160 km (100 miles) in one go.", US) == "Ride 100 mi in one go.", "the imperial century is 100 miles", Units.text("Ride 160 km (100 miles) in one go.", US))
 	ok(Units.text("Average 30 km/h over a 20 km+ ride.", US) == "Average 18.6 mph over a 12.43 mi+ ride.", "a speed and a distance in one text", Units.text("Average 30 km/h over a 20 km+ ride.", US))
-	ok(Units.text("Average 5:00 /km or faster over 5 km+.", US) == "Average 8:03 /mi or faster over 3.11 mi+.", "a pace and a distance in one text", Units.text("Average 5:00 /km or faster over 5 km+.", US))
+	ok(Units.text("Average 5:00 /km or faster over 5 km+.", US) == "Average 8:03 /mi or faster over 3.1 mi+.", "a pace and a distance in one text", Units.text("Average 5:00 /km or faster over 5 km+.", US))
 	ok(Units.text("Climb 1,000 m of elevation in one ride.", US) == "Climb 3,281 ft of elevation in one ride." and Units.text("80 m climbed", US) == "262 ft climbed", "metres of elevation in feet", Units.text("Climb 1,000 m of elevation in one ride.", US))
 	ok(Units.text("A run of exactly 5.00 km. Not a step more.", US) == "A run of exactly 5.00 km. Not a step more." and Units.text("A ride of exactly 50.0 km.", US) == "A ride of exactly 50.0 km.", "a text about the very number is left alone")
-	ok(Units.text("Run a half marathon (21.1 km) in one go", US) == "Run a half marathon (13.11 mi) in one go" and Units.text("Reach cycling level 30 or ride 5,000 km lifetime", US) == "Reach cycling level 30 or ride 3,107 mi lifetime", "what unlocks gear", Units.text("Run a half marathon (21.1 km) in one go", US))
+	ok(Units.text("Run a half marathon (21.1 km) in one go", US) == "Run a half marathon (13.1 mi) in one go" and Units.text("Run a marathon (42.2 km) in one go", US) == "Run a marathon (26.2 mi) in one go" and Units.text("Reach cycling level 30 or ride 5,000 km lifetime", US) == "Reach cycling level 30 or ride 3,107 mi lifetime", "what unlocks gear", Units.text("Run a half marathon (21.1 km) in one go", US))
 	ok(Units.text("12,340 kg volume", US) == "27,205 lb volume" and Units.text("5.2 km", US) == "3.23 mi" and Units.text("30 min", US) == "30 min" and Units.text("12 reps", US) == "12 reps" and Units.text("", US) == "", "XP labels; minutes and reps are no units to change")
 	ok(Units.text("Lift 60 kg in a set.", METRIC) == "Lift 60 kg in a set." and Units.text("Run 5 km in one go.", METRIC) == "Run 5 km in one go." and Units.text("Run 5 km in one go.", {}) == "Run 5 km in one go." and Units.text("Run 5 km in one go.", null) == "Run 5 km in one go.", "kg and km players see the texts as they are")
 	ok(Units.text("Lift 60 kg in a set, then run 5 km.", {"weightUnit": "lb", "distanceUnit": "km"}) == "Lift 132.3 lb in a set, then run 5 km." and Units.text("Lift 60 kg in a set, then run 5 km.", {"weightUnit": "kg", "distanceUnit": "mi"}) == "Lift 60 kg in a set, then run 3.11 mi.", "each unit goes by its own setting")
@@ -79,7 +81,7 @@ func _init() -> void:
 	ok(str(out[2].detail) == "340 lb (was 330 lb)", "an estimate record in pounds", out[2])
 	ok(str(out[3].detail) == "+25 lb (was +10 lb)", "a hang record in pounds", out[3])
 	ok(str(out[4].detail) == "13.1 mi (was 10 mi)", "the longest run in miles", out[4])
-	ok(str(out[5].title) == "Fastest pace (3.11 mi+)!" and str(out[5].detail) == "8:03 /mi (was 8:51)", "the fastest pace per mile, title and all", out[5])
+	ok(str(out[5].title) == "Fastest pace (3.1 mi+)!" and str(out[5].detail) == "8:03 /mi (was 8:51)", "the fastest pace per mile, title and all", out[5])
 	ok(str(out[6].title) == "Fastest ride (12.43 mi+)!" and str(out[6].detail) == "18.6 mph (was 14.9)", "the fastest ride in miles an hour", out[6])
 	ok(str(evs[1].detail) == "104.3 kg (was 102.1 kg)" and Units.records(evs, bp, ap, METRIC) == evs and Units.records(evs, bp, ap, {}) == evs and Units.records(evs, null, ap, US) == evs, "the events given are untouched; kg and km players get them as they are")
 	var first_hang = Units.records([{"type": "pr", "title": "Heaviest hang!", "detail": "+11.3 kg"}], {"lifts": {}}, {"lifts": {}, "bestHangKg": 25.0 * LB}, US)
@@ -100,6 +102,29 @@ func _init() -> void:
 	var fresh = {"id": "b", "discipline": "lift", "date": "2026-11-13", "createdAt": 2, "exercises": [{"name": "Lateral Raise - Cable", "sets": [{"reps": 24, "weightKg": 15.0 * LB}]}]}
 	var side = Sides.fix_estimates([{"type": "pr", "title": "Lateral Raise - Cable est. 1RM PR", "detail": "12.2 kg (was 11.3 kg)"}], [fresh], before_log, US)
 	ok(side.size() == 1 and str(side[0].detail) == "21 lb (was 20 lb), going by one side", "a both-sides lift's estimate card in pounds", side)
+
+	# --- the miles a race is said in are miles that earn it ------------------------------------------
+	# (Units.RACE_MILES against the rules themselves: RunSplits.counted)
+	var said = {"run_5k": "3.1", "run_10k": "6.2", "run_half": "13.1", "run_marathon": "26.2"}
+	var wrong = []
+	for id in said:
+		var a = Achievements.by_id(id)
+		var words = Units.text(str(a.desc), US)
+		var at = {"prs": {"longestRunM": float(said[id]) * MI}}
+		var under = {"prs": {"longestRunM": (float(said[id]) - 0.1) * MI}}
+		if words != "Run %s mi in one go." % said[id] or not a.check.call(at) or a.check.call(under):
+			wrong.append([id, words, a.check.call(at), a.check.call(under)])
+	ok(wrong.is_empty(), "each race trophy is earned by the miles its words say, and not by a tenth of a mile less", wrong)
+	var gear = {"race_bib": "6.2", "carbon_racers": "13.1", "marathon_medal": "26.2"}
+	wrong = []
+	for id in gear:
+		var it = Items.by_id(id)
+		var hint = Units.text(str(it.unlock.hint), US)
+		var at = {"prs": {"longestRunM": float(gear[id]) * MI}}
+		var under = {"prs": {"longestRunM": (float(gear[id]) - 0.1) * MI}}
+		if not hint.contains("%s mi" % gear[id]) or not it.unlock.check.call(at) or it.unlock.check.call(under):
+			wrong.append([id, hint, it.unlock.check.call(at), it.unlock.check.call(under)])
+	ok(wrong.is_empty(), "and so is each piece of race gear", wrong)
 
 	print("UNITS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
