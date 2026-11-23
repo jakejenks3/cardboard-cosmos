@@ -575,10 +575,18 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 	head.add_child(Kit.vcenter(PixelFont.rect("NEXT TIME", 2, Pal.SECOND)))
 	c.add(head)
 	c.add(Kit.para(LiftHistory.describe_sets(t.sets, _fmt_w(wu)), 16, Pal.TEXT, true))
+	# Reps logged as both sides added up (Sides): what that is for one side.
+	var both = int(t.get("sides", 1)) > 1
+	if both and Sides.side_words(LiftTrend.real_sets(t.sets)) != "":
+		var sw = Kit.para("Both sides added up: %s." % Sides.side_words(LiftTrend.real_sets(t.sets)), 12, Pal.LIFT, true)
+		sw.set_meta("sides_words", true)
+		c.add(sw)
 	var why = ""
 	match str(t.kind):
 		"weight":
-			if bool(t.get("heavier", false)):
+			if bool(t.get("heavier", false)) and both:
+				why = "Every set at %s went past %d reps a side: too light to build much. Add %s and come down to %d reps, %d a side." % [Fmt.fmt_weight(float(t.kg), wu), LiftTrend.HIGH_REPS, Fmt.fmt_weight(float(t.addKg), wu), int(t.reps), LiftTrend.DOWN_TO]
+			elif bool(t.get("heavier", false)):
 				why = "Every set at %s went past %d reps: too light to build much. Add %s and come down to %d reps." % [Fmt.fmt_weight(float(t.kg), wu), LiftTrend.HIGH_REPS, Fmt.fmt_weight(float(t.addKg), wu), int(t.reps)]
 			else:
 				why = "Every set at %s got %d reps: add %s." % [Fmt.fmt_weight(float(t.kg), wu), int(t.reps), Fmt.fmt_weight(float(t.addKg), wu)]
@@ -745,16 +753,29 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 	c.add(Charts.legend(legend))
 	# Said in words, not only in a tooltip (a phone shows none): this line is worked
 	# out, it is not weight that was on the bar.
+	# Reps logged as both sides added up (Sides): estimates and the ladder go
+	# by one side.
+	var both = int(ctx.get("sides", 1)) > 1
 	if metric == "e1rm":
-		c.add(Kit.para("An estimate: the single rep your best set of each day works out to. Not a lift you did; Top set shows those.", 11, Pal.MUTED))
+		c.add(Kit.para("An estimate: the single rep your best set of each day works out to%s. Not a lift you did; Top set shows those." % (", going by the reps of one side" if both else ""), 11, Pal.MUTED))
+	elif both and (metric == "reps" or metric == "best"):
+		c.add(Kit.para("Reps as you log them: both sides added up.", 11, Pal.MUTED))
 	holder.add_child(c)
 
 	if ctx.st != null:
-		JourneyLifts._records(holder, ctx.st, wu)
+		var side_e1rm = -1.0
+		if both:
+			side_e1rm = 0.0
+			for h in history:
+				if not bool(h.get("note", false)):
+					side_e1rm = maxf(side_e1rm, float(LiftTrend.day(h.get("sets", [])).e1rm))
+		JourneyLifts._records(holder, ctx.st, wu, side_e1rm)
 	if mode == "kg":
 		var steps = LiftTrend.rep_ladder(history)
 		if steps.size() >= 2:
-			holder.add_child(Kit.section_title("Best for reps"))
+			var lt = Kit.section_title("Best for reps a side" if both else "Best for reps")
+			lt.set_meta("ladder_title", "side" if both else "set")
+			holder.add_child(lt)
 			var lad = RepLadder.new()
 			lad.setup(steps, _fmt_w(wu), Pal.LIFT)
 			lad.tooltip_text = "The heaviest weight you did for at least that many reps"

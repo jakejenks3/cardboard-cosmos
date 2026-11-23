@@ -1033,6 +1033,10 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 				"new": false, "last": l.last.sets, "lastDate": str(l.last.date)}]
 		else:
 			l["options"] = options_for(l, hist, avoid, marks)
+	# A lift whose reps are both sides added up (Sides): its sets say so, here
+	# and in every way to do it, so whatever makes an aim of them goes by one side.
+	for l in extra + lifts:
+		_tag_sides(l, settings)
 	var label = str(KIND_NAMES.get(kind, "")) if kind != "" else str(GROUP_NAMES.get(group, ""))
 	var focus = Dose.plan_id(settings)
 	# The weekly run being built up has ONE day (Dose.run_day): on that day it
@@ -1054,6 +1058,23 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		"rest": {"due": off, "call": call},
 		"run": run_goal, "runToday": run_today,
 		"doseToday": Dose.day_dose(extra + lifts, before, today, marks, settings, kind, group) if (focus != "" and not off) else []}
+
+
+## Tag the sets of a planned lift, and of each way to do it, whose reps are
+## both sides added up (Sides.tag_sets makes copies: the log is left alone).
+## The lift and the way get "sides": 2.
+static func _tag_sides(l: Dictionary, settings: Dictionary) -> void:
+	var n = Sides.n(settings, str(l.get("name", "")))
+	if n > 1 and l.get("last") is Dictionary:
+		var last = l.last.duplicate()
+		last["sets"] = Sides.tag_sets(last.get("sets", []), n)
+		l["last"] = last
+		l["sides"] = n
+	for o in l.get("options", []):
+		var on = Sides.n(settings, str(o.get("name", "")))
+		if on > 1:
+			o["last"] = Sides.tag_sets(o.get("last", []), on)
+			o["sides"] = on
 
 
 ## One line on why today is that kind of day: "Yesterday was a pull day",
@@ -1202,8 +1223,10 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			desc = "New: %s. Find a weight you can do for 8 to 12 good reps." % short_name(str(main.name))
 		else:
 			desc = "Last time %s. Aim for %s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
+			if int(aim.get("sides", 1)) > 1:
+				desc += " Both sides added up: %s." % Sides.side_words(LiftTrend.real_sets(aim.sets))
 			if bool(aim.get("heavier", false)):
-				desc += " Past %d reps a set the weight is too light to build much: heavier, fewer reps." % LiftTrend.HIGH_REPS
+				desc += " Past %d reps a %s the weight is too light to build much: heavier, fewer reps." % [LiftTrend.HIGH_REPS, "side" if int(aim.get("sides", 1)) > 1 else "set"]
 		var alts = []
 		for o in l.options.slice(1):
 			alts.append(way_word(o, str(main.move)))
@@ -1632,6 +1655,8 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String, du
 			tags.append("new")
 		var t = str(o.move) + (" (%s)" % ", ".join(PackedStringArray(tags)) if not tags.is_empty() else "")
 		var aim = "" if bool(o.new) else LiftHistory.describe_sets(LiftTrend.next_target(o.last, _step_kg(wu)).sets, fmt_w)
+		if aim != "" and int(o.get("sides", 1)) > 1:
+			aim += " (both sides added up)"
 		return t + (": " + aim if aim != "" else "")
 	for l in plan.lifts:
 		if bool(l.pt) or not l.has("options") or l.options.is_empty():

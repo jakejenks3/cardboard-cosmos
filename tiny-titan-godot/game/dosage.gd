@@ -14,6 +14,12 @@ extends RefCounted
 ## indirect" adds half a set for each set of a lift that also works it (the
 ## library's "also works", as the muscle map counts it: Recovery.also_parts).
 ## Nothing here is an estimate of strength: weights are sets really logged.
+##
+## A lift logged as BOTH SIDES ADDED UP (Sides: a single arm cable raise typed
+## as 25 for a 12 and a 13) is marked "L+R" and its reps are given a side as
+## well: reps a set and the rep ranges count ONE side of it, so a reader does
+## not take 25 for a set of 25 (the user, 2026-11-23). The weight moved is the
+## total as logged, which is right.
 
 const WINDOW_DAYS = 28
 ## Days listed one by one at the end.
@@ -45,10 +51,13 @@ static func part(lift_name: String) -> String:
 
 
 ## A lift's sets in words. A band has no weight to log: it is not "bodyweight".
-static func sets_words(lift_name: String, sets: Array, fmt_w: Callable) -> String:
+## `sides` 2: the reps are both sides added up, and what that is a side is said.
+static func sets_words(lift_name: String, sets: Array, fmt_w: Callable, sides: int = 1) -> String:
 	var t = LiftHistory.describe_sets(sets, fmt_w)
 	if str(LiftNames.split(lift_name).variation).to_lower().contains("band"):
 		t = t.replace(" bodyweight", " (a band, no weight)")
+	if sides > 1 and Sides.side_words(sets) != "":
+		t += " (both sides added up: %s)" % Sides.side_words(sets)
 	return t
 
 
@@ -65,10 +74,14 @@ static func is_mobility(ex: Dictionary, marks: Dictionary) -> bool:
 ## The numbers behind the text (also what the tests read):
 ## {from, to, days, weeks, first, count: {discipline: n in the window},
 ##  days_trained, parts: {part: {direct, indirect, last7, reps, vol}},
-##  bands: [n per REP_BANDS], sets, lifts: [..], mobility: [..]}.
+##  bands: [n per REP_BANDS], sets, lifts: [..], mobility: [..],
+##  both: [names of the lifts logged as both sides added up]}.
+## A part's "reps" and the bands count ONE side of a lift logged as both
+## sides added up (Sides); "vol" is the weight as logged, both sides.
 static func figures(saved: Dictionary, today: String) -> Dictionary:
 	var sessions = saved.get("sessions", []).filter(func(s): return str(s.get("date", "")) <= today and str(s.get("date", "")) != "")
 	var marks = saved.get("pt", {})
+	var settings = saved.get("settings") if saved.get("settings") is Dictionary else {}
 	var first = today
 	for s in sessions:
 		if str(s.date) < first:
@@ -78,7 +91,7 @@ static func figures(saved: Dictionary, today: String) -> Dictionary:
 	var from = Dates.add_days(today, -(days - 1))
 	var week_from = Dates.add_days(today, -6)
 	var out = {"from": from, "to": today, "first": first, "span": span, "days": days, "weeks": days / 7.0, "count": {}, "count7": {},
-		"trained": {}, "parts": {}, "bands": [0, 0, 0, 0], "sets": 0, "lifts": {}, "mobility": {}, "sessions": sessions}
+		"trained": {}, "parts": {}, "bands": [0, 0, 0, 0], "sets": 0, "lifts": {}, "mobility": {}, "sessions": sessions, "both": []}
 	for s in sessions:
 		var d = str(s.date)
 		var disc = str(s.get("discipline", ""))
@@ -97,8 +110,11 @@ static func figures(saved: Dictionary, today: String) -> Dictionary:
 			var mob = is_mobility(ex, marks)
 			var book = out.mobility if mob else out.lifts
 			var key = Xp.normalize_exercise(name)
+			var sides = Sides.n(settings, name)
 			if not book.has(key):
-				book[key] = {"name": name, "part": part(name), "days": {}, "sets": 0, "inWindow": 0, "first": null, "last": null, "best": null}
+				book[key] = {"name": name, "part": part(name), "days": {}, "sets": 0, "inWindow": 0, "first": null, "last": null, "best": null, "sides": sides}
+				if sides > 1:
+					out.both.append(name)
 			var row = book[key]
 			row.days[d] = true
 			row.sets = int(row.sets) + sets.size()
@@ -126,11 +142,13 @@ static func figures(saved: Dictionary, today: String) -> Dictionary:
 				p.last7 = int(p.last7) + sets.size()
 			for one in sets:
 				var reps = int(one.get("reps", 0))
-				p.reps = int(p.reps) + reps
+				# (both sides added up: one side did half of it; 25 is a 12 and a 13)
+				p.reps = float(p.reps) + Sides.a_side(reps, sides)
 				p.vol = float(p.vol) + reps * float(one.get("weightKg", 0.0))
 				out.sets = int(out.sets) + 1
+				var side_reps = int(ceil(Sides.a_side(reps, sides)))
 				for i in range(REP_BANDS.size()):
-					if reps >= int(REP_BANDS[i][0]) and reps <= int(REP_BANDS[i][1]):
+					if side_reps >= int(REP_BANDS[i][0]) and side_reps <= int(REP_BANDS[i][1]):
 						out.bands[i] = int(out.bands[i]) + 1
 			for a in Recovery.also_parts(name):
 				if a == main:
@@ -235,7 +253,7 @@ static func text(saved: Dictionary, today: String) -> String:
 			var line = "- %s: %s direct, %s with indirect (last 7 days: %d direct)" % [str(Recovery.NAMES.get(p, str(p).capitalize())), per_week.call(r.direct), per_week.call(float(r.direct) + float(r.indirect)), int(r.last7)]
 			if float(r.direct) > 0.0:
 				line += "; on %s days a week" % per_week.call(r.days.size())
-				line += "; about %s reps a set" % _n(int(r.reps) / float(r.direct), 0)
+				line += "; about %s reps a set" % _n(float(r.reps) / float(r.direct), 0)
 				if float(r.vol) > 0.0:
 					line += "; %s moved a week" % Fmt.fmt_big_kg(float(r.vol) / weeks, wu)
 			L.append(line + ".")
@@ -245,6 +263,8 @@ static func text(saved: Dictionary, today: String) -> String:
 				bands.append("%s %d%%" % [str(REP_BANDS[i][2]), int(round(100.0 * int(f.bands[i]) / float(f.sets)))])
 		L.append("- All working sets by reps: %s. Total %s sets a week." % [", ".join(PackedStringArray(bands)), per_week.call(f.sets)])
 		L.append("- Weight moved counts weighted sets only (bodyweight sets add none).")
+		if not f.both.is_empty():
+			L.append("- Some lifts are single arm or single leg work that I log as ONE number for both sides added up (marked L+R below). The reps a set and the rep ranges above count ONE side of those. A set of them is still one set for the muscle.")
 
 	# --- every lift ---
 	var lifts = f.lifts.values()
@@ -255,12 +275,17 @@ static func text(saved: Dictionary, today: String) -> String:
 			return str(a.name).naturalnocasecmp_to(str(b.name)) < 0)
 		L.append("")
 		L.append("EVERY LIFT (whole log: days done, latest day, first day when it differs, heaviest set)")
+		if lifts.any(func(r): return int(r.get("sides", 1)) > 1):
+			L.append("(L+R = a single arm or single leg lift whose reps are written as left and right ADDED TOGETHER: 25 is a 12 and a 13, not a set of 25. Go by the reps a side given beside them.)")
 		for r in lifts:
-			var line = "- %s [%s]: %d day%s; latest %s: %s" % [str(r.name), str(r.part), r.days.size(), "" if r.days.size() == 1 else "s", _day(str(r.last.date)), sets_words(str(r.name), r.last.sets, fmt_w)]
+			var sides = int(r.get("sides", 1))
+			var line = "- %s [%s%s]: %d day%s; latest %s: %s" % [str(r.name), str(r.part), ", L+R" if sides > 1 else "", r.days.size(), "" if r.days.size() == 1 else "s", _day(str(r.last.date)), sets_words(str(r.name), r.last.sets, fmt_w, sides)]
 			if str(r.first.date) != str(r.last.date):
-				line += "; first %s: %s" % [_day(str(r.first.date)), sets_words(str(r.name), r.first.sets, fmt_w)]
+				line += "; first %s: %s" % [_day(str(r.first.date)), sets_words(str(r.name), r.first.sets, fmt_w, sides)]
 			if r.best != null and float(r.best.weightKg) > 0.0:
 				line += "; heaviest %s × %d" % [fmt_w.call(r.best.weightKg), int(r.best.reps)]
+				if sides > 1:
+					line += " (%s)" % Sides.side_words([r.best])
 			L.append(line + ".")
 	var mob = f.mobility.values()
 	if not mob.is_empty():
@@ -268,7 +293,7 @@ static func text(saved: Dictionary, today: String) -> String:
 		L.append("")
 		L.append("PHYSICAL THERAPY AND STRETCHES (not counted as muscle-building sets)")
 		for r in mob:
-			L.append("- %s: %d day%s, %s a week; latest %s: %s." % [str(r.name), r.days.size(), "" if r.days.size() == 1 else "s", per_week.call(r.inWindow), _day(str(r.last.date)), sets_words(str(r.name), r.last.sets, fmt_w)])
+			L.append("- %s: %d day%s, %s a week; latest %s: %s." % [str(r.name), r.days.size(), "" if r.days.size() == 1 else "s", per_week.call(r.inWindow), _day(str(r.last.date)), sets_words(str(r.name), r.last.sets, fmt_w, int(r.get("sides", 1)))])
 
 	# --- climbing ---
 	var climbs = f.sessions.filter(func(s): return str(s.get("discipline", "")) == "climb")

@@ -1122,6 +1122,52 @@ is the Windows handoff.
     the results reel (`App._split_events`: a "pr" card "Fastest 5K!" with the time it beat).
   - Tests: `tests/run_splits_test.gd`; walkthrough `tests/shots/splits.gd` (year data, also with
     `--fingers`). `ShotHelper.walk` only sees what is on screen: a hidden card is not found.
+- Reps logged as both sides added up, "L+R" (2026-11-23, "There are some exercises where I am putting
+  the total reps because they're split between two single arm movements. For example, my cable lateral
+  raises, not dumbbell raises... I think I've done 12 and 13 reps in a set before, so I usually put the
+  combined total... Need that to be differentiated somehow so that you or the app doesn't think I need
+  to increase the weight because my reps are at 25... Add that differentiation for the single arm lat
+  pull down... and add an option for the future when adding new exercises"). `game/sides.gd` (`Sides`,
+  pure).
+  - STORED: `settings.bothSides` = {normalized lift name: {name, on}}, ONLY where the player's switch
+    differs from `Sides.USUAL`. A lift with no mark goes by USUAL: a Lateral Raise whose variation
+    holds "cable" and a Lat Pulldown whose variation holds "single arm" are both sides with nothing
+    stored (the phone's save could not be reached, so the two lifts the user named are a rule, not
+    data), and switching one off sticks. A mark is on one lift, movement and variation together (the
+    dumbbell raise is plain reps). `Sides.both(settings, name)`, `n` (1 or 2), `with_mark`, `renamed`.
+  - The RULES do not know it and need not: a rep is a rep, so XP, records and the weight moved are
+    right for the total, and parity is untouched. What goes by ONE side: the aim
+    (`LiftTrend.next_target`: "too light, go heavier" only past `HIGH_REPS` a side = 30, and down to
+    `DOWN_TO` a side = 20; before, sets of about 25 on a cable raise were told to go heavier and down
+    to 10 reps), the estimated one-rep max (`LiftTrend.day().e1rm`), the rep ladder, the "change the reps"
+    advice, and the training summary (`Dosage`: a part's "reps a set" and the rep bands count one
+    side, each such lift is marked "[.., L+R]" with "(both sides added up: 12 to 13 a side)", and two
+    lines say what L+R means so a chat does not read 25 as a set of 25).
+  - HOW THEY KNOW: the SETS say so. `Sides.tag_sets(sets, 2)` / `tagged(history, 2)` make COPIES of a
+    lift's sets with `"sides": 2`, and the tag travels with them: `Missions.day_plan` tags the planned
+    lifts and every way to do them (`_tag_sides`: `l.last.sets`, `o.last`, and `l.sides` / `o.sides`),
+    so the Today card, Coming up, the missions, the morning text and the note's plan need no change
+    to aim right; the lift's page tags its history (`JourneyLifts.open_detail`), TodayView its STUCK
+    check. Stored sets are NEVER tagged (the tests check the log after a plan and a save). A new
+    place that makes an aim from a lift's sets must get them through a plan or tag them itself.
+  - Screens: the lift's page has an "L+R" tag and a card "Reps are both sides added up" with a switch
+    (`JourneyLifts._sides_block`, metas `sides_card`, `sides_switch`, `sides_tag`); a tap stores it
+    (`App.set_both_sides`: no derive, the plan and missions are made again), draws the views above
+    again and scrolls by what they grew or shrank (`_keep_in_place`), so the switch stays under the
+    finger. "Next time" says "Both sides added up: 12 to 13 a side." (meta `sides_words`); Progress:
+    "lb x 20 L+R best", "est. 1RM a side", "Best for reps a side" (meta `ladder_title`). The Log
+    tab's exercise card has an "L+R" key beside BW and Hold (meta `both_chip`; a line "L+R · reps
+    are both sides added up", meta `both_hint`; "Last ... · 12 to 13 a side"): it is part of the
+    workout's draft (`exercises[i].both`, only once touched) and is stored when the workout is
+    SAVED: `session_exercises` leaves `bothSides` on the exercise, `App.absorb_pt` stores it under
+    the lift's final name and takes the flag off. The Today row's aim is capped "AIM · L+R".
+    `App.rename_lift` keeps a lift what it was.
+  - The results reel: the rules' "est. 1RM PR" card counts reps as logged, so `Sides.fix_estimates`
+    (called in `App.commit_sessions`) works it out again for one side, or drops it when one side's
+    estimate is no new best.
+  - Tests: `tests/sides_test.gd`; walkthrough `tests/shots/sides.gd` (year data, also with
+    `--fingers`). `Kit.section_title` is drawn in the pixel font: `ShotHelper.all_text` does not see
+    it, so check a meta.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1289,6 +1335,7 @@ godot --headless --path . --script res://tests/dose_test.gd
 godot --headless --path . --script res://tests/ahead_test.gd
 godot --headless --path . --script res://tests/todos_test.gd
 godot --headless --path . --script res://tests/run_splits_test.gd
+godot --headless --path . --script res://tests/sides_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1318,6 +1365,7 @@ focus (the training focus: an added press, weekly sets, no rest day by itself, t
 ahead (the Coming up card and sheet: the next days as they will probably go, and a day's Rest / Lift key; year data),
 todo (the to-do list: the card, the sheet, adding without the Add key moving; year data),
 splits (a run's best splits: the fields that come with the distance, the sheet, Journey, the record; year data),
+sides (reps logged as both sides added up: the lift page's switch, the Log tab's L+R key, the Today aim; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -1345,6 +1393,11 @@ scenario that sets `App.cloud._cfg` and calls `sync_now`, and open the web app w
 - The phone's morning message needs the app to have been opened in the two days before; a message
   already waiting keeps its time and cannot be stopped (a new time or the switch counts from the
   mornings not left yet). The evening check and the weekly recap picture are PC only.
+- A lift logged as both sides added up (Sides) is still ONE lift to the rules: its records and the
+  Journey page's four strongest lifts go by the reps as typed. An older day typed a side (before
+  the player started adding both arms up) is read as a total like the rest: it has to be edited.
+- A lift record's card in the results reel is worded by the ported rules in kg, whatever the
+  player's unit.
 - A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules
   have no timed sets.
 - Switching "Physical therapy" on a lift's page does not redraw the view above it (the

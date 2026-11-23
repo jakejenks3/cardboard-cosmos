@@ -13,7 +13,10 @@ var editing_id = null
 ## [{name: String, bodyweight: bool, sets: [{reps: String, weight: String}]}]
 ## `timed: true` = a hold (a stretch): its sets have `hold` (seconds, a String)
 ## where the weight would be. `planned: true` = filled in from the day's plan
-## and not touched yet (the form asks about those before it saves).
+## and not touched yet (the form asks about those before it saves). `both`
+## (true / false, only once the "L+R" key was touched) = the reps are both
+## sides added up, or are not (Sides): stored for the lift when the workout
+## is saved.
 var exercises: Array = []
 var query: String = ""
 var wu: String = "kg"
@@ -103,7 +106,12 @@ func session_exercises() -> Array:
 		var nm = str(e.name).strip_edges()
 		var sets = sets_from_draft(e, wu)
 		if nm != "" and not sets.is_empty():
-			out.append({"name": nm, "sets": sets})
+			var one = {"name": nm, "sets": sets}
+			# The "L+R" key was touched: App.absorb_pt stores what it says for the
+			# lift and takes the flag off again.
+			if e.has("both"):
+				one["bothSides"] = bool(e.both)
+			out.append(one)
 	return out
 
 
@@ -218,15 +226,29 @@ func _exercise_card(i: int) -> Card:
 	name_edit.focus_exited.connect(_on_name_done.bind(i))
 	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
 	head.add_child(name_edit)
+	# (three keys beside the name: a little less padding each, so the name keeps its room)
+	var chip_pad = 8 if timed else 6
 	if not timed:
-		var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), Pal.LIFT, 8)
+		var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), Pal.LIFT, chip_pad)
 		bw.tooltip_text = "Bodyweight exercise (no weight)"
 		head.add_child(bw)
-	var hold = LogWidgets.mini_chip("Hold", timed, _toggle_timed.bind(i), Pal.LIFT, 8)
+	var hold = LogWidgets.mini_chip("Hold", timed, _toggle_timed.bind(i), Pal.LIFT, chip_pad)
 	hold.tooltip_text = "A stretch or a hold: seconds instead of weight"
 	head.add_child(hold)
+	# A single arm or single leg lift typed as left + right in one number.
+	var both = not timed and _both(e)
+	if not timed:
+		var lr = LogWidgets.mini_chip(Sides.SHORT, both, _toggle_both.bind(i), Pal.LIFT, chip_pad)
+		lr.tooltip_text = "Reps are both sides added up (left + right)"
+		lr.set_meta("both_chip", both)
+		head.add_child(lr)
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
+	if both:
+		# Said in words: a phone shows no tooltip.
+		var hint = Kit.clip("%s · reps are both sides added up" % Sides.SHORT, 11, Pal.LIFT)
+		hint.set_meta("both_hint", true)
+		c.add(Kit.pad(hint, 6, 0, 4, 0))
 
 	# Last time · best, one line (the date is in the tooltip)
 	var has_best = best != null and float(best.weightKg) > 0.0
@@ -234,7 +256,10 @@ func _exercise_card(i: int) -> Card:
 		var ref = Kit.hbox(10)
 		ref.mouse_filter = Control.MOUSE_FILTER_PASS
 		if lp != null:
-			ref.add_child(Kit.clip("Last " + LiftHistory.describe_sets(lp.sets, _fmt_w), 12, Pal.MUTED))
+			var last_words = "Last " + LiftHistory.describe_sets(lp.sets, _fmt_w)
+			if both and Sides.side_words(lp.sets) != "":
+				last_words += " · " + Sides.side_words(lp.sets)
+			ref.add_child(Kit.clip(last_words, 12, Pal.MUTED))
 			ref.tooltip_text = "Last time: %s" % Dates.relative_day(lp.date, App.today)
 		else:
 			ref.add_child(Kit.spacer())
@@ -688,6 +713,24 @@ func _toggle_timed(i: int) -> void:
 	Sfx.tick()
 	_touched(i)
 	exercises[i]["timed"] = not bool(exercises[i].get("timed", false))
+	_changed(true)
+
+
+## Are this exercise's reps both sides added up: what the "L+R" key says once
+## it was touched in this workout, else what is known of the lift (Sides).
+func _both(e: Dictionary) -> bool:
+	if e.has("both"):
+		return bool(e.both)
+	return Sides.both(App.settings(), str(e.get("name", "")).strip_edges())
+
+
+## A single arm or single leg lift typed as one number for both sides, or not.
+## It goes with the workout: stored for the lift when the workout is saved.
+func _toggle_both(i: int) -> void:
+	if i >= exercises.size():
+		return
+	Sfx.tick()
+	exercises[i]["both"] = not _both(exercises[i])
 	_changed(true)
 
 

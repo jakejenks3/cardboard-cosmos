@@ -163,6 +163,27 @@ func set_pt(lift_name: String, on: bool) -> void:
 	changed.emit()
 
 
+## Is this lift logged as both sides added up: a single arm or single leg lift
+## typed as one number for left and right (game/sides.gd)?
+func both_sides(lift_name: String) -> bool:
+	return Sides.both(saved.settings, lift_name)
+
+
+## Say that a lift's reps are both sides added up, or that they are not. No
+## XP and no record changes; the day's plan and the missions are made again,
+## since their aims go by it.
+func set_both_sides(lift_name: String, on: bool) -> void:
+	if Sides.key(lift_name) == "" or Sides.both(saved.settings, lift_name) == on:
+		return
+	saved.settings[Sides.KEY] = Sides.with_mark(saved.settings, lift_name, on)
+	saved.updatedAt = now_ms()
+	_write()
+	_quests = null
+	_plan = null
+	_ahead = null
+	changed.emit()
+
+
 ## How many sessions hold a lift of this name.
 func lift_sessions(lift_name: String) -> int:
 	var k = Xp.normalize_exercise(lift_name)
@@ -176,7 +197,8 @@ func lift_sessions(lift_name: String) -> int:
 
 
 ## Rename a lift everywhere in the log: every session's exercise of that name,
-## its physical therapy mark and the phone note's name decisions. When a lift
+## its physical therapy mark, whether its reps are both sides added up
+## (Sides) and the phone note's name decisions. When a lift
 ## of the new name exists already the two become one lift (its spelling is
 ## kept). Nothing else changes: no set, no date. A copy of the save is kept
 ## first (backups/save-<day>-before-rename-...). Returns {"ok", "sessions",
@@ -215,6 +237,10 @@ func rename_lift(old_name: String, new_name: String) -> Dictionary:
 		if not saved.pt.has(new_key):
 			mark["name"] = want
 			saved.pt[new_key] = mark
+	# Reps logged as both sides added up (Sides): the lift stays what it was.
+	var both_marks = Sides.renamed(saved.settings, old_name, want, joined)
+	if not both_marks.is_empty() or saved.settings.has(Sides.KEY):
+		saved.settings[Sides.KEY] = both_marks
 	var names = saved.inbox.get("names", {}) if saved.get("inbox") is Dictionary else {}
 	if names is Dictionary:
 		for k in names.keys():
@@ -406,6 +432,11 @@ func set_pt_goal(lift_name: String, per_week: int) -> void:
 ## (game/lift_names.gd: "barbell shrug" is saved as Shrug - Barbell), unless it
 ## is already a lift in the log. The phone note's sessions were named in its
 ## review already (they carry inboxKey), so their names are kept.
+##
+## The Log tab's "L+R" key leaves "bothSides" (true / false) on an exercise it
+## was touched on: the lift's reps are, or are not, both sides added up
+## (Sides). It is stored for the lift under its final name and the flag is
+## taken off.
 func absorb_pt(session: Dictionary) -> void:
 	if str(session.get("discipline", "")) != "lift":
 		return
@@ -418,6 +449,8 @@ func absorb_pt(session: Dictionary) -> void:
 		var tag = Pt.untag(str(ex.get("name", "")))
 		var on = bool(tag.pt) or bool(ex.get("pt", false))
 		ex.erase("pt")
+		var both = ex.get("bothSides")
+		ex.erase("bothSides")
 		var n = str(tag.name).strip_edges()
 		if n == "":
 			continue
@@ -426,6 +459,8 @@ func absorb_pt(session: Dictionary) -> void:
 		ex["name"] = n
 		if on and Pt.mark_of(saved.pt, n) == "":
 			saved.pt[Pt.key(n)] = {"name": n, "perWeek": Pt.DEFAULT_PER_WEEK}
+		if both is bool and Sides.both(saved.settings, n) != both:
+			saved.settings[Sides.KEY] = Sides.with_mark(saved.settings, n, both)
 
 
 ## Every exercise name in the log, most recent first.
@@ -679,6 +714,9 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 		events = Diff.diff_states(before, state, fresh[0])
 	else:
 		events = Diff.diff_bulk(before, state, fresh)
+	# (a lift logged as both sides added up: its estimate goes by one side)
+	var fresh_ids = fresh.map(func(s): return s.id)
+	events = Sides.fix_estimates(events, fresh, saved.sessions.filter(func(s): return not fresh_ids.has(s.id)), settings())
 	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null, settings()))
 	events = _with_extras(events, _project_events(fresh))
 	events = _with_extras(events, _split_events(fresh))

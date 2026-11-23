@@ -70,7 +70,9 @@ static func held(history: Array) -> bool:
 ##  bestReps (most reps in one set), volumeKg, e1rm, holdSec (the longest hold),
 ##  holdTotal (seconds held in all)}.
 ## A set without reps does not count. With no weight anywhere topKg is 0 and
-## topReps is the most reps in a set.
+## topReps is the most reps in a set. Reps are as they were logged; only the
+## estimate (e1rm) goes by one side for a lift logged as both sides added up
+## (sets tagged by Sides.tag_sets).
 static func day(sets: Array) -> Dictionary:
 	var out = {"sets": 0, "reps": 0, "topKg": 0.0, "topReps": 0, "bestReps": 0, "volumeKg": 0.0, "e1rm": 0.0, "holdSec": 0, "holdTotal": 0}
 	for one in sets:
@@ -89,7 +91,8 @@ static func day(sets: Array) -> Dictionary:
 			out.topKg = w
 			out.topReps = r
 		if w > 0.0:
-			out.e1rm = maxf(float(out.e1rm), Xp.e1rm(w, r))
+			var sides = maxi(1, int(one.get("sides", 1)))
+			out.e1rm = maxf(float(out.e1rm), Xp.e1rm(w, r) if sides == 1 else Xp.e1rm(w, r / float(sides)))
 	return out
 
 
@@ -368,11 +371,13 @@ static func plateau(history: Array):
 
 
 ## Ways out of a plateau, for this lift (the weight in kg, its top working weight):
-## [{"title", "text"}]: a reset week, a variation swap, another rep range.
+## [{"title", "text"}]: a reset week, a variation swap, another rep range (of
+## one side, for a lift logged as both sides added up).
 static func plateau_fixes(history: Array, lift_name: String, wu: String) -> Array:
 	var d = day(history[0].sets) if not history.is_empty() else day([])
 	var top = float(d.topKg)
-	var reps = int(d.topReps)
+	var sides = Sides.of_sets(history[0].sets) if not history.is_empty() else 1
+	var reps = int(round(int(d.topReps) / float(sides)))
 	var out = []
 	if top > 0.0:
 		var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
@@ -383,7 +388,8 @@ static func plateau_fixes(history: Array, lift_name: String, wu: String) -> Arra
 	out.append({"title": "Swap the variation", "text": "Three weeks of %s with %s, then come back to it fresh." % [str(sp.move), swap]})
 	if reps > 0:
 		var to = "8 to 10" if reps <= 6 else ("4 to 6" if reps >= 10 else "10 to 12")
-		out.append({"title": "Change the reps", "text": "You do sets of about %d: try %d weeks of %s reps." % [reps, 3, to]})
+		var each = " a side" if sides > 1 else ""
+		out.append({"title": "Change the reps", "text": "You do sets of about %d%s: try %d weeks of %s reps%s." % [reps, each, 3, to, each]})
 	return out
 
 
@@ -466,15 +472,20 @@ const DOWN_TO = 10
 ## A weighted lift whose every working set is at HIGH_REPS or more goes a step
 ## heavier and back down to DOWN_TO reps ("heavier": true), instead of adding
 ## a 25th rep to a weight that is too light.
+## A lift logged as BOTH SIDES ADDED UP (sets tagged by Sides.tag_sets:
+## "sides": 2) is judged by one side: 25 reps are a 12 and a 13, so it only
+## goes heavier past HIGH_REPS a side (30), down to DOWN_TO a side (20).
 ## {"kind": "weight" | "reps" | "hold" | "none", "sets": the sets to aim for,
 ##  "set": the set that changes (1-based, 0 = all), "reps": its reps, "addKg",
-##  "addSec", "kg": the working weight}. `step_kg`: the weight to add (2.5 kg,
-## or 5 lb in kg).
+##  "addSec", "kg": the working weight, "sides": 1, or 2 when the reps are
+##  both sides added up}. `step_kg`: the weight to add (2.5 kg, or 5 lb in kg).
 static func next_target(sets: Array, step_kg: float) -> Dictionary:
 	var real = real_sets(sets)
-	var out = {"kind": "none", "sets": [], "set": 0, "reps": 0, "addKg": 0.0, "addSec": 0, "kg": 0.0}
+	var out = {"kind": "none", "sets": [], "set": 0, "reps": 0, "addKg": 0.0, "addSec": 0, "kg": 0.0, "sides": 1}
 	if real.is_empty():
 		return out
+	var sides = Sides.of_sets(real)
+	out.sides = sides
 	var aim = []
 	for one in real:
 		aim.append(one.duplicate())
@@ -502,13 +513,13 @@ static func next_target(sets: Array, step_kg: float) -> Dictionary:
 		most = maxi(most, int(real[i].reps))
 		if int(real[i].reps) < int(real[least_i].reps):
 			least_i = i
-	if top > 0.0 and int(real[least_i].reps) >= HIGH_REPS:
+	if top > 0.0 and int(real[least_i].reps) >= HIGH_REPS * sides:
 		for i in work:
 			aim[i].weightKg = top + step_kg
-			aim[i].reps = DOWN_TO
+			aim[i].reps = DOWN_TO * sides
 		out.kind = "weight"
 		out.addKg = step_kg
-		out.reps = DOWN_TO
+		out.reps = DOWN_TO * sides
 		out.sets = aim
 		out["heavier"] = true
 		return out
@@ -586,7 +597,8 @@ static func calendar(history: Array, today: String, weeks: int) -> Array:
 ## The heaviest weight lifted for at least n reps, as steps: consecutive rep
 ## counts with the same best are one step. [{"from", "to" (reps), "kg", "date"}],
 ## fewest reps first. Only sets with weight count; rep counts past `max_reps`
-## are left out.
+## are left out. A lift logged as both sides added up (tagged sets) is counted
+## by one side: 25 reps are 12 on each for sure.
 static func rep_ladder(history: Array, max_reps: int = 12) -> Array:
 	var best = {}
 	for h in history:
@@ -594,7 +606,8 @@ static func rep_ladder(history: Array, max_reps: int = 12) -> Array:
 			var w = float(one.get("weightKg", 0))
 			if w <= 0.0 or is_hold(one):
 				continue
-			for n in range(1, mini(int(one.reps), max_reps) + 1):
+			var side_reps = int(floor(int(one.reps) / float(maxi(1, int(one.get("sides", 1))))))
+			for n in range(1, mini(side_reps, max_reps) + 1):
 				if not best.has(n) or w > float(best[n].kg) + 1e-9:
 					best[n] = {"kg": w, "date": str(h.get("date", ""))}
 	var out = []

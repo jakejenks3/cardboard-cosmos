@@ -296,16 +296,86 @@ static func _set_goal(holder: Control, lift: String, per_week: int) -> void:
 	_pt_block(holder, lift)
 
 
+## The both-sides card of a lift: a switch for a single arm or single leg lift
+## whose reps are typed as left and right added up (Sides). Rebuilt in place;
+## the views above it are drawn again (`ctx`: LiftViews' own, or null for a
+## lift never done), since the aim, the estimate and the ladder go by it.
+## `tag_slot`: where the page's "L+R" tag goes.
+static func _sides_block(holder: Control, lift: String, ctx, tag_slot) -> void:
+	if not is_instance_valid(holder):
+		return
+	Kit.clear(holder)
+	var on = Sides.both(App.settings(), lift)
+	var c = Kit.card(6, Callable(), 10)
+	c.set_meta("sides_card", on)
+	if on:
+		c.accent(Pal.LIFT)
+	var row = Kit.hbox(8)
+	row.add_child(Kit.vcenter(Icons.rect("repeat", 16)))
+	row.add_child(Kit.vcenter(Kit.clip("Reps are both sides added up", 14, null, true)))
+	var sw = Kit.switch(on, JourneyLifts._set_sides.bind(holder, lift, ctx, tag_slot), "A single arm or single leg lift logged as left + right in one number")
+	sw.set_meta("sides_switch", on)
+	row.add_child(sw)
+	c.add(row)
+	if on:
+		c.add(Kit.para("You log left + right as one number: 25 is a 12 and a 13. The aim, the estimate and the rep ladder go by one side.", 12, Pal.MUTED))
+	else:
+		c.add(Kit.para("For a single arm or single leg lift you log as left + right in one number, so 25 is not read as 25 reps.", 12, Pal.MUTED))
+	holder.add_child(c)
+	if is_instance_valid(tag_slot):
+		Kit.clear(tag_slot)
+		if on:
+			var t = Kit.tag(Sides.SHORT, Pal.LIFT, true, 12)
+			t.tooltip_text = "Reps are both sides added up"
+			t.set_meta("sides_tag", true)
+			tag_slot.add_child(t)
+
+
+static func _set_sides(on, holder: Control, lift: String, ctx, tag_slot) -> void:
+	Sfx.tick()
+	var before = holder.global_position.y
+	App.set_both_sides(lift, bool(on))
+	_sides_block(holder, lift, ctx, tag_slot)
+	# The views above go by it: tag the history anew and draw the view again.
+	if ctx is Dictionary and is_instance_valid(ctx.get("holder")):
+		var n = Sides.n(App.settings(), lift)
+		var at = ctx.history.find(ctx.cur)
+		ctx["history"] = Sides.tagged(ctx.history, n)
+		if not ctx.history.is_empty():
+			ctx["cur"] = ctx.history[maxi(0, at)]
+		ctx["sides"] = n
+		LiftViews.show_view(str(ctx.view), ctx)
+		_keep_in_place(ctx.get("sheet"), holder, before)
+
+
+## The views above a card were drawn again and are a little taller or
+## shorter: scroll the sheet by as much, so the card (and the switch that
+## was just tapped) stays where it was.
+static func _keep_in_place(sh, c: Control, before: float) -> void:
+	if not is_instance_valid(sh):
+		return
+	await sh.get_tree().process_frame
+	await sh.get_tree().process_frame
+	if not is_instance_valid(sh) or sh._closing or not is_instance_valid(c):
+		return
+	var moved = c.global_position.y - before
+	if absf(moved) >= 1.0:
+		sh._scroll.scroll_vertical += int(round(moved))
+
+
 ## The lift's bests, from the log: three tiles and one line of totals.
-static func _records(box: Control, st: Dictionary, wu: String) -> void:
+## `side_e1rm` (0 or more): the lift's reps are both sides added up (Sides),
+## and this is its estimate going by one side.
+static func _records(box: Control, st: Dictionary, wu: String, side_e1rm: float = -1.0) -> void:
 	box.add_child(Kit.section_title("Records"))
 	var vals
 	var caps
 	if float(st.bestKg) > 0.0:
+		var both = side_e1rm >= 0.0
 		var bw = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.bestKg), wu))
-		var e1 = JourneyScreen.split_unit(Fmt.fmt_weight(float(st.e1rm), wu, 0))
+		var e1 = JourneyScreen.split_unit(Fmt.fmt_weight(side_e1rm if both else float(st.e1rm), wu, 0))
 		vals = [bw[0], e1[0], str(int(st.count))]
-		caps = ["%s × %d best" % [bw[1], int(st.bestReps)], "%s est. 1RM" % e1[1], "Sessions"]
+		caps = ["%s × %d %sbest" % [bw[1], int(st.bestReps), (Sides.SHORT + " ") if both else ""], "%s est. 1RM%s" % [e1[1], " a side" if both else ""], "Sessions"]
 	elif LiftTrend.held(st.history):
 		# A stretch or other hold: seconds are what counts.
 		vals = [str(longest_hold(st.history)), Xp.fmt_int(st.reps), str(int(st.count))]
@@ -374,14 +444,22 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 	if st != null:
 		history = st.history.duplicate()
 	var pending = opts.get("pending")
-	var cur = null
 	if pending is Dictionary:
-		cur = {"date": str(pending.date), "id": "", "sets": pending.sets, "note": true}
-		history.append(cur)
+		history.append({"date": str(pending.date), "id": "", "sets": pending.sets, "note": true})
 		TTUtil.stable_sort(history, func(a, b):
 			if str(a.date) != str(b.date):
 				return str(a.date) > str(b.date)
 			return bool(a.get("note", false)) and not bool(b.get("note", false)))
+	# A lift whose reps are both sides added up: its sets say so (Sides), and the
+	# aim, the estimate and the rep ladder below go by one side.
+	var sides = Sides.n(App.settings(), lift)
+	if sides > 1:
+		history = Sides.tagged(history, sides)
+	var cur = null
+	if pending is Dictionary:
+		for hh in history:
+			if bool(hh.get("note", false)):
+				cur = hh
 	elif opts.get("session_id") != null:
 		# Opened from a logged session: the page is about that day.
 		for hh in history:
@@ -396,6 +474,9 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		tags.add_child(Kit.tag("Your own", Pal.PANEL2, false, 12))
 	if Pt.is_pt(App.pt(), lift) or (pending is Dictionary and bool(pending.get("pt", false))):
 		tags.add_child(SessionView.pt_tag(12))
+	# (filled by the both-sides card below, which can change it)
+	var sides_tag = Kit.hbox(0)
+	tags.add_child(sides_tag)
 	box.add_child(tags)
 
 	# The variations: done ones lit, the rest to try. One tap switches the page.
@@ -404,6 +485,7 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		box.add_child(vf)
 		_variation_chips(vf, sheet, e, rows, choices, pick, false)
 
+	var ctx = null
 	if cur == null:
 		var nc = Kit.card(4, Callable(), 10)
 		nc.accent(Pal.SECOND)
@@ -416,13 +498,18 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		# Three ways to look at it: Compare, Progress, Logbook (LiftViews). From a
 		# list of exercises (the note's review, a session) it opens on Compare.
 		var view = str(opts.get("view", LiftViews.last_view))
-		LiftViews.build(box, {"sheet": sheet, "lift": lift, "history": history, "cur": cur, "st": st, "wu": wu,
-			"goal": Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0, "view": view})
+		ctx = {"sheet": sheet, "lift": lift, "history": history, "cur": cur, "st": st, "wu": wu,
+			"goal": Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0, "view": view, "sides": sides}
+		LiftViews.build(box, ctx)
 
 	var pt_holder = Kit.vbox(0)
 	pt_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(pt_holder)
 	_pt_block(pt_holder, lift)
+	var sides_holder = Kit.vbox(0)
+	sides_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(sides_holder)
+	_sides_block(sides_holder, lift, ctx, sides_tag)
 
 	if not e.own:
 		box.add_child(Kit.section_title("How to do it"))

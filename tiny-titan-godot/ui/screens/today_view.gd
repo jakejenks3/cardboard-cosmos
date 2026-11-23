@@ -393,7 +393,8 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 		col = Pal.SECOND
 	else:
 		said = LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w)
-		cap = "AIM"
+		# (reps logged as both sides added up: the aim is that total too)
+		cap = "AIM · %s" % Sides.SHORT if int(main.get("sides", 1)) > 1 else "AIM"
 	var cl = Kit.label(cap, 9, Pal.GOOD if col == Pal.GOOD else Pal.MUTED, true)
 	cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	right.add_child(cl)
@@ -427,7 +428,11 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 ## A lift's history (newest first), as LiftLibrary.stats keeps it.
 static func _history_of(lift_name: String) -> Array:
 	var st = LiftLibrary.stats(App.sessions()).get(Xp.normalize_exercise(lift_name))
-	return st.history if st != null else []
+	if st == null:
+		return []
+	# (reps logged as both sides added up are judged by one side, as on its page)
+	var sides = Sides.n(App.settings(), lift_name)
+	return Sides.tagged(st.history, sides) if sides > 1 else st.history
 
 
 ## A done box: empty while still to do, a tick once done today.
