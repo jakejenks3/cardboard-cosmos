@@ -164,26 +164,14 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(Missions.lift_done(App.plan().lifts[0], App.plan(), App.sessions(), App.today) == "Bench Press - Incline dumbbell" and ShotHelper.all_text(main).contains("Incline dumbbell"), "its row is ticked, under the name it was done as")
 	await ShotHelper.snap(tree, "focus_4_done")
 
-	# --- five lifting days in a row: a rest day, and one tap to lift after all -----------------
+	# --- lifted every day for two weeks: still a lift day (no rest day is planned by a rule) ------
 	await _load(-1)
 	await _home()
 	plan = App.plan()
 	text = ShotHelper.all_text(main)
-	check(bool(plan.off) and bool(plan.rest.auto) and _find("rest_row") != null and text.contains("REST DAY · %d DAYS IN A ROW" % int(plan.rest.run)) and text.contains("Push day moves to tomorrow"), "lifted every day: the card opens with a rest day (%d in a row) and says what moves" % int(plan.rest.run))
-	check(not text.contains("YOUR FOCUS ADDS") and not text.contains("Chest Fly") and _find("start_workout") == null, "a rest day lists no lift")
-	check(text.contains("Running") and text.contains("Your run day"), "the run stays on it: it is a rest from lifting")
-	check(App.quests().daily[0].get("rest", false) and not App.quests().daily.any(func(m): return str(m.id).ends_with(":show") or str(m.id).contains(":beat:") or str(m.id).contains(":dose:")), "the day's first mission is to rest, and no lift is asked for")
-	await ShotHelper.snap(tree, "focus_5_rest")
-	var lift_key = _find("lift_today")
-	check(lift_key != null, "the rest banner has a Lift today key")
-	if lift_key != null:
-		await ShotHelper.click(tree, lift_key)
-		await ShotHelper.wait(tree, 0.7)
-		plan = App.plan()
-		text = ShotHelper.all_text(main)
-		check(not bool(plan.off) and str(plan.call) == "lift" and _find("rest_row") == null and text.contains("YOUR FOCUS ADDS") and text.contains("Chest Fly"), "Lift today: the push day is back with its lifts")
-		check(App.quests().daily.any(func(m): return str(m.id).ends_with(":show")) and not App.quests().daily.any(func(m): return m.get("rest", false)), "and its missions are a lift day's")
-		await ShotHelper.snap(tree, "focus_5b_lift_today")
+	check(not bool(plan.off) and _find("rest_row") == null and not text.contains("REST DAY") and text.contains("YOUR FOCUS ADDS") and text.contains("Chest Fly"), "lifted every day for two weeks: today is a lift day like any other")
+	check(App.ahead().all(func(a): return bool(a.lift) and not bool(a.rest)) and App.quests().daily.any(func(m): return str(m.id).ends_with(":show")) and not App.quests().daily.any(func(m): return m.get("rest", false)), "and so is every day ahead; no mission asks for rest")
+	await ShotHelper.snap(tree, "focus_5_every_day_a_lift_day")
 
 	# --- any day can be called a rest day: its lifts move to tomorrow -----------------------------
 	await _load(3)
@@ -201,7 +189,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		plan = App.plan()
 		text = ShotHelper.all_text(main)
 		chip = _find("rest_chip")
-		check(bool(plan.off) and str(plan.rest.call) == "rest" and not bool(plan.rest.auto) and text.contains("REST DAY · YOUR CALL") and text.contains("Push day moves to tomorrow") and text.contains("Your call: push day moves to tomorrow"), "Rest: today is a rest day by the player's call, and the card says what moves")
+		check(bool(plan.off) and str(plan.rest.call) == "rest" and text.contains("REST DAY · YOUR CALL") and text.contains("Push day moves to tomorrow") and text.contains("Your call: push day moves to tomorrow"), "Rest: today is a rest day by the player's call, and the card says what moves")
 		check(chip != null and absf(chip.get_global_rect().position.y - y0) < 1.0, "the chip stays under the cursor")
 		check(not text.contains("YOUR FOCUS ADDS") and not text.contains("Chest Fly") and not App.quests().daily.any(func(m): return str(m.id).contains(":beat:") or str(m.id).contains(":dose:")), "no lift on the card, none in the missions")
 		var words_after = App.ahead().map(func(a): return str(Missions.ahead_word(a).text))
@@ -211,6 +199,18 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		ShotHelper.scroll_main(main, 0)
 		await ShotHelper.frames(tree, 3)
 		await ShotHelper.snap(tree, "focus_5d_called_rest_top")
+		# "Lift today" on the banner takes it back.
+		var lift_key = _find("lift_today")
+		check(lift_key != null, "the rest banner has a Lift today key")
+		if lift_key != null:
+			ShotHelper.reveal(lift_key)
+			await ShotHelper.frames(tree, 3)
+			await ShotHelper.click(tree, _find("lift_today"))
+			await ShotHelper.wait(tree, 0.7)
+			check(not bool(App.plan().off) and (App.settings().get("dayCalls", {}) as Dictionary).is_empty() and _find("rest_row") == null and ShotHelper.all_text(main).contains("YOUR FOCUS ADDS"), "Lift today: the push day is back with its lifts, no call kept")
+			await ShotHelper.click(tree, _find("rest_chip"))
+			await ShotHelper.wait(tree, 0.7)
+			check(bool(App.plan().off), "and Rest makes it a rest day again")
 		# Tapped again: a lift day, and no call is left behind.
 		chip = _find("rest_chip")
 		ShotHelper.reveal(chip)

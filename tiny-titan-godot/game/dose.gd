@@ -42,8 +42,6 @@ extends RefCounted
 const DAYS = 7
 ## Sets a climbing session is worth: the forearms (fingers) only, see the top.
 const CLIMB_SETS = {"forearms": 4.0}
-## A rest day (a rest from lifting) is due after this many lifting days in a row.
-const REST_AFTER = 5
 const ANCHOR_DAYS = 14
 ## The days looked at for how often a muscle is trained, and the most sets a
 ## day is asked to give one muscle.
@@ -470,9 +468,12 @@ static func hard_on(sessions: Array, marks: Dictionary, date: String) -> bool:
 
 
 ## {"run": lifting days in a row up to `today` (today's own counts once it has
-## one), "today": strength work is logged today, "due": a rest day is due
-## today by the count (REST_AFTER in a row before it, and no lifting yet)}.
-## The player's own call for a day comes on top (Missions.day_plan: `off`).
+## one), "today": strength work is logged today}. For information only: NO
+## REST DAY IS EVER PLANNED FROM IT. Every day is planned as a lift day and a
+## rest day is the player's call alone (Missions.call_of; the user,
+## 2026-11-23: "just have every day be a planned strength day but be able to
+## kick a button to make a rest day"). A first version made a rest day due
+## after five in a row.
 static func rest(sessions: Array, marks: Dictionary, today: String) -> Dictionary:
 	var days = {}
 	for s in sessions:
@@ -485,7 +486,7 @@ static func rest(sessions: Array, marks: Dictionary, today: String) -> Dictionar
 	while days.has(day):
 		run += 1
 		day = Dates.add_days(day, -1)
-	return {"run": run, "today": trained, "due": run >= REST_AFTER and not trained}
+	return {"run": run, "today": trained}
 
 
 ## What the next run should be, from the last one before `ref`:

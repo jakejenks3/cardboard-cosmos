@@ -74,40 +74,22 @@ func _init() -> void:
 	# A rest day on the run day: with a focus the run only ever shows on its day.
 	ok(not Missions.ahead(log, today, {}, on).any(func(a): return a.others.any(func(o): return str(o.discipline) == "run")), "the run day (today) is a rest day: the run is not moved to another day")
 
-	# --- with a focus: rest days come due, the press is asked for ---------------------------
-	var fd = Missions.ahead(log, today, {}, on)
-	# Seven hard days in a row before today: today is a rest day, so nothing is pretended on it.
-	ok(fd[0].plan.kind == "push" and bool(fd[0].lift) and not bool(fd[0].rest), "today is a rest day: the push day is tomorrow", [fd[0].plan.kind, fd[0].rest])
-	ok(fd[0].plan.lifts[0].has("dose") and str(fd[0].plan.lifts[0].dose.part) == "chest", "and it comes with the press for the chest")
-	ok(fd.map(func(a): return str(Missions.ahead_word(a).text)) == ["Push", "Legs", "Pull", "Push", "Legs", "Rest"], "five days round the split, then a rest day", fd.map(func(a): return str(Missions.ahead_word(a).text)))
-	ok(bool(fd[5].rest) and not bool(fd[5].lift) and int(fd[5].plan.rest.run) == 5 and fd[5].others.is_empty() and Missions.ahead_word(fd[5]).what == "rest", "the rest day: five lifting days in a row by then, nothing else on it", fd[5].plan.rest)
-	ok(str(fd[5].rule) == "rest" and str(fd[5].call) == "" and bool(fd[5].can_lift) and str(fd[0].rule) == "lift" and bool(fd[0].can_lift), "each day says what it is by the rules, and whether it could be a lift day", [fd[5].rule, fd[0].rule])
-
-	# --- the player's call: a day off lifting moves the split a day ---------------------------
+	# --- every day is a lift day: no rest day is planned by a rule --------------------------
 	var call = func(base: Dictionary, calls: Dictionary) -> Dictionary:
 		var out = base.duplicate()
 		out["dayCalls"] = calls
 		return out
 	var words = func(list: Array) -> Array: return list.map(func(a): return str(Missions.ahead_word(a).text))
-	# Tomorrow called a rest day: its push day is the day after, and every day after follows.
-	var r1 = Missions.ahead(log, today, {}, call.call(on, {"2026-11-24": "rest"}))
-	ok(words.call(r1) == ["Rest", "Push", "Legs", "Pull", "Push", "Legs"], "tomorrow called rest: the push and everything after it a day later", words.call(r1))
-	ok(bool(r1[0].rest) and str(r1[0].call) == "rest" and str(r1[0].rule) == "lift" and bool(r1[0].can_lift) and str(r1[0].plan.kind) == "push" and r1[0].plan.lifts.is_empty(), "the day called rest: no lifts on it, and it knows the push day waits", [r1[0].call, r1[0].rule, r1[0].plan.kind])
-	ok(r1[1].plan.lifts.map(func(l): return str(l.name)) == fd[0].plan.lifts.map(func(l): return str(l.name)), "the day after has exactly the lifts that were planned for it", r1[1].plan.lifts.map(func(l): return str(l.name)))
-	# Today (a rest day by the count) called a lift day: the push is today, and tomorrow the rest is due again.
-	var r2 = Missions.ahead(log, today, {}, call.call(on, {today: "lift"}))
-	ok(words.call(r2) == ["Rest", "Legs", "Pull", "Push", "Legs", "Pull"] and str(r2[0].rule) == "rest", "today called a lift day: the push is done today, the rest day comes tomorrow", words.call(r2))
-	# A rest day ahead called a lift day.
-	var r3 = Missions.ahead(log, today, {}, call.call(on, {"2026-11-29": "lift"}))
-	ok(bool(r3[5].lift) and not bool(r3[5].rest) and str(r3[5].plan.kind) == "pull" and str(r3[5].call) == "lift" and str(r3[5].rule) == "rest", "a rest day called a lift day: the split goes on that day", [r3[5].plan.kind, r3[5].call])
-	# Without a focus there is no rest by the count, but a call works the same.
-	var r4 = Missions.ahead(log, today, {}, call.call(off, {"2026-11-24": "rest", "2026-11-26": "rest"}))
-	ok(words.call(r4) == ["Rest", "Legs", "Rest", "Pull", "Push", "Legs"], "no focus, two days called rest: each one moves what follows a day", words.call(r4))
-	# A rest day is a rest from lifting: the run stays on it.
-	var before22 = log.filter(func(s): return str(s.date) < "2026-11-22")
-	var r5 = Missions.ahead(before22, "2026-11-22", {}, call.call(on, {"2026-11-23": "rest"}))
-	ok(bool(r5[0].rest) and r5[0].others.any(func(o): return str(o.discipline) == "run") and not bool(r5[1].rest) and bool(r5[1].lift), "the run day called rest: the run is still on it, the lifts are the day after", [r5[0].rest, r5[0].others.map(func(o): return str(o.discipline)), r5[1].lift])
-	ok(log.size() == size_before, "and still nothing is added to the log")
+	# Seven lifting days in a row before today, and nine more ahead: all of them lift days.
+	var plain = Missions.ahead(log, today, {}, on, 9)
+	ok(plain.all(func(a): return bool(a.lift) and not bool(a.rest) and bool(a.can_lift) and str(a.call) == "") and words.call(plain).slice(0, 6) == ["Legs", "Pull", "Push", "Legs", "Pull", "Push"], "with a focus too: day after day a lift day, round the split", words.call(plain))
+	ok(not plain[0].has("rule"), "a day carries no rule of its own any more: it is a lift day unless called rest")
+
+	# --- with a focus, today called a rest day: the press is asked for on the push day ---------
+	var fd = Missions.ahead(log, today, {}, call.call(on, {today: "rest"}))
+	ok(fd[0].plan.kind == "push" and bool(fd[0].lift) and not bool(fd[0].rest), "today called rest: the push day is tomorrow", [fd[0].plan.kind, fd[0].rest])
+	ok(fd[0].plan.lifts[0].has("dose") and str(fd[0].plan.lifts[0].dose.part) == "chest", "and it comes with the press for the chest")
+	ok(words.call(fd) == ["Push", "Legs", "Pull", "Push", "Legs", "Pull"], "then round the split, a day later than it would have been", words.call(fd))
 	# Each day says where the week stands once it is done as planned; the press the plan adds is counted.
 	ok(days.all(func(a): return a.week.is_empty()) and fd.all(func(a): return a.week.has("chest") and a.week.has("back")), "with a focus every day carries the week's sets per muscle (none without)")
 	ok(is_equal_approx(float(fd[0].plan.doseToday[0].have), 3.0) and int(fd[0].plan.lifts[0].dose.sets) == 4 and is_equal_approx(float(fd[0].week.chest), 10.0), "the push day: 3 chest sets in the week, the flyes and a press of 4 make it 10", [fd[0].plan.doseToday[0], fd[0].week.chest])
@@ -115,11 +97,27 @@ func _init() -> void:
 	var bench = second_push.plan.lifts.filter(func(l): return str(LiftNames.split(str(l.name)).move) == "Bench Press")
 	ok(str(second_push.plan.kind) == "push" and bench.size() == 1 and not bench[0].has("dose") and bool(bench[0].options[0].new) and int(bench[0].options[0].planned) == 4 and bench[0].options[0].last.is_empty(), "the next push day: the press is part of the day now, still new (only planned so far: no weight to aim for)", bench)
 	ok(float(fd[3].week.chest) >= 10.0 and float(fd[3].week.chest) <= 16.0 and not log.any(func(s): return s.has("invented")), "and the chest is within its target; nothing of this reaches the log", fd[3].week.chest)
-	var longer = Missions.ahead(log, today, {}, on, 8)
-	ok(str(longer[6].plan.kind) == "pull" and bool(longer[6].lift) and not bool(longer[6].rest), "the day after the rest day the split goes on", [longer[6].date, longer[6].plan.kind, longer[6].rest])
+
+	# --- a day called rest moves the split a day, and all that follows ---------------------------
+	var r1 = Missions.ahead(log, today, {}, call.call(on, {"2026-11-24": "rest"}))
+	ok(words.call(r1) == ["Rest", "Legs", "Pull", "Push", "Legs", "Pull"], "tomorrow called rest: its leg day and everything after it a day later", words.call(r1))
+	ok(bool(r1[0].rest) and str(r1[0].call) == "rest" and bool(r1[0].can_lift) and str(r1[0].plan.kind) == "legs" and r1[0].plan.lifts.is_empty(), "the day called rest: no lifts on it, and it knows the leg day waits", [r1[0].call, r1[0].plan.kind])
+	ok(r1[1].plan.lifts.map(func(l): return str(l.name)) == plain[0].plan.lifts.map(func(l): return str(l.name)), "the day after has exactly the lifts that were planned for it", r1[1].plan.lifts.map(func(l): return str(l.name)))
+	for n in range(1, 6):
+		ok(str(r1[n].plan.kind) == str(plain[n - 1].plan.kind), "day %d: what was planned a day earlier" % (n + 1), [r1[n].plan.kind, plain[n - 1].plan.kind])
+	# Two days called rest: two days later. Without a focus it is the same.
+	var r4 = Missions.ahead(log, today, {}, call.call(off, {"2026-11-24": "rest", "2026-11-26": "rest"}))
+	ok(words.call(r4) == ["Rest", "Legs", "Rest", "Pull", "Push", "Legs"], "two days called rest: each one moves what follows a day", words.call(r4))
+	# A rest day is a rest from lifting: the run stays on it.
+	var before22 = log.filter(func(s): return str(s.date) < "2026-11-22")
+	var r5 = Missions.ahead(before22, "2026-11-22", {}, call.call(on, {"2026-11-23": "rest"}))
+	ok(bool(r5[0].rest) and r5[0].others.any(func(o): return str(o.discipline) == "run") and not bool(r5[1].rest) and bool(r5[1].lift), "the run day called rest: the run is still on it, the lifts are the day after", [r5[0].rest, r5[0].others.map(func(o): return str(o.discipline)), r5[1].lift])
+	# A "lift" left behind by the first version (it could call a rest day a lift day) counts for nothing.
+	ok(words.call(Missions.ahead(log, today, {}, call.call(on, {"2026-11-25": "lift"}), 9)) == words.call(plain), "an old lift call changes nothing")
+	ok(log.size() == size_before, "and still nothing is added to the log")
 
 	# --- pretend sessions ------------------------------------------------------------------------
-	var plan = Missions.day_plan(log, today, {}, call.call(on, {today: "lift"}))
+	var plan = Missions.day_plan(log, today, {}, on)
 	var p = Missions.pretend_lift(log, today, plan)
 	ok(p != null and p.id == "pretend-2026-11-23" and p.date == today and p.exercises.map(func(e): return str(e.name)).has("Chest Fly - Cable") and not p.exercises.any(func(e): return str(e.name).begins_with("Bench Press")), "a pretend day: the planned lifts done before, not the one never done", p.exercises.map(func(e): return str(e.name)))
 	ok(Missions.pretend_lift([], today, Missions.day_plan([], today, {}, off)) == null, "nothing to pretend without a history")
@@ -128,22 +126,50 @@ func _init() -> void:
 	ok(pr != null and pr.id == "pretend-run-2026-11-23" and is_equal_approx(float(pr.distanceM), 5500.0) and not pr.has("inboxKey") and is_equal_approx(float(log.filter(func(s): return str(s.id) == "r1")[0].distanceM), 5000.0), "a pretend run: the distance the plan aims for; the real one is not touched", pr)
 	ok(Missions.pretend_other(log, today, {"discipline": "ride", "avg": 0.0, "why": ""}, plan) == null, "no ride to copy: none")
 
-	# --- a weekday the player does not lift on ---------------------------------------------------
+	# --- a weekday never lifted on is planned like any other: no day off is guessed ---------------
+	# Four weeks of pull, push, legs, never on a Sunday. Today is a Saturday.
+	var six = []
+	var turn = 0
+	for back in range(28, 0, -1):
+		var d = Dates.add_days("2026-11-21", -back)
+		if Dates.weekday_index(d) == 6:
+			continue
+		six.append(lift(d, kinds[turn % 3]))
+		turn += 1
+	var md = Missions.ahead(six, "2026-11-21", {}, off)
+	ok(Dates.weekday_index(str(md[0].date)) == 6 and md.all(func(a): return bool(a.lift) and not bool(a.rest)), "never a lift on a Sunday so far: Sunday is a lift day like every other day ahead", md.map(func(a): return [a.date, a.lift]))
+	var md3 = Missions.ahead(six, "2026-11-21", {}, call.call(off, {"2026-11-23": "rest"}))
+	ok(md3.map(func(a): return bool(a.rest)) == [false, true, false, false, false, false] and md3.map(func(a): return bool(a.lift)) == [true, false, true, true, true, true], "one day called rest: that day and no other", md3.map(func(a): return [a.date, a.lift, a.rest]))
+	# With a split a day is never left without its lifts because they "rest": a
+	# player who did everything once a week, on Mondays, and now lifts day by day.
+	var weekly = []
+	for d in ["2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16"]:
+		weekly.append(lift(d, {"Squat - Barbell": three(5, 100), "Romanian Deadlift - Barbell": three(5, 80), "Bench Press - Barbell": three(5, 80)}))
+	var ul = {"weightUnit": "kg", "split": "upper_lower"}
+	var p_low = Missions.day_plan(weekly, "2026-11-18", {}, ul)
+	ok(Missions.likely_lifts(weekly, "2026-11-18", {}, str(p_low.kind)).is_empty() and p_low.lifts.any(func(l): return not bool(l.pt)), "lifts done once a week, two days ago: by their usual gap they rest, and the day of the split has them all the same", [p_low.kind, p_low.lifts.map(func(l): return str(l.name))])
+	var mdw = Missions.ahead(weekly, "2026-11-18", {}, ul)
+	ok(mdw.all(func(a): return bool(a.lift)), "and so has every day after it", mdw.map(func(a): return [a.date, a.plan.kind, a.lift]))
+	# A stretch that is likely that day is not the day's work: the lifts are planned beside it.
+	var stretchy = weekly + [lift("2026-11-16", {"Hamstring Stretch": [[3, 0]]}), lift("2026-11-17", {"Hamstring Stretch": [[3, 0]]})]
+	var p_st = Missions.day_plan(stretchy, "2026-11-18", {}, ul)
+	ok(p_st.lifts.any(func(l): return str(l.name) == "Hamstring Stretch") and p_st.lifts.any(func(l): return str(l.kind) != "" and str(l.name) != "Hamstring Stretch"), "a likely stretch does not stand in for the day's lifts", [p_st.kind, p_st.lifts.map(func(l): return [l.name, l.kind])])
+	var kinds_ahead = Missions.ahead(stretchy, "2026-11-18", {}, ul).map(func(a): return str(a.plan.kind))
+	var turns = true
+	for n in range(1, kinds_ahead.size()):
+		if kinds_ahead[n] == kinds_ahead[n - 1]:
+			turns = false
+	ok(turns, "so the split moves on every day", kinds_ahead)
+	# Without a split a day only has lifts when some are likely (by weekday or
+	# by their usual gap): a day with none to plan is no lift day, and says so.
 	var mwf = []
 	for d in ["2026-10-26", "2026-10-28", "2026-10-30", "2026-11-02", "2026-11-04", "2026-11-06", "2026-11-09", "2026-11-11", "2026-11-13", "2026-11-16", "2026-11-18", "2026-11-20"]:
 		mwf.append(lift(d, {"Squat - Barbell": three(5, 100), "Bench Press - Barbell": three(5, 80)}))
-	ok(Missions.lift_habit(mwf, "2026-11-23") and not Missions.lift_habit(mwf, "2026-11-24") and Missions.lift_habit([], "2026-11-24"), "a lifting habit by weekday; with nothing to go by, any day")
-	var md = Missions.ahead(mwf, "2026-11-21", {}, {"weightUnit": "kg"})
-	ok(md.map(func(a): return bool(a.lift)) == [false, true, false, true, false, true], "Monday, Wednesday, Friday: a lift on those, none between", md.map(func(a): return [a.date, a.lift]))
-	ok(Missions.ahead_word(md[0]).text == "Off" and Missions.ahead_word(md[0]).what == "" and str(Missions.ahead_word(md[1]).what) == "lift", "a day with nothing likely is Off", [Missions.ahead_word(md[0]), Missions.ahead_word(md[1])])
-	ok(str(md[0].rule) == "rest" and bool(md[0].can_lift) and str(md[1].rule) == "lift", "a weekday without lifting is no lift day by the rules, but it could be one")
-	var md2 = Missions.ahead(mwf, "2026-11-21", {}, {"weightUnit": "kg", "dayCalls": {"2026-11-22": "lift"}})
-	ok(md2.map(func(a): return bool(a.lift)) == [true, true, false, true, false, true] and str(md2[0].call) == "lift", "such a day called a lift day is one", md2.map(func(a): return [a.date, a.lift]))
-	# A day called rest hands its lifts to the day after, whatever that weekday's habit.
-	var md3 = Missions.ahead(mwf, "2026-11-21", {}, {"weightUnit": "kg", "dayCalls": {"2026-11-23": "rest"}})
-	ok(md3.map(func(a): return bool(a.lift)) == [false, false, true, true, false, true] and bool(md3[1].rest) and str(md3[2].rule) == "lift" and str(md3[2].call) == "", "Monday called rest: its lifts are Tuesday's, a day this player never lifts on", md3.map(func(a): return [a.date, a.lift, a.rest]))
-	var md4 = Missions.ahead(mwf, "2026-11-21", {}, {"weightUnit": "kg", "dayCalls": {"2026-11-23": "rest", "2026-11-24": "rest"}})
-	ok(md4.map(func(a): return bool(a.rest)) == [false, true, true, false, false, false] and bool(md4[3].lift), "and Tuesday called rest too: they are Wednesday's", md4.map(func(a): return [a.date, a.lift, a.rest]))
+	var mdn = Missions.ahead(mwf, "2026-11-21", {}, {"weightUnit": "kg"})
+	var empty_days = mdn.filter(func(a): return not bool(a.can_lift))
+	ok(not empty_days.is_empty() and empty_days.all(func(a): return not bool(a.lift) and not bool(a.rest) and Missions.ahead_word(a).text == "Off") and mdn.any(func(a): return bool(a.lift)), "no split: a day with no lift to plan is not a lift day", mdn.map(func(a): return [a.date, a.lift, a.can_lift]))
+	var none = Missions.ahead([], today, {}, off)
+	ok(none.all(func(a): return not bool(a.lift) and not bool(a.rest) and not bool(a.can_lift) and a.others.is_empty()) and Missions.ahead_word(none[0]).text == "Off" and Missions.ahead_word(none[0]).what == "", "a new player: nothing to plan yet, so nothing to look ahead to")
 	# Rides and vest walks are done now and then: never planned, never looked ahead to.
 	var riders = mwf.duplicate()
 	for d in ["2026-10-27", "2026-11-03", "2026-11-10", "2026-11-17"]:

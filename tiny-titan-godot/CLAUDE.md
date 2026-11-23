@@ -874,7 +874,7 @@ is the Windows handoff.
     was done (PT, an extra lift once its sets are in: an anchor only by a lift of its sort, anything
     else as before); `day_boxes` and TodayView use it.
   - Missions: `t:<date>:dose:<part>` ("Chest: add a press", "More for your triceps"; target = the sets,
-    250 XP); Beat it goes to "build" lifts first (a leg day's two go to its leg lifts); after `REST_AFTER` 5 hard days in a row (`Dose.is_hard`: a
+    250 XP); Beat it goes to "build" lifts first (a leg day's two go to its leg lifts); (TAKEN OUT 2026-11-23, see "EVERY DAY IS A LIFT DAY": the rest mission is now only for a day the player calls rest) after `REST_AFTER` 5 hard days in a row (`Dose.is_hard`: a
     walk, PT and stretches are not) the day's first mission is `t:<date>:rest` IN PLACE of Show up, done
     once the day is over (`data.now`, from `App.mission_data`; claimed from "From yesterday"); weekly
     `tw:<wk>:dose` "Dosed right" (every build muscle on target at once, any day of the week). The run:
@@ -913,7 +913,7 @@ is the Windows handoff.
   (`pretend_lift`: its lifts and PT as last time, a lift never done left out; `pretend_other`: the last
   climb / run / ride again, a run at the plan's aim), unless it is a rest day (a focus's rest due:
   nothing is pretended) or already logged, and the next day's plan is made from that: the split goes
-  on, rest comes due, a muscle that got its sets stops asking. `lift` needs `lift_habit` (the weekday
+  on, rest comes due, a muscle that got its sets stops asking. (TAKEN OUT 2026-11-23, see "EVERY DAY IS A LIFT DAY": no rest comes due and no weekday habit is needed, every day is a lift day.) `lift` needs `lift_habit` (the weekday
   rule that was PhonePush.lift_likely; PhonePush.forecast now calls these two). Another activity
   counts on its weekday or once its usual gap has passed (score 1 or more) and not within half its gap
   of the last one (`_too_soon`), so a weekly run is not shown a day early and then again. Nothing is
@@ -997,51 +997,68 @@ is the Windows handoff.
     13 sets (all in range), shoulders 23 (over, mostly half sets from rows and presses), legs kept.
   - A change to the plan must keep this true: what is planned has to add up to the targets, and the
     screens have to show the sum. Tests: dose_test (day_target, freq_of, day_dose), ahead_test (week).
-- Rest days are the player's to move (2026-11-23, "Need to be able to easily adjust strength days and
-  rest days and move them back a day... feeling sore today so want to use today as rest day from
-  strength, so I'll still run and do PT, but want to easily be able to push back the split one day,
-  moving today's planned strength to tomorrow and having everything move back accordingly 1 day").
-  - A REST DAY IS A REST FROM LIFTING, nothing more. `Dose.is_hard` / `hard_on` now mean strength work
-    only (a lift with more than PT and stretches); a run, a ride, a climb, a walk and PT are fine on a
-    rest day and a day with only those is a day off in the count (`Dose.rest`: LIFTING days in a row).
-    This replaces "5 hard days in a row" above, where runs and climbs counted.
-  - `settings.dayCalls` = {date: "rest" | "lift"} (`Missions.call_of`; `with_call(settings, date, want,
-    rule, today)` drops a call that only says what the day is anyway and calls older than `CALLS_KEPT`
-    30 days). "rest" = no strength work that day; "lift" = lift although a rest day is due by the count
-    or (look-ahead) it is a weekday the player rarely lifts on.
+- EVERY DAY IS A LIFT DAY; A REST DAY IS ONLY EVER THE PLAYER'S TAP (2026-11-23). Asked for in two
+  steps the same day. First: "Need to be able to easily adjust strength days and rest days and move them
+  back a day... feeling sore today so want to use today as rest day from strength, so I'll still run and
+  do PT, but want to easily be able to push back the split one day, moving today's planned strength to
+  tomorrow and having everything move back accordingly 1 day". The first version still planned a rest
+  day by itself after five lifting days in a row and guessed days off from the weekdays lifted on, so a
+  rest called today swallowed the one due tomorrow instead of moving everything. Then: "Don't need to
+  adjust where rest days are planned, just have every day be a planned strength day but be able to kick a
+  button to make a rest day for that day and push the split all back a day... I know that will mess up
+  the planned sets of each muscle group a week, so it might be that in the plan I have a few groups that
+  will exceed the number of volume, but I don't know when rest days will need to happen so it'll equal
+  itself out".
+  - NO RULE PLANS A REST DAY, and no day off is guessed. Gone: `Dose.REST_AFTER`, the "5 days in a row"
+    rest day and its mission, `Missions.lift_habit` / `PhonePush.lift_likely` (the weekday rule of the
+    look-ahead and of the phone's morning messages), a "lift" call. Whatever this file says above about
+    a rest day coming due or a lift needing a weekday habit no longer holds. `Dose.rest` only counts
+    lifting days in a row ({run, today}), for a line in the Weekly sets sheet. Do not bring a planned
+    rest day back to make the weekly sets fit.
+  - A rest day is a rest from LIFTING: `Dose.is_hard` / `hard_on` mean strength work only (a lift with
+    more than PT and stretches). A run, a ride, a climb, a walk and PT are fine on one.
+  - `settings.dayCalls` = {date: "rest"} (`Missions.call_of` -> "rest" or ""; `with_call(settings, date,
+    rest: bool, today)` adds or takes back a call, and drops calls older than `CALLS_KEPT` 30 days and
+    anything that is not a rest call: the first version stored "lift" too).
   - NOTHING IS MOVED BY HAND: the split goes by the last day really lifted (`day_kind`), so a day
-    without lifting leaves its lifts to the next lift day and every day after follows. A rest day
-    also starts the count again, so a rest called today takes the place of the one that was due
-    later (Mon pull / Tue rest becomes Mon rest / Tue pull; to rest on both, call both).
-  - `Missions.day_plan`: `plan.off` (a rest day: the call, or with a focus `plan.rest.auto`, unless
-    called "lift"; strength work logged that day makes it a lift day again), `plan.call`,
-    `plan.set_aside` (strength lifts left out), `plan.rest` = {run, today, due (= off), auto, call}.
-    On an off day `plan.lifts` holds only the PT, there are no extras, no "try something new", no
-    `doseToday`; `others` (the run on its day, the climb) and `pt` stay; `kind` / `label` still name
-    the day that waits (`off_what`, `off_moves`: "Push day moves to tomorrow"; `kind_why` says it).
-    An auto rest day used to keep its lifts on the card under the banner: it no longer does.
-  - Missions: on an off day `t:<date>:rest` is first IN PLACE of Show up ("Your call." or "N lifting
-    days in a row."; done once the day is over without lifting), and no Beat it / dose / new mission.
-    `morning_text` opens with "Rest day from lifting: ..." and lists no lift.
-  - `Missions.ahead`: a day is `rest` when its plan is off; `lift` when not off and (the weekday habit
-    or called "lift") and `can_lift`. Each day carries `call`, `rule` ("rest" | "lift": what it is
-    without a call) and `can_lift`. On a rest day the PT and the others ARE pretended (it used to
-    pretend nothing). A day CALLED rest hands its lifts to the day after (`carried`), which is then
-    a lift day whatever its weekday: the card says "moves to tomorrow", and that has to hold for a
-    player who lifts on Mondays and Fridays too. `PhonePush.forecast` takes a day called "lift",
-    and the day after one called "rest", as a lift day.
+    called rest leaves its lifts to the day after and every day after that follows, exactly one day
+    later (on a copy of the user's log: Mon Pull, Tue Push, Wed Legs... becomes Mon rest, Tue Pull, Wed
+    Push...).
+  - `Missions.day_plan`: `plan.off` = called rest and no strength work logged that day (lifting on it
+    makes it a lift day again), `plan.call`, `plan.set_aside` (strength lifts left out), `plan.rest` =
+    {due (= off), call}. On an off day `plan.lifts` holds only the PT, there are no extras, no "try
+    something new", no `doseToday`; `others` (the run on its day, the climb) and `pt` stay; `kind` /
+    `label` still name the day that waits (`off_what`, `off_moves`: "Push day moves to tomorrow";
+    `kind_why`: "Your call: push day moves to tomorrow").
+  - Missions: on an off day `t:<date>:rest` is first IN PLACE of Show up ("Your call. No lifting
+    today..."; done once the day is over without lifting), and there is no Beat it / dose / new
+    mission. `morning_text` opens with "Rest day from lifting: your call. ..." and lists no lift.
+  - `Missions.ahead`: `lift` = not called rest and `can_lift` (the plan has strength lifts), on every
+    weekday; `rest` = the plan is off; each day carries `call` and `can_lift`. On a rest day the PT
+    and the others are pretended. Without a training split a day still only has lifts when some are
+    likely (by weekday or by their usual gap), so such a player sees days with nothing to plan.
+    `PhonePush.forecast` pretends every day not yet lifted; `settled` also counts a day called rest.
+  - With a split a day never comes out without its lifts. When no real lift of the day's kind is
+    likely because they all still rest by their usual gap (lifts done once a week, and the split came
+    round sooner), `day_plan` asks `likely_lifts(..., no_rest = true)`: a lift of the kind then counts
+    once it is two days old. A stretch, a lift that goes with any day and PT are not the day's work
+    (`day_work`): a day with only those would not move the split on (it showed with the demo data:
+    two leg days in a row).
+  - The weekly sets are planned as if every day is lifted, so "If it goes as planned" can read over a
+    muscle's range (on the user's log: shoulders and triceps over, chest and back near their most).
+    That is wanted; the card says "Counts a lift every day. A rest day you call brings these down."
   - Screens: the Today card's chip row is `TodayView._day_row`: the split's kinds and "Rest" (meta
     `rest_chip`; without a split: Lift and Rest). Rest tapped again, a kind, or the banner's "Lift
     today" (meta `lift_today`) makes it a lift day again; `_call_day`, `_pick_kind`. The header tag
-    reads "Rest day"; the banner (`_rest_row(plan)`, meta `rest_row`) says "REST DAY · YOUR CALL" or
-    "· N DAYS IN A ROW", what moves, and that the run, PT and a walk are fine. Coming up
-    (`AheadView`): every day card has a key in a slot of one width (`KEY_W`; a button with an icon
-    sets its own width), "Rest" on a lift day, "Lift" on a rest day or a day off (meta `ahead_call` =
-    "<date>:<want>"); `_call` stores it and `_fill(sh)` rebuilds the sheet in place (the box never
-    gets shorter while it is open; taps are ignored for `QUIET_MS` after one, since the opposite key
-    is then under the finger). Coming up is no longer read only in this one respect.
+    reads "Rest day"; the banner (`_rest_row(plan)`, meta `rest_row`) says "REST DAY · YOUR CALL",
+    what moves, and that the run, PT and a walk are fine. Coming up (`AheadView`): every day card has
+    a key in a slot of one width (`KEY_W`; a button with an icon sets its own width), "Rest" on a lift
+    day and "Lift" on a day called rest (meta `ahead_call` = "<date>:<want>"); `_call` stores it and
+    `_fill(sh)` rebuilds the sheet in place (the box never gets shorter while it is open; taps are
+    ignored for `QUIET_MS` after one, since the opposite key is then under the finger).
   - Tests: dose_test (the off plan, calls, with_call, the rest mission, the morning text), ahead_test
-    (calls move the split a day; a day off called a lift day), walkthroughs focus and ahead.
+    (every day a lift day, a call moves the split a day, a Sunday never lifted on), phone_push_test,
+    walkthroughs focus, ahead and today.
 - Cycling and vest walks are in a Miscellaneous corner (2026-11-23, "Move cycling and weighted vest
   walks completely to their own little miscellaneous area, don't have them as daily goals or as a main
   section anywhere, just as something I still can add or track but very sporadically").
@@ -1255,7 +1272,7 @@ touch (fingers: flick, glide, stop, tap, hold, drags from keys and text boxes, y
 workout (Start workout from the Today card, the kept draft, hold seconds, finger sizes, year data),
 phone (rename a lift, small backups, the phone's own morning message: see above, year data),
 long_names (long lift names on every screen that lists lifts: nothing wider than the column, year data),
-focus (the training focus: an added press, weekly sets, a rest day and the Rest chip / Lift today, a leg day left alone, Settings; `new` data),
+focus (the training focus: an added press, weekly sets, no rest day by itself, the Rest chip / Lift today, a leg day left alone, Settings; `new` data),
 ahead (the Coming up card and sheet: the next days as they will probably go, and a day's Rest / Lift key; year data),
 todo (the to-do list: the card, the sheet, adding without the Add key moving; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.

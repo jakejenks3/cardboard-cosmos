@@ -197,11 +197,9 @@ static func _set_feel(v: int) -> void:
 	App.toast("Marked: %s. Your goals stay as they are." % ["", "tired", "okay", "strong"][v], "info", "muscle")
 
 
-## A rest day, a rest from lifting (the player's call, or enough lifting
-## days in a row): what waits for tomorrow, what is still fine today, and a
-## key to lift after all.
+## A rest day, a rest from lifting (only ever the player's call): what waits
+## for tomorrow, what is still fine today, and a key to lift after all.
 static func _rest_row(plan: Dictionary) -> Control:
-	var rest = plan.rest
 	var c = Kit.card(0, Callable(), 8)
 	c.accent(Pal.SECOND)
 	c.set_meta("rest_row", true)
@@ -209,7 +207,7 @@ static func _rest_row(plan: Dictionary) -> Control:
 	h.add_child(Kit.vcenter(Icons.rect("moon", 24)))
 	var v = Kit.vbox(1)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(Kit.label("REST DAY · YOUR CALL" if str(rest.get("call", "")) == "rest" else "REST DAY · %d DAYS IN A ROW" % int(rest.run), 10, Pal.SECOND, true))
+	v.add_child(Kit.label("REST DAY · YOUR CALL", 10, Pal.SECOND, true))
 	v.add_child(Kit.clip(Missions.off_moves(plan), 13, Pal.TEXT, true))
 	v.add_child(Kit.clip("Your run, PT and a walk are still fine", 11, Pal.MUTED))
 	h.add_child(v)
@@ -266,7 +264,7 @@ static func _pick_kind(kind: String) -> void:
 	var patch = {}
 	if off:
 		# A kind tapped on a rest day: a lift day after all.
-		patch["dayCalls"] = Missions.with_call(st, App.today, "lift", "rest" if bool(plan.rest.auto) else "lift", App.today)
+		patch["dayCalls"] = Missions.with_call(st, App.today, false, App.today)
 	if kind != str(plan.kind) or bool(plan.picked):
 		# The kind the split itself gives today: the pick is dropped.
 		var own = Missions.day_kind(App.sessions(), App.today, plan.cycle, App.pt()).kind
@@ -289,7 +287,7 @@ static func _call_day(want: String) -> void:
 		App.toast("You have lifted today: it stays a lift day", "info", "lift")
 		return
 	Sfx.tick()
-	App.update_settings({"dayCalls": Missions.with_call(App.settings(), App.today, want, "rest" if bool(plan.rest.auto) else "lift", App.today)})
+	App.update_settings({"dayCalls": Missions.with_call(App.settings(), App.today, want == "rest", App.today)})
 	var now = App.plan()
 	if want == "rest":
 		App.toast("Rest day. %s." % Missions.off_moves(now), "info", "moon")

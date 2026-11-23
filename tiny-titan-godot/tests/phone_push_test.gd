@@ -68,8 +68,6 @@ func _init() -> void:
 	var sun = "2026-11-22"
 	var saved = _saved(mon)
 	ok(Dates.weekday_index(mon) != Dates.weekday_index(sun), "the test's days")
-	ok(PhonePush.lift_likely(saved.sessions, mon) and not PhonePush.lift_likely(saved.sessions, sun), "lifts on Mondays, not on Sundays")
-	ok(PhonePush.lift_likely([], mon), "nothing to go by: likely")
 	var marks = {}
 	var plan_today = Missions.day_plan(saved.sessions, mon, marks, saved.settings)
 	var plan_tom_plain = Missions.day_plan(saved.sessions, Dates.add_days(mon, 1), marks, saved.settings)
@@ -126,8 +124,15 @@ func _init() -> void:
 	# --- settled --------------------------------------------------------------
 	ok(not PhonePush.settled(saved, mon, 12) and PhonePush.settled(saved, mon, 20), "a lift day is open until the evening")
 	ok(PhonePush.settled(real, mon, 12), "or until a lift is logged")
+	# Every day is planned as a lift day, a Sunday this player never lifted on too.
 	var on_sun = _saved(sun)
-	ok(PhonePush.settled(on_sun, sun, 9), "a day off is settled from the start")
-	ok(PhonePush.forecast(on_sun, sun, Dates.add_days(sun, 1)).size() == on_sun.sessions.size(), "and nothing is pretended on it")
+	ok(not PhonePush.settled(on_sun, sun, 9) and PhonePush.forecast(on_sun, sun, Dates.add_days(sun, 1)).size() == on_sun.sessions.size() + 1, "a weekday never lifted on is planned like any other")
+	# A day the player called a rest day is settled from the start, nothing is
+	# pretended on it, and the day after has its lifts.
+	var rested = _saved(mon)
+	rested.settings["dayCalls"] = {mon: "rest"}
+	var fc_rest = PhonePush.forecast(rested, mon, tom)
+	ok(PhonePush.settled(rested, mon, 9) and fc_rest.size() == rested.sessions.size(), "a day called rest is settled from the start, and nothing is pretended on it")
+	ok(str(Missions.day_plan(fc_rest, tom, marks, rested.settings).kind) == str(plan_today.kind) and str(PhonePush.jobs(rested, mon, noon, 0)[0].text) != str(j[0].text), "tomorrow's message then has today's kind of day")
 	print("PHONE PUSH: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

@@ -155,7 +155,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	days = App.ahead()
 	var words = days.map(func(a): return str(Missions.ahead_word(a).text))
 	print("AHEAD focus ", words)
-	check(words.has("Rest") and words.has("Push") and words.has("Legs") and words.has("Pull"), "with a focus the days ahead have a rest day among the split's days")
+	check(not words.has("Rest") and not words.has("Off") and words.has("Push") and words.has("Legs") and words.has("Pull") and days.all(func(a): return bool(a.lift)), "with a focus too every day ahead is a lift day: no rest day is planned by itself")
 	card = _find("ahead_card")
 	if card != null:
 		ShotHelper.reveal(card)
@@ -164,7 +164,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await _open_card()
 	sh = _sheet()
 	st = ShotHelper.all_text(sh) if sh != null else ""
-	check(st.contains("Rest day") and st.contains("lifting days in a row by then") and st.contains("Bench Press") and st.contains("Pull-up"), "the sheet: the rest day, the press on the next push day, a pull-up beside the pulldown")
+	check(not st.contains("Rest day") and st.contains("Every day is planned as a lift day") and st.contains("Counts a lift every day") and st.contains("Bench Press") and st.contains("Pull-up"), "the sheet: no rest day, the press on the next push day, a pull-up beside the pulldown")
 	# The plan in numbers: the week it leads to, and what each day gives its muscles.
 	var week_card = _find("ahead_week", sh)
 	var wt = ShotHelper.all_text(week_card) if week_card != null else ""

@@ -10,10 +10,11 @@ extends Node
 ## and a DELETE does not stop it). So each morning gets ONE message, made to
 ## be right the first time: the plan for a coming day is worked out as if the
 ## days before it go as planned (`forecast`: today's lifts still to do, and
-## tomorrow's, count as done on a day the player usually lifts). When the log
+## tomorrow's, count as done: every day is planned as a lift day, see
+## Missions.call_of; on a day the player called rest only its PT). When the log
 ## then says otherwise, ONE correction goes out, a minute after the first, and
-## only once the day before is settled (`settled`: a lift is logged, or it is
-## evening), so it is not corrected twice.
+## only once the day before is settled (`settled`: a lift is logged, it is
+## evening, or the day was called a rest day), so it is not corrected twice.
 ##
 ## Off until the player turns it on (settings.morning.phone; the PC's own
 ## switch is settings.morning.on). The topic and the time are shared with the
@@ -24,7 +25,6 @@ extends Node
 ##
 ##   settings(saved_settings)                  MorningAlert.settings + "phone"
 ##   when(day, "07:00", bias_min)              unix time of that local time
-##   lift_likely(sessions, day)                does the player usually lift on that weekday
 ##   forecast(saved, today, day)               the log, plus the days before `day` as planned
 ##   settled(saved, today, hour)               is today's part of the log final
 ##   jobs(saved, today, now, bias_min)         [{day, at, id, title, text}] still ahead
@@ -38,8 +38,6 @@ const DAYS_AHEAD = 2
 const SETTLE_SEC = 8.0
 ## From this hour on, a day without a lift is taken as a day off.
 const EVENING_HOUR = 20
-## Same weekdays looked at for "usually lifts on this day".
-const HABIT_WEEKS = 6
 const FILE = "push.json"
 
 ## Why the last try failed, or "".
@@ -76,16 +74,11 @@ static func _lifted_on(sessions: Array, day: String) -> bool:
 	return sessions.any(func(s): return str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) == day)
 
 
-## Does the player usually lift on this weekday: on half or more of the last
-## HABIT_WEEKS same weekdays since their first workout (true with under two to go by).
-static func lift_likely(sessions: Array, day: String) -> bool:
-	return Missions.lift_habit(sessions, day)
-
-
 ## The sessions as they will probably be on the morning of `day`: the real
 ## log, plus, for each day from today up to the day before `day` that has no
-## lift logged and is a day the player usually lifts, that day's planned
-## lifts and PT done as last time (ids "pretend-<day>").
+## lift logged, that day's planned lifts and PT done as last time (ids
+## "pretend-<day>"). Every day is planned as a lift day; a day the player
+## called rest has only its PT in the plan, so nothing else is pretended on it.
 static func forecast(saved: Dictionary, today: String, day: String) -> Array:
 	var st = saved.get("settings", {})
 	var marks = saved.get("pt", {}) if saved.get("pt") is Dictionary else {}
@@ -93,8 +86,7 @@ static func forecast(saved: Dictionary, today: String, day: String) -> Array:
 	var out = real.duplicate()
 	var x = today
 	while x < day:
-		# A lift day: by the weekday, called one, or the day after a day called rest (its lifts moved here).
-		if not _lifted_on(out, x) and (lift_likely(real, x) or Missions.call_of(st, x) == "lift" or Missions.call_of(st, Dates.add_days(x, -1)) == "rest"):
+		if not _lifted_on(out, x):
 			var pretend = Missions.pretend_lift(out, x, Missions.day_plan(out, x, marks, st))
 			if pretend != null:
 				out.append(pretend)
@@ -103,10 +95,10 @@ static func forecast(saved: Dictionary, today: String, day: String) -> Array:
 
 
 ## Is today's part of the log final enough to correct tomorrow's message: a
-## lift is logged, or it is evening, or it is not a day the player lifts.
+## lift is logged, or it is evening, or the player called today a rest day.
 static func settled(saved: Dictionary, today: String, hour: int) -> bool:
 	var real: Array = saved.get("sessions", [])
-	return _lifted_on(real, today) or hour >= EVENING_HOUR or not lift_likely(real, today)
+	return _lifted_on(real, today) or hour >= EVENING_HOUR or Missions.call_of(saved.get("settings", {}), today) == "rest"
 
 
 ## The mornings to leave with ntfy now, the ones still ahead: today's (before

@@ -140,10 +140,10 @@ static func open() -> void:
 	# Rest and the run.
 	sh.box.add_child(Kit.section_title("Rest and running"))
 	var rest = Dose.rest(App.sessions(), App.pt(), App.today)
-	var rest_text = "%d lifting day%s in a row. A rest day from lifting is due after %d: a run, a climb, PT and a walk are fine on one. The Rest chip on the Today card makes any day one." % [int(rest.run), "" if int(rest.run) == 1 else "s", Dose.REST_AFTER]
+	var rest_text = "%d lifting day%s in a row. Every day is planned as a lift day: when you need a rest day, tap Rest on the Today card (or on a day in Coming up). No lifting that day, your run, a climb and PT stay, and the split carries on a day later." % [int(rest.run), "" if int(rest.run) == 1 else "s"]
 	var today_plan = App.plan()
 	if bool(today_plan.get("off", false)):
-		rest_text = "Today is a rest day from lifting (%s). %s." % ["your call" if str(today_plan.rest.call) == "rest" else "%d lifting days in a row" % int(today_plan.rest.run), Missions.off_moves(today_plan)]
+		rest_text = "Today is a rest day from lifting (your call). %s." % Missions.off_moves(today_plan)
 	sh.box.add_child(_line("moon", rest_text))
 	if Dose.run_on(st):
 		var tomorrow = Dates.add_days(App.today, 1)

@@ -1,15 +1,15 @@
 class_name AheadView
 extends RefCounted
 ## The days ahead (Missions.ahead via App.ahead()): a card under the Today card
-## with the next few days in a word each ("Tue Push", "Thu Rest"), and a sheet
-## with every day as it will probably go: its kind, the lifts with what to aim
-## for and the other ways to do them, the lift a training focus adds, the
-## movement to try, the PT, the likely climb or run, a rest day when one is
-## due. It is a look, to plan and look forward: nothing in it is logged or
-## ticked, and it moves with what is really done.
-## The one thing that can be set here is what a day IS (Missions.call_of):
-## every day has a key, Rest on a lift day (its lifts move to the next lift
-## day and every day after follows) and Lift on a rest day or a day off.
+## with the next few days in a word each ("Tue Push", "Thu Legs"), and a sheet
+## with every day as it will go: its kind, the lifts with what to aim for and
+## the other ways to do them, the lift a training focus adds, the movement to
+## try, the PT, the likely climb or run. Every day is a lift day: no rest day
+## is planned by the game. It is a look, to plan and look forward: nothing in
+## it is logged or ticked, and it moves with what is really done.
+## The one thing that can be set here is a REST DAY (Missions.call_of): every
+## day has a Rest key (its lifts move to the day after and every day after
+## that follows, a day later); a day called rest has a Lift key to undo it.
 
 ## After a key was tapped the sheet is rebuilt, and the opposite key now sits
 ## where the finger is: taps are ignored for this long.
@@ -198,7 +198,7 @@ static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Contr
 				tags.add_child(Kit.tag(text, Pal.PANEL2, false, 10))
 		c.add(tags)
 	if bool(a.rest):
-		c.add(_line("moon", "Your call: a rest from lifting" if str(a.get("call", "")) == "rest" else "%d lifting days in a row by then" % int(plan.rest.run), Pal.SECOND))
+		c.add(_line("moon", "Your call: a rest from lifting", Pal.SECOND))
 		c.add(Kit.clip("%s. A run, PT and a walk are fine." % Missions.off_moves(plan, "the day after"), 11, Pal.MUTED))
 	elif bool(a.lift):
 		for l in plan.lifts:
@@ -207,9 +207,9 @@ static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Contr
 		if plan.new != null:
 			c.add(_line("sparkle", "Try: %s" % Missions.new_words(plan.new)))
 	elif a.others.is_empty():
-		c.add(Kit.clip("Nothing likely: you rarely train on a %s" % Dates.format_date(str(a.date), {"weekday": "long"}), 12, Pal.MUTED))
+		c.add(Kit.clip("Nothing to plan for this day yet", 12, Pal.MUTED))
 	else:
-		c.add(Kit.clip("No lifting likely on a %s" % Dates.format_date(str(a.date), {"weekday": "long"}), 11, Pal.MUTED))
+		c.add(Kit.clip("No lifts to plan yet", 11, Pal.MUTED))
 	if not plan.pt.is_empty():
 		c.add(_line("pt", "PT: %s" % ", ".join(PackedStringArray(plan.pt.map(func(r): return str(r.name)))), Pal.PT))
 	for o in a.others:
@@ -250,6 +250,8 @@ static func _week_card(days: Array):
 		var total = snappedf(sum / float(days.size()), 0.5)
 		cells.add_child(DoseView.cell(str(p), total, total, float(t[0]), float(t[1])))
 	c.add(cells)
+	# Planned as if every day is lifted, so some may read over their range.
+	c.add(Kit.clip("Counts a lift every day. A rest day you call brings these down.", 11, Pal.MUTED))
 	return c
 
 
@@ -273,7 +275,7 @@ static func _fill(sh) -> void:
 	if not _any(days):
 		sh.box.add_child(Kit.para("Not enough workouts yet to look ahead. After a few weeks this shows what the next days will probably be.", 13, Pal.MUTED))
 	else:
-		sh.box.add_child(Kit.para("The next days if each one goes as planned. Tap Rest on a day to take it off lifting: its lifts move to the next lift day and everything after follows. Nothing here is logged.", 12, Pal.MUTED))
+		sh.box.add_child(Kit.para("Every day is planned as a lift day. Tap Rest on a day to take it off lifting: its lifts move to the day after and everything after that follows, a day later. Nothing here is logged.", 12, Pal.MUTED))
 		var week = _week_card(days)
 		if week != null:
 			sh.box.add_child(week)
@@ -291,5 +293,5 @@ static func _call(sh, a: Dictionary, want: String) -> void:
 		return
 	_quiet_until = Time.get_ticks_msec() + QUIET_MS
 	Sfx.tick()
-	App.update_settings({"dayCalls": Missions.with_call(App.settings(), str(a.date), want, str(a.get("rule", "")), App.today)})
+	App.update_settings({"dayCalls": Missions.with_call(App.settings(), str(a.date), want == "rest", App.today)})
 	_fill(sh)

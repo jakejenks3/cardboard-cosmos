@@ -336,7 +336,7 @@ func _build_focus() -> void:
 		"Pick what you are training for. Every muscle then has a number of sets it should get in a week, and the Today card shows how many it got in the last 7 days.",
 		"On a day that trains a muscle that is short, the plan adds one more lift for it, with several to pick from for whatever equipment is there. A chest with no press gets a press first.",
 		"Muscles that are only kept (the legs, with \"Upper body first\") never get sets added. Their lifts still have goals to beat.",
-		"After 5 lifting days in a row the day is a rest day: a rest from lifting, so your run, a climb and physical therapy are still fine on it. The Rest chip on the Today card makes any day a rest day (or a rest day a lift day), and the days after follow.",
+		"Every day is planned as a lift day. When you need a rest day, tap Rest on the Today card (or on a day in Coming up): no lifting that day, your run, a climb and physical therapy stay, and the split carries on a day later. The weekly sets are planned as if you lift every day, so a muscle can read over its range until a rest day comes.",
 		"A climbing session counts for the forearms only, not for the back.",
 		"\"From my log\" switches all of this off.",
 	]))
