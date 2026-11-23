@@ -8,6 +8,9 @@ const VOICES = 6
 const LOUDNESS = 3.2
 
 var enabled: bool = true
+## Buzzes on a phone (settings.haptics): a record, a level, a claim, a set added.
+var buzz_on: bool = true
+var _tt_app = null
 
 var _cache = {}
 var _players = []
@@ -29,6 +32,17 @@ func _exit_tree() -> void:
 	_cache.clear()
 
 
+## A short buzz on a phone (web/tt.js, ttApp.buzz): 1 light, 2 two, 3 three.
+## Nothing anywhere else.
+func buzz(n: int = 1) -> void:
+	if not buzz_on or not OS.has_feature("web"):
+		return
+	if _tt_app == null:
+		_tt_app = JavaScriptBridge.get_interface("ttApp")
+	if _tt_app != null:
+		_tt_app.buzz(n)
+
+
 func tick() -> void:
 	_play("tick", [[880, 0.0, 0.04, "square", 0.03]])
 
@@ -48,10 +62,12 @@ func level_up() -> void:
 		notes.append([seq[i], i * 0.09, 0.18, "square", 0.07])
 	notes.append([1319, 0.38, 0.4, "triangle", 0.06])
 	_play("level_up", notes)
+	buzz(3)
 
 
 func pr() -> void:
 	_play("pr", [[784, 0.0, 0.1, "square", 0.06], [988, 0.1, 0.1, "square", 0.06], [1175, 0.2, 0.25, "square", 0.07]])
+	buzz(2)
 
 
 func achievement() -> void:
@@ -74,6 +90,7 @@ func pet() -> void:
 
 func claim() -> void:
 	_play("claim", [[587, 0.0, 0.08, "square", 0.05], [880, 0.08, 0.08, "square", 0.05], [1175, 0.16, 0.2, "square", 0.06]])
+	buzz(2)
 
 
 func stage() -> void:
@@ -113,6 +130,7 @@ func shutter() -> void:
 
 func error() -> void:
 	_play("error", [[220, 0.0, 0.15, "sawtooth", 0.04], [180, 0.12, 0.2, "sawtooth", 0.04]])
+	buzz(2)
 
 
 func _play(key: String, notes: Array) -> void:

@@ -525,7 +525,7 @@ func _shop_tile(it: Dictionary, wk: String, loadout: Dictionary, mixed: bool = f
 	var rc = Pal.rarity(it.rarity)
 	var tex = Art.item_tryon_texture(it.id, state, App.profile(), loadout)
 	var check = Wallet.can_buy(state, it, wk)
-	var pic = _zoomed(tex, it.slot)
+	var pic = _zoomed(tex, it.slot, 112.0 if mixed else 0.0)
 	if mixed:
 		var frame = CenterContainer.new()
 		frame.custom_minimum_size = Vector2(0, 120)
@@ -583,9 +583,15 @@ static func slot_view(slot: String) -> Dictionary:
 
 
 ## A hero texture zoomed in on what `slot` is about.
-func _zoomed(tex: Texture2D, slot: String) -> Control:
+## `max_w` (shop's mixed grid): a view wider than that loses a few columns at
+## its sides, so three tiles always fit the column (the widest were 124 px).
+func _zoomed(tex: Texture2D, slot: String, max_w: float = 0.0) -> Control:
 	var v = ArmoryScreen.slot_view(slot)
 	var r: Rect2 = v.rect.intersection(Rect2(0, 0, tex.get_width(), tex.get_height()))
+	if max_w > 0.0 and r.size.x * float(v.scale) > max_w:
+		var keep = floorf(max_w / float(v.scale))
+		r.position.x += floorf((r.size.x - keep) / 2.0)
+		r.size.x = keep
 	var at = AtlasTexture.new()
 	at.atlas = tex
 	at.region = r

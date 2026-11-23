@@ -159,7 +159,7 @@ static func message(saved: Dictionary, today: String) -> Dictionary:
 	var plan = Missions.day_plan(data.sessions, today, marks, settings)
 	var daily = Missions.daily(today, data, state, saved.get("claims", []))
 	var title = "Tiny Titan - %s" % Dates.format_date(today, {"weekday": "short", "month": "short", "day": "numeric"})
-	return {"title": title, "text": Missions.morning_text(plan, daily, str(settings.get("weightUnit", "kg")))}
+	return {"title": title, "text": Missions.morning_text(plan, daily, str(settings.get("weightUnit", "kg")), str(settings.get("distanceUnit", "km")))}
 
 
 ## Post a notification to the ntfy topic. Awaitable: {"ok", "code", "error"}.

@@ -38,7 +38,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not glint or not is_visible_in_tree() or _shown < 0.08:
+	if not glint or not is_visible_in_tree() or _shown < 0.08 or TouchScroll.scrolling:
 		return
 	if _glint_age < 0.0:
 		_glint_wait -= delta

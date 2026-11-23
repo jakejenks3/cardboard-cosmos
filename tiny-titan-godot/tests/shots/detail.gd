@@ -246,6 +246,9 @@ func run(m: Node, t: SceneTree) -> void:
 	check(not Pt.is_pt(App.pt(), other) and App.pt().size() == 3, "switched off again: no longer a PT lift, its sessions untouched")
 	# --- a table in the note, and a stretch held for seconds -------------------------------
 	var yesterday = Dates.add_days(today, -1)
+	# The review is what is looked at here: without this the entry imports on its
+	# own on a day whose yesterday has no demo lift (no "second lift" to ask about).
+	App.update_inbox({"autoImport": false})
 	var table = "| Date | Exercise | Variation | Weight | Reps |
 | %s | (PT) Calf stretch | wall | 30\" | 3 |
 | | Goblet squat | kettlebell | 35 | 12, 12, 10 |

@@ -8,17 +8,29 @@ extends RefCounted
 static func snap(tree: SceneTree, shot_name: String) -> String:
 	await tree.process_frame
 	await tree.process_frame
-	await RenderingServer.frame_post_draw
-	var img = tree.root.get_texture().get_image()
 	var dir = OS.get_environment("TINY_TITAN_SHOTS")
 	if dir == "":
 		dir = "user://shots"
-	DirAccess.make_dir_recursive_absolute(dir)
 	var path = dir.path_join(shot_name + ".png")
-	img.save_png(path)
-	print("SHOT ", path)
+	if DisplayServer.get_name() == "headless":
+		# Run with --headless (no window, no sound: nothing shows on the player's
+		# screen): nothing is drawn, so there is no picture, but the checks and the
+		# layout check below still run.
+		print("SHOT (none, headless) ", shot_name)
+	else:
+		await RenderingServer.frame_post_draw
+		var img = tree.root.get_texture().get_image()
+		DirAccess.make_dir_recursive_absolute(dir)
+		img.save_png(path)
+		print("SHOT ", path)
 	# Every screenshot is also a layout check: nothing may be wider than the
 	# column it scrolls in (a too-long line would push the screen off the right edge).
+	# A column whose content is too wide simply grows: so the column itself must
+	# end inside the window too (the Journey heroes once pushed it to 514 of 440).
+	var win_w = tree.root.get_visible_rect().size.x
+	for n in walk(tree.root):
+		if n is ScrollContainer and n.is_visible_in_tree() and n.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and n.get_global_rect().end.x > win_w + 0.5:
+			print("CHECK FAIL  %s: a column runs past the right edge of the window (%d > %d, %s)" % [shot_name, int(n.get_global_rect().end.x), int(win_w), str(n.get_path()).right(70)])
 	for n in walk(tree.root):
 		if n is ScrollContainer and n.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and n.get_child_count() > 0:
 			for c in n.get_children():

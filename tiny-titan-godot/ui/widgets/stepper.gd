@@ -31,6 +31,13 @@ var _repeat_time: float = 0.0
 const HOLD_DELAY = 0.38
 const REPEAT_EVERY = 0.09
 
+## On a phone a finger that lands on a key may be starting a scroll
+## (ui/touch_scroll.gd), so the first step waits for the lift (a tap) or for
+## the hold to begin; a scroll calls the press off and nothing changes.
+var _touch: bool = false
+## Steps made by holding during this press.
+var _repeats: int = 0
+
 
 func setup(value: String, step_size: float = 1.0, opts: Dictionary = {}) -> void:
 	text = value
@@ -40,8 +47,13 @@ func setup(value: String, step_size: float = 1.0, opts: Dictionary = {}) -> void
 	snap = bool(opts.get("snap", false))
 	base = opts.get("base", null)
 	if _edit == null:
+		# The phone app (web) or a phone build; a PC keeps stepping on the press.
+		_touch = (OS.has_feature("web") or OS.has_feature("mobile")) and DisplayServer.is_touchscreen_available()
 		compact = bool(opts.get("compact", false))
 		var h = float(opts.get("height", 30 if compact else 42))
+		if _touch or Kit.fingers:
+			# Room for a finger: slim rows of sets get taller keys on a phone.
+			h = maxf(h, 40.0)
 		add_theme_constant_override("separation", 2 if compact else 4)
 		_minus = _make_btn("minus", h)
 		add_child(_minus)
@@ -90,7 +102,8 @@ func _make_btn(icon: String, h: float = 42.0) -> Button:
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	b.text = "−" if icon == "minus" else "+"
 	b.tooltip_text = "Hold to repeat"
-	b.custom_minimum_size = Vector2(26 if compact else 36, h)
+	var big = _touch or Kit.fingers
+	b.custom_minimum_size = Vector2((40 if big else 26) if compact else (46 if big else 36), h)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 0, 0, 1, Pal.BORDER)
 	for k in looks:
@@ -131,18 +144,34 @@ func _down(dir: int) -> void:
 	_held = false
 	_hold_time = 0.0
 	_repeat_time = 0.0
-	if _bump(dir):
+	_repeats = 0
+	if not _touch and _bump(dir):
 		Kit.pop(_edit, 1.08, 0.14)
 	set_process(true)
 
 
 func _up() -> void:
+	var dir = _dir
 	_dir = 0
 	set_process(false)
+	# A tap on a touch screen: one step, made on the lift, and only when the
+	# finger lifts on the key (a scroll's called-off press lifts far away).
+	if _touch and dir != 0 and _repeats == 0 and Time.get_ticks_msec() - TouchScroll.last_cancel_msec > 400:
+		var key = _minus if dir < 0 else _plus
+		if key != null and key.get_global_rect().grow(6.0).has_point(TouchScroll.last_release_pos):
+			if _bump(dir):
+				Kit.pop(_edit, 1.08, 0.14)
 
 
 func _process(delta: float) -> void:
 	if _dir == 0:
+		set_process(false)
+		return
+	# Fingers: a key only repeats while a finger really holds it. A press whose
+	# release went missing ends here, before the first repeat, instead of
+	# stepping on and on until something else is touched.
+	if TouchScroll.active and TouchScroll.no_mouse and not TouchScroll.holding:
+		_dir = 0
 		set_process(false)
 		return
 	_hold_time += delta
@@ -151,6 +180,7 @@ func _process(delta: float) -> void:
 	_repeat_time += delta
 	while _repeat_time >= REPEAT_EVERY:
 		_repeat_time -= REPEAT_EVERY
+		_repeats += 1
 		_bump(_dir)
 
 

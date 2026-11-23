@@ -241,6 +241,9 @@ static func small_key(text: String, on_press: Callable, tip: String = "", w: int
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if Kit.fingers:
+		w = maxi(w, 36)
+		h = maxi(h, 36)
 	b.custom_minimum_size = Vector2(w, h)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	b.tooltip_text = tip
@@ -315,7 +318,7 @@ static func mini_chip(text: String, active: bool = false, on_press: Callable = C
 		if sb != null and b.has_theme_stylebox_override(k):
 			sb.content_margin_left = pad_h
 			sb.content_margin_right = pad_h
-	b.custom_minimum_size = Vector2(0, 28)
+	b.custom_minimum_size = Vector2(0, 38 if Kit.fingers else 28)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return b
 
@@ -328,7 +331,10 @@ static func mini_chip_width(text: String, pad_h: int = 9) -> float:
 ## An icon button with no box of its own (remove set / exercise): muted icon,
 ## a pixel key appears under it on hover and goes red when pressed.
 static func quiet_icon(icon: String, on_press: Callable, tip: String, px: int = 28) -> Button:
+	if Kit.fingers:
+		px = maxi(px, 36)
 	var b = Kit.icon_button(icon, on_press, tip, px)
+	b.custom_minimum_size = Vector2(px, px)
 	var pad_px = int(maxf(5.0, (px - 16) / 2.0))
 	var empty = StyleBoxEmpty.new()
 	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
@@ -411,6 +417,7 @@ static func finish_block(save_label: String, on_cancel: Callable, on_save: Calla
 
 ## The reward moment when a valid form is saved: sparks from the button and the XP.
 static func celebrate(save, xp = null) -> void:
+	Sfx.buzz(2)
 	if save is Control:
 		Kit.burst(save, Pal.GOOD, 22)
 	if xp is Control:

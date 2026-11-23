@@ -252,7 +252,13 @@ func _year() -> void:
 	await ShotHelper.frames(tree, 3)
 	App.open_log("lift")
 	await ShotHelper.frames(tree, 4)
+	# The lift left half entered comes back (the kept draft): start over.
+	var over = ShotHelper.find_button(main, "Start over")
+	check(over != null and not screen().form().lift.exercises.is_empty(), "a lift left half entered comes back when the form is opened again")
+	ShotHelper.press(over)
+	await ShotHelper.frames(tree, 4)
 	lift = screen().form().lift
+	check(lift.exercises.is_empty() and ShotHelper.find_button(main, "Start over") == null, "Start over empties it")
 	await tap("Use →")
 	check(lift.exercises.size() >= 1, "template applied: %d exercises" % lift.exercises.size())
 	await shot("log_07_lift_template_applied")
@@ -405,6 +411,7 @@ func _year() -> void:
 	App.open_log("lift")
 	await ShotHelper.frames(tree, 4)
 	lift = screen().form().lift
+	check(lift.exercises.is_empty(), "a draft typed in kilograms is not brought back in pounds")
 	await tap("Bench Press")
 	if lift.exercises.is_empty():
 		# A real click can land while the list is still settling: fall back to the
@@ -428,7 +435,8 @@ func _year() -> void:
 	ShotHelper.scroll_main(main, 0)
 	await shot("log_17_lb_badges")
 	print("lb draft: ", draft_text(lift.exercises[0]))
-	check(ShotHelper.find_text(screen(), "+12.5 lb") != null, "'+12.5 lb' badge shown")
+	# At finger sizes the badge drops its unit (the keys take the room).
+	check(ShotHelper.find_text(screen(), "+12.5" if Kit.fingers else "+12.5 lb") != null, "'+12.5 lb' badge shown")
 	no_overflow("ex0.name")
 	App.update_settings({"weightUnit": "kg"})
 	App.open_log(null)

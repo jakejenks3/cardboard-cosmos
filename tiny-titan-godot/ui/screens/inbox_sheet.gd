@@ -328,12 +328,11 @@ static func _pick_list(text: String, list: VBoxContainer, ui: Dictionary, pk: Di
 ## it was done (or what it works, for one never done).
 static func _pick_row(lift: String, st, detail: String, on_tap: Callable) -> Card:
 	var c = Kit.card(1, on_tap, 9)
-	var top = Kit.hbox(6)
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top = Kit.squeeze(6)
 	var sp = LiftNames.split(lift) if detail == "" else {"move": lift, "variation": ""}
-	top.add_child(Kit.clip_fit(str(sp.move), 14, null, true, 230.0))
+	top.add_child(Kit.soft_name(str(sp.move), 14, null, true, 230.0))
 	if str(sp.variation) != "":
-		top.add_child(Kit.vcenter(SessionView.variation_tag(str(sp.variation), 11)))
+		top.add_child(SessionView.variation_tag(str(sp.variation), 11, true))
 	c.add(top)
 	var bits = []
 	if detail != "":

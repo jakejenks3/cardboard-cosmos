@@ -26,6 +26,19 @@ func _ready() -> void:
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(holder)
 	_build()
+	# The phone app: a hero from the PC can arrive through the sync instead.
+	if OS.has_feature("web") and App.cloud != null:
+		App.cloud.status_changed.connect(_on_cloud)
+
+
+func _exit_tree() -> void:
+	if App.cloud != null and App.cloud.status_changed.is_connected(_on_cloud):
+		App.cloud.status_changed.disconnect(_on_cloud)
+
+
+func _on_cloud() -> void:
+	if _step == 0 and is_inside_tree():
+		_build()
 
 
 func _profile() -> Dictionary:
@@ -74,7 +87,10 @@ func _build() -> void:
 			_next.disabled = _name.strip_edges() == ""
 			_next.custom_minimum_size = Vector2(0, 56)
 			card.add(_next)
-			input.call_deferred("grab_focus")
+			if OS.has_feature("web"):
+				_box.add_child(_connect_card())
+			else:
+				input.call_deferred("grab_focus")
 		1:
 			card.add(Parts.appearance_editor(_skin, _hair_style, _hair_color, _look_changed))
 			card.add(_nav(0, Kit.button("Next →", "primary", _go.bind(2), "lg")))
@@ -90,6 +106,37 @@ func _build() -> void:
 			card.add(goal)
 			card.add(JourneyScreen.caption("sessions a week", 12))
 			card.add(_nav(1, Kit.button("Start my journey", "good", _finish, "lg", "rocket")))
+
+
+## The phone app, before it has a hero: connect to the PC's (Settings, Phone
+## app, Send to phone opens this app with a link that connects it by itself).
+func _connect_card() -> Control:
+	var c = Kit.card(10, Callable(), 14)
+	c.accent(Pal.SECOND)
+	var st = str(App.cloud.status)
+	if st == "busy":
+		var row = Kit.hbox(8)
+		row.add_child(Kit.vcenter(Icons.rect("repeat", 16)))
+		row.add_child(Kit.vcenter(Kit.label("Connecting to your hero...", 15, Pal.ACCENT, true)))
+		c.add(row)
+		return c
+	c.add(Kit.label("Already have a hero?", 15, null, true))
+	c.add(Kit.muted_para("Bring it in from a backup file (made with Settings, Back up now, or Export backup on a PC): your log and photos.", 12))
+	var restore = Kit.button("Restore from a backup", "primary", SettingsPanel.pick_import.bind(null), "md", "arrow_down")
+	restore.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.add(restore)
+	if st == "error" or st == "old":
+		c.add(Kit.muted_para(App.cloud.status_text(), 12))
+	c.add(Kit.muted_para("Or connect to a PC that shares its log (Settings, Phone app, Send to phone), or paste its link:", 12))
+	var box = Kit.input("", "Paste the link or code")
+	box.select_all_on_focus = false
+	c.add(box)
+	var go = Kit.button("Connect", "secondary", func():
+		if App.cloud.connect_with(box.text):
+			Sfx.claim(), "md", "repeat")
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.add(go)
+	return c
 
 
 ## Three pixel pips: done and current ones lit gold, the rest sunken.

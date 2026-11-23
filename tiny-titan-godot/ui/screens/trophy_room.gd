@@ -86,17 +86,22 @@ static func _trophy(id: String) -> Control:
 	return slot
 
 
-## The records, framed: the strongest lifts by estimated one-rep max, then the
-## longest run, ride and hang and the hardest climb that has been sent.
+## The records, framed: the heaviest lifts as they were really done (the weight
+## of the heaviest set and its reps, never an estimated one-rep max: a plaque
+## is for something that happened), then the longest run, ride and hang and
+## the hardest climb that has been sent.
 static func _plaques() -> Control:
 	var wu = App.weight_unit()
 	var du = App.distance_unit()
 	var items = []
-	var rows = LiftLibrary.stats(App.sessions()).values().filter(func(r): return float(r.e1rm) > 0.0)
-	rows.sort_custom(func(a, b): return float(a.e1rm) > float(b.e1rm))
+	var rows = LiftLibrary.stats(App.sessions()).values().filter(func(r): return float(r.bestKg) > 0.0)
+	rows.sort_custom(func(a, b):
+		if absf(float(a.bestKg) - float(b.bestKg)) > 1e-9:
+			return float(a.bestKg) > float(b.bestKg)
+		return int(a.bestReps) > int(b.bestReps))
 	for r in rows.slice(0, 4):
 		var sp = LiftNames.split(str(r.name))
-		items.append(["lift", str(sp.move), "%s strength" % Fmt.fmt_weight(float(r.e1rm), wu), Pal.LIFT])
+		items.append(["lift", str(sp.move), "%s × %d" % [Fmt.fmt_weight(float(r.bestKg), wu), int(r.bestReps)], Pal.LIFT])
 	var prs = App.state.get("prs", {})
 	if float(prs.get("longestRunM", 0.0)) > 0.0:
 		items.append(["run", "Longest run", Fmt.fmt_distance(float(prs.longestRunM), du), Pal.RUN])

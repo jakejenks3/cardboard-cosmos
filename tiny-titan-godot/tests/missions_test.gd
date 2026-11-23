@@ -103,6 +103,33 @@ func _init() -> void:
 	var row_m = find(after, ":beat:bent over row - barbell")
 	ok(lat_m != null and lat_m.done and row_m != null and not row_m.done, "one more rep beats it; a lighter row does not")
 	ok(find(after, ":new").done and find(after, ":pt").done and find(after, ":show").done, "the new movement, the PT and showing up are done", [find(after, ":new"), find(after, ":pt"), find(after, ":show")])
+	# "Try something new" is only done by sets really logged: not by the movement
+	# added to the workout and left empty, not by a new physical therapy exercise.
+	var nw = plan.new
+	var offered = [str(nw.move)] + nw.alts.map(func(a): return str(a.move))
+	ok(nw.alts.size() == Missions.NEW_ALTS and not nw.alts.any(func(a): return str(a.move) == str(nw.move)) and nw.alts.all(func(a): return a.part == "back" and not ["Lat Pulldown", "Bent Over Row"].has(a.move)), "two more back movements never done are offered beside it", nw.alts.map(func(a): return str(a.name)))
+	ok(str(find(day, ":new").desc).contains(Missions.short_name(str(nw.alts[0].name))) and str(find(day, ":new").desc).contains("fits a back day"), "the mission names the others", find(day, ":new").desc)
+	ok(Missions.new_by(log + [lift(TODAY, {"Lat Pulldown - Single arm": [[10, 36]]})], TODAY, plan) == "", "nothing new logged: not done")
+	var empty_day = lift(TODAY, {"Lat Pulldown - Single arm": [[10, 36]]})
+	empty_day.exercises.append({"name": str(nw.name), "sets": []})
+	empty_day.exercises.append({"name": str(nw.alts[0].name), "sets": [{"reps": 0, "weightKg": 0.0}]})
+	ok(Missions.new_by(log + [empty_day], TODAY, plan) == "", "added to the workout but no set logged: not done", Missions.new_by(log + [empty_day], TODAY, plan))
+	ok(Missions.new_by(log + [lift(TODAY, {str(nw.alts[1].name): [[10, 20]]})], TODAY, plan) == str(nw.alts[1].name), "one of the others offered, logged: done by it")
+	# Another new movement counts when it has the same goal (a back movement on a
+	# back day), not a stretch, a PT exercise or a movement of another area.
+	var back_new = ""
+	for e in LiftLibrary.catalog():
+		if str(e.part) == "back" and not offered.has(str(e.name)) and not ["Lat Pulldown", "Bent Over Row"].has(str(e.name)):
+			back_new = str(e.name)
+			break
+	ok(back_new != "" and Missions.new_by(log + [lift(TODAY, {back_new: [[10, 20]]})], TODAY, plan) == back_new, "another back movement never done counts, by its name", back_new)
+	ok(Missions.new_by(log + [lift(TODAY, {"Calf Raise": [[15, 40]]})], TODAY, plan) == "", "a new leg movement on a back day does not")
+	ok(Missions.new_by(log + [lift(TODAY, {"Lat Stretch": [[3, 0]], "Toe Stretch": [[3, 0]]})], TODAY, plan) == "", "a new stretch does not")
+	var pt_plan = plan.duplicate()
+	pt_plan["marks"] = marks.duplicate(true)
+	pt_plan.marks[Pt.key(back_new)] = {"name": back_new, "perWeek": 3}
+	ok(Missions.new_by(log + [lift(TODAY, {back_new: [[10, 20]]})], TODAY, pt_plan) == "", "a new physical therapy exercise does not (the PT row counts it)")
+	ok(Missions.new_by(log + [todays], TODAY, plan) == str(nw.name) and str(find(after, ":new").get("by", "")) == str(nw.name), "the suggested movement, logged: done, and the mission says by what", find(after, ":new"))
 	var claimed = Missions.daily(TODAY, data, state, [{"questId": str(lat_m.id)}]).filter(func(m): return m.id == lat_m.id)[0]
 	ok(bool(claimed.claimed), "a claim marks it claimed")
 

@@ -10,6 +10,9 @@ extends SceneTree
 ## When the note's table can be cleared (Settings -> Phone inbox, script
 ## version 2) and "Write the day's plan" is on, the day's plan goes into the
 ## table first (DocClear.send_plan) and the message says so.
+## When the save is shared with the phone app (Settings -> Phone app), what the
+## phone logged counts too: the copy in the note's script is merged with the
+## save in memory (app/cloud_sync.gd, SaveMerge), still without writing it.
 
 func _initialize() -> void:
 	_run()
@@ -34,6 +37,9 @@ func _run() -> void:
 		print("MORNING: the save could not be read")
 		quit(1)
 		return
+	# The request needs the tree running: wait for the first frame.
+	await process_frame
+	saved = await _with_phone(saved, dir)
 	var today = Dates.today_key()
 	var m = MorningAlert.settings(saved.get("settings", {}))
 	var msg = MorningAlert.message(saved, today)
@@ -86,9 +92,10 @@ func _evening(args: Array, dry: bool) -> void:
 	if not (saved is Dictionary):
 		quit(1)
 		return
+	await process_frame
+	saved = await _with_phone(saved, dir)
 	var today = Dates.today_key()
 	var m = MorningAlert.settings(saved.get("settings", {}))
-	await process_frame
 	var from_note = await MorningAlert.note_sessions(root, saved, today)
 	var msg = MorningAlert.evening_message(saved, today, from_note)
 	print("EVENING %s (%d from the note)\n%s" % [msg.title, from_note.size(), msg.text if msg.text != "" else "(nothing to send)"])
@@ -106,3 +113,46 @@ func _evening(args: Array, dry: bool) -> void:
 	var res = await MorningAlert.send(root, msg.title, msg.text, m.topic, m.server, MorningAlert.note_link(saved), MorningAlert.logger_link(saved))
 	print("EVENING sent: %s" % JSON.stringify(res))
 	quit(0 if res.ok else 1)
+
+
+## The save with the phone app's changes merged in, when the save is shared
+## (sync.json next to it says so). In memory only; on any trouble, the save as it is.
+func _with_phone(saved: Dictionary, dir: String) -> Dictionary:
+	var folder = (dir.trim_suffix("/").trim_suffix("\\") + "/") if dir != "" else "user://"
+	var cfg = _read_json(folder + "sync.json")
+	if not (cfg is Dictionary) or not bool(cfg.get("on", false)):
+		return saved
+	var url = str(cfg.get("url", ""))
+	var token = str(cfg.get("token", ""))
+	if url == "":
+		var cl = saved.get("inbox", {}).get("clear", {}) if saved.get("inbox") is Dictionary else {}
+		if cl is Dictionary:
+			url = str(cl.get("url", ""))
+			token = str(cl.get("token", ""))
+	if url == "" or token == "":
+		return saved
+	var req = HTTPRequest.new()
+	req.timeout = 25.0
+	root.add_child(req)
+	if req.request(url + ("&" if url.contains("?") else "?") + "token=" + token.uri_encode() + "&save=get") != OK:
+		req.queue_free()
+		return saved
+	var r = await req.request_completed
+	req.queue_free()
+	if int(r[0]) != HTTPRequest.RESULT_SUCCESS or int(r[1]) != 200:
+		return saved
+	var got = JSON.parse_string(PackedByteArray(r[3]).get_string_from_utf8())
+	if not (got is Dictionary) or int(got.get("rev", 0)) <= 0 or int(got.rev) == int(cfg.get("rev", 0)):
+		return saved
+	var theirs = CloudSync.decode(str(got.get("data", "")))
+	if not (theirs is Dictionary):
+		return saved
+	var base = _read_json(folder + "sync_base.json")
+	print("MORNING: with the phone app's changes (copy %d)" % int(got.rev))
+	return SaveMerge.merge(base if base is Dictionary else {}, saved, theirs)
+
+
+func _read_json(path: String):
+	if not FileAccess.file_exists(path):
+		return null
+	return JSON.parse_string(FileAccess.get_file_as_string(path))

@@ -200,9 +200,9 @@ static func _open_card(sh, p: Dictionary) -> Control:
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(Kit.clip(str(p.name) if str(p.name) != "" else "Project", 16, null, true))
 	v.add_child(Kit.clip(Projects.progress_text(st), 12, Pal.TEXT))
-	var since = "Picked %s" % Dates.relative_day(str(p.since), App.today).to_lower()
+	var since = "Picked %s" % ClimbCard.when_text(str(p.since))
 	if str(st.last) != "":
-		since += " · last tried %s" % Dates.relative_day(str(st.last), App.today).to_lower()
+		since += " · last tried %s" % ClimbCard.when_text(str(st.last))
 	v.add_child(Kit.clip(since, 11, Pal.MUTED))
 	row.add_child(v)
 	c.add(row)
@@ -242,7 +242,7 @@ static func _done_card(sh, p: Dictionary, sent: bool) -> Control:
 	var v = Kit.vbox(0)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(Kit.clip(str(p.name) if str(p.name) != "" else "Project", 14, null, true))
-	var what = ("Sent %s · " % Dates.relative_day(str(p.sent), App.today).to_lower()) if sent else ("Set aside %s · " % Dates.relative_day(str(p.aside), App.today).to_lower())
+	var what = ("Sent %s · " % ClimbCard.when_text(str(p.sent))) if sent else ("Set aside %s · " % ClimbCard.when_text(str(p.aside)))
 	v.add_child(Kit.clip(what + Projects.progress_text(st), 11, Pal.MUTED))
 	row.add_child(v)
 	if not sent:

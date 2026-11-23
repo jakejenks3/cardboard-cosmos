@@ -513,7 +513,7 @@ static func _standard_card(history: Array, lift_name: String, wu: String):
 	head.add_child(Kit.vcenter(Icons.rect("medal", 24)))
 	var v = Kit.vbox(0)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(Kit.label("STRENGTH LEVEL", 10, Pal.MUTED, true))
+	v.add_child(Kit.clip("STRENGTH LEVEL · FROM YOUR ESTIMATED 1-REP MAX" if r.kind == "ratio" else "STRENGTH LEVEL", 10, Pal.MUTED, true))
 	var said = "%.2f× bodyweight" % float(r.value) if r.kind == "ratio" else "%d reps in a set" % int(r.value)
 	v.add_child(Kit.clip("%s · %s" % [r.name, said], 15, col, true))
 	head.add_child(v)
@@ -578,7 +578,10 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 	var why = ""
 	match str(t.kind):
 		"weight":
-			why = "Every set at %s got %d reps: add %s." % [Fmt.fmt_weight(float(t.kg), wu), int(t.reps), Fmt.fmt_weight(float(t.addKg), wu)]
+			if bool(t.get("heavier", false)):
+				why = "Every set at %s went past %d reps: too light to build much. Add %s and come down to %d reps." % [Fmt.fmt_weight(float(t.kg), wu), LiftTrend.HIGH_REPS, Fmt.fmt_weight(float(t.addKg), wu), int(t.reps)]
+			else:
+				why = "Every set at %s got %d reps: add %s." % [Fmt.fmt_weight(float(t.kg), wu), int(t.reps), Fmt.fmt_weight(float(t.addKg), wu)]
 		"reps":
 			if float(t.kg) > 0.0:
 				why = "One more rep on set %d: %d reps at %s." % [int(t.set), int(t.reps), Fmt.fmt_weight(float(t.kg), wu)]
@@ -597,7 +600,7 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 static func metric_options(mode: String) -> Array:
 	match mode:
 		"kg":
-			return [{"value": "weight", "label": "Top set"}, {"value": "e1rm", "label": "Strength"}, {"value": "reps", "label": "Reps"}, {"value": "volume", "label": "Moved"}]
+			return [{"value": "weight", "label": "Top set"}, {"value": "e1rm", "label": "Est. 1RM"}, {"value": "reps", "label": "Reps"}, {"value": "volume", "label": "Moved"}]
 		"sec":
 			return [{"value": "hold", "label": "Hold"}, {"value": "reps", "label": "Reps"}]
 	return [{"value": "best", "label": "Best set"}, {"value": "reps", "label": "Reps in all"}]
@@ -735,11 +738,15 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 		"bar_fmt": func(val): return ("%s %s" % [Fmt.fmt_big_kg(Fmt.unit_to_kg(float(val), wu), wu), bar_word]) if mode == "kg" else ("%d %s" % [TTUtil.jsround(float(val)), "s held" if mode == "sec" else "reps"])})
 	chart.tooltip_text = METRIC_WORDS.get(metric, "")
 	c.add(chart)
-	var legend = [{"name": {"weight": "Top set", "e1rm": "Strength", "volume": "Moved", "hold": "Longest hold", "best": "Best set"}.get(metric, "Reps"), "color": Pal.LIFT},
+	var legend = [{"name": {"weight": "Top set", "e1rm": "Estimated 1-rep max", "volume": "Moved", "hold": "Longest hold", "best": "Best set"}.get(metric, "Reps"), "color": Pal.LIFT},
 		{"name": "Work that day", "color": Pal.with_alpha(Pal.MUTED, 0.6)}, {"name": "New best", "color": Pal.ACCENT}]
 	if note_day != "":
 		legend.append({"name": "Your note", "color": Pal.GOOD})
 	c.add(Charts.legend(legend))
+	# Said in words, not only in a tooltip (a phone shows none): this line is worked
+	# out, it is not weight that was on the bar.
+	if metric == "e1rm":
+		c.add(Kit.para("An estimate: the single rep your best set of each day works out to. Not a lift you did; Top set shows those.", 11, Pal.MUTED))
 	holder.add_child(c)
 
 	if ctx.st != null:

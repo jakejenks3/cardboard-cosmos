@@ -7,7 +7,6 @@ extends RefCounted
 ##
 ##   Charts.weekly_xp(points)                  stacked weekly XP bars + legend chips
 ##   Charts.heatmap(xp_by_date, today)          16-week training calendar
-##   Charts.pyramid(counts, max_grade)          climbing send pyramid
 ##   Charts.line(points, color, fmt, trend)     single-series time line
 ##   Charts.legend(items)                       a row of colour chips
 ##   Charts.moving_average(points, n)           centred moving average
@@ -31,11 +30,6 @@ static func heat(level: int) -> Color:
 		3:
 			return Pal.ACCENT
 	return Pal.ACCENT.lightened(0.45)
-
-
-## Flashes in the send pyramid: a lighter shade of the climbing colour.
-static func flash() -> Color:
-	return Pal.CLIMB.lightened(0.45)
 
 
 ## Grid lines on the well.
@@ -81,13 +75,6 @@ static func weekly_xp(points: Array) -> Control:
 static func heatmap(xp_by_date: Dictionary, today: String, weeks: int = 16) -> Control:
 	var c = HeatmapChart.new()
 	c.setup(xp_by_date, today, weeks)
-	return c
-
-
-## counts = {grade (int): {"sends": n, "flashes": n}}
-static func pyramid(counts: Dictionary, max_grade: int) -> Control:
-	var c = PyramidChart.new()
-	c.setup(counts, max_grade)
 	return c
 
 

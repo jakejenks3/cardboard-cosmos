@@ -126,7 +126,7 @@ func run(m: Node, t: SceneTree) -> void:
 	check(absf(ShotHelper.find_button(page, "Progress").get_global_rect().position.y - keys_y) <= 1.0, "switching views leaves the keys where they were")
 	var chart = _first(ProgressChart)
 	check(chart != null and chart.points.size() > 20 and not chart.records.is_empty(), "Progress: the chart, with new bests marked (%d points, %d bests)" % [chart.points.size() if chart != null else 0, chart.records.size() if chart != null else 0])
-	check(_count(RepLadder) == 1 and ShotHelper.find_button(page, "Top set") != null and ShotHelper.find_button(page, "Strength") != null and ShotHelper.find_button(page, "3M") != null, "the rep ladder, the metric picker and the range")
+	check(_count(RepLadder) == 1 and ShotHelper.find_button(page, "Top set") != null and ShotHelper.find_button(page, "Est. 1RM") != null and ShotHelper.find_button(page, "3M") != null, "the rep ladder, the metric picker and the range")
 	if chart != null:
 		chart.hover = chart.points.size() - 3
 		chart.queue_redraw()
@@ -136,7 +136,7 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.frames(tree, 5)
 	chart = _first(ProgressChart)
 	check(chart != null and chart.points.size() < all_points and chart.points.size() >= 8, "3M shows the last three months only (%d of %d)" % [chart.points.size() if chart != null else 0, all_points])
-	ShotHelper.press(ShotHelper.find_button(page, "Strength"))
+	ShotHelper.press(ShotHelper.find_button(page, "Est. 1RM"))
 	await ShotHelper.frames(tree, 5)
 	check(_first(ProgressChart) != null and ShotHelper.find_text(page, "since") != null, "Strength keeps the range and charts again")
 	await ShotHelper.snap(tree, "progress_5_strength_3m")

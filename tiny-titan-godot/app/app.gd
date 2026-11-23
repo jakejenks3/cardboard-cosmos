@@ -24,6 +24,8 @@ static var BACKUP_DIR = "user://backups"
 static var PHOTO_DIR = "user://photos"
 const KEEP_BACKUPS = 14
 const PHOTO_MAX_SIDE = 1280
+## The phone app reminds the player to make a backup file this often (days).
+const BACKUP_EVERY_DAYS = 7
 const DEFAULT_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
 
 ## Source of truth: {profile, settings, sessions, claims, body, purchases, reading, loadout, activePet, strava, updatedAt}
@@ -46,11 +48,18 @@ var log_discipline = null
 ## An exercise the lift form should add the next time it builds (set by the
 ## lift library's "Add to today's workout"; the form clears it).
 var pending_exercise: String = ""
+## The day's lifts sent over from the Today card's "Start workout" (names; the
+## lift form adds each with last time's sets and clears this).
+var pending_workout: Array = []
 var editing_session_id = null
 var editing_body_id = null
 
 ## The phone inbox (app/inbox.gd): reads workouts jotted in a note on the phone.
 var inbox = null
+## The phone app's own morning message (app/phone_push.gd).
+var push = null
+## The save shared with the phone app through the note's script (app/cloud_sync.gd).
+var cloud = null
 
 var _quests = null
 var _plan = null
@@ -85,6 +94,12 @@ func _ready() -> void:
 	inbox = PhoneInbox.new()
 	inbox.name = "PhoneInbox"
 	add_child(inbox)
+	cloud = CloudSync.new()
+	cloud.name = "CloudSync"
+	add_child(cloud)
+	push = PhonePush.new()
+	push.name = "PhonePush"
+	add_child(push)
 
 
 func _tick() -> void:
@@ -145,6 +160,67 @@ func set_pt(lift_name: String, on: bool) -> void:
 	saved.updatedAt = now_ms()
 	_write()
 	changed.emit()
+
+
+## How many sessions hold a lift of this name.
+func lift_sessions(lift_name: String) -> int:
+	var k = Xp.normalize_exercise(lift_name)
+	var n = 0
+	for s in saved.sessions:
+		for ex in s.get("exercises", []):
+			if ex is Dictionary and Xp.normalize_exercise(ex.get("name", "")) == k:
+				n += 1
+				break
+	return n
+
+
+## Rename a lift everywhere in the log: every session's exercise of that name,
+## its physical therapy mark and the phone note's name decisions. When a lift
+## of the new name exists already the two become one lift (its spelling is
+## kept). Nothing else changes: no set, no date. A copy of the save is kept
+## first (backups/save-<day>-before-rename-...). Returns {"ok", "sessions",
+## "joined", "name"}.
+func rename_lift(old_name: String, new_name: String) -> Dictionary:
+	var old_key = Xp.normalize_exercise(old_name)
+	var want = new_name.strip_edges()
+	var new_key = Xp.normalize_exercise(want)
+	var none = {"ok": false, "sessions": 0, "joined": false, "name": want}
+	if old_key == "" or new_key == "" or lift_sessions(old_name) == 0:
+		return none
+	var joined = false
+	if new_key != old_key:
+		for s in saved.sessions:
+			for ex in s.get("exercises", []):
+				if ex is Dictionary and Xp.normalize_exercise(ex.get("name", "")) == new_key:
+					joined = true
+					want = str(ex.name).strip_edges()
+	elif want == old_name.strip_edges():
+		return none
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.make_dir_recursive_absolute(BACKUP_DIR)
+		DirAccess.copy_absolute(SAVE_PATH, "%s/save-%s-before-rename-%d.json" % [BACKUP_DIR, today, now_ms()])
+	var n = 0
+	for s in saved.sessions:
+		var hit = false
+		for ex in s.get("exercises", []):
+			if ex is Dictionary and Xp.normalize_exercise(ex.get("name", "")) == old_key:
+				ex["name"] = want
+				hit = true
+		if hit:
+			n += 1
+	if saved.pt.has(old_key):
+		var mark = saved.pt[old_key]
+		saved.pt.erase(old_key)
+		if not saved.pt.has(new_key):
+			mark["name"] = want
+			saved.pt[new_key] = mark
+	var names = saved.inbox.get("names", {}) if saved.get("inbox") is Dictionary else {}
+	if names is Dictionary:
+		for k in names.keys():
+			if Xp.normalize_exercise(str(names[k])) == old_key:
+				names[k] = want
+	_commit()
+	return {"ok": true, "sessions": n, "joined": joined, "name": want}
 
 
 ## Climbing projects (game/projects.gd), as stored: open, sent and set aside.
@@ -341,7 +417,7 @@ func body_by_id(id):
 
 ## What the missions read from the save (Missions.daily / weekly).
 func mission_data() -> Dictionary:
-	return {"sessions": saved.sessions, "pt": pt(), "settings": saved.settings, "reading": reading()}
+	return {"sessions": saved.sessions, "pt": pt(), "settings": saved.settings, "reading": reading(), "now": today}
 
 
 ## {"daily": [...], "weekly": [...], "yesterday": [...]} for today (cached until
@@ -437,6 +513,42 @@ func update_profile(patch: Dictionary) -> void:
 func update_settings(patch: Dictionary) -> void:
 	saved.settings.merge(patch, true)
 	_commit()
+
+
+## A workout being entered in the Log tab is kept in a small file as it
+## changes (a phone may close the app between sets). null drops it.
+func draft_store(discipline: String, d) -> void:
+	var path = DATA_DIR + "draft-%s.json" % discipline
+	if d == null:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+		return
+	var f = FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(d))
+		f.close()
+
+
+## Today's kept draft of that kind of workout, or null (an older one is dropped).
+func draft_load(discipline: String):
+	var path = DATA_DIR + "draft-%s.json" % discipline
+	if not FileAccess.file_exists(path):
+		return null
+	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not (d is Dictionary) or str(d.get("day", "")) != today:
+		DirAccess.remove_absolute(path)
+		return null
+	return TTUtil.normalize_json(d)
+
+
+## Today's lift session (the newest), or null.
+func lift_today():
+	var out = null
+	for s in saved.sessions:
+		if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) == today:
+			if out == null or float(s.get("createdAt", 0)) >= float(out.get("createdAt", 0)):
+				out = s
+	return out
 
 
 ## Stamp a new session with an id, creation time and the perk snapshot.
@@ -687,8 +799,35 @@ func replace_all(data: Dictionary) -> void:
 	nav_changed.emit()
 
 
+## The save as merged with the phone's (or the PC's) copy (app/cloud_sync.gd):
+## taken on like a load, without counting as a change made here. False (and
+## nothing changed) when it is not a save.
+func apply_synced(data: Dictionary) -> bool:
+	var parsed = parse_saved(data)
+	if parsed == null:
+		return false
+	var had_profile = has_profile()
+	saved = parsed
+	_photo_cache.clear()
+	_write()
+	_recompute()
+	changed.emit()
+	if had_profile != has_profile():
+		nav_changed.emit()
+	return true
+
+
+## Progress photos were fetched from the other device (app/cloud_sync.gd): the
+## screens showing an empty frame are drawn again.
+func photos_arrived() -> void:
+	_photo_cache.clear()
+	changed.emit()
+
+
 ## Wipe everything (Settings → reset). Photos are deleted too.
 func reset_all() -> void:
+	for d in ["lift", "climb"]:
+		draft_store(d, null)
 	saved = empty_saved()
 	_commit()
 	_prune_photos()
@@ -866,20 +1005,135 @@ func _prune_photos() -> void:
 
 ## Write a backup file anyone can keep (same format as the web app's export,
 ## photos included). Returns "" on success or an error message.
-func export_backup(path: String) -> String:
+## Without photos (`with_photos` false) the file is the log alone: small, and
+## the photos already on a device stay when it is restored there.
+func export_backup(path: String, with_photos: bool = true) -> String:
 	var out = saved.duplicate(true)
-	var photos = {}
-	for id in referenced_photo_ids():
-		if FileAccess.file_exists(photo_path(id)):
-			var bytes = FileAccess.get_file_as_bytes(photo_path(id))
-			photos[id] = "data:image/jpeg;base64," + Marshalls.raw_to_base64(bytes)
-	out["photos"] = photos
+	if with_photos:
+		var photos = {}
+		for id in referenced_photo_ids():
+			if FileAccess.file_exists(photo_path(id)):
+				var bytes = FileAccess.get_file_as_bytes(photo_path(id))
+				photos[id] = "data:image/jpeg;base64," + Marshalls.raw_to_base64(bytes)
+		out["photos"] = photos
 	var f = FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return "Could not write to that location."
 	f.store_string(JSON.stringify(out, "  "))
 	f.close()
 	return ""
+
+
+## A backup file was made on this device just now (Settings -> Export backup):
+## remembered next to the save, for "last backed up" and the reminder.
+func note_backup(with_photos: bool = true) -> void:
+	var info = backup_info()
+	info["at"] = now_ms()
+	info["updatedAt"] = saved.get("updatedAt", 0)
+	if with_photos:
+		# Which photos that file holds, and of what day it is.
+		info["photoIds"] = photos_here()
+		info["photosDay"] = today
+	var f = FileAccess.open(DATA_DIR + "backup.json", FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(info))
+		f.close()
+	changed.emit()
+
+
+## The photos the log names that are on this device.
+func photos_here() -> Array:
+	return referenced_photo_ids().filter(func(id): return FileAccess.file_exists(photo_path(id)))
+
+
+## The photos the log names that are NOT on this device (a log restored without them).
+func photos_missing() -> Array:
+	return referenced_photo_ids().filter(func(id): return not FileAccess.file_exists(photo_path(id)))
+
+
+## Photos on this device that are in no backup file made here yet.
+func photos_unsaved() -> Array:
+	var ids = backup_info().get("photoIds", [])
+	var kept = {}
+	if ids is Array:
+		for id in ids:
+			kept[str(id)] = true
+	return photos_here().filter(func(id): return not kept.has(str(id)))
+
+
+## How many photos a backup (from read_backup) holds that are missing here.
+func photos_to_take(backup: Dictionary) -> int:
+	var photos = backup.get("photos", {})
+	return photos_missing().filter(func(id): return photos.has(id)).size()
+
+
+## Take only the photos missing here out of a backup; the log stays as it is.
+## Returns how many were added.
+func take_photos(backup: Dictionary) -> int:
+	var photos = backup.get("photos", {})
+	var n = 0
+	for id in photos_missing():
+		if photos.has(id) and _store_photo_text(str(id), str(photos[id])):
+			n += 1
+	if n > 0:
+		_photo_cache.clear()
+		changed.emit()
+	return n
+
+
+func _store_photo_text(id: String, v: String) -> bool:
+	var comma = v.find(",")
+	if v.begins_with("data:") and comma > 0:
+		v = v.substr(comma + 1)
+	var bytes = Marshalls.base64_to_raw(v)
+	if bytes.is_empty():
+		return false
+	var f = FileAccess.open(photo_path(id), FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_buffer(bytes)
+	f.close()
+	return true
+
+
+## {"at": ms, "updatedAt": the save's updatedAt then}, or {} when none was made here.
+func backup_info() -> Dictionary:
+	var path = DATA_DIR + "backup.json"
+	if not FileAccess.file_exists(path):
+		return {}
+	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return d if d is Dictionary else {}
+
+
+## Days since a backup file was last made here; -1 when never.
+func backup_age_days() -> int:
+	var at = float(backup_info().get("at", 0))
+	if at <= 0.0:
+		return -1
+	return maxi(0, int((float(now_ms()) - at) / 86400000.0))
+
+
+## "today", "3 days ago", "never".
+func backup_age_text() -> String:
+	var d = backup_age_days()
+	if d < 0:
+		return "never"
+	if d == 0:
+		return "today"
+	return "yesterday" if d == 1 else "%d days ago" % d
+
+
+## Is it time to remind the player: there is a log to lose, it changed since the
+## last backup file, and that was BACKUP_EVERY_DAYS ago or more (or never).
+func backup_due() -> bool:
+	if not has_profile() or saved.sessions.size() + saved.body.size() < 3:
+		return false
+	var info = backup_info()
+	if info.is_empty():
+		return true
+	if float(saved.get("updatedAt", 0)) <= float(info.get("updatedAt", 0)):
+		return false
+	return backup_age_days() >= BACKUP_EVERY_DAYS
 
 
 ## Read a backup file. Returns {"ok": bool, "error": String, "sessions": int, "body": int, "data": parsed}.
@@ -902,19 +1156,11 @@ func apply_backup(backup: Dictionary) -> int:
 	var n = 0
 	var photos = backup.get("photos", {})
 	for id in photos:
-		var v = str(photos[id])
-		var comma = v.find(",")
-		if v.begins_with("data:") and comma > 0:
-			v = v.substr(comma + 1)
-		var bytes = Marshalls.base64_to_raw(v)
-		if bytes.is_empty():
-			continue
-		var f = FileAccess.open(photo_path(str(id)), FileAccess.WRITE)
-		if f != null:
-			f.store_buffer(bytes)
-			f.close()
+		if _store_photo_text(str(id), str(photos[id])):
 			n += 1
 	_photo_cache.clear()
+	for d in ["lift", "climb"]:
+		draft_store(d, null)
 	saved = backup.data
 	_commit()
 	tab = "home"
@@ -1051,6 +1297,8 @@ func _write() -> void:
 	f.store_string(JSON.stringify(saved, "  "))
 	f.close()
 	_write_failed = false
+	if cloud != null:
+		cloud.local_changed()
 
 
 ## One dated copy per day the game is opened; the newest KEEP_BACKUPS are kept.
@@ -1094,3 +1342,4 @@ func _recompute() -> void:
 	var pl = plan()
 	Art.focus = str(pl.kind) if str(pl.kind) != "" else ("climb" if not pl.others.is_empty() and str(pl.others[0].discipline) == "climb" and pl.lifts.is_empty() else "")
 	Sfx.enabled = bool(saved.settings.get("sound", true))
+	Sfx.buzz_on = bool(saved.settings.get("haptics", true))

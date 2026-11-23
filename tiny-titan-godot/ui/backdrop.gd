@@ -209,7 +209,7 @@ class SkyFx:
 		queue_redraw()
 
 	func _process(delta: float) -> void:
-		if _pal.is_empty() or not is_visible_in_tree():
+		if _pal.is_empty() or not is_visible_in_tree() or TouchScroll.scrolling:
 			return
 		_t += delta
 		if _fall == null and float(_pal.stars) >= 1.0:

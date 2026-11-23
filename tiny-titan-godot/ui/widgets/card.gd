@@ -6,6 +6,8 @@ extends PanelContainer
 var box: VBoxContainer
 var _tap = Callable()
 var _press_at = null
+var _squash_tw = null
+var _down_msec: int = -100000
 var _pad = 14
 ## null = the theme's panel colour / bright edge.
 var _bg = null
@@ -102,13 +104,21 @@ func _restyle() -> void:
 	add_theme_stylebox_override("panel", PixBox.panel(bg, _border, _pad))
 
 
-## Pressed in a little while the mouse is down, popping back on release.
+## Pressed in a little while the mouse is down, popping back on release. A
+## finger's tap presses and releases in one go (ui/touch_scroll.gd): the card
+## still goes in first, then pops back.
 func _squash(down: bool) -> void:
 	pivot_offset = size / 2.0
+	if _squash_tw != null and _squash_tw.is_valid():
+		_squash_tw.kill()
 	var tw = create_tween()
+	_squash_tw = tw
 	if down:
+		_down_msec = Time.get_ticks_msec()
 		tw.tween_property(self, "scale", Vector2(0.975, 0.975), 0.06)
 	else:
+		if Time.get_ticks_msec() - _down_msec < 50:
+			tw.tween_property(self, "scale", Vector2(0.975, 0.975), 0.06)
 		tw.tween_property(self, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 

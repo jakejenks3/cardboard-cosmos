@@ -34,6 +34,8 @@ window/handheld/orientation=1
 [gui]
 
 theme/default_font_multichannel_signed_distance_field=false
+; The phone app (web build): a finger does not hover, so no tooltip may ever open.
+timers/tooltip_delay_sec.web=86400.0
 
 [rendering]
 

@@ -32,7 +32,7 @@ const PAGE_FILE = "res://app/doc_logger.html"
 
 const TIMEOUT_SEC = 30.0
 ## The script's VERSION (what a ping of the newest one says).
-const SCRIPT_VERSION = 3
+const SCRIPT_VERSION = 5
 ## The longest the logger's info may be in a link (encoded characters).
 const INFO_MAX = 2600
 

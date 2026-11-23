@@ -17,10 +17,19 @@ static func pt_tag(size: int = 10) -> Control:
 	return Kit.tag("PT", Pal.PT, true, size)
 
 
-## A lift's variation beside its movement: "Barbell", "Single arm".
-static func variation_tag(variation: String, size: int = 10) -> Control:
+## A lift's variation beside its movement: "Barbell", "Single arm". `soft`: for a
+## Kit.squeeze row, where a long one ("Single leg balance pad") is cut off with
+## "…" when the row has no room for it.
+static func variation_tag(variation: String, size: int = 10, soft: bool = false) -> Control:
 	var t = Kit.tag(variation, Pal.PANEL2, false, size)
 	t.tooltip_text = variation
+	if soft:
+		var l = t.get_child(0) as Label
+		var want = ceilf(Kit.font_bold().get_string_size(variation, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x) + 1.0 + 16.0
+		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		SqueezeRow.soften(t, want, 40.0)
+		t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return t
 
 
@@ -128,12 +137,11 @@ static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: 
 	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var top = Kit.hbox(6)
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top = Kit.squeeze(6)
 	var sp = LiftNames.split(lift)
-	top.add_child(Kit.clip_fit(str(sp.move), 13, null, true, 210.0))
+	top.add_child(Kit.soft_name(str(sp.move), 13, null, true, 210.0))
 	if str(sp.variation) != "":
-		top.add_child(Kit.vcenter(variation_tag(str(sp.variation))))
+		top.add_child(variation_tag(str(sp.variation), 10, true))
 	if pt:
 		top.add_child(Kit.vcenter(pt_tag()))
 	words.add_child(top)

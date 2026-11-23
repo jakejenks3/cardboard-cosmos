@@ -51,6 +51,11 @@ var carried: String = ""
 const LOAD_PICKS = {"lb": [10, 20, 30, 40], "kg": [5, 10, 15, 20]}
 
 var last_same = null
+## The form came back from the kept draft (the app was closed mid-workout).
+var restored: bool = false
+var _draft_text: String = ""
+## The player said the lifts still as planned were done as shown.
+var _planned_ok: bool = false
 
 # Live controls of the current build.
 var _xp_box: VBoxContainer = null
@@ -100,6 +105,7 @@ func _init(owner_screen, d: String, edit_session = null, misc_kind: String = "")
 				var lk = Misc.load_kg(editing) if d == TT.MISC else 0.0
 				if lk > 0.0:
 					carried = LogWidgets.trim_num(Fmt.kg_to_unit(lk, wu), 1)
+	_take_draft()
 	# The most recent session of this discipline (and kind), for one-tap "same as last time".
 	for s in App.sessions():
 		if s.discipline != discipline or (editing != null and s.id == editing.id):
@@ -108,6 +114,98 @@ func _init(owner_screen, d: String, edit_session = null, misc_kind: String = "")
 			continue
 		if last_same == null or s.date > last_same.date or (s.date == last_same.date and s.createdAt > last_same.createdAt):
 			last_same = s
+
+
+# ---------------------------------------------------------------------------
+# The kept draft: a new lift or climb is written to a small file as it is
+# entered (App.draft_store), so it is still there when a phone closed the app
+# between sets. Saving the session, or "Start over", drops it.
+# ---------------------------------------------------------------------------
+
+func _keeps_draft() -> bool:
+	return editing == null and (discipline == "lift" or discipline == "climb")
+
+
+func _take_draft() -> void:
+	if not _keeps_draft():
+		return
+	var d = App.draft_load(discipline)
+	if d == null:
+		return
+	var ex = d.get("exercises", [])
+	var cl = d.get("climbs", [])
+	var hg = d.get("hangs", [])
+	if not (ex is Array and cl is Array and hg is Array) or (ex.is_empty() and cl.is_empty() and hg.is_empty()):
+		return
+	if str(d.get("wu", wu)) != wu:
+		# Typed in the other weight unit: the numbers would be read wrong.
+		App.draft_store(discipline, null)
+		return
+	for e in ex:
+		if e is Dictionary and e.get("sets") is Array:
+			var sets = []
+			for s in e.sets:
+				if s is Dictionary:
+					var row = {"reps": str(s.get("reps", "")), "weight": str(s.get("weight", ""))}
+					if str(s.get("hold", "")) != "":
+						row["hold"] = str(s.hold)
+					sets.append(row)
+			var one = {"name": str(e.get("name", "")), "bodyweight": bool(e.get("bodyweight", false)), "timed": bool(e.get("timed", false)), "sets": sets}
+			if bool(e.get("planned", false)):
+				one["planned"] = true
+			lift.exercises.append(one)
+	for c in cl:
+		if c is Dictionary and c.has("grade") and c.has("count"):
+			climbs.append(c)
+	for h in hg:
+		if h is Dictionary and h.has("count"):
+			hangs.append(h)
+	show_hang = not hangs.is_empty()
+	scale = "yds" if str(d.get("scale", "v")) == "yds" else "v"
+	if LogWidgets.is_date_key(str(d.get("date", ""))):
+		date = str(d.date)
+	dh = str(d.get("dh", ""))
+	dm = str(d.get("dm", ""))
+	ds = str(d.get("ds", ""))
+	title = str(d.get("title", ""))
+	notes = str(d.get("notes", ""))
+	show_extra = title != "" or notes != ""
+	restored = true
+	_draft_text = JSON.stringify(_draft_dict())
+
+
+func _draft_dict() -> Dictionary:
+	return {"day": App.today, "wu": wu, "date": date, "dh": dh, "dm": dm, "ds": ds, "title": title, "notes": notes,
+		"exercises": lift.exercises, "climbs": climbs, "hangs": hangs, "scale": scale}
+
+
+## Write the draft when it changed (called from refresh, so after every change).
+func _keep_draft() -> void:
+	if not _keeps_draft():
+		return
+	var empty = lift.exercises.is_empty() and climbs.is_empty() and hangs.is_empty()
+	var text = "" if empty else JSON.stringify(_draft_dict())
+	if text == _draft_text:
+		return
+	_draft_text = text
+	App.draft_store(discipline, null if empty else _draft_dict())
+
+
+func _start_over() -> void:
+	Sfx.tap()
+	lift.exercises = []
+	climbs = []
+	hangs = []
+	dh = ""
+	dm = ""
+	ds = ""
+	title = ""
+	notes = ""
+	date = App.today
+	restored = false
+	_draft_text = ""
+	App.draft_store(discipline, null)
+	screen.rebuild()
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +295,20 @@ func build(parent: Control) -> void:
 		hc.tooltip_text = "Imported with duration only."
 		parent.add_child(hc)
 
+	if restored:
+		# Back from the kept draft: say so, with a way to drop it.
+		var rc = Kit.card(0, Callable(), 8)
+		rc.accent(Pal.GOOD)
+		var rr = Kit.hbox(8)
+		rr.add_child(Kit.vcenter(Icons.rect("check", 16)))
+		var rl = Kit.clip("Picked up where you left off", 13, null, true)
+		rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rr.add_child(Kit.vcenter(rl))
+		rr.add_child(Kit.vcenter(Kit.button("Start over", "ghost", _start_over, "sm")))
+		rc.add(rr)
+		rc.set_meta("draft_banner", true)
+		parent.add_child(rc)
+
 	# Date + duration on one compact row.
 	var top = Kit.hbox(6)
 	top.add_child(LogWidgets.date_field(date, _set_date))
@@ -262,6 +374,7 @@ func build(parent: Control) -> void:
 
 ## Update everything that depends on the draft without rebuilding (keeps focus while typing).
 func refresh() -> void:
+	_keep_draft()
 	var d = draft()
 	var valid = is_valid(d)
 	if is_instance_valid(_save_btn):
@@ -293,7 +406,8 @@ func refresh() -> void:
 			var nh = int(TTUtil.get_or(st, "hangs", 0))
 			if nh > 0:
 				sub += " · %d hang%s" % [nh, "" if nh == 1 else "s"]
-			side += "\n%d sends · %d flashes · %d attempts" % [int(st.sends), int(st.flashes), int(st.attempts)]
+			# st.sends counts flashes too (a flash is a send).
+			side += "\n%d flashed · %d sent after tries · %d didn't go" % [int(st.flashes), int(st.sends) - int(st.flashes), int(st.attempts)]
 			if nh > 0:
 				side += " · %d hangs" % nh
 		"run", "ride":
@@ -926,6 +1040,15 @@ func save() -> void:
 		Sfx.error()
 		App.toast(_invalid_hint(), "bad", "warning")
 		return
+	# Lifts filled in from the day's plan and never touched: done as shown, or
+	# skipped? Asked once, so a skipped lift is not logged by accident.
+	var left = lift.planned_names() if discipline == "lift" and not _planned_ok else []
+	if not left.is_empty():
+		var shown = []
+		for nm in left:
+			shown.append(Missions.short_name(str(nm)))
+		Kit.confirm("Done as shown?", "Still as they were filled in from your plan: %s. Save them as shown? If you skipped one, go back and take it off with its ×." % ", ".join(PackedStringArray(shown)), "Yes, save", _save_planned, false)
+		return
 	LogWidgets.celebrate(_save_btn, _xp_box if editing == null else null)
 	if editing != null:
 		App.update_session(d)
@@ -937,9 +1060,15 @@ func save() -> void:
 	d.erase("bonusPct")
 	d.erase("luckPct")
 	var session = App.build_session(d)
+	App.draft_store(discipline, null)
 	App.commit_sessions([session], "Session logged!")
 	App.open_log(null)
 	App.go("home")
+
+
+func _save_planned() -> void:
+	_planned_ok = true
+	save()
 
 
 func remove() -> void:

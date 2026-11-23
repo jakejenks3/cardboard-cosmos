@@ -31,6 +31,21 @@ func run(m: Node, t: SceneTree) -> void:
 		ShotHelper.scroll_main(main, i * 760)
 		await ShotHelper.snap(tree, "j_stats_%d" % i)
 
+	# The training summary: the Copy key puts the dose as text on the clipboard.
+	var copy_key = _find(func(n): return n is Button and n.has_meta("copy_dosage"))
+	if copy_key == null:
+		print("CHECK FAIL  a Copy key for the training summary")
+	else:
+		ShotHelper.reveal(copy_key)
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.click(tree, copy_key)
+		await ShotHelper.wait(tree, 0.4)
+		var clip = DisplayServer.clipboard_get()
+		print("CHECK %s  the training summary is on the clipboard (%d characters)" % ["ok" if clip.begins_with("MY TRAINING") and clip.contains("SETS PER MUSCLE GROUP") and clip.contains("DAY BY DAY") else "FAIL", clip.length()])
+		print("DOSAGE TEXT
+" + clip)
+		await ShotHelper.snap(tree, "j_stats_summary_key")
+
 	# Weekly chart: print the last week's stack and hover it.
 	var wk = _find(func(n): return n is WeeklyXpChart)
 	var last = wk.data[wk.data.size() - 1]

@@ -93,4 +93,14 @@ func run(m: Node, t: SceneTree) -> void:
 				ShotHelper.type_into(e, names[i])
 	await hammer("Add", 3, type_name)
 	await ShotHelper.snap(tree, "anchor_add")
+	# Another tab starts at the top, wherever the last one was scrolled to (its
+	# first build used to keep the old tab's position).
+	App.go("home")
+	await ShotHelper.wait(tree, 0.6)
+	main._scroll.scroll_vertical = 600
+	await ShotHelper.frames(tree, 3)
+	var was = main._scroll.scroll_vertical
+	main._nav_pressed("journey")
+	await ShotHelper.wait(tree, 0.4)
+	check(was > 0 and main._scroll.scroll_vertical == 0, "a tab opens at the top (Hero was at %d, Journey at %d)" % [was, main._scroll.scroll_vertical])
 	print("ANCHOR DONE, failures: %d" % fails)

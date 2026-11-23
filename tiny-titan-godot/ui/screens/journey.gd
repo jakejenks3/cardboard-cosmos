@@ -229,11 +229,11 @@ func _then_now_facts(sessions: Array, s: Dictionary, wu: String, du: String) -> 
 	return out.slice(0, 5)
 
 
-func _hero_fig(tex: Texture2D, title: String, lv: int, now: bool, tip: String) -> Control:
+func _hero_fig(tex: Texture2D, title: String, lv: int, now: bool, tip: String, scale: float = 3.0) -> Control:
 	var v = Kit.vbox(4)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.tooltip_text = tip
-	var art = PixelRect.make(tex, 3.0)
+	var art = PixelRect.make(tex, scale)
 	art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(art)
@@ -242,6 +242,15 @@ func _hero_fig(tex: Texture2D, title: String, lv: int, now: bool, tip: String) -
 	lvt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(lvt)
 	return v
+
+
+## Two heroes side by side at x3 when they fit the column, else x2 (the
+## redrawn hero is 64 px wide: at x3 the pair made the page wider than the window).
+func _hero_scale(tex_w: int) -> float:
+	var col = 440.0
+	if is_inside_tree():
+		col = minf(get_viewport_rect().size.x, 520.0)
+	return 3.0 if float(tex_w) * 3.0 * 2.0 + 76.0 + 70.0 <= col else 2.0
 
 
 ## Then vs now: the hero on day one and today, the day count between them and
@@ -257,7 +266,9 @@ func _then_now() -> void:
 	card.accent(Pal.tab_accent())
 	var heroes = Kit.hbox(0)
 	var then_tex = Art.hero_texture(Art.state_with_levels(s, LEVEL_ONE), profile, THEN_LOADOUT)
-	heroes.add_child(_hero_fig(then_tex, "DAY 1", 1, false, "Day 1: " + Dates.format_date(start, {"month": "short", "day": "numeric", "year": "numeric"})))
+	var now_tex = Art.hero_texture(s, profile, App.loadout())
+	var sc = _hero_scale(maxi(then_tex.get_width(), now_tex.get_width()))
+	heroes.add_child(_hero_fig(then_tex, "DAY 1", 1, false, "Day 1: " + Dates.format_date(start, {"month": "short", "day": "numeric", "year": "numeric"}), sc))
 	var mid = Kit.vbox(6)
 	mid.custom_minimum_size = Vector2(76, 0)
 	mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -265,8 +276,7 @@ func _then_now() -> void:
 	mid.add_child(big_num("DAY" if days == 1 else "DAYS", 2, Pal.MUTED))
 	mid.add_child(big_num("→", 3, Pal.ACCENT))
 	heroes.add_child(mid)
-	var now_tex = Art.hero_texture(s, profile, App.loadout())
-	heroes.add_child(_hero_fig(now_tex, "TODAY", int(s.levels.hero.level), true, "Today"))
+	heroes.add_child(_hero_fig(now_tex, "TODAY", int(s.levels.hero.level), true, "Today", sc))
 	card.add(heroes)
 	var facts = _then_now_facts(App.sessions(), s, App.weight_unit(), App.distance_unit())
 	var chips = Kit.grid(2, 8)
@@ -319,6 +329,20 @@ func _weekly_points(sessions: Array, s: Dictionary) -> Array:
 	return out
 
 
+## The training dose as text on the clipboard (Dosage.text), up to and including today.
+func _copy_dosage() -> void:
+	Sfx.tick()
+	var text = Dosage.text(App.saved, App.today)
+	if WebFiles.available():
+		# A phone's browser only copies inside a tap: this runs inside one (web/tt.js),
+		# and shows a real Copy button when the phone wants another tap.
+		# The toast waits until the text really is on the clipboard.
+		WebFiles.copy(text, "Copy the summary", func(): App.toast("Training summary copied: paste it into a chat", "good", "check"))
+		return
+	DisplayServer.clipboard_set(text)
+	App.toast("Training summary copied: paste it into a chat", "good", "check")
+
+
 func _build_stats() -> void:
 	var s = App.state
 	var sessions = App.sessions()
@@ -339,6 +363,22 @@ func _build_stats() -> void:
 	rrow.add_child(Kit.button("This month", "secondary", RecapSheet.open.bind("month", App.today.substr(0, 7)), "sm"))
 	rc.add(rrow)
 	add_child(rc)
+
+	# --- the training dose as text, to paste into a chat (game/dosage.gd) -------------
+	var dc = Kit.card(6, Callable(), 10)
+	dc.accent(Pal.LIFT)
+	var drow = Kit.hbox(8)
+	drow.add_child(Kit.vcenter(Icons.rect("log", 26)))
+	var dv = Kit.vbox(1)
+	dv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dv.add_child(Kit.label("Training summary", 15, null, true))
+	dv.add_child(Kit.para("Your weekly sets per muscle, lifts, climbs and runs as text, to paste into a chat with a coach or an AI.", 11, Pal.MUTED))
+	drow.add_child(dv)
+	var dkey = Kit.button("Copy", "secondary", _copy_dosage, "sm")
+	dkey.set_meta("copy_dosage", true)
+	drow.add_child(Kit.vcenter(dkey))
+	dc.add(drow)
+	add_child(dc)
 
 	# --- totals as big-number tiles ---------------------------------------------
 	var hours = float(t.durationSec) / 3600.0
@@ -388,44 +428,7 @@ func _build_stats() -> void:
 	if int(by.lift) > 0:
 		_lift_section(s, sessions, App.weight_unit())
 	if int(by.climb) > 0:
-		var cc = Kit.card(10)
-		cc.accent(Pal.CLIMB)
-		cc.add(disc_head("climb"))
-		var max_send = s.prs.climbMaxSend
-		var max_flash = s.prs.climbMaxFlash
-		var vals = [Xp.fmt_int(t.climbSends), Xp.fmt_int(t.climbFlashes), Xp.grade_label(max_send) if max_send != null else "-"]
-		var csc = fit_scale(vals, 96, 3)
-		cc.add(_tiles([
-			well_tile(vals[0], "Sends", Pal.CLIMB, csc),
-			well_tile(vals[1], "Flashes", Charts.flash(), csc),
-			well_tile(vals[2], "Top grade", Pal.TEXT, csc, ("Hardest flash: " + Xp.grade_label(max_flash)) if max_flash != null else ""),
-		]))
-		cc.add(Charts.pyramid(_grade_counts(sessions), int(max_send) if max_send != null else 3))
-		cc.add(Charts.legend([{"name": "Sends", "color": Pal.CLIMB}, {"name": "Flashes", "color": Charts.flash()}]))
-		# Routes and hangboard, when there are any.
-		var extras = []
-		if s.prs.get("climbMaxRoute") != null:
-			extras.append(value_chip("Hardest route", Xp.yds_label(s.prs.climbMaxRoute), Pal.CLIMB))
-		if int(TTUtil.get_or(t, "hangs", 0)) > 0:
-			var hsec: int = int(TTUtil.get_or(t, "hangSec", 0))
-			extras.append(value_chip("Hangs", "%s · %s" % [Xp.fmt_int(t.hangs), ("%d s" % hsec) if hsec < 120 else Fmt.fmt_duration_short(float(hsec))], Pal.CLIMB))
-		if float(TTUtil.get_or(s.prs, "bestHangKg", 0.0)) > 0.0:
-			extras.append(value_chip("Heaviest hang", "+" + Fmt.fmt_weight(float(s.prs.bestHangKg), App.weight_unit()), Pal.CLIMB))
-		for table in ["hangEdge", "hangOneArm"]:
-			if s.prs.get(table) == null:
-				continue
-			var edges = s.prs[table].keys()
-			edges.sort_custom(func(a, b): return int(a) < int(b))
-			for ek in edges:
-				var cap = Xp.edge_label(int(ek)) + (" one arm" if table == "hangOneArm" else "")
-				var kg = float(s.prs[table][ek])
-				extras.append(value_chip(cap, ("+" + Fmt.fmt_weight(kg, App.weight_unit())) if kg > 0.0 else "5 s+", Pal.CLIMB, "Best 5 s+ hang on this edge"))
-		if not extras.is_empty():
-			var ef = Kit.flow(6)
-			for x in extras:
-				ef.add_child(x)
-			cc.add(ef)
-		add_child(cc)
+		add_child(ClimbCard.build(s, sessions))
 	if int(by.run) > 0:
 		var pace = s.prs.bestPaceSecPerKm
 		var best = []
@@ -571,24 +574,6 @@ func _distance_card(d: String, dist: float, elev: float, longest: float, du: Str
 	return c
 
 
-func _grade_counts(sessions: Array) -> Dictionary:
-	var c = {}
-	for x in sessions:
-		if x.discipline != "climb":
-			continue
-		for cl in x.get("climbs", []):
-			if cl.result == "attempt" or Xp.is_route(cl):
-				continue
-			var g = int(cl.grade)
-			if not c.has(g):
-				c[g] = {"sends": 0, "flashes": 0}
-			if cl.result == "flash":
-				c[g].flashes += int(cl.get("count", 1))
-			else:
-				c[g].sends += int(cl.get("count", 1))
-	return c
-
-
 func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 	var t = s.totals
 	var card = Kit.card(10)
@@ -634,15 +619,18 @@ func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 			for ex in x.exercises:
 				if Xp.normalize_exercise(ex.name) != selected:
 					continue
+				# The weight really on the bar: the heaviest set of the session, not
+				# an estimated one-rep max (a number nobody lifted).
 				for st in ex.sets:
 					if float(st.weightKg) > 0.0 and int(st.reps) > 0:
-						best = maxf(best, Xp.e1rm(st.weightKg, st.reps))
+						best = maxf(best, float(st.weightKg))
 			if best > 0.0:
 				series.append({"x": x.date, "y": Fmt.kg_to_unit(best, wu)})
 		if series.size() >= 2:
-			var ln = Charts.line(series, Pal.LIFT, func(v): return "%d %s" % [TTUtil.jsround(v), wu])
-			ln.tooltip_text = "Estimated one-rep max"
+			var ln = Charts.line(series, Pal.LIFT, func(v): return "%s %s" % [TTUtil.num_str(snappedf(v, 0.1)), wu])
+			ln.tooltip_text = "The heaviest set of each session"
 			card.add(ln)
+			card.add(caption("Heaviest set of each session", 11))
 		else:
 			card.add(caption("Log it again to see a trend", 12))
 

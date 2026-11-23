@@ -10,7 +10,8 @@ extends RefCounted
 ## Week / Month switch, and "Save picture", which renders the poster to a PNG
 ## in the Pictures folder ("Tiny Titan" inside it) to keep or share.
 
-const POSTER_W = 392
+## 380: the sheet (poster + its margins) must fit a 440 px window.
+const POSTER_W = 380
 
 
 static func _build(kind: String, key: String) -> Dictionary:
@@ -87,6 +88,10 @@ static func _on_save(r: Dictionary, button: Button) -> void:
 		App.toast("Could not save the picture.", "bad", "warning")
 		return
 	Sfx.shutter()
+	if WebFiles.available():
+		# The web build: the picture goes to the phone's share sheet (Save Image, Messages...).
+		WebFiles.save(path.get_file(), "image/png", FileAccess.get_file_as_bytes(path), "Save or share the picture")
+		return
 	App.toast("Saved to %s" % path.get_base_dir().get_file().path_join(path.get_file()), "good", "camera")
 	if not App.is_test_data():
 		OS.shell_show_in_file_manager(ProjectSettings.globalize_path(path))
@@ -186,13 +191,14 @@ static func poster(r: Dictionary) -> Control:
 	xcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	xcol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var xrow = Kit.hbox(6)
-	xrow.add_child(Kit.vcenter(Kit.big_number(Xp.fmt_int(r.xp), Pal.ACCENT, 170, 4)))
+	xrow.add_child(Kit.vcenter(Kit.big_number(Xp.fmt_int(r.xp), Pal.ACCENT, 110, 4)))
 	xrow.add_child(Kit.vcenter(Kit.label("XP", 13, Pal.MUTED, true)))
 	xcol.add_child(xrow)
 	if int(r.prev.xp) > 0 and int(r.xp) != int(r.prev.xp) and not r.running:
 		var up = int(r.xp) > int(r.prev.xp)
 		xcol.add_child(Kit.tag(("▲ " if up else "▼ ") + Xp.fmt_int(absi(int(r.xp) - int(r.prev.xp))) + (" on last week" if week else " on last month"), Pal.GOOD if up else Pal.PANEL2, up, 11))
-	var lv = Kit.hbox(6)
+	# A flow: the level and coin pills go under each other when the hero leaves no room.
+	var lv = Kit.flow(6)
 	if int(r.levelTo) > int(r.levelFrom):
 		lv.add_child(Kit.pill("star", "LV %d → %d" % [int(r.levelFrom), int(r.levelTo)], Pal.ACCENT))
 	else:

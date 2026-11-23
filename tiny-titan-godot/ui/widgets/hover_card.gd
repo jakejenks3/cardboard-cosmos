@@ -41,6 +41,10 @@ static func dismiss() -> void:
 
 static func _open(target: Control, build: Callable, ring, beside: bool = false) -> void:
 	dismiss()
+	# A finger does not hover: on a touch screen the card would pop up under a tap
+	# or a scroll (ui/touch_scroll.gd). The tile's "i" and its sheet say the same.
+	if TouchScroll.active:
+		return
 	if Kit.overlay_root == null or not is_instance_valid(target) or not target.is_inside_tree():
 		return
 	# A press is under way (the tile is being clicked or dragged): no card.

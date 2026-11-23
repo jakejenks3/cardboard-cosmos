@@ -433,6 +433,93 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 	var add = Kit.button("Add to today's workout", "primary", JourneyLifts._add.bind(sheet, lift), "lg", "plus")
 	add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(add)
+	if App.lift_sessions(lift) > 0:
+		# Filed under the wrong name? Rename it, or move it under another movement.
+		var ren = Kit.button("Rename or move this lift", "ghost", JourneyLifts.open_rename.bind(sheet, lift), "sm", "edit")
+		ren.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		ren.set_meta("rename_lift", true)
+		box.add_child(ren)
+	sheet.open()
+
+
+## Rename a lift, or move it under another movement: the movement and the
+## variation as two boxes, the nearest movements as keys, and what will happen
+## said before it does (how many workouts; joined with a lift that is there
+## already). App.rename_lift does it everywhere and keeps a copy of the save.
+static func open_rename(from_sheet, lift: String) -> void:
+	Sfx.tap()
+	var sp = LiftNames.split(lift)
+	var n = App.lift_sessions(lift)
+	var sheet = Kit.sheet("Rename lift")
+	var box = sheet.box
+	box.add_child(Kit.muted_para("%s is in %d workout%s. A new name goes into all of them; its sets, dates and records come along." % [lift, n, "" if n == 1 else "s"], 13))
+	box.add_child(Kit.label("MOVEMENT", 10, Pal.MUTED, true))
+	var move = Kit.input(str(sp.move), "Bench Press")
+	move.select_all_on_focus = false
+	move.set_meta("rename_move", true)
+	box.add_child(move)
+	var near = Kit.flow(6)
+	box.add_child(near)
+	box.add_child(Kit.label("VARIATION (position or equipment)", 10, Pal.MUTED, true))
+	var vari = Kit.input(str(sp.variation), "none")
+	vari.select_all_on_focus = false
+	vari.set_meta("rename_variation", true)
+	box.add_child(vari)
+	var said = Kit.para("", 14, null, true)
+	said.set_meta("rename_said", true)
+	box.add_child(said)
+	var go = Kit.button("Rename", "primary", Callable(), "lg")
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(go)
+	var moves = []
+	for r in LiftLibrary.rows(App.sessions()):
+		moves.append(str(r.name))
+	var refresh = func():
+		var name_now = LiftNames.join(move.text.strip_edges(), vari.text.strip_edges())
+		var same = name_now == lift
+		var there = 0 if Xp.normalize_exercise(name_now) == Xp.normalize_exercise(lift) else App.lift_sessions(name_now)
+		if move.text.strip_edges() == "":
+			said.text = "Give it a movement name."
+		elif same:
+			said.text = "Change the movement or the variation."
+		elif there > 0:
+			said.text = "You already have %s (%d workout%s): the two become one lift." % [name_now, there, "" if there == 1 else "s"]
+		else:
+			said.text = "It will be: %s" % name_now
+		said.add_theme_color_override("font_color", Pal.SECOND if there > 0 else (Pal.MUTED if same else Pal.TEXT))
+		go.disabled = same or move.text.strip_edges() == ""
+		go.text = "Join the two" if there > 0 else "Rename"
+	var fill_near = func():
+		Kit.clear(near)
+		var typed = move.text.strip_edges()
+		if typed == "" or typed == str(sp.move):
+			return
+		for hit in LiftMatch.find(typed, moves, 4):
+			if str(hit.name) == typed:
+				continue
+			var chip = LogWidgets.mini_chip(str(hit.name), false, Callable(), Pal.LIFT)
+			chip.pressed.connect(func():
+				Sfx.tick()
+				move.text = str(hit.name)
+				Kit.clear(near)
+				refresh.call())
+			near.add_child(chip)
+	move.text_changed.connect(func(_t):
+		fill_near.call()
+		refresh.call())
+	vari.text_changed.connect(func(_t): refresh.call())
+	go.pressed.connect(func():
+		var res = App.rename_lift(lift, LiftNames.join(move.text.strip_edges(), vari.text.strip_edges()))
+		if not bool(res.ok):
+			App.toast("Nothing to rename", "info", "info")
+			return
+		Sfx.claim()
+		App.toast(("Joined with %s: %d workout%s moved" if bool(res.joined) else "Now %s, in %d workout%s") % [str(res.name), int(res.sessions), "" if int(res.sessions) == 1 else "s"], "good", "check")
+		sheet.close()
+		if from_sheet != null and is_instance_valid(from_sheet):
+			from_sheet.close()
+		JourneyLifts.open_named(str(res.name)))
+	refresh.call()
 	sheet.open()
 
 

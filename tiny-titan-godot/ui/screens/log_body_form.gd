@@ -121,7 +121,9 @@ func build(parent: Control) -> void:
 	var w_edit = LogWidgets.slim_stepper(ws, "weight")
 	w_edit.tooltip_text = "Body weight (%s)" % wu
 	# A new check-in starts with the cursor in the weight box, so you can just type.
-	if editing == null and weight == "":
+	# Not on a touch screen: nothing can be typed there before the box is tapped,
+	# and a box left active brought the phone's keyboard up with every later tap.
+	if editing == null and weight == "" and not TouchScroll.active and not Kit.fingers:
 		var focus_weight = func():
 			if is_instance_valid(w_edit) and w_edit.is_inside_tree() and w_edit.get_viewport().gui_get_focus_owner() == null:
 				w_edit.grab_focus()
@@ -269,6 +271,21 @@ func _set_date(key: String) -> void:
 # ---------------------------------------------------------------------------
 
 func pick_photo(angle: String) -> void:
+	if WebFiles.available():
+		# The phone app: the browser's own chooser (take a photo, or the library).
+		WebFiles.pick("image/*", "%s photo: take or choose" % TT.PHOTO_ANGLE_NAMES[angle], func(file_name: String, bytes: PackedByteArray):
+			if file_name == "" or bytes.is_empty():
+				return
+			var id = App.import_photo_bytes(bytes, file_name)
+			if id == "":
+				Sfx.error()
+				App.toast("Could not read that image", "bad", "warning")
+				return
+			photos[angle] = id
+			Sfx.shutter()
+			if is_instance_valid(screen):
+				screen.rebuild(), 1600)
+		return
 	if _dialog != null and is_instance_valid(_dialog):
 		return
 	var fd = FileDialog.new()

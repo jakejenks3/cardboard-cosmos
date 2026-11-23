@@ -5,6 +5,8 @@ extends RefCounted
 
 ## Where modal sheets and overlays are added. Set by main.gd.
 static var overlay_root: Control = null
+## A phone or tablet (set by main.gd): small keys are made big enough for a finger.
+static var fingers: bool = false
 
 static var _theme = null
 static var _bold = null
@@ -293,6 +295,23 @@ static func hbox(sep: int = 8) -> HBoxContainer:
 	return h
 
 
+## A row whose soft parts are cut off with "…" when there is no room for all of
+## them (ui/widgets/squeeze_row.gd): a lift's movement (`soft_name`) and its
+## variation (SessionView.variation_tag with soft = true).
+static func squeeze(sep: int = 6) -> SqueezeRow:
+	var r = SqueezeRow.new()
+	r.separation = float(sep)
+	return r
+
+
+## A name for a `squeeze` row: as wide as its text up to `max_w`, giving way down
+## to `least` when the row is short of room.
+static func soft_name(text, size: int = 15, color = null, bold: bool = false, max_w: float = 220.0, least: float = 60.0) -> Label:
+	var l = clip_fit(text, size, color, bold, max_w)
+	SqueezeRow.soften(l, l.custom_minimum_size.x, least)
+	return l
+
+
 ## A row that wraps its children onto more lines when they do not fit (chips, tags).
 static func flow(sep: int = 6) -> HFlowContainer:
 	var f = HFlowContainer.new()
@@ -415,7 +434,8 @@ static func _variant(variant: String) -> Dictionary:
 static func style_button(b: Button, variant: String = "primary", size: String = "md") -> void:
 	var sz = _BTN_SIZES.get(size, _BTN_SIZES["md"])
 	var v = _variant(variant)
-	var looks = PixBox.button_set(v.face, v.lip, sz.pad_h, sz.pad_v, v.depth, v.ring)
+	# A small button is too low for a finger: taller on a phone.
+	var looks = PixBox.button_set(v.face, v.lip, sz.pad_h, sz.pad_v + (4 if fingers and size == "sm" else 0), v.depth, v.ring)
 	for k in looks:
 		b.add_theme_stylebox_override(k, looks[k])
 	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
@@ -485,6 +505,8 @@ static func icon_button(icon: String, on_press: Callable = Callable(), tip: Stri
 	var b = Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	if fingers:
+		px = maxi(px, 38)
 	b.custom_minimum_size = Vector2(px, px)
 	b.tooltip_text = tip
 	# The icon at a whole-number size (never stretched to the button): twice
@@ -541,11 +563,12 @@ static func style_chip(b: Button, active: bool, color = null, size: int = 13) ->
 	var col = Pal.ACCENT if color == null else color
 	var looks
 	var fg
+	var pv = 8 if fingers else 4
 	if active:
-		looks = PixBox.button_set(col, col.darkened(0.42), 11, 4, 1, null)
+		looks = PixBox.button_set(col, col.darkened(0.42), 11, pv, 1, null)
 		fg = Pal.INK
 	else:
-		looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 11, 4, 1, Pal.LINE)
+		looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 11, pv, 1, Pal.LINE)
 		fg = Pal.TEXT
 	# Each chip gets its own copies: callers are free to adjust a chip's padding.
 	for k in looks:

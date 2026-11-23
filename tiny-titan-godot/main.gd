@@ -38,13 +38,34 @@ var _results = null
 var _result_queue = []
 ## The tab whose icon bounces the next time the bar is built (the one just tapped).
 var _bounce_tab = ""
+## On a phone, the room the status bar (top) and the home bar (bottom) take, in
+## screen units (web build: web/tt.js ttSafe). The column fits between them.
+var _inset_top = 0.0
+var _inset_bottom = 0.0
+## The tab bar's colour under the home bar.
+var _floor: ColorRect
+## Web build with ?debug=1 in the link: window.ttEval("expression") (see _debug_bridge).
+var _debug_cb = null
+## The speed readout (Settings -> Phone app -> Show speed): frames a second now,
+## and the slowest half second of the last few, in a corner of the screen.
+var _speed: Label = null
+var _speed_n = 0
+var _speed_t = 0.0
+var _speed_lows = []
 
 
 func _ready() -> void:
 	Pal.apply(App.settings().get("theme", "arcade"))
+	if OS.has_feature("web"):
+		# A phone's browser has no fonts to fall back on for arrows and triangles.
+		SymbolFont.install(ThemeDB.fallback_font, Kit.font_bold())
 	_fit_window()
 	_build()
 	resized.connect(_layout)
+	if OS.has_feature("web"):
+		_read_insets()
+		get_viewport().size_changed.connect(func(): call_deferred("_read_insets"))
+		_debug_bridge()
 	App.nav_changed.connect(_refresh)
 	App.changed.connect(_on_changed)
 	App.result_ready.connect(_on_result)
@@ -61,6 +82,11 @@ func _build() -> void:
 
 	# The pixel-art sky and mountains behind everything.
 	add_child(Backdrop.new())
+	_floor = ColorRect.new()
+	_floor.color = Pal.BG2
+	_floor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_floor.visible = false
+	add_child(_floor)
 
 	_column = Control.new()
 	add_child(_column)
@@ -143,7 +169,159 @@ func _build() -> void:
 	_toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toasts.add_theme_constant_override("separation", 6)
 	_column.add_child(_toasts)
+	_add_touch_helpers()
 	_layout()
+
+
+## On a touch screen: drag to scroll over anything (ui/touch_scroll.gd); in a
+## phone's browser, a real text field for typing (app/web_keys.gd).
+func _add_touch_helpers() -> void:
+	# A phone or tablet: keys sized for fingers (Kit.fingers; "--fingers" tries it on a PC).
+	if ((OS.has_feature("web") or OS.has_feature("mobile")) and DisplayServer.is_touchscreen_available()) or OS.get_cmdline_user_args().has("--fingers"):
+		Kit.fingers = true
+	if DisplayServer.is_touchscreen_available():
+		var ts = TouchScroll.new()
+		if OS.has_feature("web"):
+			# A phone (its pointer cannot hover): no mouse at all, only the taps made for fingers.
+			var app = JavaScriptBridge.get_interface("ttApp")
+			ts.only_fingers = app != null and bool(app.noHover)
+		add_child(ts)
+	if WebKeys.wanted():
+		add_child(WebKeys.new())
+
+
+## For testing the web build in a browser: with ?debug=1 in the page's link,
+## window.ttEval("main._scroll.scroll_vertical") evaluates a GDScript expression
+## (names: main, App) and leaves the answer in window.ttOut.
+func _debug_bridge() -> void:
+	var app = JavaScriptBridge.get_interface("ttApp")
+	if app == null or not str(app.href()).contains("debug=1"):
+		return
+	_debug_cb = JavaScriptBridge.create_callback(_debug_eval)
+	JavaScriptBridge.get_interface("window").ttEval = _debug_cb
+
+
+## For ttEval: where the `nth` visible button whose text holds `text` (or else a
+## label showing it) is, "x,y,w,h" in screen units, or "".
+func debug_rect(text: String, nth: int = 0) -> String:
+	var want = text.to_lower()
+	var hits = []
+	for n in find_children("*", "Button", true, false):
+		if n.is_visible_in_tree() and str(n.text).to_lower().contains(want):
+			hits.append(n)
+	if hits.is_empty():
+		for n in find_children("*", "Label", true, false):
+			if n.is_visible_in_tree() and str(n.text).to_lower() == want:
+				hits.append(n)
+	if nth >= hits.size():
+		return ""
+	var r = hits[nth].get_global_rect()
+	return "%d,%d,%d,%d" % [r.position.x, r.position.y, r.size.x, r.size.y]
+
+
+## For ttEval: how the last frames went: frames a second, the milliseconds the
+## scripts took, draw calls and objects drawn.
+func debug_perf() -> String:
+	return "tooltip delay %s  fps %d  script %.1f ms  draws %d  objects %d  nodes %d" % [str(ProjectSettings.get_setting_with_override("gui/timers/tooltip_delay_sec")), Engine.get_frames_per_second(),
+		Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
+		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))]
+
+
+## For ttEval (an Expression cannot name a class or a singleton): the backup keys
+## and a photo from base64.
+func debug_do(what: String, arg: String = "") -> String:
+	match what:
+		"export":
+			SettingsPanel.pick_export()
+		"import":
+			SettingsPanel.pick_import(null)
+		"photo":
+			return App.import_photo_bytes(Marshalls.base64_to_raw(arg), "x.jpg")
+		"load":
+			# A save as JSON text left in window.ttIn (demo data for a browser test).
+			var parsed = App.parse_saved(JSON.parse_string(str(JavaScriptBridge.eval("window.ttIn || ''"))))
+			if parsed == null:
+				return "not a save"
+			App.apply_backup({"data": parsed, "photos": {}})
+		"key":
+			# Press the first visible key that carries this meta (keys without their own text).
+			for n in find_children("*", "Button", true, false):
+				if n.is_visible_in_tree() and n.has_meta(arg):
+					n.pressed.emit()
+					return "ok"
+			return "no such key"
+		"confirm":
+			var b = null
+			for n in find_children("*", "Button", true, false):
+				if n.is_visible_in_tree() and str(n.text) == arg:
+					b = n
+			if b == null:
+				return "no such key"
+			b.pressed.emit()
+	return "ok"
+
+
+## For ttEval: where the `nth` visible control of a kind is, "x,y,w,h" in screen
+## units, or "". Kinds: "plus" / "minus" (a Stepper's keys), "edit" (a text box),
+## "tip:<words>" (a control whose tooltip holds the words).
+func debug_where(what: String, nth: int = 0) -> String:
+	var hits = []
+	for n in find_children("*", "Control", true, false):
+		if not n.is_visible_in_tree():
+			continue
+		if what == "plus" and n is Stepper:
+			hits.append(n._plus)
+		elif what == "minus" and n is Stepper:
+			hits.append(n._minus)
+		elif what == "edit" and (n is LineEdit or n is TextEdit):
+			hits.append(n)
+		elif what.begins_with("tip:") and str(n.tooltip_text).to_lower().contains(what.substr(4).to_lower()):
+			hits.append(n)
+	if nth >= hits.size():
+		return ""
+	var r = hits[nth].get_global_rect()
+	return "%d,%d,%d,%d" % [int(r.position.x), int(r.position.y), int(r.size.x), int(r.size.y)]
+
+
+## For ttEval: what the fingers and the keyboard are up to, as one line.
+func debug_touch() -> String:
+	var f = get_viewport().gui_get_focus_owner()
+	var first = ""
+	for n in find_children("*", "Stepper", true, false):
+		if n.is_visible_in_tree():
+			first = str(n.text)
+			break
+	return "focus=%s typing=%s holding=%s stepper=%s size=%s" % [f.get_class() if f != null else "none", str(WebKeys.typing()), str(TouchScroll.holding), first, str(get_viewport_rect().size)]
+
+
+func _debug_eval(args: Array) -> void:
+	var w = JavaScriptBridge.get_interface("window")
+	var e = Expression.new()
+	if e.parse(str(args[0]) if not args.is_empty() else "", ["main", "App"]) != OK:
+		w.ttOut = "parse error: " + e.get_error_text()
+		return
+	var r = e.execute([self, App], self)
+	w.ttOut = "error: " + e.get_error_text() if e.has_execute_failed() else str(r)
+
+
+## The web build on a phone: how much of the screen the status bar and the home
+## bar cover (CSS pixels from the page, turned into screen units).
+func _read_insets() -> void:
+	if not OS.has_feature("web") or size.x <= 0.0:
+		return
+	var raw = JavaScriptBridge.eval("window.ttSafe ? window.ttSafe() : ''", true)
+	var d = JSON.parse_string(str(raw)) if raw != null and str(raw) != "" else null
+	if not (d is Dictionary) or float(d.get("w", 0)) <= 0.0:
+		return
+	var k = size.x / float(d.w)
+	var top = roundf(float(d.get("top", 0)) * k)
+	var bottom = roundf(float(d.get("bottom", 0)) * k)
+	if top != _inset_top or bottom != _inset_bottom:
+		_inset_top = top
+		_inset_bottom = bottom
+		_layout()
 
 
 ## The theme changed in Settings: rebuild everything in the new colours and put
@@ -206,9 +384,13 @@ func _fit_window() -> void:
 
 func _layout() -> void:
 	var w = minf(size.x, MAX_W)
-	_column.position = Vector2(floor((size.x - w) / 2.0), 0)
-	_column.size = Vector2(w, size.y)
+	_column.position = Vector2(floor((size.x - w) / 2.0), _inset_top)
+	_column.size = Vector2(w, size.y - _inset_top - _inset_bottom)
 	_frame.visible = size.x > MAX_W + 2.0
+	if _floor != null:
+		_floor.position = Vector2(_column.position.x, size.y - _inset_bottom)
+		_floor.size = Vector2(w, _inset_bottom)
+		_floor.visible = _inset_bottom > 0.0
 
 
 func _on_changed() -> void:
@@ -236,6 +418,9 @@ func _refresh() -> void:
 		_shown_tab = App.tab
 		Pal.current_tab = App.tab
 		Kit.clear(_holder)
+		# A new tab starts at the top. Before the screen is added: its first build
+		# keeps the scroll position it finds (UiScreen), which was the old tab's.
+		_scroll.scroll_vertical = 0
 		# The new screen's cards rise in and its bars fill.
 		Kit.intro_begin()
 		_screen = _make(SCREENS.get(App.tab, ""), App.tab)
@@ -245,6 +430,17 @@ func _refresh() -> void:
 		_screen.modulate.a = 0.0
 		_screen.create_tween().tween_property(_screen, "modulate:a", 1.0, 0.16)
 	_build_nav()
+	_keep_awake()
+
+
+## The phone app: the screen stays on while the Log tab is open (a workout being
+## logged), where the browser allows it (web/tt.js ttApp.wake).
+func _keep_awake() -> void:
+	if not OS.has_feature("web"):
+		return
+	var app = JavaScriptBridge.get_interface("ttApp")
+	if app != null:
+		app.wake(App.tab == "log")
 
 
 func _show_onboarding() -> void:
@@ -401,6 +597,56 @@ func _result_done() -> void:
 	_next_result()
 
 
+# --- speed readout ----------------------------------------------------------
+
+func speed_shown() -> bool:
+	return _speed != null and is_instance_valid(_speed)
+
+
+## Show or hide the frames-a-second readout (kept across a theme change).
+func show_speed(on: bool) -> void:
+	if not on:
+		if speed_shown():
+			_speed.queue_free()
+		_speed = null
+		set_process(false)
+		return
+	if speed_shown():
+		return
+	_speed = Label.new()
+	_speed.add_theme_font_override("font", Kit.font_bold())
+	_speed.add_theme_font_size_override("font_size", 13)
+	_speed.add_theme_color_override("font_color", Pal.ACCENT)
+	_speed.add_theme_color_override("font_outline_color", Pal.INK)
+	_speed.add_theme_constant_override("outline_size", 6)
+	_speed.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_speed.position = Vector2(8, _inset_top + 2)
+	_speed.z_index = 100
+	_speed.text = "speed: measuring"
+	add_child(_speed)
+	_speed_n = 0
+	_speed_t = 0.0
+	_speed_lows = []
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	if not speed_shown():
+		set_process(false)
+		return
+	_speed_n += 1
+	_speed_t += delta
+	if _speed_t < 0.5:
+		return
+	var fps = int(round(float(_speed_n) / _speed_t))
+	_speed_n = 0
+	_speed_t = 0.0
+	_speed_lows.append(fps)
+	while _speed_lows.size() > 10:
+		_speed_lows.pop_front()
+	_speed.text = "%d fps (low %d)" % [fps, int(_speed_lows.min())]
+
+
 # --- toasts -----------------------------------------------------------------
 
 func _on_toast(text: String, kind: String, icon: String) -> void:
@@ -426,6 +672,8 @@ func _on_toast(text: String, kind: String, icon: String) -> void:
 	h.add_child(Icons.rect(ic, 20))
 	h.add_child(Kit.para(text, 14, null, true))
 	p.add_child(h)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	Kit.passthrough(h)
 	while _toasts.get_child_count() >= 4:
 		var oldest = _toasts.get_child(0)
 		_toasts.remove_child(oldest)

@@ -72,25 +72,70 @@ func fill() -> void:
 	train.add(_row("sound_on" if snd else "sound_off", "Sound", Kit.switch(snd, _on_sound, "Sound effects")))
 	add_child(train)
 	_build_split()
+	_build_focus()
 
-	# --- phone inbox ----------------------------------------------------------------
-	_build_inbox()
-	_build_morning()
+	# --- phone app, phone inbox ----------------------------------------------------
+	# The phone note and the morning pushes run on the PC; the phone app shares its log.
+	add_child(PhoneAppCard.make(self))
+	if not OS.has_feature("web"):
+		_build_inbox()
+		_build_morning()
+	if PhonePush.wanted():
+		_build_morning_phone()
 
 	# --- data ---------------------------------------------------------------------
 	var photos = App.referenced_photo_ids().size()
 	var what = "your sessions, check-ins and all %d progress photos" % photos if photos > 0 else "your sessions and check-ins"
-	var data = _card("DATA", _info_button("About your data", [
+	var about = [
 		"Backups include %s." % what,
 		"Photos never leave this computer.",
 		"Your save lives in %s. A dated copy is kept there automatically each day." % ProjectSettings.globalize_path(App.DATA_DIR),
-	]))
+	]
+	if OS.has_feature("web"):
+		about = [
+			"Backups include %s." % what,
+			"Your save lives in this app on this phone, and (when it is shared) in your note's script. A dated copy is kept automatically each day.",
+		]
+	var data = _card("DATA", _info_button("About your data", about))
+	var web = OS.has_feature("web")
+	if web:
+		# The phone app: the backup file is the only copy outside this phone.
+		var due = App.backup_due()
+		var last = Kit.hbox(6)
+		last.add_child(Kit.vcenter(Icons.rect("chest", 16)))
+		last.add_child(Kit.clip("Last backup: %s" % App.backup_age_text(), 13, Pal.DANGER if due else Pal.MUTED, due))
+		data.add(last)
+		data.add(Kit.muted_para("Your log and photos live in this app on this phone. A backup file is your second copy: save it to Files or iCloud, or send it to yourself.", 12))
+		if photos > 0:
+			# Photos make a backup big, so they go in once: later backups are the
+			# log alone until there is a new photo.
+			var fresh = App.photos_unsaved().size()
+			var pday = str(App.backup_info().get("photosDay", ""))
+			var pl = Kit.hbox(6)
+			pl.add_child(Kit.vcenter(Icons.rect("camera", 16)))
+			var said = ""
+			if fresh > 0:
+				said = "%d photo%s not in a backup yet: the next backup holds all your photos." % [fresh, "" if fresh == 1 else "s"]
+			else:
+				said = "Your photos are in the backup of %s. Keep that file: newer backups are small, the log alone." % Dates.format_date(pday, {"month": "short", "day": "numeric"})
+			var pt = Kit.muted_para(said, 12)
+			pt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pt.set_meta("backup_photos_line", true)
+			pl.add_child(pt)
+			data.add(pl)
 	var btns = Kit.hbox(8)
-	btns.add_child(Kit.expand(Kit.button("Export backup", "secondary", SettingsPanel.pick_export, "md", "chest")))
-	btns.add_child(Kit.expand(Kit.button("Import backup", "secondary", SettingsPanel.pick_import.bind(sheet), "md", "arrow_down")))
+	btns.add_child(Kit.expand(Kit.button("Back up now" if web else "Export backup", "primary" if web else "secondary", SettingsPanel.pick_export, "md", "chest")))
+	btns.add_child(Kit.expand(Kit.button("Restore" if web else "Import backup", "secondary", SettingsPanel.pick_import.bind(sheet), "md", "arrow_down")))
 	data.add(btns)
 	var btns2 = Kit.hbox(8)
-	btns2.add_child(Kit.expand(Kit.button("Open data folder", "ghost", _open_folder, "md", "book")))
+	if not OS.has_feature("web"):
+		btns2.add_child(Kit.expand(Kit.button("Open data folder", "ghost", _open_folder, "md", "book")))
+	elif photos > 0 and App.photos_unsaved().is_empty():
+		var full = Kit.button("Back up with photos", "ghost", SettingsPanel.pick_export.bind(true), "md", "camera")
+		full.tooltip_text = "One file with everything, photos too"
+		btns2.add_child(Kit.expand(full))
+	else:
+		btns2.add_child(Kit.spacer())
 	btns2.add_child(Kit.button("Reset", "danger", SettingsPanel.ask_reset.bind(sheet)))
 	data.add(btns2)
 	add_child(data)
@@ -281,6 +326,47 @@ func _build_split() -> void:
 	add_child(card)
 
 
+## Training focus (game/dose.gd): what the weekly sets per muscle should be.
+## The Today card then adds a lift for a muscle that is short, keeps the legs
+## at "as last time", asks for a rest day and grows the weekly run.
+func _build_focus() -> void:
+	var st = App.settings()
+	var cur = Dose.plan_id(st)
+	var card = _card("TRAINING FOCUS", _info_button("Training focus", [
+		"Pick what you are training for. Every muscle then has a number of sets it should get in a week, and the Today card shows how many it got in the last 7 days.",
+		"On a day that trains a muscle that is short, the plan adds one more lift for it, with several to pick from for whatever equipment is there. A chest with no press gets a press first.",
+		"Muscles that are only kept (the legs, with \"Upper body first\") never get sets added. Their lifts still have goals to beat.",
+		"After 5 hard days in a row the day's first mission is a rest day. A climbing session counts for the forearms only, not for the back.",
+		"\"From my log\" switches all of this off.",
+	]))
+	card.set_meta("focus_section", true)
+	var chips = Kit.flow(6)
+	chips.add_child(Kit.chip("From my log", cur == "", _on_setting.bind("", "focus"), Pal.LIFT))
+	for id in Dose.ORDER:
+		chips.add_child(Kit.chip(str(Dose.PLANS[id].name), cur == str(id), _on_setting.bind(str(id), "focus"), Pal.LIFT))
+	card.add(chips)
+	if cur != "":
+		card.add(Kit.para(str(Dose.PLANS[cur].blurb), 12, Pal.MUTED))
+		var row = Kit.hbox(8)
+		var l = Kit.vbox(1)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.add_child(Kit.label("Build up my weekly run", 14, null, true))
+		l.add_child(Kit.para("Each run aims about 10% further than the last; after a break it starts lower.", 11, Pal.MUTED))
+		row.add_child(l)
+		row.add_child(Kit.vcenter(Kit.switch(Dose.run_on(st), _on_run_goal, "Grow the weekly run a little at a time")))
+		card.add(row)
+		var see = Kit.button("See my weekly sets", "secondary", DoseView.open, "sm")
+		see.set_meta("see_dose", true)
+		card.add(see)
+	add_child(card)
+
+
+func _on_run_goal(on: bool) -> void:
+	Sfx.tick()
+	App.update_settings({"runGoal": on})
+	call_deferred("_refill")
+
+
 func _build_morning() -> void:
 	var m = MorningAlert.settings(App.settings())
 	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_morning_how.bind(m.topic), "sm"))
@@ -327,6 +413,87 @@ func _build_morning() -> void:
 	keys.add_child(Kit.button("Copy topic", "ghost", _copy_topic, "md"))
 	card.add(keys)
 	add_child(card)
+
+
+## Morning goals in the phone app: the app leaves the coming mornings' plans
+## with ntfy itself (app/phone_push.gd), so no PC is needed.
+func _build_morning_phone() -> void:
+	var m = PhonePush.settings(App.settings())
+	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_phone_morning_how.bind(m.topic), "sm"))
+	card.set_meta("morning_phone", true)
+	card.add(Kit.muted_para("The day's plan on this phone each morning, sent by the app itself. No PC needed.", 12))
+	var row = Kit.hbox(8)
+	row.add_child(Kit.vcenter(Icons.rect("sun", 20)))
+	var l = Kit.label("Every day at", 14, null, true)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(l)
+	row.add_child(Kit.vcenter(Kit.icon_button("minus", _phone_morning_time.bind(-30), "30 minutes earlier", 28)))
+	row.add_child(Kit.vcenter(PixelFont.rect(m.time, 2, Pal.ACCENT)))
+	row.add_child(Kit.vcenter(Kit.icon_button("plus", _phone_morning_time.bind(30), "30 minutes later", 28)))
+	row.add_child(Kit.spacer())
+	row.add_child(Kit.switch(m.phone, _on_phone_morning, "Send it every morning"))
+	card.add(row)
+	var st = Kit.hbox(6)
+	st.add_child(Kit.vcenter(Icons.rect("clock", 16)))
+	var sl = Kit.muted_para(App.push.status_text(), 12)
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.set_meta("push_status", true)
+	st.add_child(sl)
+	card.add(st)
+	var topic = Kit.hbox(6)
+	topic.add_child(Kit.vcenter(Icons.rect("speech", 16)))
+	topic.add_child(Kit.clip("Topic: %s" % (m.topic if m.topic != "" else "(made when you first send)"), 12, Pal.MUTED))
+	card.add(topic)
+	var keys = Kit.hbox(8)
+	keys.add_child(Kit.expand(Kit.button("Send a test", "secondary", _phone_morning_test, "md", "bolt")))
+	keys.add_child(Kit.button("Copy topic", "ghost", _copy_topic, "md"))
+	card.add(keys)
+	add_child(card)
+
+
+static func show_phone_morning_how(topic: String) -> void:
+	SettingsPanel.show_info("Morning goals", [
+		"1. The free app ntfy on this phone, subscribed to your topic: %s. If you had morning goals from your PC, that is already done." % (topic if topic != "" else "press Send a test once to make it"),
+		"2. Press Send a test: a notification with today's plan should arrive.",
+		"3. Turn the switch on. Whenever this app is open it leaves the next two mornings' plans with ntfy, which delivers each at your time.",
+		"Tomorrow's plan is written as if today goes as planned. If it did not (a day off, another workout), one updated message follows the first.",
+		"A message that is already waiting cannot be taken back, so a new time or the switch counts from the mornings not left yet. Open the app at least every other day, or the messages run out.",
+		"If your PC still sends morning goals, turn that off there, or they arrive twice. The message goes through ntfy.sh, a free public relay: the topic is a long random name, so only someone who knows it can read it. It holds lift names and weights, nothing else.",
+	])
+
+
+func _on_phone_morning(on) -> void:
+	Sfx.tick()
+	var topic = _ensure_topic()
+	_morning_patch({"phone": bool(on)})
+	if on:
+		App.push.run()
+		App.toast("Each morning at %s, to %s" % [str(PhonePush.settings(App.settings()).time), topic], "good", "sun")
+	else:
+		var w = App.push.waiting_days()
+		App.toast("Morning goals off" + ("" if w == "" else ". Already on their way: %s" % w), "info", "sun")
+	call_deferred("_refill")
+
+
+func _phone_morning_time(minutes: int) -> void:
+	Sfx.tick()
+	var m = PhonePush.settings(App.settings())
+	var parts = m.time.split(":")
+	var total = clampi(int(parts[0]) * 60 + int(parts[1]) + minutes, 0, 11 * 60 + 30)
+	_morning_patch({"time": "%02d:%02d" % [int(total / 60.0), total % 60]})
+	call_deferred("_refill")
+
+
+func _phone_morning_test() -> void:
+	Sfx.tap()
+	var topic = _ensure_topic()
+	App.toast("Sending…", "info", "bolt")
+	var res = await App.push.send_test()
+	if res.ok:
+		App.toast("Sent to %s: check your phone" % topic, "good", "check")
+	else:
+		App.toast("Not sent: %s" % str(res.error), "bad", "warning")
+	call_deferred("_refill")
 
 
 static func show_morning_how(topic: String) -> void:
@@ -426,6 +593,11 @@ func _morning_test() -> void:
 func _copy_topic() -> void:
 	Sfx.tick()
 	var topic = _ensure_topic()
+	if WebFiles.available():
+		# A phone's browser only copies inside a tap on a real button.
+		WebFiles.copy(topic, "Copy topic")
+		call_deferred("_refill")
+		return
 	DisplayServer.clipboard_set(topic)
 	App.toast("Copied: %s" % topic, "good", "check")
 	call_deferred("_refill")
@@ -573,7 +745,7 @@ static func _test_clear() -> void:
 		return
 	var res = await DocClear.send(App.inbox, str(cs.url), App.inbox.clear_token(), [], true)
 	if res.ok and int(res.get("version", 1)) < DocClear.SCRIPT_VERSION:
-		App.toast("It clears, but it is the old script: copy the script again, paste it over the old one, then Deploy > Manage deployments > edit > New version", "info", "warning")
+		App.toast("It works, but it is the old script: Copy the script, paste it over the old one, Save, run authorize once (beside Run), then Deploy > Manage deployments > edit > New version", "info", "warning")
 	elif res.ok:
 		App.toast("It works: the script sees %d table%s in the doc" % [res.tables, "" if int(res.tables) == 1 else "s"], "good", "check")
 	else:
@@ -741,6 +913,11 @@ static func _dialog(mode: int) -> FileDialog:
 	dlg.use_native_dialog = true
 	dlg.file_mode = mode
 	dlg.filters = PackedStringArray(["*.json ; Tiny Titan backup"])
+	# Start in Documents, never in the game's own folder (a backup saved there
+	# would be picked up by a build of the game).
+	var docs = OS.get_system_dir(OS.SYSTEM_DIR_DOCUMENTS)
+	if docs != "":
+		dlg.current_dir = docs
 	dlg.canceled.connect(dlg.queue_free)
 	var host = Kit.overlay_root
 	if host == null:
@@ -749,7 +926,29 @@ static func _dialog(mode: int) -> FileDialog:
 	return dlg
 
 
-static func pick_export() -> void:
+## `full`: true = with photos, false = the log alone, null = with photos only
+## when some are in no backup made here yet (the phone app's "Back up now").
+static func pick_export(full = null) -> void:
+	if WebFiles.available():
+		# The web build: the backup goes to the browser (an iPhone's share sheet).
+		var with_photos = bool(full) if full != null else not App.photos_unsaved().is_empty()
+		var n_photos = App.photos_here().size()
+		var tmp = App.DATA_DIR + "backup-export.json"
+		var err = App.export_backup(tmp, with_photos)
+		if err != "":
+			App.toast("Export failed: %s" % err, "bad", "warning")
+			return
+		var file_name = "tiny-titan-backup-%s%s.json" % [App.today, "-with-photos" if with_photos else ""]
+		WebFiles.save(file_name, "application/json", FileAccess.get_file_as_bytes(tmp), "Save the backup", func():
+			App.note_backup(with_photos)
+			if with_photos:
+				App.toast("Saved with your %d photo%s. Keep this file somewhere safe" % [n_photos, "" if n_photos == 1 else "s"], "good", "chest")
+			elif n_photos > 0:
+				App.toast("Log saved. Your photos are in the earlier backup: keep that file too", "good", "chest")
+			else:
+				App.toast("Keep that file somewhere safe: Save to Files, or send it to yourself", "good", "chest"))
+		DirAccess.remove_absolute(tmp)
+		return
 	var dlg = SettingsPanel._dialog(FileDialog.FILE_MODE_SAVE_FILE)
 	dlg.title = "Export backup"
 	dlg.current_file = "tiny-titan-backup-%s.json" % App.today
@@ -762,12 +961,25 @@ static func _export_to(path: String, dlg: FileDialog) -> void:
 		dlg.queue_free()
 	var err = App.export_backup(path)
 	if err == "":
+		App.note_backup()
 		App.toast("Backup saved", "good", "chest")
 	else:
 		App.toast("Export failed: %s" % err, "bad", "warning")
 
 
 static func pick_import(sh) -> void:
+	if WebFiles.available():
+		WebFiles.pick(".json,application/json", "Choose a backup", func(file_name: String, bytes: PackedByteArray):
+			if file_name == "" or bytes.is_empty():
+				return
+			var tmp = App.DATA_DIR + "backup-import.json"
+			var f = FileAccess.open(tmp, FileAccess.WRITE)
+			if f == null:
+				return
+			f.store_buffer(bytes)
+			f.close()
+			SettingsPanel.confirm_import(tmp, sh))
+		return
 	var dlg = SettingsPanel._dialog(FileDialog.FILE_MODE_OPEN_FILE)
 	dlg.title = "Import backup"
 	dlg.file_selected.connect(SettingsPanel._import_from.bind(dlg, sh))
@@ -786,13 +998,32 @@ static func confirm_import(path: String, sh = null) -> void:
 	if not result.ok:
 		App.toast("Import failed: %s" % result.error, "bad", "warning")
 		return
+	# A backup older than the log here that holds photos missing here (the log
+	# was restored from a small backup first): only its photos are taken.
+	var extra = App.photos_to_take(result)
+	if extra > 0 and App.has_profile() and float(result.data.get("updatedAt", 0)) < float(App.saved.get("updatedAt", 0)):
+		Kit.confirm("Add its photos?", "This backup is older than the log on this device, and it holds %d photo%s missing here. Add %s? Your log stays as it is." % [extra, "" if extra == 1 else "s", "it" if extra == 1 else "them"],
+			"Add photos", SettingsPanel.do_take_photos.bind(result, sh), false)
+		return
 	var body = "Import %d sessions and %d check-ins? This replaces your current data." % [result.sessions, result.body]
 	Kit.confirm("Import backup", body, "Import", SettingsPanel.do_import.bind(result, sh))
 
 
+static func do_take_photos(result: Dictionary, sh = null) -> void:
+	var n = App.take_photos(result)
+	App.toast("%d photo%s added" % [n, "" if n == 1 else "s"], "good", "camera")
+	if sh != null and is_instance_valid(sh):
+		sh.close()
+
+
 static func do_import(result: Dictionary, sh = null) -> void:
 	var n = App.apply_backup(result)
-	App.toast("Backup imported" + (" with %d photos" % n if n > 0 else ""), "good", "chest")
+	var missing = App.photos_missing().size()
+	if missing > 0:
+		# The log alone: its photos come from the backup that holds them.
+		App.toast("Log imported. %d photo%s missing: now restore your backup with photos to add %s" % [missing, " is" if missing == 1 else "s are", "it" if missing == 1 else "them"], "info", "camera")
+	else:
+		App.toast("Backup imported" + (" with %d photos" % n if n > 0 else ""), "good", "chest")
 	if sh != null and is_instance_valid(sh):
 		sh.close()
 

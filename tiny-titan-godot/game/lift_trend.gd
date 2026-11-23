@@ -456,8 +456,16 @@ static func records(sets: Array, before: Array) -> Array:
 	return out
 
 
+## Past this many reps on every working set a weight is too light to build much.
+const HIGH_REPS = 15
+## The reps to come back down to at the heavier weight.
+const DOWN_TO = 10
+
 ## Something to aim for next time, from a session's sets (double progression:
 ## more reps at the same weight until every set gets there, then more weight).
+## A weighted lift whose every working set is at HIGH_REPS or more goes a step
+## heavier and back down to DOWN_TO reps ("heavier": true), instead of adding
+## a 25th rep to a weight that is too light.
 ## {"kind": "weight" | "reps" | "hold" | "none", "sets": the sets to aim for,
 ##  "set": the set that changes (1-based, 0 = all), "reps": its reps, "addKg",
 ##  "addSec", "kg": the working weight}. `step_kg`: the weight to add (2.5 kg,
@@ -494,6 +502,16 @@ static func next_target(sets: Array, step_kg: float) -> Dictionary:
 		most = maxi(most, int(real[i].reps))
 		if int(real[i].reps) < int(real[least_i].reps):
 			least_i = i
+	if top > 0.0 and int(real[least_i].reps) >= HIGH_REPS:
+		for i in work:
+			aim[i].weightKg = top + step_kg
+			aim[i].reps = DOWN_TO
+		out.kind = "weight"
+		out.addKg = step_kg
+		out.reps = DOWN_TO
+		out.sets = aim
+		out["heavier"] = true
+		return out
 	if top > 0.0 and int(real[least_i].reps) >= most:
 		for i in work:
 			aim[i].weightKg = top + step_kg

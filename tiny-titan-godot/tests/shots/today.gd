@@ -152,6 +152,13 @@ func run(m: Node, t: SceneTree) -> void:
 	check(_ticks().count(true) == t_base + 1, "the lift done today is ticked (%s)" % str(_ticks()))
 	var nw = App.plan().new
 	if nw != null:
+		# Others to pick from beside the movement to try (the equipment may be taken).
+		var alt_keys = ShotHelper.walk(main).filter(func(n): return n is Control and n.has_meta("new_alt"))
+		check(alt_keys.size() == nw.alts.size() and alt_keys.size() >= 1, "the movement to try comes with others to pick from (%s)" % str(nw.alts.map(func(a): return str(a.name))))
+		if not alt_keys.is_empty():
+			ShotHelper.reveal(alt_keys[0])
+			await ShotHelper.frames(tree, 3)
+			await ShotHelper.snap(tree, "today_3a_new_options")
 		App.commit_sessions([{"id": "new1", "discipline": "lift", "date": App.today, "createdAt": App.now_ms() + 5, "source": "manual",
 			"exercises": [{"name": str(nw.name), "sets": [{"reps": 10, "weightKg": 20.0}]}]}], "Workout logged!")
 		await _dismiss_reels()

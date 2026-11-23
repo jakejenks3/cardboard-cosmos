@@ -11,6 +11,9 @@ extends RefCounted
 var _form_ref: WeakRef = null
 var editing_id = null
 ## [{name: String, bodyweight: bool, sets: [{reps: String, weight: String}]}]
+## `timed: true` = a hold (a stretch): its sets have `hold` (seconds, a String)
+## where the weight would be. `planned: true` = filled in from the day's plan
+## and not touched yet (the form asks about those before it saves).
 var exercises: Array = []
 var query: String = ""
 var wu: String = "kg"
@@ -26,6 +29,7 @@ var _pr_done: Dictionary = {}
 var _badges: Array = []  # [exercise][set] -> HBoxContainer slot for the trend badge
 var _wsteps: Array = []  # [exercise][set] -> the weight stepper (where a PR bursts from)
 var _deltas: Array = []  # [exercise] -> VBoxContainer slot for the volume note
+var _cards: Array = []  # [exercise] -> its Card (the edge lights up at the first touch)
 var _built_names: Array = []
 var _chips: HFlowContainer = null
 var _no_match: Label = null
@@ -49,29 +53,47 @@ static func draft_from_sets(ex_name: String, sets: Array, unit: String) -> Dicti
 		if float(s.weightKg) != 0.0:
 			bw = false
 	var rows = []
+	var timed = false
 	for s in sets:
 		var row = {"reps": str(int(s.reps)), "weight": LogWidgets.trim_num(Fmt.kg_to_unit(float(s.weightKg), unit)) if float(s.weightKg) > 0.0 else ""}
-		# A hold (a stretch, written 30" in the phone note): its seconds ride along.
+		# A hold (a stretch, written 30" in the phone note): seconds, not weight.
 		if int(s.get("holdSec", 0)) > 0:
-			row["hold"] = int(s.holdSec)
+			row["hold"] = str(int(s.holdSec))
+			timed = true
 		rows.append(row)
 	if rows.is_empty():
 		rows.append({"reps": "", "weight": ""})
-	return {"name": ex_name, "bodyweight": bw, "sets": rows}
+	return {"name": ex_name, "bodyweight": bw, "timed": timed, "sets": rows}
 
 
 ## Empty or zero-rep sets are dropped (as the web app does).
 static func sets_from_draft(e: Dictionary, unit: String) -> Array:
 	var out = []
+	var timed = bool(e.get("timed", false))
 	for s in e.sets:
 		var reps = maxi(0, TTUtil.jsround(LogWidgets.num(s.reps)))
-		var kg = 0.0 if e.bodyweight else maxf(0.0, Fmt.unit_to_kg(LogWidgets.num(s.weight), unit))
+		var kg = 0.0 if (e.bodyweight or timed) else maxf(0.0, Fmt.unit_to_kg(LogWidgets.num(s.weight), unit))
 		if reps > 0:
 			var one = {"reps": reps, "weightKg": kg}
-			if int(s.get("hold", 0)) > 0:
-				one["holdSec"] = int(s.hold)
+			var sec = maxi(0, TTUtil.jsround(LogWidgets.num(s.get("hold", "")))) if timed else 0
+			if sec > 0:
+				one["holdSec"] = sec
 			out.append(one)
 	return out
+
+
+## The exercises filled in from the day's plan and never touched (names).
+func planned_names() -> Array:
+	var out = []
+	for e in exercises:
+		if bool(e.get("planned", false)) and not sets_from_draft(e, wu).is_empty():
+			out.append(str(e.name).strip_edges())
+	return out
+
+
+func _touched(i: int) -> void:
+	if i < exercises.size():
+		exercises[i].erase("planned")
 
 
 ## The exercises as they will be saved: named, with at least one real set.
@@ -106,23 +128,36 @@ func build(parent: Control) -> void:
 	_badges = []
 	_wsteps = []
 	_deltas = []
+	_cards = []
 	_built_names = []
 
-	# An exercise sent over from the lift library: add it with last time's sets.
+	# Exercises sent over: the day's plan from the Today card ("Start workout",
+	# marked planned until touched) or one from the lift library. Each comes
+	# with last time's sets.
+	var pends = []
+	for nm in App.pending_workout:
+		pends.append([str(nm), true])
+	App.pending_workout = []
 	if App.pending_exercise != "":
-		var pend = App.pending_exercise
+		pends.append([App.pending_exercise, false])
 		App.pending_exercise = ""
+	for pair in pends:
+		var pend = str(pair[0])
 		var pk = Xp.normalize_exercise(pend)
 		var have = false
 		for e in exercises:
 			if Xp.normalize_exercise(e.name) == pk:
 				have = true
-		if not have and pk != "":
-			var plp = _last.get(pk)
-			if plp != null:
-				exercises.append(draft_from_sets(str(plp.name), plp.sets, wu))
-			else:
-				exercises.append({"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]})
+		if have or pk == "":
+			continue
+		var plp = _last.get(pk)
+		if plp != null:
+			var one = draft_from_sets(str(plp.name), plp.sets, wu)
+			if bool(pair[1]):
+				one["planned"] = true
+			exercises.append(one)
+		else:
+			exercises.append({"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]})
 
 	if exercises.is_empty():
 		var templates = LiftHistory.recent_workouts(sessions, 3, editing_id)
@@ -165,8 +200,12 @@ func _exercise_card(i: int) -> Card:
 	var lp = _last.get(key)
 	var best = _bests.get(key)
 	_built_names.append(str(e.name).strip_edges())
+	var timed = bool(e.get("timed", false))
 	var c = Kit.card(4, Callable(), 10)
-	c.accent(Pal.LIFT)
+	# From the day's plan and not touched yet: a quiet edge until it is.
+	c.accent(Pal.LINE if bool(e.get("planned", false)) else Pal.LIFT)
+	c.set_meta("exercise_card", i)
+	_cards.append(c)
 
 	# Name · BW · remove
 	var head = Kit.hbox(4)
@@ -176,9 +215,13 @@ func _exercise_card(i: int) -> Card:
 	name_edit.focus_exited.connect(_on_name_done.bind(i))
 	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
 	head.add_child(name_edit)
-	var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), Pal.LIFT, 8)
-	bw.tooltip_text = "Bodyweight exercise (no weight)"
-	head.add_child(bw)
+	if not timed:
+		var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), Pal.LIFT, 8)
+		bw.tooltip_text = "Bodyweight exercise (no weight)"
+		head.add_child(bw)
+	var hold = LogWidgets.mini_chip("Hold", timed, _toggle_timed.bind(i), Pal.LIFT, 8)
+	hold.tooltip_text = "A stretch or a hold: seconds instead of weight"
+	head.add_child(hold)
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
 
@@ -218,7 +261,18 @@ func _exercise_card(i: int) -> Card:
 		rs.changed.connect(_on_set_text.bind(i, j, "reps"))
 		row.add_child(rs)
 		var ws = null
-		if not e.bodyweight:
+		if timed:
+			# A hold: how many times, and the seconds each one is held.
+			row.add_child(Kit.vcenter(Kit.label("×", 13, Pal.MUTED)))
+			var h_opts = {"placeholder": "sec", "width": 44, "min": 0, "compact": true, "base": 30}
+			if ref_set != null and int(ref_set.get("holdSec", 0)) > 0:
+				h_opts["base"] = int(ref_set.holdSec)
+			ws = Kit.stepper(str(s.get("hold", "")), 5.0, Callable(), h_opts)
+			LogWidgets.slim_stepper(ws, "ex%d.s%d.hold" % [i, j]).tooltip_text = "%s: seconds held in set %d" % [label_name, j + 1]
+			ws.changed.connect(_on_set_text.bind(i, j, "hold"))
+			row.add_child(ws)
+			row.add_child(Kit.vcenter(Kit.label("s", 11, Pal.MUTED)))
+		elif not e.bodyweight:
 			row.add_child(Kit.vcenter(Kit.label("×", 13, Pal.MUTED)))
 			var w_opts = {"placeholder": wu, "width": 54, "snap": true, "min": 0, "compact": true}
 			if ref_set != null and float(ref_set.weightKg) > 0.0:
@@ -227,7 +281,9 @@ func _exercise_card(i: int) -> Card:
 			LogWidgets.slim_stepper(ws, "ex%d.s%d.weight" % [i, j]).tooltip_text = "%s weight for set %d" % [label_name, j + 1]
 			ws.changed.connect(_on_set_text.bind(i, j, "weight"))
 			row.add_child(ws)
-			row.add_child(Kit.vcenter(Kit.label(wu, 11, Pal.MUTED)))
+			# On a phone the keys take the room: the unit is in the chips below.
+			if not Kit.fingers:
+				row.add_child(Kit.vcenter(Kit.label(wu, 11, Pal.MUTED)))
 		else:
 			row.add_child(Kit.vcenter(Kit.label("reps", 11, Pal.MUTED)))
 		var slot = Kit.hbox(0)
@@ -251,7 +307,11 @@ func _exercise_card(i: int) -> Card:
 	var rep_btn = LogWidgets.mini_chip("+1 rep", false, bump_all.bind(i, "reps"))
 	rep_btn.tooltip_text = "Add one rep to every set"
 	acts.add_child(rep_btn)
-	if not e.bodyweight:
+	if timed:
+		var h_btn = LogWidgets.mini_chip("+5 s", false, bump_all.bind(i, "hold"))
+		h_btn.tooltip_text = "Hold every set five seconds longer"
+		acts.add_child(h_btn)
+	elif not e.bodyweight:
 		var w_btn = LogWidgets.mini_chip("+%s %s" % [TTUtil.num_str(_step()), wu], false, bump_all.bind(i, "weight"))
 		w_btn.tooltip_text = "Add one weight step to every set"
 		acts.add_child(w_btn)
@@ -287,7 +347,7 @@ func _refresh_exercise(i: int) -> void:
 			continue
 		Kit.clear(slot)
 		var s = e.sets[j]
-		var cur = {"reps": TTUtil.jsround(LogWidgets.num(s.reps)), "weightKg": 0.0 if e.bodyweight else Fmt.unit_to_kg(LogWidgets.num(s.weight), wu)}
+		var cur = {"reps": TTUtil.jsround(LogWidgets.num(s.reps)), "weightKg": 0.0 if (e.bodyweight or bool(e.get("timed", false))) else Fmt.unit_to_kg(LogWidgets.num(s.weight), wu)}
 		var prev = null
 		if lp != null and j < lp.sets.size():
 			prev = lp.sets[j]
@@ -314,7 +374,22 @@ func _refresh_exercise(i: int) -> void:
 		last_reps += int(s.reps)
 	var text = ""
 	var good = false
-	if e.bodyweight or last_vol == 0.0:
+	var held = 0
+	for s in cur_sets:
+		held += int(s.reps) * int(s.get("holdSec", 0))
+	var last_held = 0
+	for s in lp.sets:
+		last_held += int(s.reps) * int(s.get("holdSec", 0))
+	if bool(e.get("timed", false)) and (held > 0 or last_held > 0):
+		# A hold: the seconds held in all.
+		if held > last_held:
+			text = "▲ %d s held" % (held - last_held)
+			good = true
+		elif held == last_held:
+			text = "= last hold"
+		else:
+			text = "%d s to match" % (last_held - held)
+	elif e.bodyweight or last_vol == 0.0:
 		if reps > last_reps:
 			text = "▲ %d reps" % (reps - last_reps)
 			good = true
@@ -322,11 +397,11 @@ func _refresh_exercise(i: int) -> void:
 			text = "= last reps"
 		else:
 			text = "%d reps to match" % (last_reps - reps)
-	elif vol > last_vol + 1e-6:
+	elif absf(vol - last_vol) <= maxf(0.3, last_vol * 0.0005):
+		text = "= last volume"
+	elif vol > last_vol:
 		text = "▲ %s volume" % _fmt_w(vol - last_vol)
 		good = true
-	elif absf(vol - last_vol) <= 1e-6:
-		text = "= last volume"
 	else:
 		text = "%s to match" % _fmt_w(last_vol - vol)
 	var note = Kit.clip(text, 12, Pal.GOOD if good else Pal.MUTED, true)
@@ -360,10 +435,13 @@ func _trend_badge(trend):
 			t = LogWidgets.badge("PR!", Pal.ACCENT, 12)
 			t.tooltip_text = "Heavier than you have ever lifted on this exercise"
 		"weight":
-			t = LogWidgets.badge("+%s %s" % [LogWidgets.trim_num(Fmt.kg_to_unit(float(trend.deltaKg), wu)), wu], Pal.GOOD, 11)
+			if absf(Fmt.kg_to_unit(float(trend.deltaKg), wu)) < 0.05:
+				return null
+			var more = "+" + LogWidgets.trim_num(Fmt.kg_to_unit(float(trend.deltaKg), wu))
+			t = LogWidgets.badge(more if Kit.fingers else more + " " + wu, Pal.GOOD, 11)
 			t.tooltip_text = "Heavier than last time"
 		"reps":
-			t = LogWidgets.badge("+%d rep%s" % [int(trend.delta), "" if int(trend.delta) == 1 else "s"], Pal.GOOD, 11)
+			t = LogWidgets.badge("+%d rep%s" % [int(trend.delta), "" if int(trend.delta) == 1 or Kit.fingers else "s"], Pal.GOOD, 11)
 			t.tooltip_text = "More reps than last time"
 		"extra":
 			t = LogWidgets.badge("+set", Pal.GOOD, 11)
@@ -542,6 +620,8 @@ func apply_template(t: Dictionary) -> void:
 
 func add_set(i: int) -> void:
 	Sfx.tick()
+	Sfx.buzz(1)
+	_touched(i)
 	var sets = exercises[i].sets
 	var copy = sets[sets.size() - 1].duplicate() if not sets.is_empty() else {"reps": "", "weight": ""}
 	sets.append(copy)
@@ -549,6 +629,7 @@ func add_set(i: int) -> void:
 
 
 func remove_set(i: int, j: int) -> void:
+	_touched(i)
 	exercises[i].sets.remove_at(j)
 	_changed(true)
 
@@ -560,9 +641,12 @@ func remove_exercise(i: int) -> void:
 
 func bump_all(i: int, field: String) -> void:
 	Sfx.tick()
+	_touched(i)
 	for s in exercises[i].sets:
 		if field == "reps":
 			s.reps = TTUtil.num_str(LogWidgets.num(s.reps) + 1.0)
+		elif field == "hold":
+			s["hold"] = TTUtil.num_str(LogWidgets.num(s.get("hold", "")) + 5.0)
 		else:
 			s.weight = LogWidgets.trim_num(LiftHistory.step_value(LogWidgets.num(s.weight), _step(), 1))
 	_changed(true)
@@ -587,7 +671,16 @@ func cycle_step() -> void:
 
 
 func _toggle_bw(i: int) -> void:
+	_touched(i)
 	exercises[i].bodyweight = not exercises[i].bodyweight
+	_changed(true)
+
+
+## A hold (a stretch): seconds where the weight would be.
+func _toggle_timed(i: int) -> void:
+	Sfx.tick()
+	_touched(i)
+	exercises[i]["timed"] = not bool(exercises[i].get("timed", false))
 	_changed(true)
 
 
@@ -595,6 +688,12 @@ func _on_set_text(text: String, i: int, j: int, field: String) -> void:
 	if i >= exercises.size() or j >= exercises[i].sets.size():
 		return
 	exercises[i].sets[j][field] = text
+	if bool(exercises[i].get("planned", false)):
+		# The first touch of a planned exercise: it is this workout's now. Its
+		# edge lights up in place (a rebuild would take the keyboard away).
+		_touched(i)
+		if i < _cards.size() and is_instance_valid(_cards[i]):
+			_cards[i].accent(Pal.LIFT)
 	_refresh_exercise(i)
 	_changed(false)
 
@@ -613,7 +712,7 @@ func _on_name_done(i: int) -> void:
 	var lp = _last.get(Xp.normalize_exercise(e.name))
 	var pristine = true
 	for s in e.sets:
-		if str(s.reps) != "" or str(s.weight) != "":
+		if str(s.reps) != "" or str(s.weight) != "" or str(s.get("hold", "")) != "":
 			pristine = false
 	if lp != null and pristine:
 		exercises[i] = draft_from_sets(str(e.name).strip_edges(), lp.sets, wu)

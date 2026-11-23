@@ -52,6 +52,21 @@ func build() -> void:
 		dc.add(drow)
 		add_child(dc)
 
+	# --- the phone app: time to make a backup file (the only copy elsewhere) ------
+	if OS.has_feature("web") and App.backup_due():
+		var bc = Kit.card(6, Callable(), 10)
+		bc.accent(Pal.ACCENT)
+		var brow = Kit.hbox(10)
+		brow.add_child(Kit.vcenter(Icons.rect("chest", 26)))
+		var bv = Kit.vbox(0)
+		bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bv.add_child(Kit.clip("Back up your log", 15, null, true))
+		bv.add_child(Kit.clip("Last backup: %s" % App.backup_age_text(), 12, Pal.MUTED))
+		brow.add_child(bv)
+		brow.add_child(Kit.vcenter(Kit.button("Back up", "primary", SettingsPanel.pick_export, "sm")))
+		bc.add(brow)
+		add_child(bc)
+
 	# --- a finished week or month has a recap waiting ---------------------------
 	var ready = _recap_ready()
 	if ready != null:

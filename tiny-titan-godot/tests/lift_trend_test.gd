@@ -210,6 +210,11 @@ func _views() -> void:
 	var hold_next = LiftTrend.next_target([{"reps": 3, "weightKg": 0.0, "holdSec": 30}], 2.5)
 	ok(hold_next.kind == "hold" and int(hold_next.sets[0].holdSec) == 35, "a hold: five seconds longer", hold_next)
 	ok(LiftTrend.next_target([], 2.5).kind == "none", "nothing done: nothing to aim for")
+	var light = LiftTrend.next_target(sets([[24, 8], [24, 8], [26, 8]]), 2.5)
+	ok(light.kind == "weight" and bool(light.get("heavier", false)) and light.sets.all(func(one): return int(one.reps) == LiftTrend.DOWN_TO and is_equal_approx(float(one.weightKg), 10.5)), "every set past 15 reps: a step heavier and down to 10 reps", light)
+	var nearly = LiftTrend.next_target(sets([[16, 8], [14, 8]]), 2.5)
+	ok(nearly.kind == "reps" and not nearly.has("heavier") and int(nearly.reps) == 15, "one set still under 15: one more rep there first", nearly)
+	ok(not LiftTrend.next_target(sets([[25, 0], [25, 0]]), 2.5).has("heavier"), "bodyweight has no weight to add: reps go on")
 
 	# --- the chart, the calendar, the ladder ---------------------------------------------------
 	var pts = [{"x": "2026-10-01", "y": 50.0}, {"x": "2026-10-08", "y": 55.0}, {"x": "2026-10-15", "y": 52.0}, {"x": "2026-10-22", "y": 55.0}, {"x": "2026-10-29", "y": 60.0}]

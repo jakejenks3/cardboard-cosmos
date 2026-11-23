@@ -142,6 +142,8 @@ static func combo(sessions: Array, today: String, cycle: Array, marks: Dictionar
 const PERFECT_XP = 300
 ## Ways shown to do one planned lift (its variations and one other movement).
 const OPTIONS = 4
+## Other movements offered beside the one to try (other equipment first).
+const NEW_ALTS = 2
 ## Good first picks for "try something new", most useful first. Movements not
 ## listed (or not in the library) come after these, in library order.
 const STAPLES = {
@@ -348,6 +350,21 @@ static func options_for(l: Dictionary, hist: Dictionary, avoid: Array = [], mark
 	return out
 
 
+## A movement to try, from its library row.
+static func _new_entry(e: Dictionary) -> Dictionary:
+	var v = variation_for(e)
+	return {"name": LiftNames.join(str(e.name), v), "move": str(e.name), "variation": v, "part": str(e.part),
+		"partName": LiftLibrary.part_name(str(e.part)), "tip": str(e.tip)}
+
+
+## "Hip Thrust (barbell)", or with the others offered: "... (or Glute Bridge, Step-up)".
+static func new_words(nw: Dictionary) -> String:
+	var alts = nw.get("alts", []).map(func(a): return short_name(str(a.name)))
+	if alts.is_empty():
+		return short_name(str(nw.name))
+	return "%s (or %s)" % [short_name(str(nw.name)), ", ".join(PackedStringArray(alts))]
+
+
 ## Is `lift_name` another movement standing in for a planned one: the same
 ## body part and kind, and not itself in the day's plan? `same` = {"part",
 ## "kind", "moves": normalized movements of the day's plan} (see same_of).
@@ -387,23 +404,80 @@ static func beat_any(sessions: Array, names: Array, move: String, date: String, 
 	return false
 
 
-## Was the movement to try done on `today`: it, or any movement never done before?
-static func new_done(sessions: Array, today: String, nw) -> bool:
+## Was a movement to try done on `today`? (new_by)
+static func new_done(sessions: Array, today: String, plan: Dictionary) -> bool:
+	return new_by(sessions, today, plan) != ""
+
+
+## The lift that did "try something new" on `today`, or "": one of the
+## movements offered (`plan.new` and its `alts`, any variation), else another
+## movement never done before WITH THE SAME GOAL (same_goal). Only sets really
+## logged count: a lift added to the workout and left empty does not.
+static func new_by(sessions: Array, today: String, plan: Dictionary) -> String:
+	var nw = plan.get("new")
 	if nw == null:
-		return false
+		return ""
 	var known = {}
 	for s in sessions:
 		if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) < today:
 			for ex in s.get("exercises", []):
-				known[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+				if not LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+					known[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+	var wants = [Xp.normalize_exercise(str(nw.move))]
+	for a in nw.get("alts", []):
+		wants.append(Xp.normalize_exercise(str(a.move)))
+	var other = ""
 	for s in sessions:
 		if str(s.get("discipline", "")) != "lift" or str(s.get("date", "")) != today:
 			continue
 		for ex in s.get("exercises", []):
-			var mk = Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))
-			if mk == Xp.normalize_exercise(str(nw.move)) or not known.has(mk):
-				return true
-	return false
+			var n = str(ex.get("name", ""))
+			if LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+				continue
+			var mk = Xp.normalize_exercise(str(LiftNames.split(n).move))
+			if known.has(mk):
+				continue
+			if wants.has(mk):
+				return n
+			if other == "" and same_goal(n, plan):
+				other = n
+	return other
+
+
+## Does a movement serve the goal of the day's "try something new": strength
+## for the body area the day is about (the split's kind, else the day's area)?
+## A stretch does not, nor a physical therapy exercise (the PT row's business),
+## nor a movement of another area: a new toe stretch on a leg day used to tick
+## the box under the name of a lift that was never done.
+static func same_goal(lift_name: String, plan: Dictionary) -> bool:
+	if Pt.is_pt(plan.get("marks", {}), lift_name) or lift_name.to_lower().contains("stretch"):
+		return false
+	var kind = str(plan.get("kind", ""))
+	if kind != "":
+		var k = kind_of(lift_name)
+		return k != "" and fits(k, kind)
+	var group = str(plan.get("group", ""))
+	return group != "" and str(GROUP.get(part_of(lift_name), "")) == group
+
+
+## What a planned lift `l` was done as on `today`, or "": physical therapy by
+## itself; an extra lift of the focus (`dose`) once its sets are in (Dose.
+## extra_done: an anchor only by a lift of its sort); any other lift by one of
+## its ways, a variation of its movement or a movement standing in for it.
+static func lift_done(l: Dictionary, plan: Dictionary, sessions: Array, today: String) -> String:
+	var ways = []
+	for o in l.get("options", []):
+		if not ways.has(str(o.name)):
+			ways.append(str(o.name))
+	if ways.is_empty():
+		ways = [str(l.name)]
+	if bool(l.pt):
+		return done_of(sessions, ways, today)
+	var same = same_of(str(l.name), plan)
+	if l.has("dose"):
+		var got = Dose.extra_done(l, sessions, today, same)
+		return str(got.name) if int(got.sets) >= int(l.dose.sets) else ""
+	return done_of(sessions, ways, today, str(LiftNames.split(str(l.name)).move), same)
 
 
 ## The boxes of the Today card, ticked as TodayView ticks them: a row per
@@ -412,15 +486,9 @@ static func new_done(sessions: Array, today: String, nw) -> bool:
 static func day_boxes(plan: Dictionary, sessions: Array, today: String) -> Array:
 	var out = []
 	for l in plan.get("lifts", []):
-		var ways = l.get("options", []).map(func(o): return str(o.name))
-		if ways.is_empty():
-			ways = [str(l.name)]
-		var pt = bool(l.pt)
-		var move = "" if pt else str(LiftNames.split(str(l.name)).move)
-		var done = done_of(sessions, ways, today, move, {} if pt else same_of(str(l.name), plan)) != ""
-		out.append({"what": str(l.name), "done": done})
+		out.append({"what": str(l.name), "done": lift_done(l, plan, sessions, today) != ""})
 	if plan.get("new") != null:
-		out.append({"what": "new", "done": new_done(sessions, today, plan.new)})
+		out.append({"what": "new", "done": new_done(sessions, today, plan)})
 	if not plan.get("pt", []).is_empty():
 		out.append({"what": "pt", "done": plan.pt.all(func(r): return not sets_on(sessions, str(r.name), today).is_empty())})
 	for o in plan.get("others", []).slice(0, 2):
@@ -648,6 +716,23 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		for g in first_seen:
 			if group == "" or int(count[g]) > int(count[group]):
 				group = g
+	# A training focus (game/dose.gd): the extra lifts the day's muscles still
+	# need, and what each lift is for ("build" or "keep"). The extras go first
+	# (the heavy press before the flyes), and nothing else in the plan offers
+	# their movements.
+	var hist = LiftLibrary.stats(before)
+	var avoid = lifts.map(func(l): return Xp.normalize_exercise(str(LiftNames.split(str(l.name)).move)))
+	var extra = []
+	if Dose.plan_id(settings) != "":
+		extra = Dose.extras(lifts, before, today, marks, settings, kind, group, hist, avoid)
+		for x in extra:
+			x["mode"] = str(x.dose.mode)
+			for o in x.options:
+				var omk = Xp.normalize_exercise(str(o.move))
+				if not avoid.has(omk):
+					avoid.append(omk)
+		for l in lifts:
+			l["mode"] = "" if bool(l.pt) else Dose.mode_of(settings, str(l.name))
 	var new = null
 	if group != "":
 		# Never done before today (what is done today keeps the day's pick).
@@ -671,25 +756,40 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 				if i >= l.size():
 					continue
 				var e = LiftNames.movement(str(l[i]))
-				if e != null and fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
+				if e != null and fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not avoid.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
 					pool.append(e)
 		for e in LiftLibrary.catalog():
-			if fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
+			if fit.call(e) and not done.has(Xp.normalize_exercise(str(e.name))) and not avoid.has(Xp.normalize_exercise(str(e.name))) and not pool.any(func(x): return x.name == e.name):
 				pool.append(e)
 		if not pool.is_empty():
 			# The day picks one of the three most useful ones not done yet.
+			var every = pool
 			pool = pool.slice(0, mini(3, pool.size()))
 			var e = pool[int(Rng.make_rng("try:" + today).next() * pool.size()) % pool.size()]
-			var v = variation_for(e)
-			new = {"name": LiftNames.join(str(e.name), v), "move": str(e.name), "variation": v, "part": str(e.part),
-				"partName": LiftLibrary.part_name(str(e.part)), "tip": str(e.tip)}
+			new = _new_entry(e)
+			# And a couple of others to pick from, for the day its equipment is taken
+			# or not there: the same body part first, and other equipment first.
+			var rest = every.filter(func(x): return str(x.name) != str(e.name))
+			var near = func(x): return (2 if str(x.part) == str(e.part) else 0) + (1 if str(x.equip) != str(e.equip) else 0)
+			TTUtil.stable_sort(rest, func(a, b): return int(near.call(a)) > int(near.call(b)))
+			var alts = []
+			var gear = [str(e.equip)]
+			for turn in range(2):
+				for x in rest:
+					if alts.size() >= NEW_ALTS:
+						break
+					if alts.any(func(a): return str(a.move) == str(x.name)):
+						continue
+					if turn == 0 and gear.has(str(x.equip)):
+						continue
+					gear.append(str(x.equip))
+					alts.append(_new_entry(x))
+			new["alts"] = alts
 	var pt = []
 	for r in Pt.status(before, marks, today):
 		if str(r.state) != "done":
 			pt.append(r)
 	# The ways to do each lift: how the player has done it (PT as it is).
-	var hist = LiftLibrary.stats(before)
-	var avoid = lifts.map(func(l): return Xp.normalize_exercise(str(LiftNames.split(str(l.name)).move)))
 	if new != null:
 		avoid.append(Xp.normalize_exercise(str(new.move)))
 	for l in lifts:
@@ -699,9 +799,12 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		else:
 			l["options"] = options_for(l, hist, avoid, marks)
 	var label = str(KIND_NAMES.get(kind, "")) if kind != "" else str(GROUP_NAMES.get(group, ""))
-	return {"date": today, "lifts": lifts, "group": group, "label": label, "new": new,
+	var focus = Dose.plan_id(settings)
+	return {"date": today, "lifts": extra + lifts, "group": group, "label": label, "new": new,
 		"pt": pt, "others": likely_others(before, today), "split": split if not cycle.is_empty() else "auto",
-		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked, "moves": avoid}
+		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked, "moves": avoid, "marks": marks,
+		"focus": focus, "rest": Dose.rest(before, marks, today) if focus != "" else {"run": 0, "today": false, "due": false},
+		"run": Dose.run_goal(before, today, str(settings.get("distanceUnit", "km"))) if Dose.run_on(settings) else null}
 
 
 ## One line on why today is that kind of day: "Yesterday was a pull day",
@@ -781,12 +884,59 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	var plan = day_plan(sessions, today, marks, settings)
 	var todays = sessions.filter(func(s): return str(s.get("date", "")) == today)
 	var out = []
-	out.append(_mission("t:%s:show" % today, "daily", today, "Show up", "Log any workout today.", "flame", null, 1, todays.size(), "sessions", 150, claims))
+	var focus = str(plan.get("focus", "")) != ""
+	if focus and bool(plan.rest.due):
+		# Enough days in a row: the day's first mission is to rest. It counts once
+		# the day is over (`data.now` is the real today), from "From yesterday".
+		var over = str(data.get("now", today)) > today
+		out.append(_mission("t:%s:rest" % today, "daily", today, "Rest day", "%d days in a row. No hard workout today: a walk, physical therapy and stretches are fine. It counts once the day is over." % int(plan.rest.run), "moon", null,
+			1, 1 if (over and not Dose.hard_on(sessions, marks, today)) else 0, "", 150, claims, {"rest": true}))
+	else:
+		out.append(_mission("t:%s:show" % today, "daily", today, "Show up", "Log any workout today.", "flame", null, 1, todays.size(), "sessions", 150, claims))
 
-	# Beat last time: the likeliest lifts that are not physical therapy.
-	var beats = 0
+	# What the focus adds today: an extra lift for a muscle that is short.
 	for l in plan.lifts:
-		if beats >= BEAT_MISSIONS or bool(l.pt):
+		if not l.has("dose"):
+			continue
+		var d = l.dose
+		var first = l.options[0]
+		var pn = Dose.part_name(str(d.part))
+		var anchor = Dose.ANCHORS.get(str(d.part)) if bool(d.anchor) else null
+		var title = ("%s: add %s" % [pn, str(anchor.what)]) if anchor != null else ("More for your %s" % pn.to_lower())
+		var words = "%s: " % pn
+		if float(d.need) >= 1.0:
+			words += "%s of %s weekly sets" % [Dosage._n(float(d.have)), Dosage._n(float(d.min))]
+			if anchor != null:
+				words += ", no %s in two weeks" % str(anchor.word)
+		else:
+			words += "no %s in two weeks" % str(anchor.word)
+		words += ". "
+		if anchor != null:
+			words += str(anchor.why) + " "
+		words += "Do %d sets of %s" % [int(d.sets), short_name(str(first.name))]
+		if bool(first.new):
+			words += ": 6 to 12 reps, the last ones hard."
+		else:
+			words += ": last time %s." % LiftHistory.describe_sets(first.last, fmt_w)
+		# The other ways: a variation of the same movement by its own word.
+		var others = l.options.slice(1).map(func(o): return str(o.variation).to_lower() if str(o.move) == str(first.move) and str(o.variation) != "" else short_name(str(o.name)))
+		if not others.is_empty():
+			words += " Or: %s." % ", ".join(PackedStringArray(others))
+		var got = Dose.extra_done(l, sessions, today, same_of(str(l.name), plan))
+		out.append(_mission("t:%s:dose:%s" % [today, str(d.part)], "daily", today, title, words, "muscle", "lift",
+			int(d.sets), mini(int(d.sets), int(got.sets)), "", 250, claims,
+			{"lift": str(first.name), "why": str(l.why), "ways": l.options.map(func(o): return str(o.name)), "dose": str(d.part)}))
+
+	# Beat last time: the likeliest lifts that are not physical therapy. With a
+	# training focus the lifts of the muscles being built come first; a kept
+	# muscle's lifts are beaten like any other when it is their day.
+	var beats = 0
+	var ranked = plan.lifts.duplicate()
+	if focus:
+		var rank = func(l): return {"build": 0, "keep": 1}.get(str(l.get("mode", "")), 2)
+		TTUtil.stable_sort(ranked, func(a, b): return int(rank.call(a)) < int(rank.call(b)))
+	for l in ranked:
+		if beats >= BEAT_MISSIONS or bool(l.pt) or l.has("dose"):
 			continue
 		# The lift as done last, the other ways after "Or"; done by any of them or
 		# any variation of the movement (the id stays the planned lift's).
@@ -805,6 +955,8 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			desc = "Easy day: %s (about 10%% lighter). Doing it any way counts." % LiftHistory.describe_sets(aim.sets, fmt_w)
 		else:
 			desc = "Last time %s. Aim for %s%s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w), " (feeling strong: one step more)" if strong else ""]
+			if bool(aim.get("heavier", false)):
+				desc += " Past %d reps a set the weight is too light to build much: heavier, fewer reps." % LiftTrend.HIGH_REPS
 		var alts = []
 		for o in l.options.slice(1):
 			alts.append(short_name(str(o.name)))
@@ -820,9 +972,14 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	if plan.new != null:
 		# Done by the movement suggested, or by any movement never done before.
 		var nw = plan.new
-		var did = new_done(sessions, today, nw)
-		out.append(_mission("t:%s:new" % today, "daily", today, "Try something new", "%s: a %s movement you haven't done yet." % [str(nw.name), str(nw.partName).to_lower()], "sparkle", "lift",
-			1, 1 if did else 0, "", 200, claims, {"lift": str(nw.name)}))
+		var by = new_by(sessions, today, plan)
+		var desc = "%s: a %s movement you haven't done yet." % [str(nw.name), str(nw.partName).to_lower()]
+		var others = nw.get("alts", []).map(func(a): return short_name(str(a.name)))
+		var fit_words = str(plan.get("label", "")).to_lower()
+		others.append("any other movement new to you" + ((" that fits a %s" % fit_words) if fit_words != "" else ""))
+		desc += " Or: %s." % ", ".join(PackedStringArray(others))
+		out.append(_mission("t:%s:new" % today, "daily", today, "Try something new", desc, "sparkle", "lift",
+			1, 1 if by != "" else 0, "", 200, claims, {"lift": str(nw.name), "by": by}))
 
 	if not plan.pt.is_empty():
 		var names = []
@@ -854,7 +1011,13 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			var unit_m = 1609.344 if du == "mi" else 1000.0
 			var dist_m = maxf(unit_m, roundf(float(o.avg) / unit_m * 2.0) / 2.0 * unit_m)
 			var title = {"run": "Get the miles in", "ride": "Spin the wheels", "misc": "Walk it"}[disc]
-			out.append(_mission("t:%s:%s" % [today, disc], "daily", today, title, "%s. Go %s." % [str(o.why), Fmt.fmt_distance(dist_m, du)], disc if disc != "misc" else "vest",
+			var go = "%s. Go %s." % [str(o.why), Fmt.fmt_distance(dist_m, du)]
+			if disc == "run" and plan.get("run") != null:
+				# The weekly run is being built up: a little further than the last one.
+				dist_m = float(plan.run.targetM)
+				title = "Run a little further"
+				go = "Go %s. %s. Easy pace, and stop short if anything hurts." % [Fmt.fmt_distance(dist_m, du), Dose.run_why(plan.run, du)]
+			out.append(_mission("t:%s:%s" % [today, disc], "daily", today, title, go, disc if disc != "misc" else "vest",
 				disc if disc != "misc" else null, dist_m, progress, "m", 200, claims))
 
 	if not data.get("reading", []).is_empty():
@@ -951,6 +1114,28 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 		out.append(_mission("tw:%s:combo" % wk, "weekly", wk, "Combo week", "Three lift days in your split's order (%s)." % ", ".join(PackedStringArray(cycle.map(func(k): return str(KIND_SHORT[k]).to_lower()))), "flame", "lift",
 			3, mini(3, int(cb.best)), "", 300, claims))
 
+	# A training focus: every muscle being built at its weekly sets at once (the
+	# last seven days, as the Today card counts them), on any day of the week.
+	var build = Dose.build_parts(settings)
+	if not build.is_empty():
+		var best = 0
+		for i in range(7):
+			var day = Dates.add_days(wk, i)
+			if day > today:
+				break
+			best = maxi(best, Dose.on_target(sessions, marks, settings, day))
+		out.append(_mission("tw:%s:dose" % wk, "weekly", wk, "Dosed right", "Have %s all at their weekly sets at once (the last 7 days), on any day this week." % ", ".join(PackedStringArray(build.map(func(p): return Dose.part_name(str(p)).to_lower()))), "muscle", "lift",
+			build.size(), best, "", 500, claims))
+	# The weekly run, a little further than the last one before this week.
+	var rg = Dose.run_goal(sessions, wk, str(settings.get("distanceUnit", "km"))) if Dose.run_on(settings) else null
+	if rg != null:
+		var far = 0.0
+		for s in week:
+			if str(s.get("discipline", "")) == "run":
+				far = maxf(far, float(s.get("distanceM", 0.0)))
+		out.append(_mission("tw:%s:longrun" % wk, "weekly", wk, "Long run", "One run of %s this week. %s." % [Fmt.fmt_distance(float(rg.targetM), str(settings.get("distanceUnit", "km"))), Dose.run_why(rg, str(settings.get("distanceUnit", "km")))], "run", "run",
+			float(rg.targetM), far, "m", 300, claims))
+
 	if int(state.get("body", {}).get("entries", 0)) > 0:
 		var checked = 1 if int(state.body.get("weekFlags", {}).get(wk, 0)) > 0 else 0
 		out.append(_mission("tw:%s:body" % wk, "weekly", wk, "Check in", "Log your weight or progress photos this week.", "camera", null, 1, checked, "sessions", 150, claims))
@@ -976,7 +1161,7 @@ static func evening_text(plan: Dictionary, sessions: Array, today: String, perfe
 	for b in open:
 		match str(b.what):
 			"new":
-				lines.append("- Try: %s" % short_name(str(plan.new.name)))
+				lines.append("- Try: %s" % new_words(plan.new))
 			"pt":
 				var left = plan.pt.filter(func(r): return sets_on(sessions, str(r.name), today).is_empty()).map(func(r): return str(r.name))
 				lines.append("- PT: %s" % ", ".join(PackedStringArray(left)))
@@ -989,9 +1174,11 @@ static func evening_text(plan: Dictionary, sessions: Array, today: String, perfe
 
 
 ## The plan and the day's missions in a few short lines (a phone notification).
-static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) -> String:
+static func morning_text(plan: Dictionary, daily_missions: Array, wu: String, du: String = "km") -> String:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var lines = []
+	if bool(plan.get("rest", {}).get("due", false)):
+		lines.append("Rest day: %d days in a row. A walk, PT and stretches are fine." % int(plan.rest.run))
 	if str(plan.get("kind", "")) != "":
 		lines.append("%s. %s." % [str(plan.label), kind_why(plan)])
 	elif str(plan.label) != "":
@@ -1010,11 +1197,15 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) ->
 	for l in plan.lifts:
 		if bool(l.pt) or not l.has("options") or l.options.is_empty():
 			continue
-		lines.append(str(way.call(l.options[0])))
+		var lead = ""
+		if l.has("dose"):
+			# An extra lift of the focus: say what it is for.
+			lead = "For your %s, %d sets: " % [Dose.part_name(str(l.dose.part)).to_lower(), int(l.dose.sets)]
+		lines.append(lead + str(way.call(l.options[0])))
 		for o in l.options.slice(1):
 			lines.append("  or " + str(way.call(o)))
 	if plan.new != null:
-		lines.append("Try: %s" % short_name(str(plan.new.name)))
+		lines.append("Try: %s" % new_words(plan.new))
 	if not plan.pt.is_empty():
 		var names = []
 		for r in plan.pt:
@@ -1022,6 +1213,9 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String) ->
 		lines.append("PT: %s" % ", ".join(PackedStringArray(names)))
 	for o in plan.others.slice(0, 1):
 		var why = str(o.why)
+		if str(o.discipline) == "run" and plan.get("run") != null:
+			lines.append("Running: aim for %s" % Fmt.fmt_distance(float(plan.run.targetM), du))
+			continue
 		lines.append("%s: %s" % [TT.DISCIPLINE_META[o.discipline].name, why.left(1).to_lower() + why.substr(1)])
 	if lines.is_empty():
 		lines.append("No pattern for today yet: anything counts.")

@@ -33,29 +33,101 @@ static func card() -> Control:
 	if not plan.cycle.is_empty():
 		c.add(Kit.clip(Missions.kind_why(plan), 12, Pal.MUTED, true))
 		c.add(_split_row(plan))
+	# A training focus (game/dose.gd): a rest day when one is due, and the sets
+	# the day's muscles got this week.
+	var focus = str(plan.get("focus", "")) != ""
+	if focus and bool(plan.rest.due) and not Dose.hard_on(App.sessions(), App.pt(), App.today):
+		c.add(_rest_row(plan.rest))
 	c.add(_feel_row())
 	if Missions.lighter_week_due(App.settings(), App.today):
 		c.add(_lighter_week_row())
 	if App.sessions().any(func(s): return str(s.get("discipline", "")) == "lift"):
 		c.add(RecoveryView.row())
+	if focus:
+		c.add(DoseView.row(plan))
 	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
 	if nothing:
 		c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for.", 13, Pal.MUTED))
 		return c
-	if not plan.lifts.is_empty():
+	# What the focus adds (a muscle that is short this week) goes first: the
+	# heavy lift before the usual ones.
+	var extra = plan.lifts.filter(func(l): return l.has("dose"))
+	var usual = plan.lifts.filter(func(l): return not l.has("dose"))
+	if not extra.is_empty():
+		c.add(_kicker("YOUR FOCUS ADDS", "What a muscle still needs this week, from your training focus"))
+		for l in extra:
+			c.add(_lift_row(l, wu, Missions.same_of(str(l.name), plan)))
+	if not usual.is_empty():
 		c.add(_kicker("PROBABLY TODAY", "From the days and gaps of your last six weeks"))
-		for l in plan.lifts:
+		for l in usual:
 			c.add(_lift_row(l, wu, {} if bool(l.pt) else Missions.same_of(str(l.name), plan)))
 	if plan.new != null:
 		c.add(_new_row(plan.new))
 	if not plan.pt.is_empty():
 		c.add(_pt_row(plan.pt))
+	var start = _start_row(plan)
+	if start != null:
+		c.add(start)
 	for o in plan.others.slice(0, 2):
 		c.add(_other_row(o))
 	var perfect = App.quests().daily.filter(func(m): return m.get("perfect", false))
 	if not perfect.is_empty():
 		c.add(_perfect_row(perfect[0]))
 	return c
+
+
+## What a planned lift was done as today (any way of it), or "".
+static func _done_name(l: Dictionary, plan: Dictionary) -> String:
+	return Missions.lift_done(l, plan, App.sessions(), App.today)
+
+
+## The lifts "Start workout" sends to the Log tab: the day's lifts and PT
+## still to do, each as it would be done first (the way it was done last).
+static func workout_names(plan: Dictionary) -> Array:
+	var names = []
+	var seen = {}
+	for l in plan.lifts:
+		if _done_name(l, plan) != "":
+			continue
+		var opts = l.get("options", [])
+		var nm = str(opts[0].name) if not opts.is_empty() else str(l.name)
+		var k = Xp.normalize_exercise(nm)
+		if not seen.has(k):
+			seen[k] = true
+			names.append(nm)
+	for r in plan.pt:
+		var k2 = Xp.normalize_exercise(str(r.name))
+		if not seen.has(k2) and Missions.sets_on(App.sessions(), str(r.name), App.today).is_empty():
+			seen[k2] = true
+			names.append(str(r.name))
+	return names
+
+
+## One key from the plan to the Log tab: the day's lifts are there with last
+## time's sets, so only what is different needs a tap. A workout under way
+## (kept as it is typed, or saved once today) is picked up again.
+static func _start_row(plan: Dictionary):
+	var names = workout_names(plan)
+	var draft = App.draft_load("lift") != null
+	var going = App.lift_today()
+	if names.is_empty() and not draft:
+		return null
+	var b = Kit.button("Continue workout" if (draft or going != null) else "Start workout", "primary", _start.bind(names), "lg", "lift")
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = "The Log tab with %s and last time's sets" % ("your workout as you left it" if draft else ("%d lift%s" % [names.size(), "" if names.size() == 1 else "s"]))
+	b.set_meta("start_workout", true)
+	return b
+
+
+static func _start(names: Array) -> void:
+	Sfx.tap()
+	if App.draft_load("lift") != null:
+		# Under way: as it was left (nothing is added to it again).
+		App.open_log("lift")
+		return
+	var going = App.lift_today()
+	App.pending_workout = names.duplicate()
+	App.open_log("lift", going.id if going != null else null)
 
 
 ## Perfect day: a chest that fills as the boxes tick; once all are ticked it
@@ -119,6 +191,25 @@ static func _set_feel(v: int) -> void:
 	m[App.today] = v
 	App.update_settings({"feels": m})
 	App.toast(["", "Easy day: lighter targets, any way counts", "As planned", "Feeling strong: aiming a step further"][v], "info", "muscle")
+
+
+## Enough hard days in a row (training focus): take today off.
+static func _rest_row(rest: Dictionary) -> Control:
+	var c = Kit.card(0, DoseView.open, 8)
+	c.accent(Pal.SECOND)
+	c.set_meta("rest_row", true)
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect("moon", 24)))
+	var v = Kit.vbox(1)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(Kit.label("REST DAY · %d DAYS IN A ROW" % int(rest.run), 10, Pal.SECOND, true))
+	v.add_child(Kit.clip("Muscle is built while you rest", 13, Pal.TEXT, true))
+	v.add_child(Kit.clip("A walk, PT and stretches are fine", 11, Pal.MUTED))
+	h.add_child(v)
+	c.add(h)
+	return c
 
 
 ## Tired two of the last three days: a lighter week, one tap.
@@ -198,7 +289,9 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 	for o in opts:
 		if not ways.has(str(o.name)):
 			ways.append(str(o.name))
-	var done_name = Missions.done_of(App.sessions(), ways if not ways.is_empty() else [str(l.name)], App.today, "" if bool(l.pt) else planned_move, same)
+	# An extra lift of the training focus ("dose").
+	var dose = l.get("dose")
+	var done_name = Missions.lift_done(l, App.plan(), App.sessions(), App.today)
 	var shown = done_name if done_name != "" else str(main.name)
 	var c = Kit.card(0, JourneyLifts.open_named.bind(shown, {"view": "compare"}), 8)
 	c.tooltip_text = "Last time, and what to beat"
@@ -207,12 +300,15 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 	var left = Kit.vbox(1)
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var top = Kit.hbox(6)
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top = Kit.squeeze(6)
 	var sp = LiftNames.split(shown)
-	top.add_child(Kit.clip_fit(str(sp.move), 13, null, true, 170.0))
+	top.add_child(Kit.soft_name(str(sp.move), 13, null, true, 170.0))
 	if str(sp.variation) != "":
-		top.add_child(Kit.vcenter(SessionView.variation_tag(str(sp.variation))))
+		top.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+	if dose != null and done_name == "":
+		var ft = Kit.tag("FOR " + Dose.part_name(str(dose.part)).to_upper(), JourneyLifts.part_color(str(dose.part)), true, 10)
+		ft.tooltip_text = "Added by your training focus"
+		top.add_child(Kit.vcenter(ft))
 	if bool(l.pt):
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
 	elif LiftTrend.plateau(_history_of(shown)) != null:
@@ -220,9 +316,10 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 		st_tag.tooltip_text = "No new best for three sessions: its page has ways out"
 		top.add_child(Kit.vcenter(st_tag))
 	left.add_child(top)
-	left.add_child(Kit.clip(str(l.why), 11, Pal.MUTED))
+	# (an extra lift once done: what it was for, its count is out of date)
+	left.add_child(Kit.clip("Added for your %s" % Dose.part_name(str(dose.part)).to_lower() if (dose != null and done_name != "") else str(l.why), 11, Pal.MUTED))
 	# A barbell lift: the warm-up and what goes on the bar.
-	if done_name == "" and not bool(l.pt) and Plates.is_barbell(shown):
+	if done_name == "" and not bool(l.pt) and not bool(main.new) and Plates.is_barbell(shown):
 		var top_kg = 0.0
 		for one in LiftTrend.next_target(main.last, _step_kg(wu)).sets:
 			top_kg = maxf(top_kg, float(one.get("weightKg", 0.0)))
@@ -253,6 +350,14 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 	elif bool(l.pt):
 		said = LiftHistory.describe_sets(l.last.sets, fmt_w)
 		cap = "AS LAST TIME"
+	elif dose != null:
+		var got = int(Dose.extra_done(l, App.sessions(), App.today, same).sets)
+		cap = ("%d OF %d SETS" % [got, int(dose.sets)]) if got > 0 else ("ADD · %d SETS" % int(dose.sets))
+		if bool(main.new):
+			said = "6 to 12 reps, hard"
+			col = Pal.SECOND
+		else:
+			said = LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w)
 	elif bool(main.new):
 		said = "Find your weight"
 		cap = "FIRST TIME"
@@ -325,19 +430,45 @@ static func _new_row(nw: Dictionary) -> Card:
 	var v = Kit.vbox(1)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.label("TRY SOMETHING NEW", 10, Pal.SECOND, true))
-	var top = Kit.hbox(6)
-	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(Kit.clip_fit(str(nw.move), 13, null, true, 170.0))
-	if str(nw.variation) != "":
-		top.add_child(Kit.vcenter(SessionView.variation_tag(str(nw.variation))))
-	top.add_child(Kit.vcenter(Kit.tag(str(nw.partName), JourneyLifts.part_color(str(nw.part)), true, 10)))
+	# Done as the mission counts it: this movement logged today, or another one
+	# never done before. Then the row names the lift that did it, so a tick never
+	# stands beside a movement that was not done.
+	var by = ""
+	for m in App.quests().daily:
+		if str(m.id).ends_with(":new") and bool(m.done):
+			by = str(m.get("by", ""))
+	var other = by != "" and Xp.normalize_exercise(str(LiftNames.split(by).move)) != Xp.normalize_exercise(str(nw.move))
+	v.add_child(Kit.label("SOMETHING NEW · DONE" if other else "TRY SOMETHING NEW", 10, Pal.SECOND, true))
+	var top = Kit.squeeze(6)
+	if other:
+		var sp = LiftNames.split(by)
+		top.add_child(Kit.soft_name(str(sp.move), 13, null, true, 170.0))
+		if str(sp.variation) != "":
+			top.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+		top.add_child(Kit.vcenter(Kit.tag("First time", Pal.SECOND, true, 10)))
+	else:
+		top.add_child(Kit.soft_name(str(nw.move), 13, null, true, 170.0))
+		if str(nw.variation) != "":
+			top.add_child(SessionView.variation_tag(str(nw.variation), 10, true))
+		top.add_child(Kit.vcenter(Kit.tag(str(nw.partName), JourneyLifts.part_color(str(nw.part)), true, 10)))
 	v.add_child(top)
 	row.add_child(v)
-	# Done as the mission counts it: this movement, or any never done before.
-	var did = App.quests().daily.any(func(m): return str(m.id).ends_with(":new") and bool(m.done))
-	row.add_child(_tick(did))
+	row.add_child(_tick(by != ""))
 	c.add(row)
+	# Others that count just the same, for when the equipment is not there.
+	var alts = nw.get("alts", [])
+	if by == "" and not alts.is_empty():
+		var more = Kit.flow(6)
+		more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var orl = Kit.label("OR", 10, Pal.MUTED, true)
+		orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		more.add_child(orl)
+		for a in alts:
+			var b = Kit.chip(Missions.short_name(str(a.name)), false, JourneyLifts.open_named.bind(str(a.name), {"view": "compare"}), Pal.SECOND, 11)
+			b.tooltip_text = "New to you: a %s movement" % str(a.partName).to_lower()
+			b.set_meta("new_alt", str(a.name))
+			more.add_child(b)
+		c.add(more)
 	return c
 
 
@@ -389,7 +520,12 @@ static func _other_row(o: Dictionary) -> Control:
 		usual = "%d sends" % TTUtil.jsround(float(o.avg))
 	else:
 		usual = Fmt.fmt_distance(float(o.avg), App.distance_unit())
-	var u = Kit.label("usually %s" % usual, 12, Pal.TEXT, true)
+	var said = "usually %s" % usual
+	var run_goal = App.plan().get("run")
+	if d == "run" and run_goal != null:
+		# The weekly run is being built up (training focus).
+		said = "aim %s" % Fmt.fmt_distance(float(run_goal.targetM), App.distance_unit())
+	var u = Kit.label(said, 12, Pal.TEXT, true)
 	row.add_child(Kit.vcenter(u))
 	row.add_child(_tick(_did_today(d)))
 	c.add(row)

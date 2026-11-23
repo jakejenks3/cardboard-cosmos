@@ -559,6 +559,336 @@ is the Windows handoff.
   scrolls when it is full, so adding one never moves the form), then Sent and Set aside).
   The Today card's climb row names the open project. Tests: `tests/projects_test.gd`,
   walkthrough `tests/shots/projects.gd` (year data).
+- The Journey climbing card (2026-11-21, "a flash is a send, just not every send is a flash"):
+  `ui/screens/climb_card.gd` (`ClimbCard`) from `game/climb_ladder.gd` (`ClimbLadder.ladder(sessions,
+  routes)`, pure). Three outcomes in the Log tab's colours: flash (gold, sent first go), send (climbing
+  colour, sent after tries), didn't go (`Pal.SECOND`, attempts); "sent" = flash + send, as
+  `totals.climbSends` counts it, and "tries" = all three. Boulders / Routes chips (when both were
+  logged), three tiles, `OutcomeBar` (`ui/charts/outcome_bar.gd`: every try, a bracket "SENT n · p%"),
+  `GradeLadder` (`ui/charts/grade_ladder.gd`: a bar per grade from the hardest tried to the easiest,
+  "sent/tries", a hover tip; a click picks the grade and only the detail under it is redrawn), the
+  records. `ClimbCard.mode` / `picks` are static, so a rebuild keeps them. The send pyramid
+  (`PyramidChart`, `Charts.pyramid`, `Charts.flash`) is gone. The Log form's climb line says "N flashed ·
+  N sent after tries · N didn't go" (`st.sends` counts flashes too). Tests: `tests/climb_ladder_test.gd`,
+  walkthrough `tests/shots/climbs.gd` (year data).
+- Also 2026-11-21: `ShotHelper.snap` also fails when a column runs past the window's right edge (a row
+  that is too wide makes the whole ScrollContainer grow, which the older check missed: the Journey
+  page was 514 of 440 px since the hero was redrawn). The "Day 1 / Today" heroes are drawn x2 when two
+  at x3 would not fit (`JourneyScreen._hero_scale`). The same check found the shop's "For sale" grid
+  (470 px: `ArmoryScreen._zoomed(tex, slot, max_w)` trims a view wider than 112 px by a few columns at
+  its sides) and the recap sheet (448 px: `RecapSheet.POSTER_W` 380, the XP number at most 110 px wide,
+  the level and coin pills in a flow).
+- The phone app (2026-11-21, "the end goal is to have this all on an app on my iPhone or a bookmark";
+  no Mac, so no native iOS app): the game itself, exported for the web and opened from the iPhone's Home
+  Screen, sharing one save with the PC through the note's script.
+  - Build: `export_presets.cfg` ("Web": no threads, so no special server headers; tests/tools/web/build
+    excluded), page `web/shell.html` (Godot's shell plus iPhone meta tags, a pixel loading screen, the
+    typing bar `#tt-type`, the action button `#tt-act`), `web/tt.js` (ttSafe: notch / home-bar insets;
+    ttApp: touch, iOS, standalone, the link's #part, wake lock; ttKb: typing; ttFile: share / pick a
+    file; registers `sw.js`). `python tools/build_web.py` exports to `build/web` (`build/.gdignore` keeps
+    Godot out), adds the icons (from icon.svg), `manifest.json` (no start_url: the Home Screen keeps
+    the link it was added from, #c= and all), `sw.js` (offline; a new build replaces the old one the
+    next time the app opens) and `.nojekyll`. `tools/publish_web.py <clone> [--push]` copies the build
+    into the GitHub Pages repo: published 2026-11-21 to `jakejenks3/tiny-titan`, branch gh-pages,
+    local clone `C:/Users/jdjen/Documents/tiny-titan-pages`, live at
+    https://jakejenks3.github.io/tiny-titan/ (= `CloudSync.APP_URL`). To update the phone app:
+    build_web.py, then publish_web.py with --push (no need to ask: 2026-11-22, "You can always publish
+    to phone in future"; build and test first, then check the live site serves that build).
+    The pack holds no save, no link, no token (checked 2026-11-21).
+  - Phone handling: `ui/touch_scroll.gd` (`TouchScroll`, added by main.gd on any touch screen; rewritten
+    2026-11-21 after "after I release it scrolls a bit and THEN the tooltip pops up, sometimes it clicks").
+    It switches `Input.emulate_mouse_from_touch` OFF and swallows every raw touch in `_input` (with
+    emulation off Godot's buttons act on raw touches by themselves: taps counted twice), then makes the
+    clicks itself: a tap = press + release on the lift (`TAP_SEC`); a hold (`HOLD_SEC` still) = the press
+    starts under the finger (a stepper repeats); a drag past `SLOP` scrolls the nearest ScrollContainer
+    that can, calling off a press under way with a MOTION far away and then the release (a Button only
+    learns the pointer left from a motion); the lift glides (`_fling`, own speed from the last 90 ms,
+    float position); a finger on a gliding page only stops it; a swipe where nothing scrolls is not a
+    tap. A text box is pressed as the finger lands (the keyboard must open inside the touch). After a
+    click the pointer is moved off screen (`LINGER_SEC`), so nothing stays hovered; no motion is sent
+    for a tap, so no tooltip timer starts; `HoverCard` stays shut while `TouchScroll.active`. Before,
+    the emulated mouse stayed parked where the finger had been, and what glided under it was hovered
+    and sometimes pressed; Godot's own ScrollContainer touch drag also fought this one. `Stepper` on a
+    phone (`_touch`) steps when the finger lifts on the key (`TouchScroll.last_release_pos`). Walkthrough
+    with real touch events, PC build: `tests/shots/touch.gd` (year data).
+    Settings -> Phone app shows the build's date (`ttApp.build`, written into the page by build_web.py)
+    and a "Show speed" switch (`main.show_speed`: frames a second and the slowest half second, in the
+    corner). A frame costs about 0.5 ms and 100 draw calls on the PC, so a slow phone is not the drawing:
+    look at Low Power Mode (Safari then runs pages at 30 frames a second) first. `web/tt.js` caps
+    `devicePixelRatio` at 2 on touch devices.
+    THE REAL CAUSE on an iPhone (found the same evening, "the hover tooltip still shows up every
+    time", "like a cogwheel"): Godot's web layer takes mouse motion from the browser's `pointermove`,
+    and a real finger sends those (a made-up TouchEvent does not, so every test passed). The engine's
+    mouse followed the finger: a hover storm during a drag, a parked pointer and a tooltip after it.
+    Now `web/tt.js` stops non-mouse pointer events before the engine sees them; `only_fingers` (set by
+    main.gd when `ttApp.noHover`) drops every mouse event not made by TouchScroll (`MY_DEVICE`) and
+    moves the pointer away again (hover is worked out before `_input` runs); project.godot has
+    `gui/timers/tooltip_delay_sec.web` = a day (read it with `get_setting_with_override`); the page
+    follows the finger in parts of a unit (`_scroll_to` returns where it is, `tt_fine` / `tt_base`
+    metas, `_placed` after `sort_children`); `TouchScroll.scrolling` pauses Backdrop, Fx, Bar and Stage
+    animations. When testing touch in a browser, ALSO dispatch `PointerEvent('pointermove',
+    {pointerType: 'touch'})` on window: that is what a phone does.
+    NEVER leave a file with the user's data in the project folder: a build exports every resource
+    (a backup JSON saved there on 2026-11-21 got into an UNPUBLISHED build). Guards: export excludes
+    `*.json`; `build_web.check_pack` stops a build whose pack holds anything but the game's own
+    folders (publish_web.py checks again); Export backup opens in Documents.
+    In the web build only: `app/web_keys.gd` (`WebKeys`: a focused LineEdit / TextEdit shows the page's real field at the top,
+    which the phone's keyboard types into; text goes back as it is typed, Done / return submits; the
+    field is focused inside the tap's touchend so iOS opens its keyboard, and tapping the field always
+    does); `ui/symbol_font.gd` (`SymbolFont`: → ← ↑ ▲ ▼ ▾ ✓ as a small MSDF fallback font from
+    `ui/symbol_font_data.gd`, made by `tools/make_symbol_font.gd` from Droid Sans Fallback, Apache 2.0,
+    `ui/fonts/LICENSE-DroidSansFallback.txt`; Godot's own font lacks them and a browser has no system
+    fallback); main.gd fits the column between the status bar and the home bar (`_read_insets`);
+    `Stepper` steps on a tap's lift and repeats on a hold, so a scroll that starts on a key changes
+    nothing (`TouchScroll.last_cancel_msec`); `app/web_files.gd` (`WebFiles`: recap pictures and backups
+    go to the share sheet, backups come from the file chooser). Hidden on the web: the phone inbox (a
+    browser cannot fetch a Google Doc: the PC reads the note), morning goals, Open data folder, Import
+    from phone; `RecapPush` does not send. `?debug=1` in the link: `window.ttEval("expr")` evaluates a
+    GDScript expression (names main, App) into `window.ttOut`; `main.debug_rect(text)` finds a button.
+  - Sync: `app/cloud_sync.gd` (`CloudSync`, `App.cloud`, a child of App; reaches App as `_app()` so the
+    class compiles in --script tests). The note's script, VERSION 4 (`DocClear.SCRIPT_VERSION`), keeps
+    the save: GET `?save=get|head`, POST `{token, save: "put", base, data, by}` (gzip + base64, in 8000
+    character script properties, two slots so the copy before stays whole; a put whose base is not the
+    current rev is turned down and the game merges). A Google POST answers with a redirect: the PC
+    fetches it itself (`max_redirects = 0`), a browser follows it. Local files `sync.json` ({on, url,
+    token, rev, at}; on the PC the link and token come from the phone note's settings) and
+    `sync_base.json` (the copy last agreed on). `game/save_merge.gd` (`SaveMerge.merge(base, mine,
+    theirs)`): records by id (a change outweighs a delete; both changed: the newer save), pages read
+    added up per day, everything else key by key. Guards: an empty save never goes over a full one (a
+    new phone or a reset takes the copy instead); a sync that would remove more than `MAX_GONE` (10)
+    sessions at once is not made; the save is copied to `backups/sync-*.json` before a merge is taken
+    on (`App.apply_synced`). It syncs a moment after start, a few seconds after each change, every 3
+    minutes and when the app comes back. Settings -> PHONE APP (`ui/screens/phone_app_card.gd`): the
+    switch (off until the user flips it), the state, Sync now, Send to phone (an ntfy push with
+    `APP_URL#c=<code>`; the code is the script's link and token), Copy; in the phone app a paste box to
+    connect, and the onboarding offers "Already have a hero on your PC?". `tools/morning.gd` merges the
+    script's copy in memory (never writes), so the morning plan and evening check see what the phone
+    logged. Tests: `tests/sync_test.gd` (merges, and CloudSync against the real script in the Node stub,
+    which now answers POSTs with a redirect like Google and keeps properties).
+  - Progress photos (2026-11-21, "everything transferred except my progress pictures... blank"): the
+    script, VERSION 5, keeps them as files `<id>.jpg` in a folder of the user's Google Drive, "Tiny
+    Titan photos" (`photoFolder`: its id in the script's properties, else found by name, else made;
+    GET `?photo=list` / `?photo=get&id=`, POST `{photo: "put", id, data}`; never deletes). DriveApp
+    means Google asks for Drive when the new version is authorised: the script has `authorize()` to
+    run once from the editor BEFORE deploying (an unauthorised version answers nothing at all, the
+    logger included). `CloudSync._sync_photos` runs after every good sync: photos the save names
+    that are missing here are fetched (checked to be a JPEG, then written to `App.photo_path`,
+    `App.photos_arrived` redraws), photos here that the folder lacks are sent; one listing, and only
+    when there is something to do; `sync.json` `photos` remembers what the folder has;
+    `cloud.photo_note` says what is in the way (shown in Settings -> Phone app). The phone app adds
+    photos itself: `LogBodyForm.pick_photo` -> `WebFiles.pick("image/*", ..., 1600)`: the page shrinks
+    the picture on a canvas (which also turns a phone photo the right way up) before the game
+    stores it. Tests: sync_test (the stub has a pretend Drive, `/drive`).
+  - Phone only, backups by hand (2026-11-21, evening: "I don't need my pc version to stay synced...
+    goal is to just have it on phone"; "I will just backup by hand from phone"). The user chose NOT to
+    keep the script as a backup: the sync and the Drive photos stay in the code but are theirs to leave
+    off, and script version 5 was never deployed by them. So the phone app's backup file is the only
+    second copy: `App.note_backup` / `backup_info` (`backup.json` next to the save), `backup_age_text`,
+    `backup_due` (a log worth keeping, changed since the last file, `BACKUP_EVERY_DAYS` 7 or never).
+    On the web: Settings -> DATA shows "Last backup: ..." with Back up now (the JSON with photos, to
+    the share sheet) and Restore; the Hero tab shows a "Back up your log" card when due; the first
+    screen offers "Restore from a backup" (how the log and photos get into a new phone or the Home
+    Screen app, whose storage is its own). The PC's photos reach the phone the same way: Export
+    backup on the PC, Restore on the phone. `main.debug_do` drives these from ttEval.
+  - Tried 2026-11-21 in a phone-size browser (Chromium, touch emulation) against the stub: connecting by
+    link, the whole save arriving (184 sessions), logging on the phone reaching the PC copy, touch
+    scrolling, taps, steppers, the typing bar. NOT tried on a real iPhone (Safari's keyboard, the Home
+    Screen's handling of #c=, audio): the first real test is the user's.
+- Phone only, the next batch (2026-11-21, night: "do all besides the rest timer and the walks"):
+  - Start workout: the Today card's key (`TodayView._start_row`, meta `start_workout`) sends the day's
+    lifts and PT still to do (`TodayView.workout_names`) as `App.pending_workout`; `LogLiftEditor.build`
+    adds each with last time's sets, marked `planned: true` until touched (a quiet card edge;
+    `_touched`). Finish asks once about lifts still planned ("Done as shown?",
+    `LogSessionForm._save_planned`), so a skipped lift is not logged by accident. With a lift already
+    saved today the key says "Continue workout" and opens that session with what is left.
+  - The kept draft: a NEW lift or climb is written to `<data>/draft-lift.json` / `draft-climb.json` as it
+    is entered (`App.draft_store` / `draft_load`, from `LogSessionForm.refresh`), because a phone closes
+    the app between sets. Opening the form again the same day brings it back (`restored`, a "Picked up
+    where you left off" card with Start over); saving drops it. Edits of a saved session are not kept.
+  - Hold seconds in the lift editor: an exercise has `timed` (the "Hold" chip; a hold from the note
+    arrives timed), its sets a `hold` String; a seconds stepper (step 5, starts at last time's or 30)
+    takes the weight's place, "+5 s" bumps all, the note compares seconds held.
+  - Finger sizes: `Kit.fingers` (main.gd: a touch screen on web / mobile, or `--fingers` after the
+    data kind in a walkthrough): stepper keys 40 x 40, mini chips 38 tall, chips and small buttons
+    taller, icon buttons at least 38, the weight unit dropped from set rows. Any new small key must
+    look at it. `tests/shots/workout.gd` snaps every tab with it on (the snap's width check).
+  - Rename or move a lift: the key at the foot of a lift's page -> `JourneyLifts.open_rename` (movement
+    and variation boxes, nearest movements as chips, what will happen said first) -> `App.rename_lift`
+    (every session's exercise of that name, the PT mark, `inbox.names`; an existing name = the two
+    become one lift; a copy of the save in backups/save-<day>-before-rename-*). Renaming to a new
+    name changes no XP; joining two lifts can (records are per name).
+  - Sharper picture: `web/tt.js` caps `devicePixelRatio` at 3 (was 2) unless `localStorage.tt_sharp`
+    is "0" (Settings -> Phone app -> "Sharper picture", shown when the screen has more than 2; the
+    page reloads). Buzzes: `Sfx.buzz(n)` -> `ttApp.buzz` (navigator.vibrate, or on an iPhone a hidden
+    switch checkbox clicked, which ticks on iOS 17.4+); with `Sfx.pr`, `level_up`, `claim`, `error`,
+    + Set and Finish; `settings.haptics` (default on). NOT felt on a real iPhone by anyone yet.
+  - Backups: `App.export_backup(path, with_photos)`. The phone's "Back up now" (`SettingsPanel.pick_export`)
+    puts the photos in only when some are in no backup made here (`App.photos_unsaved`, from
+    `backup.json` `photoIds` / `photosDay`); otherwise the log alone, and "Back up with photos" for a
+    full one. Restoring a log-only file leaves the device's photos; restoring a file OLDER than the
+    log that holds photos missing here offers "Add photos" only (`App.take_photos`).
+  - Morning message without the PC: `app/phone_push.gd` (`PhonePush`, `App.push`; web, or
+    `--phone-push-test`). The app leaves the next mornings' plans with ntfy as held messages (JSON to
+    the server's root, `delay` = unix time, no headers so no CORS preflight). ntfy.sh cannot replace
+    or take back a held message (tried 2026-11-21: same `sequence_id` twice = two deliveries, DELETE
+    does not stop one), so it is ONE message per morning, written as if the days before go as planned
+    (`forecast`: pretend sessions on days the player usually lifts, `lift_likely`) and at most one
+    "(updated)" correction, a minute later, once the day before is settled. `settings.morning.phone`
+    is the phone's switch (the PC's stays `on`); state in `<data>/push.json`. Settings -> MORNING GOALS
+    on the web is `_build_morning_phone`. Tests: `tests/phone_push_test.gd`, walkthrough
+    `tests/shots/phone.gd` (needs `node tests/push_stub.js 8799` and `--phone-push-test`).
+  - `PhoneAppCard` in a phone app that is not connected shows its own switches first; sharing with a
+    PC is behind "Share my log with a PC…".
+  - Where this batch stands (2026-11-21, 22:05): all 24 unit suites and every walkthrough pass, and
+    the walkthroughs were also run with `--fingers` after the data kind (detail, progress, settings,
+    armory, climbs, reading, projects, lifts, climb_more, misc, log, shop, bounty, adventure, journey,
+    today, workout). That run found two things, both fixed: a set row in pounds was 4 px too wide
+    (at finger sizes the badge beside a set drops its unit: "+12.5"), and a toast took the click
+    meant for a key under it (its row is now `Kit.passthrough`). Build 20261121-220221 has it all and
+    was opened at phone size (Start workout). Published 2026-11-22 (the user's "Publish.").
+    Walkthroughs open a window: run them only once the user says they are off the computer. A copy
+    of the project with a no-focus window far off screen still went over their game; `--headless`
+    does not work for walkthroughs (clicks are not delivered; `ShotHelper.snap` skips the picture).
+- Typing and taps on the phone, overhauled (2026-11-22, "body check in page on mobile is all kinds of
+  messed up... keyboard pops up... up or down buttons keep spamming"). What was wrong, all in the web
+  build only:
+  - The ENGINE has a hidden typing box of its own (`div.ime`, Godot's web IME): while a LineEdit has the
+    focus it takes the page's focus every 100 ms, pulling the keyboard from `#tt-input` and pushing the
+    page about. `web/tt.js` puts class `tt-touch` on the page and `web/shell.html` keeps `.ime` at
+    `display: none !important` there (an element not displayed cannot take the focus).
+  - The engine also focuses its canvas on every touchstart, which blurred the field: keyboard down and
+    up again with each touch. While typing, `canvas.focus` is a no-op (`cv.ttFocus` keeps the real one).
+  - The page opened the keyboard on the lift of ANY tap while a box was active, and the body check-in
+    put the cursor in the weight box by itself. Now the keyboard belongs to a tap on a text box only:
+    `TouchScroll._finger_down` calls `WebKeys.finger_on(box)`; `WebKeys._on_focus` holds a box only
+    within `FINGER_MS` of that, takes over a box rebuilt under the typing (`_hold(c, true)`, `GRACE_SEC`),
+    and makes any other box that got the focus from the game let go again; `kb.fresh` (set by `want`,
+    `arm`) is the only thing the touchend handler opens the keyboard for. A tap or press elsewhere ends
+    the typing (`TouchScroll._leave_text` -> `WebKeys.tap_away`), and so does the phone putting its
+    keyboard away (`kb.onClose`). `LogBodyForm` no longer grabs the focus on a touch screen.
+  - A tap's click is made INSIDE the finger's lift (press and release together; `_flash` shows the key
+    pressed, a Card squashes by itself), because a phone only opens a file chooser, the share sheet or
+    the clipboard from inside the finger's own event: `ttFile.pick` / `save` / `ttCopy` act at once
+    when `live()` (the `#tt-act` button is the fallback; for a chooser it shows as well, and it goes
+    with the next touch of the game). One tap on a photo tile opens the chooser.
+  - A lift that never arrives must not leave a key held: `ttApp.fingers()` (touch events' own count,
+    plus a pointer that went up with no touch event since), `TouchScroll._lost_lift` at the next touch
+    or from the `_watch` in `_process`; `TouchScroll.holding` / `no_mouse`: a Stepper on a finger-only
+    screen repeats only while a finger really holds it.
+  - Tried in a phone-size browser with made-up touch events (ttEval helpers `main.debug_where(kind, nth)`,
+    `main.debug_touch()`): no bar on opening the check-in, + / − step once, typing ends on a tap
+    elsewhere, a touch of the screen keeps the field's focus, a held key with no lift is let go, the
+    photo tile calls `ttFile.pick` inside the touchend. NOT tried on a real iPhone: a made-up event
+    carries no "user activation", so the chooser itself opening in one tap is unproven.
+  - `tests/shots/touch.gd` sets `Engine.max_fps = 120`: at 1,800 frames a second (a PC with no vsync)
+    a flick's moves fell inside the 4 ms `_speed` does not read, and the glide check failed at random.
+  - Published 2026-11-22 as build 20261122-071629 (the user's "Yes"); the live pack was checked to be
+    the tested one. Still waiting for the user's word on how it feels on the real iPhone.
+- Long lift names and the iPhone's short page (2026-11-22, "first page isn't fitting right", a
+  screenshot of the Hero tab cut off at the right with a dead band under the tab bar):
+  - The width: a Today row holding "Romanian Deadlift" + a four-word variation + PT + the aim + the
+    tick needed about 480 of 440 px, and one row too wide widens the whole page. The demo lifts are
+    short, so no walkthrough saw it. `ui/widgets/squeeze_row.gd` (`SqueezeRow`, `Kit.squeeze(sep)`): a
+    row whose soft parts (`Kit.soft_name`, `SessionView.variation_tag(v, size, true)`) are cut off with
+    "…" when it is short of room, the last soft part first (the variation before the movement). Used
+    by the Today card's lift and "try something new" rows, `SessionView._lift_row`, the review's pick
+    row. A movement name beside a variation tag goes in a squeeze row, never a plain hbox.
+    Walkthrough `tests/shots/long_names.gd` (year data, also with `--fingers`): gives the planned
+    lifts long variations, marks them PT and snaps every screen that lists lifts.
+  - The band: WebKit bug 301994 (iOS 26.0 to 26.1, back in iOS 27, still open in Nov 2026). A Home
+    Screen app with the black-translucent status bar gets a page SHORTER than the screen by the
+    status bar (874 screen, 812 page on an iPhone 16 Pro); the system draws the band under it and no
+    element can reach it, so the page cannot fill it (the status bar style is fixed when the app is
+    added to the Home Screen, and adding it again starts with empty storage: do not suggest that).
+    What the game does: `ttSafe()` (web/tt.js) reports no bottom inset in that state (the home bar
+    lies in the band, not on the page), so the tab bar sits at the page's bottom edge and 34 pt come
+    back. Settings -> Phone app shows "Screen WxH · page WxH · bars top / bottom · N short" under the
+    version: ask for a screenshot of that line when the phone app does not fit.
+  - Published 2026-11-22 as build 20261122-102403 (the user's "Yes"). How the band and the lower tab
+    bar look on the real iPhone is not known yet.
+- Real lifts, not estimates (2026-11-22, "it's using some of my estimated 1rm instead of my real ones
+  for plaques... in some of my lift graphs too which doesn't make sense"): an estimated one-rep max
+  is never shown as if it were lifted. The trophy room's lift plaques are the heaviest set really done
+  ("230 lb × 5", by `bestKg` then reps); the Journey -> Stats lifting chart plots the heaviest set of
+  each session (it plotted the estimate, said only in a tooltip, which a phone never shows). Where
+  the estimate stays it says so in words on screen: the lift page's metric key is "Est. 1RM" (was
+  "Strength") with a line under the chart, the records tile "est. 1RM", the strength-level card's
+  heading, the ghost card, the reel's "est. 1RM PR". The default metric is Top set. A new number
+  that is worked out and not lifted must be labelled the same way, on screen, not in a tooltip.
+  Published as build 20261122-104529.
+- "Try something new" with options (2026-11-22, a screenshot of Hip Thrust ticked though it was never
+  logged; then "that's fine actually, if it's a new movement with same goal... give a few options
+  because I only didn't do it because of equipment"): `plan.new.alts` = `NEW_ALTS` (2) more movements
+  never done (the same body part first, other equipment first), shown as OR chips under the row
+  (meta `new_alt`) and named in the mission and the morning / evening text (`Missions.new_words`).
+  `Missions.new_by(sessions, today, plan)` = the lift that did it: one of the movements offered, else
+  another never-done movement with the same goal (`same_goal`: the split's kind, else the day's area;
+  not a stretch, not a PT exercise, not another area), and only with sets really logged. The mission
+  carries `by`; when another movement did it the Today row names THAT lift ("SOMETHING NEW · DONE",
+  a "First time" tag), so a tick never stands beside a movement that was not done. The plan carries
+  `marks`. Tests: missions_test; the today walkthrough snaps the chips.
+- Training summary as text (2026-11-22, "break down my exercise dosage... a pastable text I can send to
+  a normal Claude chat... main goal of the app is to track and see how well I'm planning and dosing to
+  improve physique"): `game/dosage.gd` (`Dosage`, pure). `text(saved, today)`: the period, body weight
+  and fat (first and latest), a typical week (per week = the last `WINDOW_DAYS` 28 days, or the whole
+  log when shorter, never under 7, scaled to 7; and the last 7 days as they were), working sets per
+  muscle group per week (direct, with indirect = half a set per set of a lift whose library "also
+  works" names it, days a week, reps a set, weight moved), sets by rep range, every lift (days, latest,
+  first, heaviest REAL set: no estimates), PT and stretches apart (`is_mobility`: a PT mark, "stretch"
+  in the name, or holds only), climbing (boulders and routes by grade), runs, rides, vest walks, a day
+  by day list, what the log lacks, and what to analyse. A session's length is only said when most
+  sessions have one. `figures()` holds the numbers. Journey -> Stats has the "Training summary" card
+  with Copy (`JourneyScreen._copy_dosage`, meta `copy_dosage`; on the phone `WebFiles.copy`). The
+  phone's log is the only complete one, so the text is made there. Test: `tests/dosage_test.gd` (with
+  DOSAGE_SAVE / DOSAGE_TODAY it prints the text of a save kept outside the project).
+- Training focus (2026-11-22, the user's priorities: 1 muscle up and fat down, the upper body most; 2 keep
+  climbing and the legs, no leg size; 3 one run a week, further; "do an overhaul of my daily goals... to
+  push me to add more chest exercises... I still will probably need options some days due to
+  equipment"). `game/dose.gd` (`Dose`, pure), OFF unless `settings.focus` is a `PLANS` id ("upper" =
+  Upper body first: chest, back, shoulders, biceps, triceps "build"; forearms, core and the legs "keep";
+  "balanced" = Whole body); Settings -> TRAINING FOCUS (`SettingsPanel._build_focus`, meta
+  `focus_section`). With it off nothing below happens and every older test is unchanged.
+  - A week is the LAST 7 DAYS (`Dose.window`), never Monday to Sunday. A set counts 1 for the lift's main
+    muscle (`Dosage.part`), a half for each muscle its library row "also works", a climbing session
+    `CLIMB_SETS` = forearms 4 and NOTHING for the back or the biceps (the user, 2026-11-22: "Don't count
+    back together with climbing, climbing really doesn't work that way, it's way more fingers and much
+    less back in practice"); PT, stretches and holds-only exercises count nothing
+    (`Dosage.is_mobility`). Targets are [least, most, mode]; state short / ok / plenty.
+  - "keep" means NO SETS ARE ADDED for that muscle, nothing else: its lifts still get Beat it missions
+    and aims like any other (the user, same day: "leg stuff can still have goals to beat, I just don't
+    plan on adding more volume... I still want to improve the lifting but not have it take the focus").
+    A "Keep it: match last time" mission was built first and taken out again.
+  - The plan (`Missions.day_plan`) gets EXTRA lifts (`Dose.extras`, at most `EXTRA_LIFTS` 2, put FIRST in
+    `plan.lifts`, each with `dose` {part, sets 3-5, have, cover, need, min, mode, anchor, moves}): for a
+    "build" muscle of the day's kind that is still short after the day's usual lifts, or one whose
+    ANCHOR was not done in `ANCHOR_DAYS` 14 (the chest's press: Bench Press, Push-up, Dip; offered as
+    barbell, incline dumbbell, machine, weighted push-up, dip, the player's own first). Their movements
+    go into `plan.moves`, so "try something new" and the other lifts' options never offer them. Every
+    lift has `mode` ("build" / "keep" / "").
+  - `Missions.lift_done(l, plan, sessions, today)` is now the ONE place that says whether a planned lift
+    was done (PT, an extra lift once its sets are in: an anchor only by a lift of its sort, anything
+    else as before); `day_boxes` and TodayView use it.
+  - Missions: `t:<date>:dose:<part>` ("Chest: add a press", "More for your triceps"; target = the sets,
+    250 XP); Beat it goes to "build" lifts first (a leg day's two go to its leg lifts); after `REST_AFTER` 5 hard days in a row (`Dose.is_hard`: a
+    walk, PT and stretches are not) the day's first mission is `t:<date>:rest` IN PLACE of Show up, done
+    once the day is over (`data.now`, from `App.mission_data`; claimed from "From yesterday"); the run
+    mission aims at `Dose.run_goal` (10% past the last run within 10 days, the same after a longer gap,
+    80% after 21 days; `settings.runGoal`, on with a focus); weekly `tw:<wk>:dose` "Dosed right" (every
+    build muscle on target at once, any day of the week) and `tw:<wk>:longrun`.
+  - Screens: `ui/screens/dose_view.gd` (`DoseView.row(plan)` on the Today card, meta `dose_row`: the
+    day's muscles, sets of 7 days against the least; `open()` the sheet: every muscle, what counted,
+    rest, the next run). Today card: "YOUR FOCUS ADDS" rows before "PROBABLY TODAY" (a "FOR CHEST" tag,
+    "ADD · N SETS", the other ways as chips), a rest banner (meta
+    `rest_row`), "aim 3.6 mi" on the run row. The morning text says the same.
+  - `LiftTrend.next_target`: a weighted lift whose every working set is at `HIGH_REPS` 15 or more goes a
+    step heavier and down to `DOWN_TO` 10 reps (`heavier: true`), always, focus or not: the aim used to
+    be a 25th rep at a weight that is too light.
+  - The user's phone has to switch it on (Settings -> Training focus -> Upper body first); it was tried
+    on a copy of the PC's log: push days get the press, pull and leg days nothing extra.
+  - Tests: `tests/dose_test.gd`, more in lift_trend_test; walkthrough `tests/shots/focus.gd` (`new` data,
+    makes its own log; also with `--fingers`).
+- Also 2026-11-21: switching tabs kept the old tab's scroll position (the new screen's first build in
+  `UiScreen` kept what it found); `main._refresh` now resets it before adding the screen (anchor walkthrough).
 - Miscellaneous activities (added 2026-11-16): `game/misc.gd` (`Misc`) is a catalog of
   activities outside the four disciplines; for now one row, `vest_walk` (weighted vest walk).
   A misc activity is a normal session in `saved.sessions` with `discipline: "misc"`
@@ -698,6 +1028,11 @@ godot --headless --path . --script res://tests/doc_clear_test.gd
 godot --headless --path . --script res://tests/recovery_test.gd
 godot --headless --path . --script res://tests/plates_test.gd
 godot --headless --path . --script res://tests/projects_test.gd
+godot --headless --path . --script res://tests/climb_ladder_test.gd
+godot --headless --path . --script res://tests/sync_test.gd
+godot --headless --path . --script res://tests/phone_push_test.gd
+godot --headless --path . --script res://tests/dosage_test.gd
+godot --headless --path . --script res://tests/dose_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -718,6 +1053,12 @@ detail (a session's detail, a lift's trends, physical therapy, year data),
 progress (a lift's three views: Compare, Progress, Logbook, and the review's history bars, year data),
 today (the Today card, missions, claiming, yesterday's missions, the Morning goals card, year data),
 projects (climbing projects: the card, the sheet, the reel's "was it your project?", year data),
+climbs (the Journey climbing card: flashes, sends, tries that did not go, per grade, routes, year data),
+touch (fingers: flick, glide, stop, tap, hold, drags from keys and text boxes, year data),
+workout (Start workout from the Today card, the kept draft, hold seconds, finger sizes, year data),
+phone (rename a lift, small backups, the phone's own morning message: see above, year data),
+long_names (long lift names on every screen that lists lifts: nothing wider than the column, year data),
+focus (the training focus: an added press, weekly sets, rest day, a leg day left alone, Settings; `new` data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -728,10 +1069,23 @@ Verified 2026-11-15: the link, fetch and export all work; the doc was still empt
 `--check-only` does not work for scripts that use the App/Sfx autoloads; a real run is
 the check.
 
+The phone app (web build): `python tools/build_web.py`, then serve `build/web` on this PC
+(`python -m http.server 8765 --bind 127.0.0.1 --directory build/web`) and open it in the built-in
+browser at phone size (resize_window preset mobile; add `?v=<anything>` to force a reload). For
+sync, run the note's script in the stub (`DocClear.script_for(token)` written to a file, then
+`node tests/doc_clear_stub.js script.js doc.json <port>`), give a "PC" copy its save with a
+scenario that sets `App.cloud._cfg` and calls `sync_now`, and open the web app with
+`#c=<App.cloud.connect_code()>`. Synthetic touches: dispatch `TouchEvent`s on the canvas.
+
 ## Known rough edges
 
-- A hold's seconds cannot be typed in the Log tab's lift editor: a hold made in the phone
-  note shows there as reps without weight (its seconds are kept when the session is saved).
+- The phone app (web build): photo sync and the Drive consent were only tried against the stub, never
+  against Google itself (the first real run is the user's); the phone cannot read the Google Doc (the PC imports
+  it, and the import reaches the phone through the sync); its keys are sized for a 440 px column,
+  so the compact −/+ steppers are small for fingers.
+- The phone's morning message needs the app to have been opened in the two days before; a message
+  already waiting keeps its time and cannot be stopped (a new time or the switch counts from the
+  mornings not left yet). The evening check and the weekly recap picture are PC only.
 - A hold earns XP as the reps it is stored as (a 30 second stretch is one rep): the rules
   have no timed sets.
 - Switching "Physical therapy" on a lift's page does not redraw the view above it (the
@@ -748,8 +1102,8 @@ the check.
 - Lift names are filed when a lift is imported or saved, not afterwards: changing `MOVES`,
   `VOCAB` or `ALIASES` does not rename what is already in a save. To bring a save in line,
   run `LiftNames.migrate` over it on a copy (as was done 2026-11-20) and check XP is unchanged.
-- A "no" in the review keeps a lift as a movement of its own ("Jefferson Curl"); there is no
-  screen yet to rename a lift or move it under another movement afterwards.
+- A "no" in the review keeps a lift as a movement of its own ("Jefferson Curl"); it can be renamed or
+  moved under another movement afterwards from its page (Rename or move this lift).
 - A note line whose date header was used before is checked against what was imported under
   it (`PhoneInbox.split_entries` / `_resolve_updates`): the same day changed is an edit that
   REPLACES the session it came from. The user clears the note between visits and may write

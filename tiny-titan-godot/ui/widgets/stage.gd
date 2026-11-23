@@ -44,7 +44,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_visible_in_tree():
+	if not is_visible_in_tree() or TouchScroll.scrolling:
 		return
 	_t += delta
 	# Ten redraws a second is plenty for a twinkle.

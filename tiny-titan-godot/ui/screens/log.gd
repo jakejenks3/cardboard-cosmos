@@ -28,7 +28,7 @@ func on_nav() -> void:
 	if _target_key() != _key:
 		_sync_form()
 		rebuild()
-	elif App.pending_exercise != "":
+	elif App.pending_exercise != "" or not App.pending_workout.is_empty():
 		rebuild()
 
 
@@ -125,10 +125,12 @@ func _build_picker() -> void:
 	add_child(misc)
 	# Reading is not a workout: its key opens the reading sheet (game/reading.gd).
 	add_child(_reading_tile())
-	# Workouts jotted on the phone (app/inbox.gd).
-	var imp = Kit.button("Import from phone", "ghost", InboxSheet.check_and_review.bind(Callable()), "sm", "speech")
-	imp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	add_child(imp)
+	# Workouts jotted in the phone note (app/inbox.gd): the PC reads the note (a
+	# browser cannot fetch a Google Doc), so the phone app has no such key.
+	if not OS.has_feature("web"):
+		var imp = Kit.button("Import from phone", "ghost", InboxSheet.check_and_review.bind(Callable()), "sm", "speech")
+		imp.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		add_child(imp)
 
 
 ## A big bright key in the discipline's colour: its icon and name.

@@ -7,8 +7,13 @@
 //  - writes the day's plan into empty rows (marked ▸)
 //  - serves the phone logger page (?page=log): tap to log sets, climbs, pages...
 //  - keeps how you feel today (?feel=1..3, from the morning push's buttons)
+//  - keeps a copy of the game's save, so the phone app and the PC share one log
+//    (?save=get / ?save=head, and POST {save: 'put'}; only the game can read it)
+//  - keeps the progress photos as files in a folder of your Google Drive,
+//    "Tiny Titan photos" (?photo=list / ?photo=get, POST {photo: 'put'}); it only
+//    ever reads and adds files in that folder, and never deletes one
 const TOKEN = '%TOKEN%';
-const VERSION = 3;
+const VERSION = 5;
 const MARK = '▸';
 const PAGE = %PAGE%;
 
@@ -23,8 +28,11 @@ function doGet(e) {
   }
   if (p.api) return reply(api(String(p.api), JSON.parse(p.args || '[]')));
   if (p.feel) return feelPage(p.feel);
+  if (p.save === 'get' || p.save === 'head') return reply(saveGet(p.save === 'get'));
+  if (p.photo === 'list') return reply(photoList());
+  if (p.photo === 'get') return reply(photoGet(String(p.id || '')));
   const tables = DocumentApp.getActiveDocument().getBody().getTables();
-  if (p.ping) return reply({ok: true, tables: tables.length, version: VERSION, feels: feels()});
+  if (p.ping) return reply({ok: true, tables: tables.length, version: VERSION, feels: feels(), save: saveGet(false).rev});
   if (p.info) PropertiesService.getScriptProperties().setProperty('info', String(p.info));
   if (p.plan) return reply(writePlan(tables, String(p.date || ''), JSON.parse(p.plan)));
   if (p.info) return reply({ok: true, info: true});
@@ -46,6 +54,166 @@ function doGet(e) {
     lock.releaseLock();
   }
   return reply({ok: true, cleared: cleared, skipped: skipped});
+}
+
+// The game sends its save here (a POST, so it can be long). The browser's own
+// fetch and the PC both POST plain text: {token, save: 'put', base, data, by}.
+function doPost(e) {
+  let b = {};
+  try {
+    b = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+  } catch (err) {
+    return reply({ok: false, error: 'not JSON'});
+  }
+  if (b.token !== TOKEN) return reply({ok: false, error: 'wrong token'});
+  if (b.save === 'put') return reply(savePut(b));
+  if (b.photo === 'put') return reply(photoPut(b));
+  return reply({ok: false, error: 'nothing to do'});
+}
+
+// ---------------------------------------------------------------------------
+// The game's save (gzip + base64 text, as the game sends it; this script never
+// reads what is inside). Kept in the script's properties in pieces of CHUNK
+// characters, in two slots: a new copy goes in the slot not in use and only
+// then becomes the current one, so the copy before it stays whole too.
+// rev counts the copies: a put names the rev it was made from (base), and is
+// turned down when the copy here moved on since (the game then merges).
+// ---------------------------------------------------------------------------
+
+const CHUNK = 8000;
+
+function saveGet(withData) {
+  const all = PropertiesService.getScriptProperties().getProperties();
+  const rev = Number(all.save_rev || 0);
+  const out = {ok: true, rev: rev, at: Number(all.save_at || 0), by: String(all.save_by || '')};
+  if (withData && rev > 0) {
+    const slot = all.save_slot === 'b' ? 'b' : 'a';
+    const n = Number(all['save_' + slot + '_n'] || 0);
+    let data = '';
+    for (let i = 0; i < n; i++) data += all['save_' + slot + '_' + i] || '';
+    out.data = data;
+  }
+  return out;
+}
+
+function savePut(b) {
+  const data = String(b.data || '');
+  if (!data) return {ok: false, error: 'no data'};
+  // Two slots of this much stay inside the 500 kB Google gives a script's properties.
+  if (data.length > 200000) return {ok: false, error: 'too big'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const all = props.getProperties();
+    const rev = Number(all.save_rev || 0);
+    if (Number(b.base || 0) !== rev) return {ok: false, conflict: true, rev: rev};
+    const slot = all.save_slot === 'a' ? 'b' : 'a';
+    const before = Number(all['save_' + slot + '_n'] || 0);
+    const n = Math.ceil(data.length / CHUNK);
+    const set = {};
+    for (let i = 0; i < n; i++) set['save_' + slot + '_' + i] = data.substr(i * CHUNK, CHUNK);
+    set['save_' + slot + '_n'] = String(n);
+    props.setProperties(set);
+    for (let i = n; i < before; i++) props.deleteProperty('save_' + slot + '_' + i);
+    // Only now is the new copy the current one.
+    props.setProperties({save_slot: slot, save_rev: String(rev + 1), save_at: String(Date.now()), save_by: String(b.by || '').slice(0, 40)});
+    return {ok: true, rev: rev + 1};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Progress photos: each one a file "<id>.jpg" in the Drive folder PHOTO_FOLDER
+// (made the first time a photo arrives; found again by its id, kept in the
+// script's properties, or by its name). The PC and the phone app each send the
+// photos the folder lacks and fetch the ones they lack. Nothing is ever deleted.
+// ---------------------------------------------------------------------------
+
+const PHOTO_FOLDER = 'Tiny Titan photos';
+
+// Run this once from the editor after pasting a new version (choose "authorize"
+// beside the Run button, press Run): Google then asks for what the script needs,
+// here your Drive for the photo folder. Without it nothing in this script answers.
+function authorize() {
+  photoFolder(true);
+  return 'Allowed. Now: Deploy > Manage deployments > edit > New version > Deploy.';
+}
+
+function photoFolder(make) {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('photo_folder');
+  if (id) {
+    try {
+      const known = DriveApp.getFolderById(id);
+      if (!known.isTrashed()) return known;
+    } catch (err) {
+      // Gone: look for it by name, or make it again.
+    }
+  }
+  const named = DriveApp.getFoldersByName(PHOTO_FOLDER);
+  while (named.hasNext()) {
+    const f = named.next();
+    if (!f.isTrashed()) {
+      props.setProperty('photo_folder', f.getId());
+      return f;
+    }
+  }
+  if (!make) return null;
+  const made = DriveApp.createFolder(PHOTO_FOLDER);
+  props.setProperty('photo_folder', made.getId());
+  return made;
+}
+
+function photoName(id) {
+  return String(id).replace(/[^A-Za-z0-9]/g, '') + '.jpg';
+}
+
+function photoList() {
+  const ids = [];
+  const folder = photoFolder(false);
+  if (folder) {
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      const name = f.getName();
+      if (/\.jpg$/.test(name) && !f.isTrashed()) ids.push(name.slice(0, -4));
+    }
+  }
+  return {ok: true, photos: ids};
+}
+
+function photoGet(id) {
+  const folder = photoFolder(false);
+  if (folder && photoName(id) !== '.jpg') {
+    const files = folder.getFilesByName(photoName(id));
+    while (files.hasNext()) {
+      const f = files.next();
+      if (!f.isTrashed()) return {ok: true, id: id, data: Utilities.base64Encode(f.getBlob().getBytes())};
+    }
+  }
+  return {ok: false, missing: true};
+}
+
+function photoPut(b) {
+  const id = String(b.id || '');
+  const data = String(b.data || '');
+  if (photoName(id) === '.jpg' || !data) return {ok: false, error: 'no photo'};
+  if (data.length > 6000000) return {ok: false, error: 'too big'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const folder = photoFolder(true);
+    const there = folder.getFilesByName(photoName(id));
+    while (there.hasNext()) {
+      if (!there.next().isTrashed()) return {ok: true, id: id, kept: true};
+    }
+    folder.createFile(Utilities.newBlob(Utilities.base64Decode(data), 'image/jpeg', photoName(id)));
+    return {ok: true, id: id};
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ---------------------------------------------------------------------------

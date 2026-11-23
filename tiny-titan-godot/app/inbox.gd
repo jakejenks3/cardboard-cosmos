@@ -80,6 +80,10 @@ func _app():
 
 func _ready() -> void:
 	set_process(false)
+	# The web build cannot fetch a Google Doc (the browser blocks it): the PC
+	# reads the note, and the phone app gets what it imported through the sync.
+	if OS.has_feature("web"):
+		return
 	var st = settings()
 	if str(st.get("source", "")).strip_edges() != "" and bool(st.get("auto", true)):
 		# In the background a moment after start; failures stay quiet on launch.

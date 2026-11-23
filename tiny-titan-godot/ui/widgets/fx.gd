@@ -71,7 +71,7 @@ class Shine:
 	var _age: float = -1.0
 
 	func _process(delta: float) -> void:
-		if not is_visible_in_tree():
+		if not is_visible_in_tree() or TouchScroll.scrolling:
 			return
 		if _age < 0.0:
 			wait -= delta
@@ -112,7 +112,7 @@ class Embers:
 		_seed = int(get_instance_id() % 997)
 
 	func _process(delta: float) -> void:
-		if not is_visible_in_tree():
+		if not is_visible_in_tree() or TouchScroll.scrolling:
 			return
 		_t += delta
 		queue_redraw()
@@ -145,7 +145,7 @@ class Twinkle:
 		_seed = int(get_instance_id() % 991)
 
 	func _process(delta: float) -> void:
-		if not is_visible_in_tree():
+		if not is_visible_in_tree() or TouchScroll.scrolling:
 			return
 		_t += delta
 		queue_redraw()

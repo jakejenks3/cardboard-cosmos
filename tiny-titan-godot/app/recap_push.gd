@@ -14,6 +14,9 @@ extends RefCounted
 static func send_if_due() -> bool:
 	if OS.get_environment("TINY_TITAN_DATA") != "" and not OS.get_cmdline_user_args().has("--recap-push-test"):
 		return false
+	# The PC sends it (it has the morning goals); the phone app would send it twice.
+	if OS.has_feature("web"):
+		return false
 	var key = MorningAlert.recap_due(App.settings(), App.sessions(), App.today)
 	if key == "":
 		return false
