@@ -33,6 +33,13 @@ var _badges: Array = []  # [exercise][set] -> HBoxContainer slot for the trend b
 var _wsteps: Array = []  # [exercise][set] -> the weight stepper (where a PR bursts from)
 var _deltas: Array = []  # [exercise] -> VBoxContainer slot for the volume note
 var _cards: Array = []  # [exercise] -> its Card (the edge lights up at the first touch)
+var _filed: Array = []  # [exercise] -> VBoxContainer slot: how a new name will be filed
+## The player's lifts (App.lift_names) and their keys, and whether a name typed
+## here is filed when the workout is saved (App.absorb_pt: not for a session
+## that came from the phone note, whose names stay as they are).
+var _own: Array = []
+var _have: Dictionary = {}
+var _files_names: bool = true
 var _built_names: Array = []
 var _chips: HFlowContainer = null
 var _no_match: Label = null
@@ -133,6 +140,13 @@ func build(parent: Control) -> void:
 	_last = LiftHistory.last_performances(sessions, editing_id)
 	_suggestions = LiftHistory.exercise_suggestions(sessions, LiftNames.defaults(), editing_id)
 	_bests = App.state.prs.lifts
+	var owner_form = _form()
+	_files_names = owner_form == null or owner_form.editing == null or str(owner_form.editing.get("inboxKey", "")) == ""
+	_own = App.lift_names() if _files_names else []
+	_have = {}
+	for known in _own:
+		_have[Xp.normalize_exercise(str(known))] = true
+	_filed = []
 	_badges = []
 	_wsteps = []
 	_deltas = []
@@ -167,7 +181,12 @@ func build(parent: Control) -> void:
 		else:
 			exercises.append({"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]})
 
+	# The day's plan as keys (LogPlanCard): first of all while the workout is
+	# empty, else under the exercises, where the next lift is added.
+	var plan_card = LogPlanCard.build(self)
 	if exercises.is_empty():
+		if plan_card != null:
+			parent.add_child(plan_card)
 		var templates = LiftHistory.recent_workouts(sessions, 3, editing_id)
 		if not templates.is_empty():
 			var tv = Kit.vbox(6)
@@ -185,6 +204,8 @@ func build(parent: Control) -> void:
 	for i in range(exercises.size()):
 		parent.add_child(_exercise_card(i))
 
+	if plan_card != null and not exercises.is_empty():
+		parent.add_child(plan_card)
 	parent.add_child(_picker_card())
 	_building = false
 
@@ -244,6 +265,13 @@ func _exercise_card(i: int) -> Card:
 		head.add_child(lr)
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
+	# How a name that is new to the log will be filed, said while it is typed:
+	# the movement, and its variation as a tag (_refresh_filed).
+	var filed = Kit.vbox(1)
+	var filed_wrap = Kit.pad(filed, 6, 0, 4, 0)
+	filed_wrap.visible = false
+	c.add(filed_wrap)
+	_filed.append(filed)
 	if both:
 		# Said in words: a phone shows no tooltip.
 		var hint = Kit.clip("%s · reps are both sides added up" % Sides.SHORT, 11, Pal.LIFT)
@@ -343,6 +371,14 @@ func _exercise_card(i: int) -> Card:
 		var w_btn = LogWidgets.mini_chip("+%s %s" % [TTUtil.num_str(_step()), wu], false, bump_all.bind(i, "weight"))
 		w_btn.tooltip_text = "Add one weight step to every set"
 		acts.add_child(w_btn)
+	# Up and down in the workout's order: two lifts done in turn (a superset)
+	# go next to each other, and there is no scrolling between them. With the
+	# other keys, not at the row's right end: that is under the column of the
+	# set rows' crosses, and this row slides there when the last set is taken
+	# off, so a second tap meant for a cross would move the exercise.
+	if exercises.size() > 1:
+		acts.add_child(_move_key(i, true))
+		acts.add_child(_move_key(i, false))
 	var delta = Kit.vbox(0)
 	delta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	delta.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -350,7 +386,92 @@ func _exercise_card(i: int) -> Card:
 	c.add(Kit.pad(acts, 0, 2, 0, 0))
 	_deltas.append(delta)
 	_refresh_exercise(i)
+	_refresh_filed(i)
 	return c
+
+
+## What a name typed here will be saved as when the workout is finished:
+## {"name", "move", "variation", "kind", "closest", "pt"}, or null for an empty
+## name, for a lift that is in the log already (it keeps its name) and where
+## names are not filed (a session from the phone note). The same steps as
+## App.absorb_pt, which does the filing.
+func filed_as(typed: String):
+	if not _files_names:
+		return null
+	var tag = Pt.untag(typed)
+	var n = str(tag.name).strip_edges()
+	if n == "" or _have.has(Xp.normalize_exercise(n)):
+		return null
+	var r = LiftNames.resolve(n, _own)
+	r["pt"] = bool(tag.pt)
+	return r
+
+
+## "March, variation Band" / "High Knee March, no variation".
+static func filed_words(r: Dictionary) -> String:
+	if str(r.variation) == "":
+		return "%s, no variation" % str(r.move)
+	return "%s, variation %s" % [str(r.move), str(r.variation)]
+
+
+## For a movement of the player's own typed without a variation: how to write one.
+static func filed_tip(r: Dictionary) -> String:
+	if str(r.variation) != "" or str(r.kind) != "new":
+		return ""
+	return "A variation goes after a dash: %s - banded" % str(r.move)
+
+
+## The line under an exercise's name, for a name that is new to the log: what
+## it will be saved as (the user, 2026-11-23: "I don't just type in March -
+## banded right because it takes that as the full name and not the exercise
+## plus the variation modifier?" It is filed as the movement March with the
+## variation Band, but only when the workout is saved, and nothing said so).
+func _refresh_filed(i: int) -> void:
+	if i >= _filed.size() or i >= exercises.size() or not is_instance_valid(_filed[i]):
+		return
+	var slot = _filed[i]
+	Kit.clear(slot)
+	var r = filed_as(str(exercises[i].name))
+	slot.get_parent().visible = r != null
+	slot.set_meta("filed_as", str(r.name) if r != null else "")
+	if r == null:
+		return
+	var line = Kit.hbox(6)
+	var cap = Kit.label("SAVED AS", 9, Pal.MUTED, true)
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	line.add_child(cap)
+	var row = Kit.squeeze(6)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(Kit.soft_name(str(r.move), 12, null, true, 200.0))
+	if str(r.variation) != "":
+		row.add_child(SessionView.variation_tag(str(r.variation), 10, true))
+	if bool(r.pt):
+		row.add_child(Kit.vcenter(SessionView.pt_tag()))
+	line.add_child(row)
+	slot.add_child(line)
+	var tip = filed_tip(r)
+	slot.set_meta("filed_tip", tip != "")
+	if tip != "":
+		slot.add_child(Kit.para(tip, 11, Pal.MUTED))
+
+
+## A key that moves an exercise one place up or down in the workout (the user,
+## 2026-11-23: "Add a way to bump exercises up and down in order too, helps to
+## decrease scrolling while super setting"). Its tooltip names the exercise:
+## that is how the screen finds the key of the SAME exercise again after the
+## move (UiScreen), so it stays under the finger and a second tap moves the
+## same exercise once more. At the top (or the bottom) it is there, switched
+## off, so nothing in the row changes place.
+func _move_key(i: int, up: bool) -> Button:
+	var nm = str(exercises[i].name).strip_edges()
+	if nm == "":
+		nm = "this exercise"
+	var b = Kit.icon_button("arrow_up" if up else "arrow_down", move_exercise.bind(i, -1 if up else 1), "Move %s %s" % [nm, "up" if up else "down"], 28)
+	b.disabled = (i == 0) if up else (i == exercises.size() - 1)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.set_meta("move_key", "up" if up else "down")
+	b.set_meta("move_of", i)
+	return b
 
 
 func _ref_set(lp, j: int):
@@ -509,7 +630,7 @@ func _picker_card() -> Card:
 
 	_chips = Kit.flow(5)
 	c.add(_chips)
-	_no_match = Kit.label("", 11, Pal.MUTED)
+	_no_match = Kit.para("", 11, Pal.MUTED)
 	c.add(_no_match)
 	_fill_chips()
 	return c
@@ -551,8 +672,17 @@ func _fill_chips() -> void:
 		more.tooltip_text = "Show fewer exercises" if show_all_chips else "Show more exercises"
 		_chips.add_child(more)
 	if is_instance_valid(_no_match):
-		_no_match.text = "New exercise: tap Add" if q != "" and shown.is_empty() else ""
-		_no_match.visible = _no_match.text != ""
+		# A new exercise: how Add will file it (the movement, and its variation).
+		var said = ""
+		var filing = filed_as(query) if (q != "" and shown.is_empty()) else null
+		if filing != null:
+			var tip = filed_tip(filing)
+			said = "New exercise: tap Add. It is saved as %s.%s" % [filed_words(filing), (" %s." % tip) if tip != "" else ""]
+		elif q != "" and shown.is_empty():
+			said = "New exercise: tap Add"
+		_no_match.text = said
+		_no_match.visible = said != ""
+		_no_match.set_meta("filed_as", str(filing.name) if filing != null else "")
 	if is_instance_valid(_add_btn):
 		_add_btn.disabled = q == ""
 
@@ -627,6 +757,33 @@ func add_exercise(ex_name: String, from_search: bool = false) -> void:
 	_changed(true)
 
 
+## A key of "From today's plan" (LogPlanCard): the lift goes into the workout
+## with last time's sets, marked planned until it is touched, and comes out
+## again at a second tap while it still is. One that has the player's own
+## numbers is not taken out by a tap here: its card has the cross for that.
+func plan_toggle(ex_name: String) -> void:
+	var key = Xp.normalize_exercise(ex_name)
+	if key == "":
+		return
+	for i in range(exercises.size()):
+		if Xp.normalize_exercise(str(exercises[i].name)) != key:
+			continue
+		if bool(exercises[i].get("planned", false)):
+			Sfx.tap()
+			exercises.remove_at(i)
+			_changed(true)
+		else:
+			Sfx.tick()
+			App.toast("%s has your sets. Take it out with the cross on its card." % Missions.short_name(ex_name), "info", "lift")
+		return
+	Sfx.tick()
+	var lp = _last.get(key)
+	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else {"name": ex_name.strip_edges(), "bodyweight": false, "sets": [{"reps": "", "weight": ""}]}
+	one["planned"] = true
+	exercises.append(one)
+	_changed(true)
+
+
 func add_from_search() -> void:
 	var q = Xp.normalize_exercise(query)
 	if q == "":
@@ -663,6 +820,41 @@ func add_set(i: int) -> void:
 func remove_set(i: int, j: int) -> void:
 	_touched(i)
 	exercises[i].sets.remove_at(j)
+	_changed(true)
+
+
+## Move an exercise one place up (-1) or down (+1) in the workout. Its sets,
+## and whether it is still as the plan filled it in, go with it.
+func move_exercise(i: int, d: int) -> void:
+	var j = i + d
+	if i < 0 or j < 0 or i >= exercises.size() or j >= exercises.size():
+		return
+	Sfx.tick()
+	var e = exercises[i]
+	exercises[i] = exercises[j]
+	exercises[j] = e
+	# The sets that already celebrated a record go with their exercise.
+	var done = {}
+	for k in _pr_done:
+		var parts = str(k).split(":")
+		var a = int(parts[0])
+		if a == i:
+			a = j
+		elif a == j:
+			a = i
+		done["%d:%s" % [a, parts[1]]] = true
+	_pr_done = done
+	# And so does the typing cursor.
+	var f = _form()
+	if f != null and is_instance_valid(f.screen) and f.screen.is_inside_tree():
+		var own = f.screen.get_viewport().gui_get_focus_owner()
+		if own != null and own.has_meta(LogWidgets.FKEY):
+			var fk = str(own.get_meta(LogWidgets.FKEY))
+			for pair in [[i, j], [j, i]]:
+				var head = "ex%d." % int(pair[0])
+				if fk.begins_with(head):
+					f.screen.focus_key = "ex%d." % int(pair[1]) + fk.substr(head.length())
+					break
 	_changed(true)
 
 
@@ -751,6 +943,7 @@ func _on_set_text(text: String, i: int, j: int, field: String) -> void:
 func _on_name_typed(text: String, i: int) -> void:
 	if i < exercises.size():
 		exercises[i].name = text
+		_refresh_filed(i)
 		_changed(false)
 
 

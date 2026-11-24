@@ -12,8 +12,19 @@ extends VBoxContainer
 
 ## How many end-of-frame passes the layout gets to settle before the view is pinned.
 const SETTLE_PASSES = 8
+## How long presses are dropped after a rebuild that could not keep the pressed
+## control under the pointer (see `guard_shifts`).
+const QUIET_MS = 350
 
 var auto_rebuild: bool = true
+## For a screen where a stray tap changes what was typed (the Log tab): when a
+## rebuild cannot keep the pressed control where it was (it is gone, or the
+## page cannot scroll that far: an exercise moved to the top of the workout),
+## presses are dropped for QUIET_MS, so a second tap meant for it does not land
+## on whatever took its place.
+var guard_shifts: bool = false
+## Presses are dropped until this moment (Time.get_ticks_msec).
+static var quiet_until: int = 0
 var _queued: bool = false
 var _settle_gen: int = 0
 ## The ScrollContainer's follow_focus setting while a rebuild has it switched off.
@@ -26,6 +37,11 @@ func _ready() -> void:
 	App.changed.connect(_on_app_changed)
 	App.nav_changed.connect(_on_app_nav)
 	rebuild_now()
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and Time.get_ticks_msec() < quiet_until:
+		get_viewport().set_input_as_handled()
 
 
 func _on_app_changed() -> void:
@@ -181,3 +197,15 @@ func _settle(scroll, keep: int, anchor, gen: int, step: int) -> void:
 		_settle.call_deferred(scroll, keep, anchor, gen, step + 1)
 	else:
 		_release_follow(scroll)
+		if guard_shifts and anchor != null and _anchor_moved(scroll, keep, anchor):
+			quiet_until = Time.get_ticks_msec() + QUIET_MS
+
+
+## Is the control that was under the pointer somewhere else on screen now (or
+## gone)? `keep`: the scroll position it had then.
+func _anchor_moved(scroll, keep: int, anchor: Dictionary) -> bool:
+	var c = _find_anchor(anchor)
+	if c == null:
+		return true
+	var now_y = (c.global_position.y - global_position.y) - float(scroll.scroll_vertical)
+	return absf(now_y - (float(anchor.rel) - float(keep))) > 2.0

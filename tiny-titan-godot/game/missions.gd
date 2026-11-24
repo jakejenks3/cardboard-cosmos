@@ -687,6 +687,75 @@ static func day_boxes(plan: Dictionary, sessions: Array, today: String) -> Array
 	return out
 
 
+## The label of another way to do a planned lift, beside its movement: its
+## variation as it is written ("Home cable") when it is the same movement,
+## else way_word ("bodyweight", "Pull-up").
+static func way_label(o: Dictionary, main_move: String) -> String:
+	if str(o.move) == main_move and str(o.variation) != "":
+		return str(o.variation)
+	return way_word(o, main_move)
+
+
+## The day's plan as a list to pick a workout from: the Log tab's "From
+## today's plan" (the user, 2026-11-23, about adding the Today card's lifts
+## through one lift page after another: "have it maybe have an area that says
+## from suggested workouts based on the goals and volume we have planned and
+## easily be able to add/remove from workout as I go"). A row per thing of the
+## Today card, in its order: what the training focus adds, the likely lifts
+## (physical therapy among them), the movement to try, then the PT still
+## needed that has no row yet. A row names the lift as it would be done first
+## (the way it was done last) and the other ways to do it, so there is one
+## whatever equipment is at hand.
+##   [{"kind": "extra" | "lift" | "pt" | "new", "name", "move", "variation",
+##     "new" (never done), "pt", "part" (an extra's muscle, the new movement's
+##     body part, else ""), "last" (its sets last time; [] when new, and for a
+##     PT row that is not one of the plan's lifts), "sides", "why",
+##     "ways": [{"name", "word", "new"}],
+##     "done" (the lift it was done as on `today`, or ""),
+##     "lift" (the plan's lift, for its aim; null for "new" and a bare PT row)}]
+## `sessions`: the saved ones that count as done (the Log form leaves out the
+## session it is editing: what is in the form is not done, it is there to see).
+static func picks(plan: Dictionary, sessions: Array, today: String) -> Array:
+	var out = []
+	var seen = {}
+	var lifts = plan.get("lifts", [])
+	for l in lifts.filter(func(x): return x.has("dose")) + lifts.filter(func(x): return not x.has("dose")):
+		var opts = l.get("options", [])
+		var before = l.get("last")
+		var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": before.sets if before is Dictionary and before.has("sets") else []}
+		var k = Xp.normalize_exercise(str(main.name))
+		if seen.has(k):
+			continue
+		seen[k] = true
+		var sp = LiftNames.split(str(main.name))
+		var ways = []
+		for o in opts.slice(1):
+			ways.append({"name": str(o.name), "word": way_label(o, str(sp.move)), "new": bool(o.get("new", false))})
+		out.append({"kind": "extra" if l.has("dose") else ("pt" if bool(l.get("pt", false)) else "lift"),
+			"name": str(main.name), "move": str(sp.move), "variation": str(sp.variation),
+			"new": bool(main.get("new", false)), "pt": bool(l.get("pt", false)), "part": str(l.dose.part) if l.has("dose") else "",
+			"last": main.get("last", []), "sides": int(main.get("sides", 1)), "why": str(l.get("why", "")),
+			"ways": ways, "done": lift_done(l, plan, sessions, today), "lift": l})
+	var nw = plan.get("new")
+	if nw != null and not seen.has(Xp.normalize_exercise(str(nw.name))):
+		seen[Xp.normalize_exercise(str(nw.name))] = true
+		var alts = []
+		for a in nw.get("alts", []):
+			alts.append({"name": str(a.name), "word": short_name(str(a.name)), "new": true})
+		out.append({"kind": "new", "name": str(nw.name), "move": str(nw.move), "variation": str(nw.variation), "new": true, "pt": false,
+			"part": str(nw.get("part", "")), "last": [], "sides": 1, "why": "", "ways": alts, "done": new_by(sessions, today, plan), "lift": null})
+	for r in plan.get("pt", []):
+		var pk = Xp.normalize_exercise(str(r.name))
+		if seen.has(pk):
+			continue
+		seen[pk] = true
+		var psp = LiftNames.split(str(r.name))
+		out.append({"kind": "pt", "name": str(r.name), "move": str(psp.move), "variation": str(psp.variation), "new": false, "pt": true,
+			"part": "", "last": [], "sides": 1, "why": "", "ways": [],
+			"done": str(r.name) if not sets_on(sessions, str(r.name), today).is_empty() else "", "lift": null})
+	return out
+
+
 ## The one of these, of any variation of `move`, or (with `same`) of a
 ## movement standing in for it, done on `date` (its name as logged), or "".
 static func done_of(sessions: Array, names: Array, date: String, move: String = "", same: Dictionary = {}) -> String:

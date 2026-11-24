@@ -1224,6 +1224,84 @@ is the Windows handoff.
     piece of race gear is earned by the miles its words say and not by a tenth of a mile less.
   - Parity still passes: no fixture has a run in those few metres. Tests: run_splits_test (the rules
     through `Derive.derive`), units_test; walkthrough units.
+- "From today's plan" in the Log tab's lift form, and exercises moved up and down (2026-11-23, late
+  afternoon). The user, in the middle of a workout: "it's annoying to have to click on it, press add
+  to workout, then go back to hero page, then repeat. When going to log, have it maybe have an area
+  that says 'from suggested workouts' based on the goals and volume we have planned and easily be
+  able to add/remove from workout as I go", then "Add a way to bump exercises up and down in order
+  too, helps to decrease scrolling while super setting".
+  - `Missions.picks(plan, sessions, today)` (pure): the day's plan as rows in the Today card's order:
+    what the focus adds ("extra"), the likely lifts ("lift"; a PT lift of the plan is "pt"), the
+    movement to try ("new", its `alts` as ways), then PT still needed that has no row. A row: {kind,
+    name (the way it was done last), move, variation, new, pt, part, last, sides, why, ways [{name,
+    word, new}], done (the lift it was done as today, any way: `lift_done` / `new_by`), lift (the
+    plan's lift; null for "new" and a bare PT row)}. `Missions.way_label` words a way.
+  - `ui/screens/log_plan_card.gd` (`LogPlanCard.build(editor)`, meta `plan_card`): under the workout's
+    exercise cards and above "Add exercise"; first of all (before "Repeat a workout") while the
+    workout is empty. Only for a workout dated today: a new one, or today's saved one opened again
+    (then the session in the form is left out of what counts as done). Header: the day's label, rows
+    seen to / rows (meta `plan_count`), Hide / Show (`LogPlanCard.folded`, static; meta `plan_fold`).
+    A row is one wide key (`LogWidgets.key`; meta `plan_pick` = the lift, `plan_state` = add / in /
+    done): a box (plus, tick), the movement and its variation in a squeeze row, a tag (FOR CHEST, NEW,
+    PT) and what to aim for on a line of its own (`TodayView.aim_words`, which the Today card's rows
+    use too). Under it the other ways as chips (meta `plan_way`), each a key of its own.
+  - `LogLiftEditor.plan_toggle(name)`: not in the workout -> added with last time's sets, `planned:
+    true` (Finish asks "Done as shown?" about the ones never touched, as after Start workout); in it
+    and still planned -> taken out; in it with the player's own numbers -> a toast, it stays (its
+    card has the cross).
+  - Up and down: every exercise card has two keys in its foot row, after "+ Set" and the bump chips
+    (`_move_key`; metas `move_key` = up / down, `move_of` = its place; only with two exercises or
+    more; the first one's up and the last one's down are there, switched off). NOT at the row's right
+    end: that is under the column of the set rows' crosses, and the foot row slides there when the
+    last set is taken off. `move_exercise(i, d)` swaps the exercise with its neighbour: its sets,
+    `planned`, the records already celebrated (`_pr_done`) and the typing cursor go along.
+  - Nothing moves under the finger. A plan key's unseen Button text ("Plan: <lift>"), a way chip's
+    word and a move key's tooltip ("Move <lift> up") are the same in every state and name the LIFT,
+    so `UiScreen` finds the key of the same lift again after the rebuild and keeps it where it was:
+    the cards above come and go, a moved card takes the view with it, and a second tap on its up key
+    moves the same exercise again. A new key here must keep to that: never change a key's text with
+    its state, never name it by its place.
+  - Where the page cannot follow (a card moved to the top with the page at its top, a lift taken back
+    with little above it, a picker key that is gone once tapped) the key cannot stay, and the next
+    tap would land on whatever slid there: a stepper, another card's key. `UiScreen.guard_shifts`
+    (on for `LogScreen` only): after a rebuild that could not keep the pressed control in place
+    (`_anchor_moved`), left presses are dropped for `QUIET_MS` 350 (`UiScreen.quiet_until`, read in
+    `_input`). A walkthrough that makes real clicks on the Log tab waits that long after a tap that
+    shifts the page (`tap` in picks.gd).
+  - Also fixed: `App.set_pt` / `set_pt_goal` clear the cached plan, missions and look-ahead (a lift
+    marked PT kept its old row on the Today card until something else changed).
+  - With the plan card the lift form is long enough to scroll even with one exercise: the touch
+    walkthrough waits for its drag's glide to end before it holds a stepper.
+  - Tests: missions_test and dose_test (`picks`); walkthrough `tests/shots/picks.gd` (year data, also
+    `--fingers`): add, take back, the other way, a touched lift stays, every key under the pointer on
+    every frame, up and down, the guarded second tap, fold, done after saving, no card on another
+    day. long_names snaps the card with long names.
+  - Held back while it was built: the user was in the middle of a workout ("Don't push anything to
+    phone yet... don't wanna mess with refreshing the app"). Published and pushed that evening on
+    their word ("go ahead and publish all the unpublished changes"), as build 20261123-170924-4f7936e5.
+- How a new exercise's name will be filed, said as it is typed (2026-11-23, evening). The user: "If I
+  want to add new exercises, how do I add the variations? Like I don't just type in 'March - banded'
+  right because it takes that as the full name and not the exercise plus the variation modifier?" It
+  does not: `App.absorb_pt` files a name typed in the Log tab through `LiftNames.resolve` when the
+  workout is saved ("March - banded" -> "March - Band": the dash splits movement and variation;
+  equipment and place words need no dash, so "banded march" is the same lift; other words without a
+  dash are the movement: "High Knee March"). But nothing said so until after the save.
+  - `LogLiftEditor.filed_as(typed)` (the same steps as `absorb_pt`: `Pt.untag`, a lift of the log
+    keeps its name, else `LiftNames.resolve(n, App.lift_names())`; null for an empty name, a lift of
+    the log, and a session from the phone note, whose names are not filed), `filed_words`,
+    `filed_tip` (a movement of the player's own typed without a variation: "A variation goes after a
+    dash: <Movement> - banded").
+  - Under an exercise's name (`_refresh_filed(i)`, slot `_filed[i]`, metas `filed_as` = the name it
+    will have, `filed_tip`): "SAVED AS", the movement, the variation as a tag, a PT tag. Only for a
+    name that is new to the log; it follows the name as it is typed (`_on_name_typed`).
+  - Under the search box (`_no_match`, now a label that wraps; meta `filed_as`): "New exercise: tap
+    Add. It is saved as March, variation Band." when no key matches what is typed.
+  - `LiftNames.resolve` takes 1 to 5 ms on the PC and now runs on each keystroke of a new name.
+  - Walkthrough: `tests/shots/filed.gd` (year data, also `--fingers`): what the line says is what the
+    saved workout holds.
+  - Also that evening: `LogSessionForm._set_date` rebuilds the lift form when the date leaves or
+    reaches today, so "From today's plan" goes (or comes back) at once. It used to stay until the
+    next tap and vanish under the finger.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1424,6 +1502,8 @@ todo (the to-do list: the card, the sheet, adding without the Add key moving; ye
 splits (a run's best splits: the fields that come with the distance, the sheet, Journey, the record; year data),
 sides (reps logged as both sides added up: the lift page's switch, the Log tab's L+R key, the Today aim; year data),
 units (pounds and miles where the rules write kg and km: record cards, XP chips, trophies; year data),
+picks (the Log form's "From today's plan" card and an exercise card's up / down keys; year data),
+filed (how a new exercise typed in the Log tab will be filed: the note at the search box, the line under its name; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
@@ -1493,6 +1573,9 @@ scenario that sets `App.cloud._cfg` and calls `sync_now`, and open the web app w
   details.
 - A walkthrough that hits a script error still prints its checks: read the log for
   `ERROR` as well as for failed checks.
+- The e2e walkthrough is for the normal size only. With `--fingers` the body check-in does not
+  take the typing focus by itself (as on a phone), the walkthrough's typed weight goes nowhere and
+  four checks fail. Seen 2026-11-23; it is not a bug of the game.
 - Logging an old session for an earlier week changes the bounty HP of the weeks after it
   (the HP is built from the four weeks before), so a past bounty can flip. By design:
   the bounties are a pure function of the log.

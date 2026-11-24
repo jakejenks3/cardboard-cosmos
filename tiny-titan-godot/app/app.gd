@@ -160,6 +160,10 @@ func set_pt(lift_name: String, on: bool) -> void:
 		return
 	saved.updatedAt = now_ms()
 	_write()
+	# (the day is planned differently around a PT lift: the plan is made again)
+	_quests = null
+	_plan = null
+	_ahead = null
 	changed.emit()
 
 
@@ -421,6 +425,9 @@ func set_pt_goal(lift_name: String, per_week: int) -> void:
 	saved.pt[at]["perWeek"] = clampi(per_week, 1, Pt.MAX_PER_WEEK)
 	saved.updatedAt = now_ms()
 	_write()
+	_quests = null
+	_plan = null
+	_ahead = null
 	changed.emit()
 
 

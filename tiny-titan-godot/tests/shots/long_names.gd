@@ -101,4 +101,20 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	App.open_log("lift")
 	await ShotHelper.wait(tree, 1.0)
 	await ShotHelper.snap(tree, "long_8_log_lift")
+	# The day's plan as keys under the workout (LogPlanCard): the same long names.
+	var plan_card = null
+	for n in ShotHelper.walk(main):
+		if n.has_meta("plan_card"):
+			plan_card = n
+	check(plan_card != null, "the lift form has the From today's plan card")
+	if plan_card != null:
+		ShotHelper.reveal(plan_card)
+		await ShotHelper.wait(tree, 0.5)
+		await ShotHelper.snap(tree, "long_9_log_plan")
+	# An empty workout: the plan card first, every lift still to add.
+	App.open_log(null)
+	App.draft_store("lift", null)
+	App.open_log("lift")
+	await ShotHelper.wait(tree, 1.0)
+	await ShotHelper.snap(tree, "long_10_log_plan_empty")
 	print("LONG NAMES DONE fails=%d" % fails)

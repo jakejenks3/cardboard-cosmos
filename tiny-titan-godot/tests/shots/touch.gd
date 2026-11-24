@@ -283,7 +283,15 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.5)
 		st = _stepper()
 		check(int(st.number()) == v1, "a drag that starts on + changes nothing (%d)" % int(st.number()))
-		main._scroll.scroll_vertical = 0
+		# With the day's plan on it (LogPlanCard) the page is long enough to
+		# scroll: the drag above ends in a glide, and a finger on a gliding page
+		# only stops it. Let the glide end, then go back to the top.
+		for k in range(360):
+			if ts._fling == null:
+				break
+			await tree.process_frame
+		await ShotHelper.wait(tree, 0.3)
+		ts._scroll_to(main._scroll, 1, 0.0)
 		await ShotHelper.frames(tree, 4)
 		st = _stepper()
 		var pp = _center(st._plus)

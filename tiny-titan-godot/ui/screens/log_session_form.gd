@@ -512,8 +512,14 @@ func _set_dur(part: String, t: String) -> void:
 
 
 func _set_date(key: String) -> void:
+	var was_today = date == App.today
 	date = key
-	refresh()
+	# The lift form's "From today's plan" (LogPlanCard) is for a workout dated
+	# today: it goes, or comes back, as the date leaves or reaches today.
+	if discipline == "lift" and was_today != (date == App.today) and is_instance_valid(screen):
+		screen.rebuild()
+	else:
+		refresh()
 
 
 func _toggle_extra() -> void:

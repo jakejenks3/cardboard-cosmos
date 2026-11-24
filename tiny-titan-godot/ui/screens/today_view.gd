@@ -306,6 +306,27 @@ static func _step_kg(wu: String) -> float:
 	return 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
 
 
+## What to aim for in a planned lift that is not done yet, as its row says it:
+## {"cap", "said", "col"}. `main`: the way it would be done first ({"new",
+## "last" (sets), "sides"}); `got`: the sets an extra lift of the focus
+## already has today. The Log tab's "From today's plan" says the same.
+static func aim_words(l: Dictionary, main: Dictionary, wu: String, got: int = 0) -> Dictionary:
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	var dose = l.get("dose")
+	if bool(l.pt):
+		return {"cap": "AS LAST TIME", "said": LiftHistory.describe_sets(l.last.sets, fmt_w), "col": Pal.PT}
+	if dose != null:
+		var cap = ("%d OF %d SETS" % [got, int(dose.sets)]) if got > 0 else ("ADD · %d SETS" % int(dose.sets))
+		if bool(main.new):
+			return {"cap": cap, "said": "6 to 12 reps, hard", "col": Pal.SECOND}
+		return {"cap": cap, "said": LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w), "col": Pal.ACCENT}
+	if bool(main.new):
+		return {"cap": "FIRST TIME", "said": "Find your weight", "col": Pal.SECOND}
+	# (reps logged as both sides added up: the aim is that total too)
+	return {"cap": "AIM · %s" % Sides.SHORT if int(main.get("sides", 1)) > 1 else "AIM",
+		"said": LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w), "col": Pal.ACCENT}
+
+
 ## A likely lift as done last (its first option): name and variation, why it
 ## is likely, what to aim for; the other ways the player has done it under it
 ## as chips. Done today (any way): what was done.
@@ -376,25 +397,11 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}) -> Card:
 		said = LiftHistory.describe_sets(Missions.sets_on(App.sessions(), done_name, App.today), fmt_w)
 		cap = "DONE · BEAT IT" if beat else "DONE TODAY"
 		col = Pal.GOOD if beat else Pal.TEXT
-	elif bool(l.pt):
-		said = LiftHistory.describe_sets(l.last.sets, fmt_w)
-		cap = "AS LAST TIME"
-	elif dose != null:
-		var got = int(Dose.extra_done(l, App.sessions(), App.today, same).sets)
-		cap = ("%d OF %d SETS" % [got, int(dose.sets)]) if got > 0 else ("ADD · %d SETS" % int(dose.sets))
-		if bool(main.new):
-			said = "6 to 12 reps, hard"
-			col = Pal.SECOND
-		else:
-			said = LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w)
-	elif bool(main.new):
-		said = "Find your weight"
-		cap = "FIRST TIME"
-		col = Pal.SECOND
 	else:
-		said = LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w)
-		# (reps logged as both sides added up: the aim is that total too)
-		cap = "AIM · %s" % Sides.SHORT if int(main.get("sides", 1)) > 1 else "AIM"
+		var aim = aim_words(l, main, wu, int(Dose.extra_done(l, App.sessions(), App.today, same).sets) if dose != null else 0)
+		said = str(aim.said)
+		cap = str(aim.cap)
+		col = aim.col
 	var cl = Kit.label(cap, 9, Pal.GOOD if col == Pal.GOOD else Pal.MUTED, true)
 	cl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	right.add_child(cl)

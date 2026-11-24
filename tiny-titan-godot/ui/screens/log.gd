@@ -20,6 +20,8 @@ var _form = null
 
 func _init() -> void:
 	auto_rebuild = false
+	# A tap that lands on a stepper or a key by mistake changes the workout.
+	guard_shifts = true
 
 
 func on_nav() -> void:

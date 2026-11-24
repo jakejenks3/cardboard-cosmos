@@ -336,6 +336,35 @@ func _init() -> void:
 	ok(names(Missions.likely_lifts(once, sat, {}, "pull")).has("Shrug - Barbell"), "a lift done once on the last pull day is planned for the next one")
 	ok(not names(Missions.likely_lifts(blog + [lift("2026-11-20", {"Shrug - Barbell": [[10, 60]]})], sat, {}, "pull")).has("Shrug - Barbell") and not names(Missions.likely_lifts(once, sat, {}, "")).has("Shrug - Barbell"), "not the day after it was done, and not without a split (three days after a first time is too soon to call)")
 
+	# --- the plan as a list to pick a workout from (the Log tab's "From today's plan") --------------
+	var vpk = Missions.picks(vp, vlog, sat)
+	var vfr = vpk.filter(func(r): return str(r.name) == "Chest Fly - Gym cable")
+	ok(vfr.size() == 1 and str(vfr[0].kind) == "lift" and str(vfr[0].move) == "Chest Fly" and str(vfr[0].variation) == "Gym cable" and not bool(vfr[0].new) and not bool(vfr[0].pt) and str(vfr[0].done) == "" and is_equal_approx(float(vfr[0].last[0].weightKg), 25.0) and vfr[0].lift == vfly, "a row per planned lift, named as it was done last, with those sets and the lift of the plan", vfr)
+	ok(vfr[0].ways.map(func(w): return str(w.name)) == ["Chest Fly - Home cable", "Pullover - Dumbbell"] and vfr[0].ways.map(func(w): return str(w.word)) == ["Home cable", "Pullover (dumbbell)"] and vfr[0].ways.map(func(w): return bool(w.new)) == [false, true], "its other ways: a variation as it is written, another movement by its name, one never done marked new", vfr[0].ways)
+	ok(vpk.slice(0, vp.lifts.size()).map(func(r): return str(r.name)) == names(vp.lifts), "the lifts in the order of the Today card", vpk.map(func(r): return str(r.name)))
+	var vnew = vpk.filter(func(r): return str(r.kind) == "new")
+	ok(vp.new != null and vnew.size() == 1 and vpk.find(vnew[0]) == vp.lifts.size() and str(vnew[0].name) == str(vp.new.name) and bool(vnew[0].new) and vnew[0].lift == null and vnew[0].last.is_empty() and vnew[0].ways.map(func(w): return str(w.name)) == vp.new.alts.map(func(a): return str(a.name)) and vnew[0].ways.all(func(w): return bool(w.new)), "then the movement to try, with the others that count as chips", vnew)
+	var uniq = {}
+	for r in vpk:
+		uniq[Xp.normalize_exercise(str(r.name))] = true
+	ok(uniq.size() == vpk.size() and vpk.all(func(r): return r.has("kind") and r.has("ways") and r.has("done") and r.has("sides") and r.has("why")), "no lift twice, every row whole")
+	# Done today, one way or another: the row names the lift that did it.
+	var vdone = Missions.picks(vp, vlog + [lift(sat, {"Chest Fly - Home cable": [[12, 15]], "Lateral Raise - Gym cable": [[12, 5]]})], sat)
+	var done_of = {}
+	for r in vdone:
+		done_of[str(r.name)] = str(r.done)
+	ok(done_of["Chest Fly - Gym cable"] == "Chest Fly - Home cable" and done_of["Lateral Raise - Gym cable"] == "Lateral Raise - Gym cable" and str(vdone.filter(func(r): return str(r.kind) == "new")[0].done) == "", "done today: the fly by its other way, the raise as planned, the new movement not yet", done_of)
+	ok(Missions.picks(vp, vlog + [lift(sat, {"Chest Fly - Home cable": []})], sat).all(func(r): return str(r.done) == ""), "a lift added and left empty is not done")
+	# Physical therapy: the PT lifts of the plan, then the PT still needed that has no row yet.
+	var bpk = Missions.picks(bp, blog, sat)
+	var bpt = bpk.filter(func(r): return bool(r.pt))
+	ok(bpt.size() == 2 and bpt.all(func(r): return str(r.kind) == "pt" and r.ways.is_empty() and not bool(r.new)) and bpt.map(func(r): return str(r.name)).has("Neck 4 Way") and bpt.map(func(r): return str(r.name)).has("Wrist Curl"), "the physical therapy has its rows, once each", bpk.map(func(r): return "%s/%s" % [r.name, r.kind]))
+	ok(bpk.filter(func(r): return not bool(r.pt) and str(r.kind) == "lift").size() == Missions.PLAN_LIFTS, "beside the six strength lifts")
+	var only_pt = Missions.picks({"lifts": [], "new": null, "pt": [{"name": "Neck 4 Way"}]}, blog + [lift(sat, {"Neck 4 Way": [[20, 4]]})], sat)
+	ok(only_pt.size() == 1 and str(only_pt[0].kind) == "pt" and only_pt[0].lift == null and str(only_pt[0].done) == "Neck 4 Way" and Missions.picks({"lifts": [], "new": null, "pt": [{"name": "Neck 4 Way"}]}, blog, sat)[0].done == "", "PT that is not one of the plan's lifts: a row of its own, done once it has sets today", only_pt)
+	ok(Missions.picks({}, [], sat).is_empty() and Missions.picks(Missions.day_plan([], sat, {}), [], sat).is_empty(), "no plan, no rows")
+	ok(Missions.way_label(vfly.options[1], "Chest Fly") == "Home cable" and Missions.way_label(gopts[1], "Sit-up") == "bodyweight" and Missions.way_label(gopts[2], "Sit-up") == "Crunch", "a way's label: the variation as written, else the word for it")
+
 	# --- the morning message --------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg")
 	ok(text.begins_with("Probably a back day.") and text.contains("Lat Pulldown (single arm): ") and text.contains("Try: ") and text.contains("PT: Neck 4 Way"), "the morning message", text)
