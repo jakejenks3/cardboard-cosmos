@@ -86,7 +86,13 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(PHOTO_DIR)
 	saved = _load()
 	_daily_backup()
+	var fixed = _local_fixes()
 	_recompute()
+	if not fixed.is_empty():
+		_write()
+		get_tree().create_timer(4.0).timeout.connect(func():
+			for line in fixed:
+				toast(str(line), "good", "book"))
 	var t = Timer.new()
 	t.wait_time = 30.0
 	t.timeout.connect(_tick)
@@ -101,6 +107,28 @@ func _ready() -> void:
 	push = PhonePush.new()
 	push.name = "PhonePush"
 	add_child(push)
+
+
+## A one-time repair of the player's own save that is not in the source (it
+## holds their own data): app/fixes_local.gd, when the build has it. Only in
+## the phone app (TINY_TITAN_FIX_TEST=1 tries it on a scratch save). The save
+## was copied to the backups just before (_daily_backup). Returns what it did.
+const LOCAL_FIXES = "res://app/fixes_local.gd"
+
+
+func _local_fixes() -> Array:
+	if not OS.has_feature("web") and OS.get_environment("TINY_TITAN_FIX_TEST") != "1":
+		return []
+	if not ResourceLoader.exists(LOCAL_FIXES):
+		return []
+	var script = load(LOCAL_FIXES)
+	if script == null:
+		return []
+	var said = script.apply(saved, now_ms())
+	if said is Array and not said.is_empty():
+		saved.updatedAt = now_ms()
+		return said
+	return []
 
 
 func _tick() -> void:

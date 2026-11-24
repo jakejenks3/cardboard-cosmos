@@ -82,6 +82,12 @@ static func card() -> Control:
 			b.pressed.connect(ReadingView.add.bind(n, "", b))
 			keys.add_child(b)
 		c.add(keys)
+		# The page math needs a book: say where to start one.
+		var start = LogWidgets.mini_chip("+ Add the book you're reading", false, ReadingView.open)
+		start.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		start.tooltip_text = "Then type the page you stop on, and the pages are worked out"
+		start.set_meta("book_start_hint", true)
+		c.add(start)
 	Kit.passthrough(top)
 	if Time.get_ticks_msec() - _added_at < 400:
 		big.ready.connect(Kit.pop.bind(big, 1.25, 0.3), CONNECT_DEFERRED)
@@ -228,7 +234,7 @@ static func _fill(box: VBoxContainer) -> void:
 		keys.add_child(b)
 	day_card.add(keys)
 	var exact = Kit.hbox(8)
-	exact.add_child(Kit.vcenter(Kit.muted("Or type the day's pages:", 12)))
+	exact.add_child(Kit.vcenter(Kit.muted("Or type how many pages:", 12)))
 	var field = Kit.input("", str(on_day), true)
 	field.custom_minimum_size = Vector2(72, 34)
 	field.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -239,6 +245,7 @@ static func _fill(box: VBoxContainer) -> void:
 	set_b.pressed.connect(func(): ReadingView._set_exact(field.text, _date))
 	exact.add_child(set_b)
 	day_card.add(exact)
+	day_card.add(Kit.para("A count of pages read that day, not a page number. For the page you stopped on, use your book's page box above.", 11, Pal.MUTED))
 	box.add_child(day_card)
 
 	# --- the last two weeks ----------------------------------------------------------

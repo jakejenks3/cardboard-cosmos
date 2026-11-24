@@ -1465,7 +1465,15 @@ is the Windows handoff.
     Remove), "Add a book" (meta `book_add`: title, author, length, on page; Start reading / Already
     read) with "Add several at once" (meta `book_paste`). The old shelf of "a book per 100 pages" is
     gone from the screen; `Reading.books` stays for its trophies.
-  - The user's own books went in by a paste from chat (their list is not in the source).
+  - The user never pasted their books, and with no book being read typed the page they stopped on as
+    the day's pages. Repaired once by `app/fixes_local.gd` (LOCAL ONLY, never committed: it holds
+    their books and that day's numbers; `sync_clone.py` skips every `*_local.*` file): the day's
+    pages set right, their books added, the book being read given its bookmark and that day's log.
+    `App._local_fixes` runs it at start in the web build only (`TINY_TITAN_FIX_TEST=1` on a scratch
+    save), after the daily backup, once (`settings.fixes`). Test: `tests/fixes_local_test.gd` (local
+    too). Built into 20261123-220030. Delete both files once the user confirms it is right.
+  - Since then: with no book being read the reading card has "+ Add the book you're reading", and the
+    day editor says its box is a count of pages, not a page number.
   - Tests: `tests/books_test.gd`; walkthrough `tests/shots/books.gd` (year data, also `--fingers`).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
