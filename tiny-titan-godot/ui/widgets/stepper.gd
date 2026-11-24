@@ -204,6 +204,6 @@ func _bump(dir: int) -> bool:
 		return false
 	text = t
 	_edit.text = t
-	Sfx.tick()
+	Sfx.step(dir)
 	changed.emit(text)
 	return true

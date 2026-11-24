@@ -7,14 +7,49 @@ const VOICES = 6
 ## The web version's oscillator gains are tiny; scale them to a comfortable level.
 const LOUDNESS = 3.2
 
+## The clicks: a key going down, a step of a stepper, something added or taken
+## away. Soft sine pops whose pitch rises (a bubble, a fruit plucked) or falls,
+## each a little higher or lower than the last. The user, 2026-11-23, about the
+## square-wave tick every key used to make: "The sound is really jarring, make
+## it more satisfying/clicky/bubbly. I like the Stardew Valley sound effects
+## when harvesting". A note: [hz, start, seconds, wave, gain, {"to": the pitch it
+## glides to, "glide": the seconds that takes, "attack": seconds to full level}].
+## (A note fades fast: half way through it is at a twentieth of its level, so
+## the glide is done early, while it can be heard.) Kept quiet: a key is
+## pressed hundreds of times a workout. No square or sawtooth here: at this
+## sample rate their overtones fold back and grate, which is what the old tick
+## did (a fifth of its energy sat above 2.5 kHz; these have none there).
+const CLICKS = {
+	# A key going down: light and short, up a fifth.
+	"tick": [[620, 0.0, 0.065, "sine", 0.030, {"to": 930, "glide": 0.028, "attack": 0.003}], [1240, 0.0, 0.030, "sine", 0.006, {"to": 1860, "glide": 0.014, "attack": 0.002}]],
+	# Opening something, moving on: rounder and lower.
+	"tap": [[400, 0.0, 0.090, "sine", 0.044, {"to": 640, "glide": 0.040, "attack": 0.004}], [800, 0.0, 0.040, "sine", 0.008, {"to": 1280, "glide": 0.020, "attack": 0.002}]],
+	# Something added (a set, an exercise, a lift from the plan): a bubble, up
+	# more than an octave.
+	"pop": [[340, 0.0, 0.120, "sine", 0.050, {"to": 760, "glide": 0.055, "attack": 0.004}], [680, 0.0, 0.050, "sine", 0.010, {"to": 1520, "glide": 0.028, "attack": 0.002}]],
+	# Something taken away again: the same bubble, falling.
+	"unpop": [[720, 0.0, 0.100, "sine", 0.042, {"to": 400, "glide": 0.050, "attack": 0.004}], [1440, 0.0, 0.040, "sine", 0.007, {"to": 800, "glide": 0.025, "attack": 0.002}]],
+}
+## How far a click's pitch strays from its own, each time.
+const CLICK_DRIFT = 0.05
+## Buzzes this close together are one (a key's tick and what its handler asks for).
+const BUZZ_GAP_MS = 90
+
 var enabled: bool = true
-## Buzzes on a phone (settings.haptics): a record, a level, a claim, a set added.
+## Buzzes on a phone (settings.haptics): a light tick with every tap, more for
+## a record, a level, a claim, a workout finished.
 var buzz_on: bool = true
 var _tt_app = null
 
 var _cache = {}
 var _players = []
 var _next = 0
+## The click asked for in this frame ([key, pitch]): played once, in _process,
+## so a key's own tick and the sound its handler asks for are one click (the
+## last one asked for), not two on top of each other.
+var _click = null
+var _buzz_at: int = -100000
+var _buzz_n: int = 0
 
 
 func _ready() -> void:
@@ -22,6 +57,25 @@ func _ready() -> void:
 		var p = AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
+	set_process(false)
+
+
+func _process(_delta: float) -> void:
+	set_process(false)
+	if _click == null:
+		return
+	var c = _click
+	_click = null
+	_play(str(c[0]), CLICKS[str(c[0])], float(c[1]) * randf_range(1.0 - CLICK_DRIFT, 1.0 + CLICK_DRIFT))
+
+
+## One of the CLICKS, at `pitch` times its own (a stepper's plus is higher than
+## its minus). The last one asked for in a frame is the one that is heard.
+func _click_sound(key: String, pitch: float = 1.0) -> void:
+	if not enabled:
+		return
+	_click = [key, pitch]
+	set_process(true)
 
 
 func _exit_tree() -> void:
@@ -33,22 +87,59 @@ func _exit_tree() -> void:
 
 
 ## A short buzz on a phone (web/tt.js, ttApp.buzz): 1 light, 2 two, 3 three.
-## Nothing anywhere else.
+## Nothing anywhere else. It is asked for at once, never a frame later: an
+## iPhone only ticks from inside the finger's own event (a tap's click is made
+## inside the lift, ui/touch_scroll.gd). Buzzes that come BUZZ_GAP_MS apart or
+## less are one: a tap is one tick, and a longer buzz right after a tick only
+## adds what is missing.
 func buzz(n: int = 1) -> void:
 	if not buzz_on or not OS.has_feature("web"):
 		return
 	if _tt_app == null:
 		_tt_app = JavaScriptBridge.get_interface("ttApp")
-	if _tt_app != null:
-		_tt_app.buzz(n)
+	if _tt_app == null:
+		return
+	var now = Time.get_ticks_msec()
+	if now - _buzz_at < BUZZ_GAP_MS:
+		if n <= _buzz_n:
+			return
+		_tt_app.buzz(n, _buzz_n)
+		_buzz_n = n
+		return
+	_buzz_at = now
+	_buzz_n = n
+	_tt_app.buzz(n, 0)
+
+
+## A key going down under a finger or the mouse: its sound, and a light tick
+## in the hand on a phone.
+func click() -> void:
+	_click_sound("tick")
+	buzz(1)
+
+
+## One step of a stepper: up is a little higher than down.
+func step(dir: int) -> void:
+	_click_sound("tick", 1.12 if dir > 0 else 0.9)
+	buzz(1)
 
 
 func tick() -> void:
-	_play("tick", [[880, 0.0, 0.04, "square", 0.03]])
+	_click_sound("tick")
 
 
 func tap() -> void:
-	_play("tap", [[520, 0.0, 0.05, "triangle", 0.05]])
+	_click_sound("tap")
+
+
+## Something added: a set, an exercise, a lift from the plan.
+func pop() -> void:
+	_click_sound("pop")
+
+
+## Something taken away again.
+func unpop() -> void:
+	_click_sound("unpop")
 
 
 func xp() -> void:
@@ -133,7 +224,7 @@ func error() -> void:
 	buzz(2)
 
 
-func _play(key: String, notes: Array) -> void:
+func _play(key: String, notes: Array, pitch: float = 1.0) -> void:
 	if not enabled or _players.is_empty():
 		return
 	if not _cache.has(key):
@@ -141,10 +232,14 @@ func _play(key: String, notes: Array) -> void:
 	var p = _players[_next]
 	_next = (_next + 1) % _players.size()
 	p.stream = _cache[key]
+	p.pitch_scale = pitch
 	p.play()
 
 
-## notes: [[frequency_hz, start_sec, duration_sec, wave, gain], ...]
+## notes: [[frequency_hz, start_sec, duration_sec, wave, gain, opts?], ...]
+## opts: {"to": the frequency the note glides to (a pop rises, a drop falls),
+## "glide": the seconds the glide takes (the note's length when not given),
+## "attack": seconds to full level (0.01 when not given)}.
 func _render(notes: Array) -> AudioStreamWAV:
 	var total = 0.0
 	for n in notes:
@@ -158,19 +253,28 @@ func _render(notes: Array) -> AudioStreamWAV:
 		var dur = float(n[2])
 		var wave = str(n[3])
 		var gain = float(n[4])
+		var opts = n[5] if n.size() > 5 else {}
+		var freq_to = float(opts.get("to", freq))
+		var attack = float(opts.get("attack", 0.01))
+		var glide = maxf(0.001, float(opts.get("glide", dur)))
 		var length = int((dur + 0.02) * RATE)
+		var ph = 0.0
 		for i in range(length):
 			var idx = first + i
 			if idx >= count:
 				break
 			var t = float(i) / RATE
-			# Same envelope as the web oscillators: a 10 ms attack, then an exponential fade.
+			# Same envelope as the web oscillators: a short attack (10 ms unless
+			# the note says otherwise), then an exponential fade.
 			var env
-			if t < 0.01:
-				env = 0.0001 * pow(gain / 0.0001, t / 0.01)
+			if t < attack:
+				env = 0.0001 * pow(gain / 0.0001, t / attack)
 			else:
-				env = gain * pow(0.0001 / gain, minf(1.0, (t - 0.01) / maxf(0.001, dur - 0.01)))
-			var ph = fmod(t * freq, 1.0)
+				env = gain * pow(0.0001 / gain, minf(1.0, (t - attack) / maxf(0.001, dur - attack)))
+			# The pitch glides from `freq` to `freq_to` (a ratio a second, so it
+			# sounds even); the phase is added up sample by sample.
+			var f = freq if freq_to == freq else freq * pow(freq_to / freq, minf(1.0, t / glide))
+			ph = fmod(ph + f / RATE, 1.0)
 			var w
 			match wave:
 				"square":

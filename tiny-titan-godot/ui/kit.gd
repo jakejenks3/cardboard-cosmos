@@ -147,9 +147,10 @@ static func intro_delay() -> float:
 	return minf(float(_intro_n) * 0.03, 0.36)
 
 
-## Click feedback for any button: a tick as it goes down, a little pop as it comes back up.
+## Click feedback for any button: a soft pop (and, on a phone, a tick in the
+## hand) as it goes down, a little bounce as it comes back up.
 static func juice(b: BaseButton) -> void:
-	b.button_down.connect(Sfx.tick)
+	b.button_down.connect(Sfx.click)
 	b.button_up.connect(pop.bind(b, 1.05, 0.16))
 
 

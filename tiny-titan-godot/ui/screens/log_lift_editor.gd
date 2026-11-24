@@ -774,14 +774,14 @@ func plan_toggle(ex_name: String) -> void:
 		if Xp.normalize_exercise(str(exercises[i].name)) != key:
 			continue
 		if bool(exercises[i].get("planned", false)):
-			Sfx.tap()
+			Sfx.unpop()
 			exercises.remove_at(i)
 			_changed(true)
 		else:
 			Sfx.tick()
 			App.toast("%s has your sets. Take it out with the cross on its card." % Missions.short_name(ex_name), "info", "lift")
 		return
-	Sfx.tick()
+	Sfx.pop()
 	var lp = _last.get(key)
 	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else {"name": ex_name.strip_edges(), "bodyweight": false, "sets": [{"reps": "", "weight": ""}]}
 	one["planned"] = true
@@ -813,7 +813,7 @@ func apply_template(t: Dictionary) -> void:
 
 
 func add_set(i: int) -> void:
-	Sfx.tick()
+	Sfx.pop()
 	Sfx.buzz(1)
 	_touched(i)
 	var sets = exercises[i].sets
@@ -823,6 +823,7 @@ func add_set(i: int) -> void:
 
 
 func remove_set(i: int, j: int) -> void:
+	Sfx.unpop()
 	_touched(i)
 	exercises[i].sets.remove_at(j)
 	_changed(true)
@@ -864,6 +865,7 @@ func move_exercise(i: int, d: int) -> void:
 
 
 func remove_exercise(i: int) -> void:
+	Sfx.unpop()
 	exercises.remove_at(i)
 	_changed(true)
 

@@ -129,7 +129,7 @@ func _gui_input(event: InputEvent) -> void:
 		if event.pressed:
 			_press_at = event.global_position
 			_squash(true)
-			Sfx.tick()
+			Sfx.click()
 		elif _press_at != null:
 			var moved = event.global_position.distance_to(_press_at)
 			_press_at = null

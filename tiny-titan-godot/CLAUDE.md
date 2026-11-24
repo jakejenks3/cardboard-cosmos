@@ -1339,6 +1339,41 @@ is the Windows handoff.
   - The build a phone is on when this is published has no notice yet: that one update still needs
     the app closed and opened again (twice at worst).
   - Walkthrough: `tests/shots/update.gd` (year data, also `--fingers`).
+- Softer clicks, and a tick in the hand with every tap (2026-11-23, night). The user: "work on the
+  sound effect of clicks. The sound is really jarring, make it more satisfying/clicky/bubbly. I like
+  the Stardew Valley sound effects when harvesting... Also can you add some haptic feeling during a
+  click or not on iPhone".
+  - What grated: every key played `tick` as it went down (`Kit.juice`), a bare 880 Hz SQUARE wave. At
+    22,050 samples a second a square's overtones fold back, and a fifth of its energy sat above
+    2.5 kHz. And a key's own tick and the sound its handler asked for played on top of each other.
+  - `Sfx.CLICKS` (app/sfx.gd): `tick` (a key going down), `tap` (opening, moving on), `pop`
+    (something added: a set, an exercise, a lift from the plan), `unpop` (taken away again). All
+    sine: a soft pop whose pitch glides up (a bubble) or down, with a quiet octave over it for the
+    click. Nothing above 2.5 kHz. A note of `_render` can now glide (`{"to", "glide", "attack"}`,
+    the phase added up sample by sample). Each click is played a little higher or lower than the
+    last (`CLICK_DRIFT`); `Sfx.step(dir)` (a stepper) is higher for plus than for minus.
+  - One click a frame: `_click_sound` only notes what was asked for, `_process` plays the LAST one
+    (so a key's tick and its handler's `pop` are one sound, the handler's). A new click sound goes
+    in `CLICKS`; do not use square or sawtooth for anything heard at every tap.
+  - The fanfares (xp, claim, level up, record, drops...) are as they were: square and triangle
+    notes. Not asked about.
+  - Haptics: `Sfx.click()` (a key going down: `Kit.juice`, a `Card`) and `Sfx.step` also ask for
+    `buzz(1)`. `Sfx.buzz` asks AT ONCE, never a frame later: an iPhone only ticks from inside the
+    finger's own event (web/tt.js clicks a hidden `<input type="checkbox" switch>`, which ticks on
+    iOS 17.4 and later; Android: `navigator.vibrate`), and a tap's click is made inside the lift
+    (TouchScroll). Buzzes `BUZZ_GAP_MS` (90) apart or less are one: a tap is one tick, and a longer
+    buzz right after it only adds what is missing (`ttApp.buzz(n, felt)`). Settings -> Phone app:
+    "Taps you can feel" (`settings.haptics`, as before).
+  - Checked 2026-11-23 in a phone-size browser with made-up touches and `ttApp.buzz` wrapped: a key,
+    a stepper and "+ Set" each ask for exactly one tick, from inside the touchend; a tap on empty
+    space asks for none; Finish asks for 1 then 2 (one more, 110 ms later). `window.ttEval` runs
+    its GDScript at once, inside the JS call: that is how to tell what happens inside an event.
+    Whether the iPhone really ticks can only be felt on one: NOT felt by anyone yet. The second
+    tick of a longer buzz comes from a timer, outside the event, and may not tick at all there.
+  - The sounds were measured, not heard: `tests/sfx_test.gd` renders them and checks they are sine,
+    quiet, short, start at once and have nothing above 2.5 kHz, that a pop rises and an unpop falls,
+    and that a frame plays one click (the last asked for). A before / after WAV made from the same
+    renderings was sent to the user for a listen.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1508,6 +1543,7 @@ godot --headless --path . --script res://tests/todos_test.gd
 godot --headless --path . --script res://tests/run_splits_test.gd
 godot --headless --path . --script res://tests/sides_test.gd
 godot --headless --path . --script res://tests/units_test.gd
+godot --headless --path . --script res://tests/sfx_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other

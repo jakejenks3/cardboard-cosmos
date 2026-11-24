@@ -122,12 +122,12 @@ func _phone_rows() -> void:
 		add_child(row)
 	var hz = Kit.hbox(8)
 	hz.add_child(Kit.vcenter(Icons.rect("bolt", 16)))
-	var hl = Kit.clip("Buzz on sets and records", 14, null, true)
+	var hl = Kit.clip("Taps you can feel", 14, null, true)
 	hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hz.add_child(Kit.vcenter(hl))
 	hz.add_child(Kit.switch(bool(App.settings().get("haptics", true)), func(on):
 		App.update_settings({"haptics": bool(on)})
-		Sfx.buzz(2), "A short buzz when you add a set, finish a workout or set a record"))
+		Sfx.buzz(2), "A light tick with every tap, and a buzz when you finish a workout or set a record"))
 	hz.set_meta("buzz_row", true)
 	add_child(hz)
 

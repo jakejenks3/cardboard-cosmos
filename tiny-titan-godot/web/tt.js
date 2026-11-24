@@ -51,14 +51,19 @@
 
   // A short buzz. Android: navigator.vibrate. An iPhone has no vibrate(), but a
   // switch-style checkbox ticks when it is toggled (iOS 17.4 and later), so a
-  // hidden one is clicked. n: 1 light, 2 two ticks, 3 three.
-  function buzz(n) {
+  // hidden one is clicked: that only ticks from inside the finger's own event,
+  // which is where the game asks (a tap's click is made in the lift).
+  // n: 1 light, 2 two ticks, 3 three. felt: how many of them were just given
+  // (a key's own tick, then its handler asking for more: only the rest follows).
+  function buzz(n, felt) {
     n = Math.max(1, Math.min(3, n | 0));
+    felt = Math.max(0, Math.min(n, felt | 0));
     try {
       if (navigator.vibrate) {
         navigator.vibrate(n === 1 ? 12 : (n === 2 ? [16, 50, 16] : [22, 50, 22, 50, 34]));
         return;
       }
+      if (!touch) return;
       const tick = function () {
         const label = document.createElement('label');
         label.setAttribute('aria-hidden', 'true');
@@ -71,8 +76,8 @@
         label.click();
         document.head.removeChild(label);
       };
-      tick();
-      for (let i = 1; i < n; i++) setTimeout(tick, i * 110);
+      if (felt === 0) tick();
+      for (let i = Math.max(1, felt); i < n; i++) setTimeout(tick, (i - felt + (felt > 0 ? 1 : 0)) * 110);
     } catch (e) { /* no buzz */ }
   }
   // A finger is not a mouse. The engine takes its mouse position from the browser's
