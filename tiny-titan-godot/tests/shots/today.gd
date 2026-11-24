@@ -202,12 +202,16 @@ func run(m: Node, t: SceneTree) -> void:
 		await _home()
 		check(_ticks().count(true) == t_base + 2, "trying the new movement ticks its row too (%s)" % str(_ticks()))
 		await ShotHelper.snap(tree, "today_3b_ticks")
-		# The PT too: every box ticked, the chest opens once.
+		# The PT too, and any other lift of the plan not done yet (a lift due by
+		# its gap shows up on some weekdays): every box ticked, the chest opens once.
 		var pt_names = App.plan().pt.map(func(r): return str(r.name))
-		if not pt_names.is_empty():
+		var left = App.plan().lifts.filter(func(l): return Missions.lift_done(l, App.plan(), App.sessions(), App.today) == "")
+		if not pt_names.is_empty() or not left.is_empty():
 			var exs = []
 			for n in pt_names:
 				exs.append({"name": n, "sets": [{"reps": 20, "weightKg": 4.5}]})
+			for l in left:
+				exs.append({"name": str(l.name), "sets": LiftTrend.real_sets(l.last.sets).duplicate(true)})
 			App.commit_sessions([{"id": "pt2", "discipline": "lift", "date": App.today, "createdAt": App.now_ms() + 9, "source": "manual", "exercises": exs}], "Workout logged!")
 			await _dismiss_reels()
 			await _home()

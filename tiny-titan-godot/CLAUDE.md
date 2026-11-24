@@ -1475,6 +1475,20 @@ is the Windows handoff.
   - Since then: with no book being read the reading card has "+ Add the book you're reading", and the
     day editor says its box is a count of pages, not a page number.
   - Tests: `tests/books_test.gd`; walkthrough `tests/shots/books.gd` (year data, also `--fingers`).
+- Physical therapy is ONE goal, not single lifts of the plan (2026-11-24). The user: "Make it so individual
+  PT exs don't go into the missions or plan for the day. There are individual ones and also a goal for
+  doing 5+ etc, just keep that one."
+  - `Missions.day_plan` leaves every PT lift out of `plan.lifts` (`PLAN_PT` is gone): no PT row among
+    "PROBABLY TODAY", no box of its own, no line of its own in the morning message, none in Coming up's
+    lift rows. What stays: `plan.pt` (the PT still needed this week) and everything made of it as a
+    whole: the Today card's PT row and box, the daily "Physical therapy" mission (target = how many),
+    the weekly "PT on target", the "PT:" line of the morning and evening messages and of Coming up.
+  - Also out: the Log tab's "From today's plan" has no row per PT exercise (`Missions.picks`), and Start
+    workout sends no PT (`TodayView.workout_names`). PT exercises are added from "Add exercise".
+  - A rest day's plan therefore has no lifts at all; its PT row stays.
+  - Tests: missions_test (one row, one box, one mission, the morning text); walkthroughs picks (a
+    PT-marked lift has no key) and today (does every planned lift before the chest: a lift due by its
+    gap shows up on some weekdays, which made it fail on a Tuesday).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window

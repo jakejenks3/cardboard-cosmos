@@ -86,8 +86,9 @@ static func _done_name(l: Dictionary, plan: Dictionary) -> String:
 	return Missions.lift_done(l, plan, App.sessions(), App.today)
 
 
-## The lifts "Start workout" sends to the Log tab: the day's lifts and PT
-## still to do, each as it would be done first (the way it was done last).
+## The lifts "Start workout" sends to the Log tab: the day's lifts still to
+## do, each as it would be done first (the way it was done last). Physical
+## therapy is not sent: it is its own goal, not one of the day's lifts.
 static func workout_names(plan: Dictionary) -> Array:
 	var names = []
 	var seen = {}
@@ -100,11 +101,6 @@ static func workout_names(plan: Dictionary) -> Array:
 		if not seen.has(k):
 			seen[k] = true
 			names.append(nm)
-	for r in plan.pt:
-		var k2 = Xp.normalize_exercise(str(r.name))
-		if not seen.has(k2) and Missions.sets_on(App.sessions(), str(r.name), App.today).is_empty():
-			seen[k2] = true
-			names.append(str(r.name))
 	return names
 
 

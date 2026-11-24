@@ -172,8 +172,7 @@ func run(m: Node, t: SceneTree) -> void:
 		"exercises": [{"name": DUMBBELL, "sets": [{"reps": 8, "weightKg": 22.0}, {"reps": 8, "weightKg": 22.0}]}]})
 	App.commit_sessions(habit, "Workout logged!")
 	await _dismiss_reels()
-	App.set_pt(STRETCH, true)
-	await ShotHelper.wait(tree, 0.4)
+	# (a physical therapy exercise has no key of its own: checked at the end)
 
 	# --- the Log tab's first screen: what is still to do, a tap opens the workout with it ----------
 	App.open_log(null)
@@ -229,7 +228,7 @@ func run(m: Node, t: SceneTree) -> void:
 	var dumb = _way(DUMBBELL)
 	check(dumb != null and str(dumb.text) == "Dumbbell" and _state(dumb) == "add", "the bench has its other way as a chip (%s)" % (str(dumb.text) if dumb != null else "-"))
 	var said = ShotHelper.all_text(card) if card != null else ""
-	check(said.contains("AIM") and said.contains("AS LAST TIME") and said.contains("PROBABLY TODAY"), "a row says what to aim for; the stretch is PT, as last time")
+	check(said.contains("AIM") and said.contains("PROBABLY TODAY"), "a row says what to aim for")
 	var picker = ShotHelper.find_text(main, "Add exercise")
 	check(card != null and picker != null and card.global_position.y < picker.global_position.y, "it comes before Add exercise")
 	await ShotHelper.snap(tree, "picks_1_empty")
@@ -417,6 +416,17 @@ func run(m: Node, t: SceneTree) -> void:
 		check(main.get_viewport().gui_get_hovered_control() == null, "and nothing is left hovered")
 	ts.queue_free()
 	App.draft_store("lift", null)
+	# --- physical therapy is its own goal: no key per PT exercise --------------------------------------
+	App.draft_store("lift", null)
+	App.open_log(null)
+	App.set_pt(STRETCH, true)
+	await ShotHelper.wait(tree, 0.4)
+	App.open_log("lift")
+	await ShotHelper.wait(tree, 0.9)
+	check(not App.plan().pt.is_empty() and _pick(STRETCH) == null and _pick(BENCH) != null, "marked PT: the stretch has no key in the list (PT is its one goal); the bench still has")
+	App.set_pt(STRETCH, false)
+	App.draft_store("lift", null)
+	App.open_log(null)
 	App.go("home")
 	await ShotHelper.wait(tree, 0.5)
 	print("PICKS WALK: %d failed" % fails)

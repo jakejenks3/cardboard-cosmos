@@ -32,11 +32,12 @@ extends RefCounted
 
 ## How far back a pattern is looked for.
 const LOOKBACK = 42
-## Strength lifts in a day's plan. Physical therapy does not take one of these
-## places: a PT lift that ranks among the first PLAN_LIFTS of everything likely
-## is listed as well, beside them (PLAN_PT at most: the PT row has them all).
+## Strength lifts in a day's plan. Physical therapy is NOT one of the day's
+## lifts (the user, 2026-11-24: "Make it so individual PT exs don't go into the
+## missions or plan for the day... just keep" the goal for all of them): it has
+## its one row and its one mission, from plan.pt (the PT still needed this
+## week), and nothing else of the plan names a PT exercise on its own.
 const PLAN_LIFTS = 6
-const PLAN_PT = 2
 ## "Beat last time" missions a day.
 const BEAT_MISSIONS = 2
 
@@ -839,15 +840,7 @@ static func picks(plan: Dictionary, sessions: Array, today: String) -> Array:
 			alts.append({"name": str(a.name), "word": short_name(str(a.name)), "new": true})
 		out.append({"kind": "new", "name": str(nw.name), "move": str(nw.move), "variation": str(nw.variation), "new": true, "pt": false,
 			"part": str(nw.get("part", "")), "last": [], "sides": 1, "why": "", "ways": alts, "done": new_by(sessions, today, plan), "lift": null})
-	for r in plan.get("pt", []):
-		var pk = Xp.normalize_exercise(str(r.name))
-		if seen.has(pk):
-			continue
-		seen[pk] = true
-		var psp = LiftNames.split(str(r.name))
-		out.append({"kind": "pt", "name": str(r.name), "move": str(psp.move), "variation": str(psp.variation), "new": false, "pt": true,
-			"part": "", "last": [], "sides": 1, "why": "", "ways": [],
-			"done": str(r.name) if not sets_on(sessions, str(r.name), today).is_empty() else "", "lift": null})
+	# (no row per physical therapy exercise: PT is its one goal, plan.pt)
 	return out
 
 
@@ -1073,8 +1066,6 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	var kind = str(dk.kind)
 	var lifts = []
 	var strength = 0
-	var pt_rows = 0
-	var seen_any = 0
 	var likely = likely_lifts(before, today, marks, kind)
 	# Every day is a lift day (see "Rest days" at the top). With a split, a day
 	# whose lifts are all still resting by their usual gap (lifts done once a
@@ -1085,14 +1076,12 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	if kind != "" and not likely.any(day_work):
 		likely = likely_lifts(before, today, marks, kind, true)
 	for l in likely:
+		# (physical therapy: its own row and goal, plan.pt; not one of the lifts)
 		if bool(l.pt):
-			if seen_any < PLAN_LIFTS and pt_rows < PLAN_PT:
-				lifts.append(l)
-				pt_rows += 1
-		elif strength < PLAN_LIFTS:
+			continue
+		if strength < PLAN_LIFTS:
 			lifts.append(l)
 			strength += 1
-		seen_any += 1
 	var group = kind
 	if kind == "":
 		# The body area most of the likely lifts work (PT and stretches aside).

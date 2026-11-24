@@ -358,6 +358,12 @@ func _init() -> void:
 	var bp = Missions.day_plan(blog, sat, bmarks, {"split": "pull_push_legs"})
 	var strong_lifts = bp.lifts.filter(func(l): return not bool(l.pt))
 	ok(bp.kind == "pull" and strong_lifts.size() == Missions.PLAN_LIFTS and Missions.PLAN_LIFTS == 6, "a pull day with six strength lifts: all six are planned, physical therapy takes none of their places", names(bp.lifts))
+	ok(not bp.lifts.any(func(l): return bool(l.pt)) and bp.pt.map(func(r): return str(r.name)).has("Neck 4 Way") and bp.pt.map(func(r): return str(r.name)).has("Wrist Curl"), "no PT exercise among the day's lifts: they are the PT row's (plan.pt)", [names(bp.lifts), bp.pt.map(func(r): return str(r.name))])
+	var bday = Missions.daily(sat, {"sessions": blog, "pt": bmarks, "settings": {"split": "pull_push_legs"}, "reading": []}, state, [])
+	var bpm = find(bday, ":pt")
+	ok(bpm != null and int(bpm.target) == 2 and str(bpm.desc).contains("Neck 4 Way") and bday.filter(func(m): return str(m.get("lift", "")) != "" and Pt.is_pt(bmarks, str(m.lift))).is_empty(), "one PT mission for all of them; no mission names a single PT exercise", bday.map(func(m): return str(m.id)))
+	ok(Missions.day_boxes(bp, blog, sat).filter(func(b): return str(b.what) == "pt").size() == 1 and not Missions.day_boxes(bp, blog, sat).any(func(b): return Pt.is_pt(bmarks, str(b.what))), "one PT box on the Today card", Missions.day_boxes(bp, blog, sat))
+	ok(not Missions.morning_text(bp, bday, "kg").contains("Neck 4 Way:") and Missions.morning_text(bp, bday, "kg").contains("PT: "), "the morning message: one PT line, no PT exercise as a lift", Missions.morning_text(bp, bday, "kg"))
 	var once = blog + [lift("2026-11-18", {"Shrug - Barbell": [[10, 60]]})]
 	ok(names(Missions.likely_lifts(once, sat, {}, "pull")).has("Shrug - Barbell"), "a lift done once on the last pull day is planned for the next one")
 	ok(not names(Missions.likely_lifts(blog + [lift("2026-11-20", {"Shrug - Barbell": [[10, 60]]})], sat, {}, "pull")).has("Shrug - Barbell") and not names(Missions.likely_lifts(once, sat, {}, "")).has("Shrug - Barbell"), "not the day after it was done, and not without a split (three days after a first time is too soon to call)")
@@ -381,13 +387,11 @@ func _init() -> void:
 		done_of[str(r.name)] = str(r.done)
 	ok(done_of["Chest Fly - Gym cable"] == "Chest Fly - Home cable" and done_of["Lateral Raise - Gym cable"] == "Lateral Raise - Gym cable" and str(vdone.filter(func(r): return str(r.kind) == "new")[0].done) == "", "done today: the fly by its other way, the raise as planned, the new movement not yet", done_of)
 	ok(Missions.picks(vp, vlog + [lift(sat, {"Chest Fly - Home cable": []})], sat).all(func(r): return str(r.done) == ""), "a lift added and left empty is not done")
-	# Physical therapy: the PT lifts of the plan, then the PT still needed that has no row yet.
+	# Physical therapy is not in the list: it is its one goal (plan.pt, the PT row and mission).
 	var bpk = Missions.picks(bp, blog, sat)
-	var bpt = bpk.filter(func(r): return bool(r.pt))
-	ok(bpt.size() == 2 and bpt.all(func(r): return str(r.kind) == "pt" and r.ways.is_empty() and not bool(r.new)) and bpt.map(func(r): return str(r.name)).has("Neck 4 Way") and bpt.map(func(r): return str(r.name)).has("Wrist Curl"), "the physical therapy has its rows, once each", bpk.map(func(r): return "%s/%s" % [r.name, r.kind]))
-	ok(bpk.filter(func(r): return not bool(r.pt) and str(r.kind) == "lift").size() == Missions.PLAN_LIFTS, "beside the six strength lifts")
-	var only_pt = Missions.picks({"lifts": [], "new": null, "pt": [{"name": "Neck 4 Way"}]}, blog + [lift(sat, {"Neck 4 Way": [[20, 4]]})], sat)
-	ok(only_pt.size() == 1 and str(only_pt[0].kind) == "pt" and only_pt[0].lift == null and str(only_pt[0].done) == "Neck 4 Way" and Missions.picks({"lifts": [], "new": null, "pt": [{"name": "Neck 4 Way"}]}, blog, sat)[0].done == "", "PT that is not one of the plan's lifts: a row of its own, done once it has sets today", only_pt)
+	ok(not bpk.any(func(r): return bool(r.pt) or str(r.kind) == "pt") and not bp.pt.is_empty(), "no row per physical therapy exercise in the list, though PT is still needed", bpk.map(func(r): return "%s/%s" % [r.name, r.kind]))
+	ok(bpk.filter(func(r): return str(r.kind) == "lift").size() == Missions.PLAN_LIFTS, "the six strength lifts")
+	ok(Missions.picks({"lifts": [], "new": null, "pt": [{"name": "Neck 4 Way"}]}, blog, sat).is_empty(), "a plan of only PT gives no list")
 	ok(Missions.picks({}, [], sat).is_empty() and Missions.picks(Missions.day_plan([], sat, {}), [], sat).is_empty(), "no plan, no rows")
 	ok(Missions.way_label(vfly.options[1], "Chest Fly") == "Home cable" and Missions.way_label(gopts[1], "Sit-up") == "bodyweight" and Missions.way_label(gopts[2], "Sit-up") == "Crunch", "a way's label: the variation as written, else the word for it")
 
