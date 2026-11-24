@@ -119,6 +119,12 @@ func _build_picker() -> void:
 	add_child(_body_tile())
 	# Reading is not a workout: its key opens the reading sheet (game/reading.gd).
 	add_child(_reading_tile())
+	# What of the day's plan is still to do (LogPlanCard.picker): a tap opens
+	# the lift form with that lift in the workout. Under the keys used every
+	# day, which stay where they were, and above what is done now and then.
+	var plan_card = LogPlanCard.picker()
+	if plan_card != null:
+		add_child(plan_card)
 	# Miscellaneous: what is done now and then, in small keys at the end.
 	# Cycling (Misc.SIDE) and the activities outside the four disciplines
 	# (game/misc.gd: a weighted vest walk).

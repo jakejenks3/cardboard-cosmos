@@ -179,7 +179,12 @@ func build(parent: Control) -> void:
 				one["planned"] = true
 			exercises.append(one)
 		else:
-			exercises.append({"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]})
+			# (never done: an empty set; from the plan it is "planned" like the
+			# others, so its key in "From today's plan" takes it back again)
+			var blank = {"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]}
+			if bool(pair[1]):
+				blank["planned"] = true
+			exercises.append(blank)
 
 	# The day's plan as keys (LogPlanCard): first of all while the workout is
 	# empty, else under the exercises, where the next lift is added.

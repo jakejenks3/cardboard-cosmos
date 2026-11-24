@@ -1268,6 +1268,15 @@ is the Windows handoff.
     (`_anchor_moved`), left presses are dropped for `QUIET_MS` 350 (`UiScreen.quiet_until`, read in
     `_input`). A walkthrough that makes real clicks on the Log tab waits that long after a tap that
     shifts the page (`tap` in picks.gd).
+  - On the Log tab's FIRST screen too (the same evening; the user, looking for it there after the
+    publish: "shouldn't it pop up as suggested like I asked earlier when going to log a workout?").
+    `LogPlanCard.picker()` (meta `plan_picker`, count meta `plan_left`), between Reading and
+    Miscellaneous, lists the rows still to do today (the done ones are left out; a lift the kept
+    draft already holds is ticked). A row's key or a way's chip is `_open_with(lift)`:
+    `App.pending_workout = [lift]` and `App.open_log("lift")`, so the lift form opens (the kept
+    workout, else a new one) with that lift in it, planned. `LogLiftEditor.build` now marks a
+    never-done lift that comes from `pending_workout` planned too. Both cards are filled by one
+    builder (`_fill`, `_row(ctx, r, here)`; `ctx` = {wu, sessions, last, tap}).
   - Also fixed: `App.set_pt` / `set_pt_goal` clear the cached plan, missions and look-ahead (a lift
     marked PT kept its old row on the Today card until something else changed).
   - With the plan card the lift form is long enough to scroll even with one exercise: the touch
@@ -1302,6 +1311,34 @@ is the Windows handoff.
   - Also that evening: `LogSessionForm._set_date` rebuilds the lift form when the date leaves or
     reaches today, so "From today's plan" goes (or comes back) at once. It used to stay until the
     next tap and vanish under the finger.
+- "New version ready" in the phone app (2026-11-23, late evening). After a publish the user did not
+  see the change, then: "its up there now, i must not have updated it correctly before". The service
+  worker fetches a new build in the background and the page on screen stays the old one until the
+  app is started again, and nothing said so.
+  - `web/tt.js`: `window.ttUpdate` = {can, ready(), check(), restart()}. `ready()` turns true when a
+    worker takes over from another one (`controllerchange` with a controller there before: the first
+    worker ever is not an update). The page also asks the site for a newer worker when the app comes
+    back to the front, at most every 10 minutes (a Home Screen app can stay open for days, and the
+    browser itself only asks when a page is loaded). `restart()` reloads after 900 ms (the last save
+    is still on its way into the browser's storage). Nothing restarts by itself.
+  - `app/web_update.gd` (`WebUpdate`: `can`, `ready`, `check`, `restart`; `pretend` = "idle" | "ready"
+    for a walkthrough on the PC). `main.gd` asks every 4 s on the web (`_ask_update`): once it is
+    ready, one toast and `App.changed`, so the Hero tab shows `PhoneAppCard.update_card()` (meta
+    `update_card`, key meta `update_restart`) above the backup card, and Settings -> Phone app its
+    row (`PhoneAppCard.update_row()`, metas `update_row`, `update_key` = restart | check: "Check now"
+    while there is nothing newer).
+  - Tried for real 2026-11-23 in a hidden Edge on the PC (the built-in browser cannot register a
+    service worker; `msedge --headless=new --remote-debugging-port` with a scratch profile, driven
+    by a Node script over the DevTools port, the build folder served on http://localhost): build A
+    open and kept by its worker, build B made, `check()`, B fetched, `ready()` true while the page
+    still shows A, `restart()` loads B, the old build's files gone a moment after the switch. In
+    the built-in browser with `ttUpdate.ready` stubbed: the toast, the Hero card, and Restart
+    loading the page again. Such a hidden Edge leaves helper processes behind: stop every
+    `msedge.exe` whose command line holds the scratch profile folder, and only those. NOT tried on
+    an iPhone (Safari's worker).
+  - The build a phone is on when this is published has no notice yet: that one update still needs
+    the app closed and opened again (twice at worst).
+  - Walkthrough: `tests/shots/update.gd` (year data, also `--fingers`).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1504,6 +1541,7 @@ sides (reps logged as both sides added up: the lift page's switch, the Log tab's
 units (pounds and miles where the rules write kg and km: record cards, XP chips, trophies; year data),
 picks (the Log form's "From today's plan" card and an exercise card's up / down keys; year data),
 filed (how a new exercise typed in the Log tab will be filed: the note at the search box, the line under its name; year data),
+update (the phone app's "new version ready" card and its Settings row, pretended on the PC; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

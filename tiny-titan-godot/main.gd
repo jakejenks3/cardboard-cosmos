@@ -73,6 +73,23 @@ func _ready() -> void:
 	_refresh()
 	# Last week's recap to the phone, once a week (app/recap_push.gd), a moment after start.
 	get_tree().create_timer(6.0).timeout.connect(RecapPush.send_if_due)
+	# The phone app: a newer build fetched behind this one (app/web_update.gd).
+	if OS.has_feature("web"):
+		var ask = Timer.new()
+		ask.wait_time = 4.0
+		ask.autostart = true
+		ask.timeout.connect(_ask_update)
+		add_child(ask)
+
+
+## A newer build has taken over from the one on screen: say so once, and let
+## the Hero tab and Settings show their restart key.
+func _ask_update() -> void:
+	if WebUpdate.announced or not WebUpdate.ready():
+		return
+	WebUpdate.announced = true
+	App.toast("A new version is ready: restart from the Hero tab", "good", "sparkle")
+	App.changed.emit()
 
 
 ## Build the shell: scene, column, screen holder, tab bar, overlay and toast layers.

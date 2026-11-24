@@ -175,6 +175,46 @@ func run(m: Node, t: SceneTree) -> void:
 	App.set_pt(STRETCH, true)
 	await ShotHelper.wait(tree, 0.4)
 
+	# --- the Log tab's first screen: what is still to do, a tap opens the workout with it ----------
+	App.open_log(null)
+	App.go("log")
+	await ShotHelper.wait(tree, 0.9)
+	var first = _with_meta("plan_picker")
+	check(_form() == null and first != null and ShotHelper.find_text(first, "From today's plan") != null, "the Log tab's first screen has a From today's plan card")
+	check(_pick(BENCH) != null and _state(_pick(BENCH)) == "add" and _pick(PRESS) != null and _way(DUMBBELL) != null, "with the lifts still to do, and their other ways")
+	var lifting = ShotHelper.find_button(main, "Lifting")
+	check(first != null and lifting != null and first.global_position.y > lifting.global_position.y, "under the keys, which stay where they were")
+	if first != null:
+		ShotHelper.reveal(first)
+		await ShotHelper.frames(tree, 4)
+	await ShotHelper.snap(tree, "picks_0_first_screen")
+	ShotHelper.press(_pick(BENCH))
+	await ShotHelper.wait(tree, 0.9)
+	var opened = _form()
+	check(opened != null and opened.discipline == "lift" and opened.editing == null and _names() == [BENCH] and bool(opened.lift.exercises[0].get("planned", false)) and opened.lift.exercises[0].sets.size() == 2, "a tap opens the lift form with the bench in the workout, last time's sets filled in (%s)" % str(_names()))
+	check(_with_meta("plan_card") != null and _state(_pick(BENCH)) == "in", "and the form's own card has it ticked")
+	# Back to the first screen: the workout is kept, its lift is ticked there.
+	App.open_log(null)
+	await ShotHelper.wait(tree, 0.9)
+	check(_form() == null and _with_meta("plan_picker") != null and _state(_pick(BENCH)) == "in" and _state(_pick(PRESS)) == "add", "back on the first screen the kept workout's lift is ticked")
+	ShotHelper.press(_way(DUMBBELL))
+	await ShotHelper.wait(tree, 0.9)
+	check(_names() == [BENCH, DUMBBELL], "a way's chip opens the workout with that way of the lift (%s)" % str(_names()))
+	var fresh_name = str(App.plan().new.name) if App.plan().new != null else ""
+	if fresh_name != "":
+		App.open_log(null)
+		await ShotHelper.wait(tree, 0.9)
+		ShotHelper.press(_pick(fresh_name))
+		await ShotHelper.wait(tree, 0.9)
+		var at = _names().find(fresh_name)
+		check(at >= 0 and bool(_form().lift.exercises[at].get("planned", false)), "a movement never done comes with an empty set, planned like the others")
+		await tap(func(): return _pick(fresh_name), "the new movement, taken back in the form")
+		check(not _names().has(fresh_name), "so its key in the form takes it back (%s)" % str(_names()))
+	# (start the rest from an empty workout)
+	App.draft_store("lift", null)
+	App.open_log(null)
+	await ShotHelper.wait(tree, 0.6)
+
 	# --- an empty workout: the plan first ---------------------------------------------------------
 	App.open_log("lift")
 	await ShotHelper.wait(tree, 0.9)
@@ -320,6 +360,12 @@ func run(m: Node, t: SceneTree) -> void:
 	card = _with_meta("plan_card")
 	check(card != null and ShotHelper.all_text(card).contains("DONE TODAY"), "and says so")
 	await ShotHelper.snap(tree, "picks_5_done")
+	# The first screen lists only what is still to do.
+	App.open_log(null)
+	await ShotHelper.wait(tree, 0.9)
+	check(_with_meta("plan_picker") != null and _pick(BENCH) != null and _pick(PRESS) == null and _pick(STRETCH) == null, "the first screen: the bench still to do, the saved lifts gone from it")
+	check(int(_with_meta("plan_left").get_meta("plan_left")) == Missions.picks(App.plan(), App.sessions(), App.today).filter(func(r): return str(r.done) == "").size(), "and counts what is left")
+	await ShotHelper.snap(tree, "picks_5b_first_screen_after")
 	# The saved workout opened again: its lifts are in the form, not "done".
 	if not saved_today.is_empty():
 		App.open_log("lift", saved_today[0].id)

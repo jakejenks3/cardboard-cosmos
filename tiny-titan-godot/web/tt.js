@@ -448,10 +448,47 @@
     },
   };
 
-  // --- offline --------------------------------------------------------------------------
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  // --- offline, and updates --------------------------------------------------------------
+  // sw.js keeps this build's files, so the app opens without a connection. A new build
+  // comes with a new sw.js: the browser fetches it when the app starts (and, here, when
+  // the app comes back to the front), keeps the new files and hands this page over to
+  // them. What is on screen is still the old build: ttUpdate.ready() says so, and the
+  // game offers a restart (app/web_update.gd). Nothing restarts by itself.
+  const upd = { ready: false, had: false, asked: Date.now() };
+  const swOk = 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost');
+  function swCheck() {
+    if (!swOk) return;
+    upd.asked = Date.now();
+    try {
+      navigator.serviceWorker.getRegistration().then(function (r) {
+        if (r) r.update().catch(function () { /* no connection */ });
+      }).catch(function () { /* no worker */ });
+    } catch (e) { /* no service worker here */ }
+  }
+  if (swOk) {
+    try {
+      upd.had = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        // The first worker ever is the app being kept for offline use; one that takes
+        // over from another is a new build.
+        if (upd.had) upd.ready = true;
+        upd.had = true;
+      });
+      // Back at the front after a while: is there a newer build? (A Home Screen app can
+      // stay open for days, and the browser only asks when a page is loaded.)
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && Date.now() - upd.asked > 10 * 60 * 1000) swCheck();
+      });
+    } catch (e) { /* the app works without it */ }
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').catch(function () { /* still works online */ });
     });
   }
+  window.ttUpdate = {
+    can: swOk,
+    ready: function () { return upd.ready; },
+    check: swCheck,
+    // A moment first: the game's last save is still on its way into the browser's storage.
+    restart: function () { setTimeout(function () { window.location.reload(); }, 900); },
+  };
 }());

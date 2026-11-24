@@ -1,23 +1,33 @@
 class_name LogPlanCard
 extends RefCounted
-## "From today's plan" in the Log tab's lift form (the user, 2026-11-23: "it's
-## annoying to have to click on it, press add to workout, then go back to hero
-## page, then repeat. When going to log, have it maybe have an area that says
-## from suggested workouts based on the goals and volume we have planned and
+## "From today's plan" in the Log tab (the user, 2026-11-23: "it's annoying to
+## have to click on it, press add to workout, then go back to hero page, then
+## repeat. When going to log, have it maybe have an area that says from
+## suggested workouts based on the goals and volume we have planned and
 ## easily be able to add/remove from workout as I go").
 ##
-## The Today card's lifts as keys, under the workout's exercises and above "Add
-## exercise" (first of all while the workout is empty): what the training focus
-## adds, the likely lifts, the movement to try, the physical therapy
-## (Missions.picks). One tap puts a lift into the workout with last time's
-## sets, marked planned; a second tap takes it out again while it is untouched
-## (LogLiftEditor.plan_toggle). The other ways to do a lift are chips under
-## it, each a key of its own, for the day the equipment is not there.
+## The Today card's lifts as keys: what the training focus adds, the likely
+## lifts, the movement to try, the physical therapy (Missions.picks). In two
+## places:
+##
+##   build(editor)   in the lift form, under the workout's exercises and above
+##                   "Add exercise" (first of all while the workout is empty).
+##                   One tap puts a lift into the workout with last time's
+##                   sets, marked planned; a second tap takes it out again
+##                   while it is untouched (LogLiftEditor.plan_toggle). Only
+##                   for a workout dated today.
+##   picker()        on the Log tab's first screen, under its keys: the lifts
+##                   still to do today. A tap opens the lift form with that
+##                   lift in the workout (the user, the same evening, looking
+##                   for it there: "shouldn't it pop up as suggested like I
+##                   asked earlier when going to log a workout?").
+##
+## The other ways to do a lift are chips under it, each a key of its own, for
+## the day the equipment is not there.
 ##
 ## Nothing moves under the finger: a key keeps its place, its size and its
 ## (unseen) name whatever its state, so the screen's rebuild finds it again and
-## keeps it where it was (UiScreen) while the exercise cards above come and
-## go. Only for a workout dated today.
+## keeps it where it was (UiScreen) while the exercise cards above come and go.
 
 const KICKERS = {
 	"extra": "YOUR FOCUS ADDS",
@@ -38,13 +48,44 @@ static func _others(ed: LogLiftEditor) -> Array:
 	return sessions.filter(func(s): return s.id != ed.editing_id)
 
 
-## The card, or null when there is nothing to offer (another day, no plan).
+## The card's first line: the sun, its name, the day's label, a count, and
+## whatever key goes at its end.
+static func _head(plan: Dictionary, count: Control, last = null) -> Control:
+	var head = Kit.hbox(6)
+	head.add_child(Kit.vcenter(Icons.rect("sun", 16)))
+	var title = Kit.clip("From today's plan", 14, null, true)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(Kit.vcenter(title))
+	if bool(plan.get("off", false)):
+		head.add_child(Kit.vcenter(Kit.tag("Rest day", Pal.SECOND, true, 11)))
+	elif str(plan.get("label", "")) != "":
+		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 11)))
+	head.add_child(Kit.vcenter(count))
+	if last != null:
+		head.add_child(last)
+	return head
+
+
+## The rows, under their kickers.
+static func _fill(c: Card, ctx: Dictionary, rows: Array, here: Dictionary) -> void:
+	var group = ""
+	for r in rows:
+		var g = _group(r)
+		if g != group:
+			group = g
+			c.add(Kit.label(str(KICKERS[g]), 10, Pal.MUTED, true))
+		c.add(_row(ctx, r, here))
+
+
+## The card of the lift form, or null when there is nothing to offer (another
+## day, no plan).
 static func build(ed: LogLiftEditor):
 	var f = ed._form()
 	if f == null or str(f.discipline) != "lift" or str(f.date) != App.today:
 		return null
 	var plan = App.plan()
-	var rows = Missions.picks(plan, _others(ed), App.today)
+	var others = _others(ed)
+	var rows = Missions.picks(plan, others, App.today)
 	if rows.is_empty():
 		return null
 	var here = {}
@@ -59,34 +100,53 @@ static func build(ed: LogLiftEditor):
 	var c = Kit.card(6, Callable(), 10)
 	c.accent(Pal.ACCENT)
 	c.set_meta("plan_card", true)
-	var head = Kit.hbox(6)
-	head.add_child(Kit.vcenter(Icons.rect("sun", 16)))
-	var title = Kit.clip("From today's plan", 14, null, true)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(Kit.vcenter(title))
-	if bool(plan.get("off", false)):
-		head.add_child(Kit.vcenter(Kit.tag("Rest day", Pal.SECOND, true, 11)))
-	elif str(plan.get("label", "")) != "":
-		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 11)))
 	var count = Kit.tag("%d/%d" % [seen_to, rows.size()], Pal.PANEL2, false, 11)
 	count.set_meta("plan_count", seen_to)
-	head.add_child(Kit.vcenter(count))
 	var fold = LogWidgets.mini_chip("Show" if folded else "Hide", false, _toggle_fold.bind(ed))
 	fold.tooltip_text = "Show the day's plan" if folded else "Fold the day's plan away"
 	fold.set_meta("plan_fold", folded)
-	head.add_child(fold)
-	c.add(head)
+	c.add(_head(plan, count, fold))
 	if folded:
 		return c
 	c.add(Kit.para("Tap a lift to add it with last time's sets. Tap it again to take it back.", 11, Pal.MUTED))
-	var group = ""
-	for r in rows:
-		var g = _group(r)
-		if g != group:
-			group = g
-			c.add(Kit.label(str(KICKERS[g]), 10, Pal.MUTED, true))
-		c.add(_row(ed, r, here))
+	_fill(c, {"wu": ed.wu, "sessions": others, "last": ed._last, "tap": ed.plan_toggle}, rows, here)
 	return c
+
+
+## The card of the Log tab's first screen, or null: what of the day's plan is
+## still to do. A row's key (and each of its ways) opens the lift form with
+## that lift in the workout; one that the workout kept from earlier already
+## holds is ticked.
+static func picker():
+	var plan = App.plan()
+	var sessions = App.sessions()
+	var rows = Missions.picks(plan, sessions, App.today).filter(func(r): return str(r.done) == "")
+	if rows.is_empty():
+		return null
+	var here = {}
+	var draft = App.draft_load("lift")
+	if draft is Dictionary and draft.get("exercises") is Array:
+		for i in range(draft.exercises.size()):
+			if draft.exercises[i] is Dictionary:
+				here[Xp.normalize_exercise(str(draft.exercises[i].get("name", "")))] = i
+	var c = Kit.card(6, Callable(), 10)
+	c.accent(Pal.ACCENT)
+	c.set_meta("plan_picker", true)
+	var count = Kit.tag("%d to go" % rows.size(), Pal.PANEL2, false, 11)
+	count.set_meta("plan_left", rows.size())
+	c.add(_head(plan, count))
+	c.add(Kit.para("Tap a lift to open your workout with it, last time's sets filled in.", 11, Pal.MUTED))
+	_fill(c, {"wu": App.weight_unit(), "sessions": sessions, "last": LiftHistory.last_performances(sessions, null), "tap": _open_with}, rows, here)
+	return c
+
+
+## A key of the first screen's card: the lift form, with this lift in the
+## workout (LogLiftEditor.build takes it from App.pending_workout, marked
+## planned; one that is there already is left alone).
+static func _open_with(lift: String) -> void:
+	Sfx.tap()
+	App.pending_workout = [lift]
+	App.open_log("lift")
 
 
 static func _group(r: Dictionary) -> String:
@@ -117,26 +177,29 @@ static func _box(state: String) -> Control:
 
 
 ## What a row says under its name: what to aim for, or what was done.
-static func _words(ed: LogLiftEditor, r: Dictionary, state: String) -> Dictionary:
-	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), ed.wu)
+## `ctx`: {"wu", "sessions" (the saved ones that count as done), "last"
+## (LiftHistory.last_performances), "tap" (Callable(lift name))}.
+static func _words(ctx: Dictionary, r: Dictionary, state: String) -> Dictionary:
+	var wu = str(ctx.wu)
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	if state == "done":
-		return {"cap": "DONE TODAY", "said": LiftHistory.describe_sets(Missions.sets_on(_others(ed), str(r.done), App.today), fmt_w), "col": Pal.TEXT}
+		return {"cap": "DONE TODAY", "said": LiftHistory.describe_sets(Missions.sets_on(ctx.sessions, str(r.done), App.today), fmt_w), "col": Pal.TEXT}
 	var l = r.get("lift")
 	if l != null:
 		var got = 0
 		if l.has("dose"):
-			got = int(Dose.extra_done(l, _others(ed), App.today, Missions.same_of(str(l.name), App.plan())).sets)
-		return TodayView.aim_words(l, {"name": str(r.name), "new": bool(r.new), "last": r.last, "sides": int(r.sides)}, ed.wu, got)
+			got = int(Dose.extra_done(l, ctx.sessions, App.today, Missions.same_of(str(l.name), App.plan())).sets)
+		return TodayView.aim_words(l, {"name": str(r.name), "new": bool(r.new), "last": r.last, "sides": int(r.sides)}, wu, got)
 	if bool(r.new):
 		return {"cap": "FIRST TIME", "said": "Find your weight", "col": Pal.SECOND}
 	# Physical therapy that is not one of the plan's lifts: as it was done last.
-	var lp = ed._last.get(Xp.normalize_exercise(str(r.name)))
+	var lp = ctx.last.get(Xp.normalize_exercise(str(r.name)))
 	return {"cap": "AS LAST TIME", "said": LiftHistory.describe_sets(lp.sets, fmt_w) if lp != null else "", "col": Pal.PT}
 
 
 ## One planned lift: a key as wide as the card (box, name, variation, what to
 ## aim for) and, under it, the other ways to do it as chips.
-static func _row(ed: LogLiftEditor, r: Dictionary, here: Dictionary) -> Control:
+static func _row(ctx: Dictionary, r: Dictionary, here: Dictionary) -> Control:
 	var state = "add"
 	if here.has(Xp.normalize_exercise(str(r.name))):
 		state = "in"
@@ -161,7 +224,7 @@ static func _row(ed: LogLiftEditor, r: Dictionary, here: Dictionary) -> Control:
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
 	v.add_child(top)
 	# What to aim for on a line of its own, so the name never cuts it short.
-	var words = _words(ed, r, state)
+	var words = _words(ctx, r, state)
 	var line = Kit.hbox(6)
 	var cap = Kit.label(str(words.cap), 9, Pal.GOOD if state == "done" else Pal.MUTED, true)
 	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -174,8 +237,9 @@ static func _row(ed: LogLiftEditor, r: Dictionary, here: Dictionary) -> Control:
 	Kit.passthrough(h)
 	var tint = Pal.LIFT if state == "in" else (Pal.GOOD if state == "done" else null)
 	var face = Pal.PANEL2 if tint == null else Pal.PANEL2.lerp(tint, 0.3 if state == "done" else 0.2)
+	var tap: Callable = ctx.tap
 	# The key's own (unseen) text never changes, so a rebuild finds it again.
-	var b = LogWidgets.key("Plan: %s" % str(r.name), face, h, ed.plan_toggle.bind(str(r.name)), 8, 6, 2, Pal.LINE if tint == null else tint)
+	var b = LogWidgets.key("Plan: %s" % str(r.name), face, h, tap.bind(str(r.name)), 8, 6, 2, Pal.LINE if tint == null else tint)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.tooltip_text = "In this workout. Tap to take it back (while its sets are untouched)." if state == "in" else "Add it to this workout, with last time's sets"
 	b.set_meta("plan_pick", str(r.name))
@@ -189,7 +253,7 @@ static func _row(ed: LogLiftEditor, r: Dictionary, here: Dictionary) -> Control:
 		more.add_child(orl)
 		for w in r.ways:
 			var on = here.has(Xp.normalize_exercise(str(w.name)))
-			var chip = Kit.chip(str(w.word), on, ed.plan_toggle.bind(str(w.name)), Pal.SECOND if bool(w.new) else Pal.LIFT, 11)
+			var chip = Kit.chip(str(w.word), on, tap.bind(str(w.name)), Pal.SECOND if bool(w.new) else Pal.LIFT, 11)
 			chip.tooltip_text = ("New to you: " if bool(w.new) else "") + Missions.short_name(str(w.name))
 			chip.set_meta("plan_way", str(w.name))
 			chip.set_meta("plan_state", "in" if on else "add")

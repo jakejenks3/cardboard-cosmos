@@ -52,6 +52,10 @@ func build() -> void:
 		dc.add(drow)
 		add_child(dc)
 
+	# --- the phone app: a newer version is on the phone, one restart away --------
+	if WebUpdate.ready():
+		add_child(PhoneAppCard.update_card())
+
 	# --- the phone app: time to make a backup file (the only copy elsewhere) ------
 	if OS.has_feature("web") and App.backup_due():
 		var bc = Kit.card(6, Callable(), 10)

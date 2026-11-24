@@ -147,6 +147,57 @@ func _home_screen_hint_plain() -> void:
 	add_child(tip)
 
 
+## "New version ready": the build on screen has been replaced behind it
+## (WebUpdate). One tap loads the app again, into the new one; a workout under
+## way is kept (the draft) and so is everything saved. For the Hero tab.
+static func update_card() -> Control:
+	var c = Kit.card(6, Callable(), 10)
+	c.accent(Pal.GOOD)
+	c.set_meta("update_card", true)
+	var row = Kit.hbox(10)
+	row.add_child(Kit.vcenter(Icons.rect("sparkle", 26)))
+	var v = Kit.vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(Kit.clip("New version ready", 15, null, true))
+	v.add_child(Kit.clip("Restart to use it. Your log is kept.", 12, Pal.MUTED))
+	row.add_child(v)
+	var b = Kit.button("Restart", "good", restart_now, "sm")
+	b.set_meta("update_restart", true)
+	row.add_child(Kit.vcenter(b))
+	c.add(row)
+	return c
+
+
+static func restart_now() -> void:
+	Sfx.tap()
+	App.toast("Restarting into the new version...", "good", "sparkle")
+	WebUpdate.restart()
+
+
+static func check_now() -> void:
+	Sfx.tick()
+	WebUpdate.check()
+	App.toast("Looking for a newer version. If there is one it is fetched, and a Restart key shows here.", "info", "sparkle")
+
+
+## Updates, said in Settings: a Restart key once a newer build is in, else a
+## key to look for one now (the app also looks when it starts and when it
+## comes back to the front). Null where the app does not update this way.
+static func update_row():
+	if not WebUpdate.can():
+		return null
+	var row = Kit.hbox(8)
+	row.set_meta("update_row", true)
+	var ready = WebUpdate.ready()
+	var l = Kit.clip("A new version is ready" if ready else "Updates come by themselves", 12, Pal.GOOD if ready else Pal.MUTED, ready)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(Kit.vcenter(l))
+	var b = Kit.button("Restart", "good", restart_now, "sm") if ready else Kit.button("Check now", "ghost", check_now, "sm")
+	b.set_meta("update_key", "restart" if ready else "check")
+	row.add_child(Kit.vcenter(b))
+	return row
+
+
 ## Which build this is, and a switch for the speed readout (frames a second in
 ## the corner): the two things to look at when the phone app misbehaves.
 func _version_row() -> void:
@@ -165,6 +216,9 @@ func _version_row() -> void:
 	row.add_child(Kit.vcenter(Kit.clip("Show speed", 12, null, true)))
 	row.add_child(Kit.switch(main.speed_shown(), func(on): main.show_speed(bool(on)), "Frames a second, in the corner of the screen"))
 	add_child(row)
+	var updates = update_row()
+	if updates != null:
+		add_child(updates)
 	# The sizes the phone gives the page: what to read off a screenshot when the
 	# app does not fit (an iPhone can hand a Home Screen app a page that is
 	# shorter than its screen: web/tt.js, ttSafe).
