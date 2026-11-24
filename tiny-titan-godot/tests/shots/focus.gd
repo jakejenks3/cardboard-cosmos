@@ -141,6 +141,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.7)
 		var st = ShotHelper.all_text(_sheet()) if _sheet() != null else ""
 		check(st.contains("Upper body first") and st.contains("SHORT") and st.contains("from climbing") and st.contains("Next run: 5.5 km"), "its sheet: every muscle against its target, what counted, the next run")
+		var direct_lines = ShotHelper.walk(_sheet()).filter(func(n): return n.has_meta("dose_direct"))
+		var half_lines = ShotHelper.walk(_sheet()).filter(func(n): return n.has_meta("dose_half"))
+		check(not direct_lines.is_empty() and direct_lines.all(func(n): return str(n.text).begins_with("Direct: ")) and not half_lines.is_empty() and half_lines.all(func(n): return str(n.text).begins_with("Half sets from: ")), "and lift by lift: what was done for a muscle, and the half sets other lifts gave it (%s)" % (str(direct_lines[0].text) if not direct_lines.is_empty() else "-"))
 		await ShotHelper.snap(tree, "focus_2_sheet")
 		if _sheet() != null:
 			ShotHelper.scroll_main(_sheet(), 600)

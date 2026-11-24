@@ -86,7 +86,7 @@ func _init() -> void:
 	var wm = Dose.window([lift("2026-11-22", {"Neck 4 Way": three(20, 4), "Pec Stretch": [[1, 0, 30]], "Chest Fly - Cable": []})], {"neck 4 way": {"name": "Neck 4 Way", "perWeek": 3}}, st, "2026-11-22")
 	ok(Dose.PARTS.all(func(p): return is_equal_approx(float(wm.parts[p].total), 0.0)), "physical therapy, stretches and empty exercises count for nothing", wm.parts)
 	ok(Dose.window(log, marks, off, "2026-11-22").parts.chest.state == "" and is_equal_approx(float(Dose.window(log, marks, off, "2026-11-22").parts.chest.total), 6.0), "without a focus the sets are counted, with no target")
-	ok(Dose.parts_today("push", "") == ["chest", "shoulders", "triceps"] and Dose.parts_today("upper", "").has("back") and Dose.parts_today("upper", "").has("chest") and Dose.parts_today("", "legs") == ["quads", "hamstrings", "glutes", "calves"] and Dose.parts_today("", "").is_empty(), "the muscles of a day", [Dose.parts_today("push", ""), Dose.parts_today("", "legs")])
+	ok(Dose.parts_today("push", "") == ["chest", "front_delts", "side_delts", "triceps"] and Dose.parts_today("pull", "") == ["back", "rear_delts", "traps", "biceps"] and Dose.parts_today("upper", "").has("back") and Dose.parts_today("upper", "").has("chest") and Dose.parts_today("", "legs") == ["quads", "hamstrings", "glutes", "calves"] and Dose.parts_today("", "").is_empty(), "the muscles of a day", [Dose.parts_today("push", ""), Dose.parts_today("", "legs")])
 
 	# --- the plan: a press for the chest, first ------------------------------------------------
 	var plain = Missions.day_plan(log, today, marks, off)
@@ -101,7 +101,7 @@ func _init() -> void:
 	ok(str(pk[0].kind) == "extra" and str(pk[0].part) == "chest" and str(pk[0].name) == "Bench Press - Barbell" and bool(pk[0].new) and pk[0].last.is_empty() and pk[0].lift == x and str(pk[0].done) == "" and pk[0].ways.map(func(w): return str(w.name)) == ["Bench Press - Incline dumbbell", "Bench Press - Machine", "Push-up - Weighted", "Dip"] and pk[0].ways.map(func(w): return str(w.word)) == ["Incline dumbbell", "Machine", "Push-up (weighted)", "Dip"], "the list to pick a workout from: the press for the chest first, its other ways as chips", pk[0])
 	ok(pk.slice(1, plan.lifts.size()).all(func(r): return str(r.kind) != "extra") and pk.slice(1, plan.lifts.size()).map(func(r): return str(r.name)) == plan.lifts.slice(1).map(func(l): return str(l.options[0].name) if not l.get("options", []).is_empty() else str(l.name)), "then the usual lifts, each as it was done last", pk.map(func(r): return str(r.name)))
 	ok(plan.new != null and not ["Bench Press", "Push-up", "Dip"].has(str(plan.new.move)) and not plan.new.alts.any(func(a): return ["Bench Press", "Push-up", "Dip"].has(str(a.move))), "\"try something new\" offers other movements than the press", [plan.new.name, plan.new.alts.map(func(a): return str(a.name))])
-	ok(plan.lifts.slice(1).all(func(l): return str(l.mode) == "build") and ["Bench Press", "Push-up", "Dip"].all(func(m): return plan.moves.has(Xp.normalize_exercise(m))), "the day's lifts are for building; the press's movements belong to the plan", plan.moves)
+	ok(plan.lifts.slice(1).all(func(l): return str(l.mode) == ("keep" if Dose.main_part(str(l.name)) == "front_delts" else "build")) and ["Bench Press", "Push-up", "Dip"].all(func(m): return plan.moves.has(Xp.normalize_exercise(m))), "the day's lifts are for building (a press for the front delts is kept); the press's movements belong to the plan", plan.lifts.map(func(l): return [str(l.name), str(l.mode)]))
 	var fly = plan.lifts.filter(func(l): return str(l.name) == "Chest Fly - Cable")[0]
 	ok(not fly.options.any(func(o): return str(o.move) == "Bench Press"), "the fly does not offer the press as another way")
 
@@ -224,7 +224,7 @@ func _init() -> void:
 	ok(is_equal_approx(Dose.day_target([8, 16, "build"], 6.0, 3.0), 3.0) and is_equal_approx(Dose.day_target([8, 16, "build"], 0.0, 1.0), 8.0), "three days a week: a third; once a week: all of it")
 	ok(is_equal_approx(Dose.freq_of(log, today, "chest", marks), 2.0) and is_equal_approx(Dose.freq_of(log, today, "calves", marks), 2.0) and is_equal_approx(Dose.freq_of([], today, "chest", marks), 1.0), "how often a muscle is trained: four chest days in two weeks is twice a week")
 	var dd = plan.doseToday
-	ok(dd.map(func(d): return str(d.part)) == ["chest", "shoulders", "triceps"] and plain.doseToday.is_empty(), "the plan says what it gives each muscle of the day (nothing without a focus)", dd.map(func(d): return str(d.part)))
+	ok(dd.map(func(d): return str(d.part)) == ["chest", "front_delts", "side_delts", "triceps"] and plain.doseToday.is_empty(), "the plan says what it gives each muscle of the day (nothing without a focus)", dd.map(func(d): return str(d.part)))
 	var dchest = dd[0]
 	ok(is_equal_approx(float(dchest.have), 6.0) and is_equal_approx(float(dchest.today), 6.0) and is_equal_approx(float(dchest.after), 12.0) and dchest.state == "ok" and is_equal_approx(float(dchest.share), 5.0), "chest: 6 in the week, the flyes and the added press give 6 more: 12, on target", dchest)
 	var plain_dose = Dose.day_dose(plain.lifts, log.filter(func(s): return str(s.date) < today), today, marks, st, "push", "push")
@@ -287,9 +287,10 @@ func _init() -> void:
 
 	# --- the week: every muscle being built on target at once ------------------------------------------
 	var dz = find(week, ":dose")
-	ok(dz != null and int(dz.target) == 5 and int(dz.progress) == 4 and str(dz.desc).contains("chest, back, shoulders, biceps, triceps") and find(Missions.weekly(wk, today, data_off, state, []), ":dose") == null, "Dosed right: four of five before the press", dz)
-	var full = log + [lift(today, {"Bench Press - Incline dumbbell": three(10, 20), "Chest Fly - Cable": three(12, 15)})]
-	ok(Dose.on_target(full, marks, st, today) == 5 and find(Missions.weekly(wk, today, {"sessions": full, "pt": marks, "settings": st, "reading": [], "now": today}, state, []), ":dose").done, "with the press and the flyes: five of five")
+	var before_press = Dose.on_target(log, marks, st, today)
+	ok(dz != null and int(dz.target) == 6 and int(dz.progress) == before_press and before_press < 6 and str(dz.desc).contains("chest, back, side delts, rear delts, biceps, triceps") and find(Missions.weekly(wk, today, data_off, state, []), ":dose") == null, "Dosed right: every muscle being built, the shoulders as their heads (%d of 6 before the press)" % before_press, dz)
+	var full = log + [lift(today, {"Bench Press - Incline dumbbell": three(10, 20), "Chest Fly - Cable": three(12, 15), "Face Pull": three(15, 10), "Lateral Raise - Dumbbell": three(12, 8)})]
+	ok(Dose.on_target(full, marks, st, today) == 6 and find(Missions.weekly(wk, today, {"sessions": full, "pt": marks, "settings": st, "reading": [], "now": today}, state, []), ":dose").done, "with the press, the flyes and the shoulders' own work: six of six", Dose.window(full, marks, st, today).parts)
 
 	# --- the morning message ---------------------------------------------------------------------------
 	var text = Missions.morning_text(plan, day, "kg", "km")
@@ -299,6 +300,81 @@ func _init() -> void:
 	ok(not Missions.morning_text(plain, day_off, "kg", "km").contains("For your") and not Missions.morning_text(plain, day_off, "kg", "km").contains("Rest day"), "without a focus it is as before")
 	var lt = Missions.morning_text(lp, ld, "kg", "km")
 	ok(lt.contains("Squat (barbell): 3×5 @ 102.5 kg"), "a leg lift's aim is one step more, as for any lift", lt)
+
+	# --- where a muscle's sets came from, lift by lift ----------------------------------------------
+	var src_log = [
+		lift("2026-11-20", {"Lateral Raise - Dumbbell": three(12, 8), "Overhead Press - Barbell": three(8, 40), "Bench Press - Barbell": three(5, 80), "Chest Fly - Dumbbell": three(12, 12),
+			"Tricep Pushdown - Gym rope": three(10, 30)}),
+		lift("2026-11-21", {"Bent Over Row - Barbell": three(8, 60), "Face Pull": [[15, 10], [15, 10]], "Tricep Extension - Cable": three(10, 35), "Lateral Raise - Gym cable": three(20, 5),
+			"Neck 4 Way": three(20, 4), "Chest Fly - Machine": []}),
+		lift("2026-11-10", {"Overhead Press - Barbell": three(8, 40)}),
+	]
+	var src_marks = {"neck 4 way": {"name": "Neck 4 Way", "perWeek": 3}}
+	var src = Dose.sources(src_log, src_marks, "2026-11-22")
+	var side_rows = src.get("side_delts", [])
+	var front_rows = src.get("front_delts", [])
+	var rear_rows = src.get("rear_delts", [])
+	ok(side_rows.map(func(x): return str(x.move)) == ["Lateral Raise", "Overhead Press"] and is_equal_approx(float(side_rows[0].direct), 6.0) and is_equal_approx(float(side_rows[1].half), 1.5), "the side delts: the lateral raises (both kinds), half a set from the overhead press", side_rows)
+	ok(front_rows.map(func(x): return str(x.move)) == ["Overhead Press", "Bench Press", "Chest Fly"] and is_equal_approx(float(front_rows[0].direct), 3.0) and is_equal_approx(float(front_rows[1].half), 1.5) and is_equal_approx(float(front_rows[2].half), 0.75), "the front delts: the overhead press, half a set from the bench, a quarter from a fly", front_rows)
+	ok(rear_rows.map(func(x): return str(x.move)) == ["Face Pull", "Bent Over Row"] and is_equal_approx(float(rear_rows[0].direct), 2.0) and is_equal_approx(float(rear_rows[1].half), 1.5), "the rear delts: face pulls, half a set from the row", rear_rows)
+	ok(not src.has("shoulders"), "no shoulders as one number any more")
+	var tr_rows = src.get("triceps", [])
+	ok(tr_rows.size() == 3 and str(tr_rows[0].move) == "Tricep Pushdown" and is_equal_approx(float(tr_rows[0].direct), 6.0) and is_equal_approx(float(tr_rows[1].half), 1.5) and is_equal_approx(float(tr_rows[2].half), 1.5), "a pushdown and a cable extension are one lift here too", tr_rows)
+	var src_w = Dose.window(src_log, src_marks, st, "2026-11-22")
+	var adds_up = true
+	for p in Dose.PARTS:
+		var d_sum = 0.0
+		var h_sum = 0.0
+		for src_row in src.get(p, []):
+			d_sum += float(src_row.direct)
+			h_sum += float(src_row.half)
+		if not is_equal_approx(d_sum, float(src_w.parts[p].direct)) or not is_equal_approx(h_sum, float(src_w.parts[p].indirect)):
+			adds_up = false
+	ok(adds_up, "it adds up to what the week counts for every muscle (physical therapy, empty exercises and older days left out)")
+	ok(Dose.sources([], {}, "2026-11-22").is_empty() and not src.has("neck"), "no lifts, no sources")
+
+	# --- the shoulders as three heads, the traps apart from the back ------------------------------------
+	ok(Dose.main_part("Lateral Raise - Gym cable") == "side_delts" and Dose.main_part("Upright Row - Barbell") == "side_delts" and Dose.main_part("Overhead Press - Barbell") == "front_delts" and Dose.main_part("Arnold Press - Dumbbell") == "front_delts" and Dose.main_part("Face Pull - Green band") == "rear_delts" and Dose.main_part("Rear Delt Fly - Dumbbell") == "rear_delts", "each shoulder movement of the library trains its head")
+	ok(Dose.main_part("Shrug - Barbell") == "traps" and Dose.main_part("Bent Over Row - Barbell") == "back" and Dose.main_part("Bench Press - Barbell") == "chest" and Dose.main_part("Squat - Barbell") == "quads", "shrugs are the traps; every other lift its body part")
+	ok(Dose.head_of("Reverse Pec Deck") == "rear_delts" and Dose.head_of("Shoulder Press - Machine") == "front_delts" and Dose.head_of("Y Raise") == "side_delts", "a shoulder lift of the player's own: by its words")
+	ok(Dose.also_of("Bench Press - Barbell") == {"triceps": 0.5, "front_delts": 0.5} and Dose.also_of("Chest Fly - Cable") == {"front_delts": 0.25} and Dose.also_of("Bent Over Row - Barbell") == {"biceps": 0.5, "rear_delts": 0.5}, "what a lift also works: half a set, a quarter for a fly", [Dose.also_of("Bench Press - Barbell"), Dose.also_of("Chest Fly - Cable")])
+	ok(Dose.also_of("Overhead Press - Barbell") == {"triceps": 0.5, "chest": 0.5, "side_delts": 0.5} and Dose.also_of("Lateral Raise - Dumbbell").is_empty() and Dose.also_of("Shrug - Barbell") == {"forearms": 0.5} and Dose.also_of("Rear Delt Fly") == {"back": 0.25} and Dose.also_of("Upright Row") == {"traps": 0.5}, "an overhead press works the side delts too; nothing counts twice for its own muscle", [Dose.also_of("Overhead Press - Barbell"), Dose.also_of("Shrug - Barbell"), Dose.also_of("Rear Delt Fly")])
+	ok(Dose.part_name("side_delts") == "Side delts" and Dose.part_name("traps") == "Traps" and Dose.part_name("chest") == "Chest", "their names")
+	# A push day and a pull day as the user logs them: the shoulders no longer read as one big number.
+	var heads_log = [
+		lift("2026-11-17", {"Bent Over Row - Barbell": three(8, 60), "Lat Pulldown": three(10, 50), "Face Pull": three(15, 10), "Shrug - Barbell": three(10, 80), "Bicep Curl - Dumbbell": three(10, 12)}),
+		lift("2026-11-18", {"Chest Fly - Dumbbell": three(12, 14), "Lateral Raise - Dumbbell": three(12, 8), "Overhead Press - Barbell": three(8, 40), "Tricep Pushdown - Gym rope": three(10, 30)}),
+		lift("2026-11-20", {"Bent Over Row - Barbell": three(8, 60), "Lat Pulldown": three(10, 50), "Face Pull": three(15, 10), "Shrug - Barbell": three(10, 80), "Bicep Curl - Dumbbell": three(10, 12)}),
+		lift("2026-11-21", {"Chest Fly - Dumbbell": three(12, 14), "Lateral Raise - Dumbbell": three(12, 8), "Overhead Press - Barbell": three(8, 40), "Tricep Pushdown - Gym rope": three(10, 30)}),
+	]
+	var hw = Dose.window(heads_log, {}, st, "2026-11-22").parts
+	ok(is_equal_approx(float(hw.side_delts.total), 9.0) and is_equal_approx(float(hw.rear_delts.total), 9.0) and is_equal_approx(float(hw.front_delts.total), 7.5) and is_equal_approx(float(hw.traps.total), 6.0) and is_equal_approx(float(hw.back.total), 12.0), "two push and two pull days: side delts 9 (raises 6, presses 3), rear 9, front 7.5, traps 6, back 12 without the shrugs", [hw.side_delts.total, hw.rear_delts.total, hw.front_delts.total, hw.traps.total, hw.back.total])
+	ok(hw.side_delts.state == "ok" and hw.front_delts.mode == "keep" and hw.traps.mode == "keep" and hw.chest.state == "short", "each against its own target; the chest is what is short", [hw.side_delts.state, hw.chest.state])
+
+	# --- a lift done on another kind of day: planned there -------------------------------------------------
+	var moved_log = []
+	var pull_day = {"Bent Over Row - Barbell": three(8, 60), "Lat Pulldown": three(10, 50), "Lateral Raise - Dumbbell": three(12, 8)}
+	var push_day = {"Bench Press - Barbell": three(5, 80), "Chest Fly - Dumbbell": three(12, 14), "Tricep Pushdown - Gym rope": three(10, 30)}
+	var legs_day = {"Squat - Barbell": three(5, 100)}
+	var mday = "2026-11-08"
+	for k in range(5):
+		moved_log.append(lift(Dates.add_days(mday, k * 3), pull_day))
+		moved_log.append(lift(Dates.add_days(mday, k * 3 + 1), push_day))
+		moved_log.append(lift(Dates.add_days(mday, k * 3 + 2), legs_day))
+	var mk = Missions.done_kinds(moved_log, "2026-11-23", {})
+	ok(str(mk.get("lateral raise", "")) == "pull" and mk.size() == 1, "lateral raises done on pull days and not on the push days between: a pull day's lift now", mk)
+	var ppl = {"weightUnit": "kg", "split": "pull_push_legs"}
+	var on_pull = Missions.day_plan(moved_log, "2026-11-23", {}, ppl)
+	var on_push = Missions.day_plan(moved_log + [lift("2026-11-23", pull_day)], "2026-11-24", {}, ppl)
+	ok(on_pull.kind == "pull" and on_pull.lifts.any(func(l): return str(l.name) == "Lateral Raise - Dumbbell") and on_push.kind == "push" and not on_push.lifts.any(func(l): return str(l.name) == "Lateral Raise - Dumbbell"), "so it is planned on the pull day, not the push day", [on_pull.lifts.map(func(l): return str(l.name)), on_push.lifts.map(func(l): return str(l.name))])
+	var full_body = []
+	for d in ["2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16"]:
+		full_body.append(lift(d, {"Squat - Barbell": three(5, 100), "Romanian Deadlift - Barbell": three(5, 80), "Bench Press - Barbell": three(5, 80)}))
+	ok(Missions.done_kinds(full_body, "2026-11-23", {}).is_empty(), "a full-body day (a leg day by its majority) moves nothing: there were no push days without the bench")
+	var once = moved_log.duplicate()
+	once.append(lift("2026-11-22", {"Bent Over Row - Barbell": three(8, 60), "Shrug - Barbell": three(10, 80), "Lateral Raise - Dumbbell": three(12, 8)}))
+	var back_on_push = once + [lift("2026-11-23", push_day.merged({"Lateral Raise - Dumbbell": three(12, 8)})), lift("2026-11-24", push_day.merged({"Lateral Raise - Dumbbell": three(12, 8)}))]
+	ok(not Missions.done_kinds(back_on_push, "2026-11-25", {}).has("lateral raise"), "done on push days again twice: back to the push day")
 
 	print("DOSE: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

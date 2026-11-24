@@ -191,11 +191,17 @@ static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Contr
 		tags.set_meta("ahead_dose", str(a.date))
 		for d in dose:
 			var after = float(a.get("week", {}).get(str(d.part), float(d.after)))
-			var text = "%s +%s → %s/%s" % [Dose.part_name(str(d.part)), Dosage._n(float(d.today)), Dosage._n(after), Dosage._n(float(d.min))]
+			# (the week against its whole range: "30.5/8-16" is over the top, where
+			# "30.5/8" read like thirty of eight)
+			var text = "%s +%s → %s/%s-%s" % [Dose.part_name(str(d.part)), Dosage._n(float(d.today)), Dosage._n(after), Dosage._n(float(d.min)), Dosage._n(float(d.max))]
 			if str(d.mode) == "build":
 				tags.add_child(Kit.tag(text, DoseView.state_color(DoseView.state_of(after, float(d.min), float(d.max))), true, 10))
 			else:
 				tags.add_child(Kit.tag(text, Pal.PANEL2, false, 10))
+		# Where those sets come from, lift by lift: the Weekly sets sheet.
+		var why = Kit.chip("What counts?", false, DoseView.open, null, 10)
+		why.set_meta("ahead_why", str(a.date))
+		tags.add_child(why)
 		c.add(tags)
 	if bool(a.rest):
 		c.add(_line("moon", "Your call: a rest from lifting", Pal.SECOND))

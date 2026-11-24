@@ -1374,6 +1374,67 @@ is the Windows handoff.
     quiet, short, start at once and have nothing above 2.5 kHz, that a pop rises and an unpop falls,
     and that a frame plays one click (the last asked for). A before / after WAV made from the same
     renderings was sent to the user for a listen.
+- One exercise under two names, and where a muscle's sets come from (2026-11-23, night). The user,
+  with a screenshot of Coming up (a push day: "Shoulders +9 -> 30.5/8", a Tricep Pushdown row AND a
+  Tricep Extension - Cable row): "Why is shoulders so high? Is it just from secondary movements.
+  Also, Tricep extension and push down are the same thing but both are listed in same workout."
+  - `Missions.SAME_MOVES` and `Missions.move_of(lift)`: two entries of the lift library that are one
+    exercise in the gym are PLANNED as one movement. A Tricep Extension whose variation holds
+    "cable", "rope" or "bar" (and not "overhead", "lying", "incline") is a Tricep Pushdown. Every
+    place the plan asks which movement a lift is goes through `move_of` (`likely_lifts`' groups,
+    `options_for`, `stands_in` / `same_of`, `done_of`, `new_by`, `lift_done`, the missions), so the
+    day lists it once (named as it was done last, the other name among its ways), either name ticks
+    the row, and it is one row in `Dose.sources`. Nothing in the log is renamed: history and
+    records stay per name, and Journey -> Lifts still shows two movements (the user can join them
+    with "Rename or move this lift"). Another such pair is one more row in `SAME_MOVES`.
+  - The shoulder number was real, not a slip of the count: on a copy of the PC's log, the week had
+    lateral raises and an overhead press on each push day (three push days inside the seven days)
+    plus face pulls, about two thirds of the sets; the rest were half sets from flyes and presses
+    (front of the shoulder) and rows (rear). Half sets are not counted twice for a lift's own
+    muscle (`Dose.add_lift`).
+  - `Dose.sources(sessions, marks, today)`: {part: [{move, direct, half}]}, the most first; it adds
+    up to `Dose.window`. The Weekly sets sheet (`DoseView.open`) lists them under every muscle:
+    "Direct: Lateral Raise 9, Overhead Press 6" and "Half sets from: Chest Fly 4.5, Bent Over Row 3"
+    (metas `dose_direct`, `dose_half`).
+  - Coming up: a day's tags say the week against its WHOLE range ("Shoulders +9 -> 30.5/8-16"; the
+    least alone read like thirty of eight) and end in a "What counts?" key (meta `ahead_why`) that
+    opens the Weekly sets sheet.
+  - NOT done, and asked of the user: the plan does not drop or mark as optional a lift whose muscle
+    is already past its weekly most. Usual lifts are planned whatever the week holds; only the
+    focus's extra lifts look at the range.
+  - Tests: missions_test (`move_of`, a day planned once, either name ticks it), dose_test
+    (`sources`); walkthroughs focus and ahead.
+- The weekly sets count the shoulders as three, and the plan follows where a lift is done (2026-11-23,
+  night). The user, with the Weekly sets sheet (back 28.5, shoulders 23, biceps 19, chest 7.5): "the
+  only real lateral delts I do are lateral raises so the number just is so high... more specific for
+  shoulders like posterior anterior lateral... Should I shift 1 shoulder activity to my pull day to
+  open space for another chest/Tricep on push day?"
+  - `Dose.PARTS` (this count only): chest, back, front_delts, side_delts, rear_delts, traps, biceps,
+    triceps, forearms, core and the legs. `Dose.main_part(lift)`: the body part (`Dosage.part`), a
+    shoulder lift as its head (`HEADS` by movement, else `head_of` by its words: rear / front, else
+    side), a shrug as traps (`TRAPS_MOVES`). `Dose.also_of(lift)`: {part: share} from the library's
+    "also works" (`Dose.ALSO_WORDS`, the most precise words first), half a set each unless `TOUCH`
+    says otherwise (a fly gives the front delts a quarter; an overhead press also gives the side
+    delts a half; a rear delt fly the back a quarter), never the main muscle. `add_lift` uses both.
+  - Targets ("upper" and "balanced"): side delts [8, 16, build], rear delts [6, 16, build], front
+    delts [0, 12, keep] (every press works them), traps [0, 12, keep]. `Dose.NOTES` puts a line under
+    each in the Weekly sets sheet. `Dose.KIND_PARTS` (push: chest, front and side delts, triceps;
+    pull: back, rear delts, traps, biceps), `Dose.AREA`, `Dose.NAMES`. `parts_today(kind, group,
+    lifts, marks)` also takes the main muscle of every strength lift planned.
+  - The plan's body parts, the muscle map (Recovery) and the training summary (Dosage) still say
+    "shoulders". The half-set rule itself stays: it is how volume is usually counted (a row trains
+    the biceps about half as much as a curl), so the biceps' "from other lifts" is real.
+  - `Missions.done_kinds(sessions, today, marks)`: a movement whose last 3 times were on days of one
+    kind (kind_of_day with pull, push, legs) at least twice, while days of its own kind were lifted
+    without it meanwhile, is planned on that kind of day (`likely_lifts`, and the focus's
+    `more_options`). Lateral raises moved to the pull day go there after two pull days; a full-body
+    day (a "leg" day by its majority) moves nothing; done on push days again, they go back.
+  - On a copy of the PC's log (Nov 15-21): side delts 10.5, rear 5, front 5.3, traps 1, where one
+    "shoulders" number had been about 21.
+  - The Today card's row (`DoseView.row`) shows the muscles being built first; a muscle with least 0
+    (front delts, traps) only when there is room, and is read against its most ("3 -> 9.5").
+  - Tests: dose_test (heads, `also_of`, `done_kinds`), missions_test, ahead_test; the walkthroughs
+    were held while the user played a game on the PC and run once they were off it.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window

@@ -15,11 +15,11 @@ static func part_color(id: String) -> Color:
 	match id:
 		"chest":
 			return Pal.LIFT
-		"shoulders":
+		"shoulders", "front_delts", "side_delts", "rear_delts":
 			return Pal.ACCENT2
 		"triceps":
 			return Pal.ACCENT
-		"back":
+		"back", "traps":
 			return Pal.SECOND
 		"biceps":
 			return Pal.CLIMB

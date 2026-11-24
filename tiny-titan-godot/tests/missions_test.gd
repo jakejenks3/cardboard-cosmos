@@ -191,11 +191,37 @@ func _init() -> void:
 
 	# --- another movement standing in for a planned one --------------------------------------------
 	var tri = Missions.same_of("Tricep Pushdown - Rope", sp)
-	ok(Missions.stands_in("Tricep Extension - Cable", tri) and not Missions.stands_in("Bicep Curl - Dumbbell", tri) and not Missions.stands_in("Chest Fly - Cable", tri), "triceps extensions stand in for the pushdown; curls and a planned fly do not")
+	ok(Missions.stands_in("Tricep Extension - Overhead dumbbell", tri) and Missions.stands_in("Tricep Kickback - Dumbbell", tri) and not Missions.stands_in("Bicep Curl - Dumbbell", tri) and not Missions.stands_in("Chest Fly - Cable", tri), "overhead triceps extensions stand in for the pushdown; curls and a planned fly do not")
+	ok(not Missions.stands_in("Tricep Extension - Cable", tri) and Missions.move_of("Tricep Extension - Cable") == "Tricep Pushdown", "an extension on the cable does not stand in for it: it is the pushdown itself")
 	var sho = Missions.same_of("Lateral Raise - Cable", sp)
 	ok(sp.new != null and Missions.kind_of(str(sp.new.name)) == "push" and (Missions.part_of(str(sp.new.name)) != "shoulders" or not Missions.stands_in(str(sp.new.name), sho)), "today's new movement counts for itself, not for a planned row", [sp.new.name, sp.moves])
 	var ext_day = split_log + [lift(sat, {"Tricep Extension - Cable": [[12, 20]]})]
-	ok(Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat, tri) and not Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat), "done by extensions only with the stand-in rule")
+	ok(Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat, tri) and Missions.beat_any(ext_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat), "done by a cable extension, with or without the stand-in rule (the same movement)")
+	var over_day = split_log + [lift(sat, {"Tricep Extension - Overhead dumbbell": [[12, 20]]})]
+	ok(Missions.beat_any(over_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat, tri) and not Missions.beat_any(over_day, ["Tricep Pushdown - Rope"], "Tricep Pushdown", sat), "done by overhead extensions only with the stand-in rule")
+
+	# --- two names of the library, one exercise: planned once -----------------------------------------
+	ok(Missions.move_of("Tricep Extension - Cable") == "Tricep Pushdown" and Missions.move_of("Tricep Extension - Gym cable") == "Tricep Pushdown" and Missions.move_of("Tricep Extension - Rope") == "Tricep Pushdown" and Missions.move_of("Tricep Extension - Single arm cable") == "Tricep Pushdown", "a tricep extension on a cable is a pushdown")
+	ok(Missions.move_of("Tricep Extension - Overhead cable") == "Tricep Extension" and Missions.move_of("Tricep Extension - Overhead dumbbell") == "Tricep Extension" and Missions.move_of("Tricep Extension - Lying EZ bar") == "Tricep Extension" and Missions.move_of("Tricep Extension - Dumbbell") == "Tricep Extension" and Missions.move_of("Tricep Extension") == "Tricep Extension", "an overhead, a lying or a dumbbell extension is its own exercise")
+	ok(Missions.move_of("Tricep Pushdown - Gym rope") == "Tricep Pushdown" and Missions.move_of("Bench Press - Barbell") == "Bench Press" and Missions.move_of("Pull-up") == "Pull-up" and Missions.move_of("Hip Flexor Thing") == "Hip Flexor Thing", "any other lift is its own movement (a barbell is no bar attachment)")
+	var tri_push = func(tri_name: String): return {"Bench Press - Barbell": [[5, 80], [5, 80], [5, 80]], tri_name: [[10, 30], [10, 30], [10, 30]]}
+	var one_log = [
+		lift("2026-11-12", tri_push.call("Tricep Pushdown - Gym rope")), lift("2026-11-13", {"Squat - Barbell": [[5, 100]]}), lift("2026-11-14", {"Bent Over Row - Barbell": [[8, 60]]}),
+		lift("2026-11-15", tri_push.call("Tricep Extension - Cable")), lift("2026-11-16", {"Squat - Barbell": [[5, 100]]}), lift("2026-11-17", {"Bent Over Row - Barbell": [[8, 60]]}),
+		lift("2026-11-18", tri_push.call("Tricep Pushdown - Gym rope")), lift("2026-11-19", {"Squat - Barbell": [[5, 100]]}), lift("2026-11-20", {"Bent Over Row - Barbell": [[8, 60]]}),
+	]
+	var one = Missions.day_plan(one_log, sat, {}, {"split": "pull_push_legs"})
+	var one_tri = one.lifts.filter(func(l): return Missions.part_of(str(l.name)) == "triceps")
+	ok(one.kind == "push" and one_tri.size() == 1 and str(one_tri[0].name) == "Tricep Pushdown - Gym rope", "logged under both names on different days: the push day plans it once, as it was done last", names(one.lifts))
+	ok(names(one_tri[0].options).has("Tricep Extension - Cable") and names(one_tri[0].options)[0] == "Tricep Pushdown - Gym rope", "with the other name as one of its ways", names(one_tri[0].options))
+	var swapped = one_log.duplicate()
+	swapped[6] = lift("2026-11-18", tri_push.call("Tricep Extension - Cable"))
+	var two = Missions.day_plan(swapped, sat, {}, {"split": "pull_push_legs"})
+	var two_tri = two.lifts.filter(func(l): return Missions.part_of(str(l.name)) == "triceps")
+	ok(two_tri.size() == 1 and str(two_tri[0].name) == "Tricep Extension - Cable" and names(two_tri[0].options).has("Tricep Pushdown - Gym rope"), "the other way round too", names(two.lifts))
+	ok(Missions.lift_done(one_tri[0], one, one_log + [lift(sat, {"Tricep Extension - Cable": [[10, 35]]})], sat) == "Tricep Extension - Cable" and Missions.lift_done(one_tri[0], one, one_log + [lift(sat, {"Bicep Curl - Dumbbell": [[10, 10]]})], sat) == "", "and either name ticks its row")
+	var one_rows = Missions.picks(one, one_log, sat).filter(func(r): return Missions.part_of(str(r.name)) == "triceps")
+	ok(one_rows.size() == 1 and one_rows[0].ways.map(func(w): return str(w.name)).has("Tricep Extension - Cable"), "the Log tab's list has it once as well", one_rows)
 	ok(Missions.done_of(ext_day, ["Tricep Pushdown - Rope"], sat, "Tricep Pushdown", tri) == "Tricep Extension - Cable", "the Today row shows what stood in")
 
 	# --- perfect day: every box of the Today card --------------------------------------------------

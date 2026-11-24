@@ -27,13 +27,16 @@ static func _window() -> Dictionary:
 ## The muscles the Today card's row shows: the day's own (those with a target),
 ## else the ones being built that are short, else the first being built.
 static func row_parts(plan: Dictionary, w: Dictionary) -> Array:
-	var parts = Dose.parts_today(str(plan.get("kind", "")), str(plan.get("group", ""))).filter(func(p): return str(w.parts[p].mode) != "")
+	var parts = Dose.parts_today(str(plan.get("kind", "")), str(plan.get("group", "")), plan.get("lifts", []), App.pt()).filter(func(p): return str(w.parts[p].mode) != "")
 	if parts.is_empty():
 		var build = Dose.build_parts(App.settings())
 		parts = build.filter(func(p): return str(w.parts[p].state) == "short")
 		if parts.is_empty():
 			parts = build
-	return parts.slice(0, 4)
+	# (the muscles being built first, as on a lift day)
+	var built = parts.filter(func(p): return str(w.parts[p].mode) == "build")
+	built.append_array(parts.filter(func(p): return str(w.parts[p].mode) != "build" and float(w.parts[p].min) > 0.0))
+	return built.slice(0, 4)
 
 
 ## "short" / "ok" / "plenty" for a muscle's sets against its target.
@@ -50,10 +53,12 @@ static func cell(part: String, now: float, after: float, least: float, most: flo
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(Kit.clip(Dose.part_name(part), 11, Pal.TEXT, true))
-	v.add_child(Kit.bar(clampf(now / maxf(1.0, least), 0.0, 1.0), col, 6))
-	var said = "%s / %s" % [Dosage._n(now), Dosage._n(least)]
+	# (a muscle that needs no sets of its own, least 0: against the most it should get)
+	var ref = least if least > 0.0 else most
+	v.add_child(Kit.bar(clampf(now / maxf(1.0, ref), 0.0, 1.0), col, 6))
+	var said = "%s / %s" % [Dosage._n(now), Dosage._n(least)] if least > 0.0 else "%s · max %s" % [Dosage._n(now), Dosage._n(most)]
 	if after > now + 0.01:
-		said = "%s → %s / %s" % [Dosage._n(now), Dosage._n(after), Dosage._n(least)]
+		said = "%s → %s / %s" % [Dosage._n(now), Dosage._n(after), Dosage._n(least)] if least > 0.0 else "%s → %s" % [Dosage._n(now), Dosage._n(after)]
 	v.add_child(Kit.clip(said, 11, col, true))
 	return v
 
@@ -82,7 +87,13 @@ static func row(plan: Dictionary) -> Control:
 			var r = w.parts[p]
 			cells.add_child(cell(str(p), float(r.total), float(r.total), float(r.min), float(r.max)))
 	else:
-		for d in today.slice(0, 4):
+		# The muscles being built first; one that needs no sets of its own (the
+		# front delts, the traps: least 0) only when there is room.
+		var shown = today.filter(func(d): return str(d.mode) == "build")
+		shown.append_array(today.filter(func(d): return str(d.mode) != "build" and float(d.min) > 0.0))
+		if shown.size() < 4:
+			shown.append_array(today.filter(func(d): return str(d.mode) != "build" and float(d.min) <= 0.0))
+		for d in shown.slice(0, 4):
 			# What is really logged, and what the plan makes of the week (never less than that).
 			var now = float(w.parts[str(d.part)].total)
 			cells.add_child(cell(str(d.part), now, maxf(now, float(d.after)), float(d.min), float(d.max)))
@@ -90,14 +101,23 @@ static func row(plan: Dictionary) -> Control:
 	return c
 
 
-static func _part_row(p: String, r: Dictionary) -> Control:
+## "Lateral Raise 9, Overhead Press 6": the lifts behind a muscle's sets.
+static func _lifts(rows: Array, field: String) -> String:
+	var bits = []
+	for x in rows:
+		if float(x[field]) > 0.0:
+			bits.append("%s %s" % [str(x.move), Dosage._n(float(x[field]))])
+	return ", ".join(PackedStringArray(bits))
+
+
+static func _part_row(p: String, r: Dictionary, src: Array = []) -> Control:
 	var col = state_color(str(r.state))
 	var v = Kit.vbox(1)
 	var row = Kit.hbox(8)
 	var n = Kit.label(Dose.part_name(p), 14, null, true)
 	n.custom_minimum_size = Vector2(92, 0)
 	row.add_child(Kit.vcenter(n))
-	row.add_child(Kit.bar(clampf(float(r.total) / maxf(1.0, float(r.min)), 0.0, 1.0), col, 10))
+	row.add_child(Kit.bar(clampf(float(r.total) / maxf(1.0, float(r.min) if float(r.min) > 0.0 else float(r.max)), 0.0, 1.0), col, 10))
 	var num = Kit.label("%s / %s-%s" % [Dosage._n(float(r.total)), Dosage._n(float(r.min)), Dosage._n(float(r.max))], 12, Pal.TEXT, true)
 	num.custom_minimum_size = Vector2(82, 0)
 	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -114,6 +134,21 @@ static func _part_row(p: String, r: Dictionary) -> Control:
 	if float(r.climb) > 0.0:
 		bits.append("%s from climbing" % Dosage._n(float(r.climb)))
 	v.add_child(Kit.clip(" · ".join(PackedStringArray(bits)) if not bits.is_empty() else "Nothing in the last 7 days", 11, Pal.MUTED))
+	if Dose.NOTES.has(p):
+		var note = Kit.para(str(Dose.NOTES[p]), 11, Pal.with_alpha(Pal.MUTED, 0.85))
+		note.set_meta("dose_note", p)
+		v.add_child(note)
+	# Lift by lift: what was done for it, and what only brushed it.
+	var direct = _lifts(src, "direct")
+	var half = _lifts(src, "half")
+	if direct != "":
+		var dl = Kit.para("Direct: %s" % direct, 11, Pal.TEXT)
+		dl.set_meta("dose_direct", p)
+		v.add_child(dl)
+	if half != "":
+		var hl = Kit.para("Half sets from: %s" % half, 11, Pal.MUTED)
+		hl.set_meta("dose_half", p)
+		v.add_child(hl)
 	return v
 
 
@@ -125,9 +160,10 @@ static func open() -> void:
 	if plan == null:
 		return
 	var w = _window()
+	var src = Dose.sources(App.sessions(), App.pt(), App.today)
 	var sh = Kit.sheet("Weekly sets")
 	sh.box.add_child(Kit.label(str(plan.name), 16, Pal.LIFT, true))
-	sh.box.add_child(Kit.para(str(plan.blurb) + " Sets of the last 7 days against what each muscle needs in a week.", 12, Pal.MUTED))
+	sh.box.add_child(Kit.para(str(plan.blurb) + " Sets of the last 7 days against what each muscle needs in a week, and the lifts they came from.", 12, Pal.MUTED))
 	for mode in ["build", "keep"]:
 		var parts = Dose.PARTS.filter(func(p): return str(w.parts[p].mode) == mode)
 		if parts.is_empty():
@@ -136,7 +172,7 @@ static func open() -> void:
 		if mode == "keep":
 			sh.box.add_child(Kit.para("No sets are added for these. Their lifts still have goals to beat.", 11, Pal.MUTED))
 		for p in parts:
-			sh.box.add_child(_part_row(str(p), w.parts[p]))
+			sh.box.add_child(_part_row(str(p), w.parts[p], src.get(p, [])))
 	# Rest and the run.
 	sh.box.add_child(Kit.section_title("Rest and running"))
 	var rest = Dose.rest(App.sessions(), App.pt(), App.today)
@@ -155,7 +191,7 @@ static func open() -> void:
 		else:
 			var quicker = (", or quicker than %s" % Fmt.fmt_pace(float(g.paceSec), App.distance_unit())) if float(g.paceSec) > 0.0 else ""
 			sh.box.add_child(_line("run", "%sNext run: %s%s. %s. Run goals show on that day only." % [day_words, Fmt.fmt_distance(float(g.targetM), App.distance_unit()), quicker, Dose.run_why(g, App.distance_unit())]))
-	sh.box.add_child(Kit.para("A set of a lift counts 1 for its main muscle and a half for the muscles it also works. A climbing session counts %s sets for the forearms and nothing for the back: climbing is fingers far more than pulling. Physical therapy and stretches count for nothing here. Change the focus in Settings, under Training focus." % Dosage._n(float(Dose.CLIMB_SETS.forearms)), 11, Pal.MUTED))
+	sh.box.add_child(Kit.para("A set of a lift counts 1 for its main muscle and a half for the muscles it also works (a quarter for the front delts from a fly). The shoulders are counted as three: front, side and rear delts, and shrugs count for the traps, not the back. A climbing session counts %s sets for the forearms and nothing for the back: climbing is fingers far more than pulling. Physical therapy and stretches count for nothing here. Change the focus in Settings, under Training focus." % Dosage._n(float(Dose.CLIMB_SETS.forearms)), 11, Pal.MUTED))
 	var ok = Kit.button("Got it", "primary", sh.close, "lg")
 	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sh.box.add_child(ok)

@@ -11,10 +11,10 @@ extends RefCounted
 ## is how much a muscle got lately, and a count that starts again at nothing
 ## every Monday would call every Monday "short".
 ##
-## What counts as a set for a muscle (the same way the training summary counts
-## it, game/dosage.gd):
+## What counts as a set for a muscle:
 ##   - a set of a lift whose main muscle it is: 1 ("direct");
-##   - a set of a lift that also works it (the library's "also works"): half;
+##   - a set of a lift that also works it (the library's "also works"): half,
+##     or what TOUCH says for that lift (a fly barely uses the front delts);
 ##   - a climbing session: CLIMB_SETS, for the forearms ONLY. Climbing is
 ##     fingers and forearms far more than back (the user, 2026-11-22: "climbing
 ##     really doesn't work that way, it's way more fingers and much less back"),
@@ -38,6 +38,20 @@ extends RefCounted
 ## usual lifts leave short of its share, one more movement for it, with several to pick from for whatever equipment is there.
 ## A muscle with an ANCHOR (the chest's press) gets that first when no lift of
 ## that sort was done in ANCHOR_DAYS: flyes alone never load the chest much.
+##
+## THE SHOULDERS ARE THREE MUSCLES HERE, and the traps are apart from the back
+## (the user, 2026-11-23, with 23 sets of "shoulders" though "the only real
+## lateral delts I do are lateral raises": "Or even being more specific for
+## shoulders like posterior anterior lateral"). One "shoulders" number added up
+## every press (front delts), every row (rear delts) and the lateral raises
+## (side delts), so it was always "plenty" while the side delts got only the
+## raises. The front delts: presses, which every bench session works, so they
+## need no sets of their own ("keep", least 0). The side delts: lateral raises
+## and upright rows, half a set from an overhead press. The rear delts: face
+## pulls and rear delt flyes, half a set from every row. A lift's main muscle
+## among them is HEADS (by movement), else guessed from its words (head_of).
+## These are the parts of THIS count only: the plan's body parts, the muscle
+## map and the training summary still say "shoulders".
 
 const DAYS = 7
 ## Sets a climbing session is worth: the forearms (fingers) only, see the top.
@@ -63,13 +77,51 @@ const RUN_PACE_SHARE = 0.75
 ## How far back runs are looked at to find the run day.
 const RUN_DAY_LOOK = 56
 
-const PARTS = ["chest", "back", "shoulders", "biceps", "triceps", "forearms", "core", "quads", "hamstrings", "glutes", "calves"]
+const PARTS = ["chest", "back", "front_delts", "side_delts", "rear_delts", "traps", "biceps", "triceps", "forearms", "core", "quads", "hamstrings", "glutes", "calves"]
+const NAMES = {"front_delts": "Front delts", "side_delts": "Side delts", "rear_delts": "Rear delts", "traps": "Traps"}
+## The shoulder movements of the library, by the head they train.
+const HEADS = {
+	"Lateral Raise": "side_delts", "Upright Row": "side_delts",
+	"Overhead Press": "front_delts", "Push Press": "front_delts", "Arnold Press": "front_delts", "Handstand Push-up": "front_delts", "Front Raise": "front_delts",
+	"Rear Delt Fly": "rear_delts", "Face Pull": "rear_delts", "Pull-Apart": "rear_delts",
+}
+## Movements whose main muscle is the traps (filed under back in the library).
+const TRAPS_MOVES = ["Shrug"]
+## What a set of a lift gives the muscles it also works, where it is not half
+## of a set: {movement: {part: share}}. A part given here that the library
+## does not name is added (an overhead press works the side delts too).
+const TOUCH = {
+	"Chest Fly": {"front_delts": 0.25},
+	"Overhead Press": {"side_delts": 0.5},
+	"Push Press": {"side_delts": 0.5},
+	"Arnold Press": {"side_delts": 0.5},
+	"Handstand Push-up": {"side_delts": 0.5},
+	"Rear Delt Fly": {"back": 0.25},
+	"Pull-Apart": {"back": 0.25},
+	"Upright Row": {"traps": 0.5},
+}
+## Words of a movement's "also works" that name a muscle of this count, the
+## most precise first.
+const ALSO_WORDS = [["front delt", "front_delts"], ["side delt", "side_delts"], ["rear delt", "rear_delts"], ["upper chest", "chest"],
+	["delt", "front_delts"], ["shoulder", "front_delts"], ["trap", "traps"], ["lower back", "back"], ["upper back", "back"], ["lat", "back"], ["back", "back"],
+	["triceps", "triceps"], ["biceps", "biceps"], ["forearm", "forearms"], ["grip", "forearms"], ["glute", "glutes"], ["hamstring", "hamstrings"],
+	["quad", "quads"], ["legs", "quads"], ["core", "core"], ["abs", "core"], ["chest", "chest"], ["calves", "calves"], ["calf", "calves"]]
+## Which muscles each kind of day trains (Missions.KIND_PARTS in this count's parts).
+const KIND_PARTS = {"pull": ["back", "rear_delts", "traps", "biceps"], "push": ["chest", "front_delts", "side_delts", "triceps"],
+	"legs": ["quads", "hamstrings", "glutes", "calves"]}
+## The body area of a part of this count that the plan's areas do not have.
+const AREA = {"front_delts": "shoulders", "side_delts": "shoulders", "rear_delts": "shoulders", "traps": "back"}
+## A line under a part in the Weekly sets sheet.
+const NOTES = {"front_delts": "Every press works them: no sets of their own needed.", "side_delts": "Lateral raises and upright rows; half a set from an overhead press.",
+	"rear_delts": "Face pulls and rear delt flyes; half a set from every row.", "traps": "Shrugs and heavy pulls."}
 const PLANS = {
 	"upper": {"name": "Upper body first", "blurb": "Build chest, back, shoulders and arms. Legs keep the volume they have: no sets are added, their lifts still have goals to beat.",
-		"targets": {"chest": [10, 16, "build"], "back": [10, 20, "build"], "shoulders": [8, 16, "build"], "biceps": [8, 16, "build"], "triceps": [8, 16, "build"],
+		"targets": {"chest": [10, 16, "build"], "back": [10, 20, "build"], "side_delts": [8, 16, "build"], "rear_delts": [6, 16, "build"], "biceps": [8, 16, "build"], "triceps": [8, 16, "build"],
+			"front_delts": [0, 12, "keep"], "traps": [0, 12, "keep"],
 			"forearms": [4, 16, "keep"], "core": [3, 10, "keep"], "quads": [4, 10, "keep"], "hamstrings": [3, 10, "keep"], "glutes": [2, 10, "keep"], "calves": [3, 10, "keep"]}},
 	"balanced": {"name": "Whole body", "blurb": "Build everything evenly, legs as much as the upper body.",
-		"targets": {"chest": [10, 16, "build"], "back": [10, 20, "build"], "shoulders": [8, 16, "build"], "biceps": [8, 16, "build"], "triceps": [8, 16, "build"],
+		"targets": {"chest": [10, 16, "build"], "back": [10, 20, "build"], "side_delts": [8, 16, "build"], "rear_delts": [6, 16, "build"], "biceps": [8, 16, "build"], "triceps": [8, 16, "build"],
+			"front_delts": [0, 12, "keep"], "traps": [0, 12, "keep"],
 			"forearms": [0, 16, "keep"], "core": [4, 12, "keep"], "quads": [8, 16, "build"], "hamstrings": [6, 14, "build"], "glutes": [4, 14, "build"], "calves": [6, 14, "build"]}},
 }
 const ORDER = ["upper", "balanced"]
@@ -103,12 +155,60 @@ static func mode_of(settings: Dictionary, lift_name: String) -> String:
 	var plan = plan_of(settings)
 	if plan == null:
 		return ""
-	var t = plan.targets.get(Dosage.part(lift_name))
+	var t = plan.targets.get(main_part(lift_name))
 	return str(t[2]) if t != null else ""
 
 
 static func part_name(part: String) -> String:
-	return str(Recovery.NAMES.get(part, part.capitalize()))
+	return str(NAMES.get(part, Recovery.NAMES.get(part, part.capitalize())))
+
+
+## The shoulder head a shoulder lift trains: HEADS, else its words ("rear",
+## "face pull" the rear; "press", "front" the front; anything else the side).
+static func head_of(lift_name: String) -> String:
+	var mv = Missions.move_of(lift_name)
+	if HEADS.has(mv):
+		return str(HEADS[mv])
+	var low = lift_name.to_lower()
+	for w in ["rear", "face pull", "reverse", "pull-apart", "pull apart", "posterior"]:
+		if low.contains(w):
+			return "rear_delts"
+	for w in ["press", "front", "anterior", "pike", "handstand"]:
+		if low.contains(w):
+			return "front_delts"
+	return "side_delts"
+
+
+## The muscle of this count a lift trains most: its body part (Dosage.part),
+## with the shoulders as their three heads and shrugs as traps.
+static func main_part(lift_name: String) -> String:
+	var p = Dosage.part(lift_name)
+	if p == "shoulders":
+		return head_of(lift_name)
+	if p == "back" and (TRAPS_MOVES.has(Missions.move_of(lift_name)) or lift_name.to_lower().contains("shrug")):
+		return "traps"
+	return p
+
+
+## What a set of a lift gives the muscles it also works ({part: share}): the
+## library's "also works", half a set each unless TOUCH says otherwise. Never
+## its main muscle.
+static func also_of(lift_name: String) -> Dictionary:
+	var main = main_part(lift_name)
+	var out = {}
+	var m = LiftNames.movement(str(LiftNames.split(lift_name).move))
+	if m != null:
+		var text = str(m.get("also", "")).to_lower()
+		for w in ALSO_WORDS:
+			if text.contains(str(w[0])):
+				text = text.replace(str(w[0]), " ")
+				if str(w[1]) != main and not out.has(str(w[1])):
+					out[str(w[1])] = 0.5
+	var touch = TOUCH.get(Missions.move_of(lift_name), {})
+	for p in touch:
+		if str(p) != main:
+			out[str(p)] = float(touch[p])
+	return out
 
 
 static func _mk(lift_name: String) -> String:
@@ -117,13 +217,14 @@ static func _mk(lift_name: String) -> String:
 
 ## Add what `n` sets of a lift give each muscle to `into` ({part: sets}).
 static func add_lift(into: Dictionary, lift_name: String, n: float, also_into = null) -> void:
-	var p = Dosage.part(lift_name)
+	var p = main_part(lift_name)
 	if PARTS.has(p):
 		into[p] = float(into.get(p, 0.0)) + n
 	var side = into if also_into == null else also_into
-	for a in Recovery.also_parts(lift_name):
+	var also = also_of(lift_name)
+	for a in also:
 		if a != p and PARTS.has(a):
-			side[a] = float(side.get(a, 0.0)) + n * 0.5
+			side[a] = float(side.get(a, 0.0)) + n * float(also[a])
 
 
 ## What the `days` days ending on `today` gave each muscle:
@@ -164,6 +265,51 @@ static func window(sessions: Array, marks: Dictionary, settings: Dictionary, tod
 	return {"from": from, "to": today, "focus": plan_id(settings), "parts": parts}
 
 
+## Where each muscle's sets of the `days` days ending on `today` came from,
+## lift by lift (the user, 2026-11-23, looking at 30.5 sets for the shoulders:
+## "Why is shoulders so high? Is it just from secondary movements"):
+## {part: [{"move", "direct", "half"}]}, the most first. "direct": sets of a
+## lift whose main muscle it is; "half": the half sets a lift gives a muscle it
+## also works (a fly or a press the front of the shoulders, a row the rear).
+## A lift is named by its movement (Missions.move_of), its variations together.
+## The same sets as `window` counts.
+static func sources(sessions: Array, marks: Dictionary, today: String, days: int = DAYS) -> Dictionary:
+	var from = Dates.add_days(today, -(days - 1))
+	var by = {}
+	for s in sessions:
+		var d = str(s.get("date", ""))
+		if d < from or d > today or str(s.get("discipline", "")) != "lift":
+			continue
+		for ex in s.get("exercises", []):
+			var n = LiftTrend.real_sets(ex.get("sets", [])).size()
+			if n == 0 or Dosage.is_mobility(ex, marks):
+				continue
+			var direct = {}
+			var half = {}
+			add_lift(direct, str(ex.get("name", "")), float(n), half)
+			var mv = Missions.move_of(str(ex.get("name", "")))
+			for pair in [[direct, 0], [half, 1]]:
+				for p in pair[0]:
+					if not by.has(p):
+						by[p] = {}
+					if not by[p].has(mv):
+						by[p][mv] = [0.0, 0.0]
+					by[p][mv][int(pair[1])] += float(pair[0][p])
+	var out = {}
+	for p in by:
+		var rows = []
+		for mv in by[p]:
+			rows.append({"move": str(mv), "direct": float(by[p][mv][0]), "half": float(by[p][mv][1])})
+		rows.sort_custom(func(a, b):
+			var ta = float(a.direct) + float(a.half)
+			var tb = float(b.direct) + float(b.half)
+			if not is_equal_approx(ta, tb):
+				return ta > tb
+			return str(a.move).naturalnocasecmp_to(str(b.move)) < 0)
+		out[p] = rows
+	return out
+
+
 ## The muscles the focus builds.
 static func build_parts(settings: Dictionary) -> Array:
 	var plan = plan_of(settings)
@@ -178,18 +324,26 @@ static func on_target(sessions: Array, marks: Dictionary, settings: Dictionary, 
 	return build_parts(settings).filter(func(p): return str(w.parts[p].state) != "short").size()
 
 
-## The muscles a day of this kind (a split's), or of this body area, trains.
-static func parts_today(kind: String, group: String) -> Array:
+## The muscles a day of this kind (a split's), or of this body area, trains,
+## and the main muscle of every strength lift planned for it (`lifts`: lateral
+## raises done on pull days make the side delts a pull day's too).
+static func parts_today(kind: String, group: String, lifts: Array = [], marks: Dictionary = {}) -> Array:
 	var out = []
 	if kind != "":
-		for k in Missions.KIND_PARTS:
+		for k in KIND_PARTS:
 			if Missions.fits(str(k), kind):
-				out.append_array(Missions.KIND_PARTS[k])
+				out.append_array(KIND_PARTS[k])
 	elif group != "":
 		for p in PARTS:
-			if str(Missions.GROUP.get(p, "")) == group:
+			if str(AREA.get(p, Missions.GROUP.get(p, ""))) == group:
 				out.append(p)
-	return out
+	for l in lifts:
+		if bool(l.get("pt", false)) or (l.get("last") is Dictionary and Dosage.is_mobility({"name": str(l.name), "sets": l.last.get("sets", [])}, marks)):
+			continue
+		var p = main_part(str(l.name))
+		if PARTS.has(p) and not out.has(p):
+			out.append(p)
+	return PARTS.filter(func(p): return out.has(p))
 
 
 ## Was a lift of one of these movements done from `from` up to (not on) `before`?
@@ -247,13 +401,13 @@ static func anchor_options(anchor: Dictionary, hist: Dictionary, taken: Array) -
 ## Other movements for a muscle, not in the day's plan: the player's own of the
 ## day's kind (one per movement, the latest first), then the library's staples
 ## never done.
-static func more_options(part: String, hist: Dictionary, taken: Array, kind: String, marks: Dictionary) -> Array:
-	var fit = func(n: String): return kind == "" or Missions.fits(Missions.kind_of(n), kind)
+static func more_options(part: String, hist: Dictionary, taken: Array, kind: String, marks: Dictionary, done_kinds: Dictionary = {}) -> Array:
+	var fit = func(n: String): return kind == "" or Missions.fits(str(done_kinds.get(Xp.normalize_exercise(Missions.move_of(n)), Missions.kind_of(n))), kind)
 	var by_move = {}
 	for k in hist:
 		var n = str(hist[k].name)
 		var mk = _mk(n)
-		if Dosage.part(n) != part or taken.has(mk) or Pt.is_pt(marks, n) or n.to_lower().contains("stretch") or not fit.call(n):
+		if main_part(n) != part or taken.has(mk) or Pt.is_pt(marks, n) or n.to_lower().contains("stretch") or not fit.call(n):
 			continue
 		if not by_move.has(mk) or str(hist[k].last) > str(by_move[mk].last):
 			by_move[mk] = hist[k]
@@ -265,11 +419,11 @@ static func more_options(part: String, hist: Dictionary, taken: Array, kind: Str
 	var done = {}
 	for k in hist:
 		done[_mk(str(hist[k].name))] = true
-	for name in Missions.STAPLES.get(str(Missions.GROUP.get(part, "")), []):
+	for name in Missions.STAPLES.get(str(AREA.get(part, Missions.GROUP.get(part, ""))), []):
 		if out.size() >= 4:
 			break
 		var e = LiftNames.movement(str(name))
-		if e == null or str(e.part) != part:
+		if e == null or main_part(str(e.name)) != part:
 			continue
 		var mk = Xp.normalize_exercise(str(e.name))
 		if done.has(mk) or taken.has(mk) or not fit.call(str(e.name)):
@@ -295,7 +449,7 @@ static func freq_of(before: Array, today: String, part: String, marks: Dictionar
 		for ex in s.get("exercises", []):
 			if LiftTrend.real_sets(ex.get("sets", [])).is_empty() or Dosage.is_mobility(ex, marks):
 				continue
-			if Dosage.part(str(ex.get("name", ""))) == part:
+			if main_part(str(ex.get("name", ""))) == part:
 				days[d] = true
 	var span = float(clampi(Dates.days_between(first if first > from else from, today), 7, FREQ_LOOK))
 	return clampf(days.size() / (span / 7.0), 1.0, 3.0)
@@ -340,7 +494,7 @@ static func day_dose(lifts: Array, before: Array, today: String, marks: Dictiona
 		if n > 0:
 			add_lift(cover, str(l.name), float(n))
 	var out = []
-	for p in parts_today(kind, group):
+	for p in parts_today(kind, group, lifts, marks):
 		var t = plan.targets.get(p)
 		if t == null:
 			continue
@@ -362,9 +516,10 @@ static func day_dose(lifts: Array, before: Array, today: String, marks: Dictiona
 ## the day; `taken`: normalized movements already in the plan.
 static func extras(lifts: Array, before: Array, today: String, marks: Dictionary, settings: Dictionary, kind: String, group: String, hist: Dictionary, taken_in: Array) -> Array:
 	var plan = plan_of(settings)
-	var todays = parts_today(kind, group)
+	var todays = parts_today(kind, group, lifts, marks)
 	if plan == null or todays.is_empty():
 		return []
+	var done_kinds = Missions.done_kinds(before, today, marks)
 	var w = window(before, marks, settings, Dates.add_days(today, -1), DAYS - 1)
 	var cover = {}
 	var planned = {}
@@ -395,7 +550,7 @@ static func extras(lifts: Array, before: Array, today: String, marks: Dictionary
 		# (never a lift that would take the week past the muscle's most)
 		if not missing and have + float(cover.get(p, 0.0)) + EXTRA_MIN > float(t[1]) + 0.01:
 			continue
-		var opts = anchor_options(anchor, hist, taken) if missing else more_options(p, hist, taken, kind, marks)
+		var opts = anchor_options(anchor, hist, taken) if missing else more_options(p, hist, taken, kind, marks, done_kinds)
 		if opts.is_empty():
 			continue
 		var n = clampi(int(ceil(need)), EXTRA_MIN, EXTRA_MAX)

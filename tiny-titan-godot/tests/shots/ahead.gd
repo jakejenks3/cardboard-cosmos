@@ -174,6 +174,11 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		chest_sum += float(a.week.get("chest", 0.0))
 	check(chest_sum / float(days.size()) >= 10.0, "the planned days give the chest its weekly sets (%s a week)" % Dosage._n(chest_sum / float(days.size())))
 	check(_all("ahead_dose", sh).size() >= 3 and st.contains("Chest +") and st.contains("Back +"), "each lift day says what it adds to each of its muscles")
+	var tag_words = ""
+	for tag_row in _all("ahead_dose", sh):
+		tag_words += ShotHelper.all_text(tag_row) + "
+"
+	check(tag_words.contains("Chest +") and tag_words.contains("/10-16") and _all("ahead_why", sh).size() >= 3, "against the whole range of the week (the chest: 10-16), with a key to what counts")
 	check(st.contains("Running") and st.contains("aim 5.5 km"), "and the run with the distance to aim for")
 	await ShotHelper.snap(tree, "ahead_5_sheet_focus")
 	if sh != null:

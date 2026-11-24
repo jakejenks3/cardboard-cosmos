@@ -168,6 +168,34 @@ const STAPLES = {
 # The plan
 # ---------------------------------------------------------------------------
 
+## Two entries of the lift library that are one exercise in the gym. A lift
+## logged under the second is planned, offered and counted as done as a way of
+## the first, so a day never lists both (the user, 2026-11-23, with a tricep
+## pushdown and a cable tricep extension in one push day: "Tricep extension
+## and push down are the same thing but both are listed in same workout").
+## [the movement it is, the movement it was filed under, words one of which its
+## variation holds, words it must not hold]. An overhead or a lying extension
+## is another exercise, and so is one with dumbbells. Nothing in the log is
+## renamed: records and history stay per name.
+const SAME_MOVES = [
+	["Tricep Pushdown", "Tricep Extension", ["cable", "rope", "bar"], ["overhead", "lying", "incline"]],
+]
+
+
+## The movement a lift is planned as: its own (LiftNames.split), or the one it
+## is the same exercise as (SAME_MOVES).
+static func move_of(lift_name: String) -> String:
+	var sp = LiftNames.split(lift_name)
+	var mv = str(sp.move)
+	for r in SAME_MOVES:
+		if mv != str(r[1]):
+			continue
+		var words = str(sp.variation).to_lower().split(" ", false)
+		if r[2].any(func(w): return words.has(str(w))) and not r[3].any(func(w): return words.has(str(w))):
+			return str(r[0])
+	return mv
+
+
 ## The body part of a lift ("back"), from the library or guessed from its name.
 static func part_of(lift_name: String) -> String:
 	var mv = str(LiftNames.split(lift_name).move)
@@ -186,6 +214,73 @@ static func kind_of(lift_name: String) -> String:
 		if KIND_PARTS[k].has(part):
 			return k
 	return ""
+
+
+## Lifts done on another kind of day than their body part says (the user,
+## 2026-11-23, about moving a shoulder lift from the push day to the pull
+## day): {normalized movement: kind}. A movement whose last DONE_KIND_LAST
+## times were on days of one kind (kind_of_day with pull, push, legs) at least
+## DONE_KIND_MIN times is planned on that kind of day from then on, but only
+## when days of its own kind were lifted meanwhile without it: a full-body day
+## (squat, deadlift and bench, a "leg" day by its majority) moves nothing.
+## Only those that differ from kind_of are in it.
+const DONE_KIND_LAST = 3
+const DONE_KIND_MIN = 2
+
+
+static func done_kinds(sessions: Array, today: String, marks: Dictionary = {}) -> Dictionary:
+	var from = Dates.add_days(today, -LOOKBACK)
+	var by_date = {}
+	for s in sessions:
+		var d = str(s.get("date", ""))
+		if str(s.get("discipline", "")) != "lift" or d >= today or d < from:
+			continue
+		if not by_date.has(d):
+			by_date[d] = []
+		by_date[d].append_array(s.get("exercises", []))
+	var times = {}
+	var a_name = {}
+	var kind_days = {}
+	for d in by_date:
+		var dk = kind_of_day(by_date[d], ["pull", "push", "legs"], marks)
+		if dk == "":
+			continue
+		if not kind_days.has(dk):
+			kind_days[dk] = []
+		kind_days[dk].append(d)
+		var seen = {}
+		for ex in by_date[d]:
+			var n = str(ex.get("name", ""))
+			if Pt.is_pt(marks, n) or LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+				continue
+			var mk = Xp.normalize_exercise(move_of(n))
+			if mk == "" or seen.has(mk):
+				continue
+			seen[mk] = true
+			a_name[mk] = n
+			if not times.has(mk):
+				times[mk] = []
+			times[mk].append([d, dk])
+	var out = {}
+	for mk in times:
+		var list: Array = times[mk]
+		list.sort_custom(func(a, b): return str(a[0]) > str(b[0]))
+		var count = {}
+		for t in list.slice(0, DONE_KIND_LAST):
+			count[str(t[1])] = int(count.get(str(t[1]), 0)) + 1
+		var best = ""
+		for k in count:
+			if int(count[k]) >= DONE_KIND_MIN and (best == "" or int(count[k]) > int(count[best])):
+				best = str(k)
+		var own = kind_of(str(a_name[mk]))
+		if best == "" or best == own or own == "":
+			continue
+		# A day of its own kind since the first of those times, without it.
+		var first = str(list.slice(0, DONE_KIND_LAST)[-1][0])
+		var done_on = list.map(func(t): return str(t[0]))
+		if kind_days.get(own, []).any(func(d): return str(d) >= first and not done_on.has(str(d))):
+			out[mk] = best
+	return out
 
 
 ## The hero's pose for a lift in the workout replay: "press" (push), "curl"
@@ -465,10 +560,10 @@ static func way_word(o: Dictionary, main_move: String) -> String:
 ## `hist`: LiftLibrary.stats of the log before the day. One never done is
 ## "new" and has no sets. [{"name", "move", "variation", "new", "last", "lastDate"}]
 static func options_for(l: Dictionary, hist: Dictionary, avoid: Array = [], marks: Dictionary = {}) -> Array:
-	var move_of = func(n: String): return Xp.normalize_exercise(str(LiftNames.split(n).move))
+	var mkey = func(n: String): return Xp.normalize_exercise(move_of(n))
 	var name = str(l.name)
-	var mk = move_of.call(name)
-	var e = LiftNames.movement(str(LiftNames.split(name).move))
+	var mk = mkey.call(name)
+	var e = LiftNames.movement(move_of(name))
 	var latest = func(a, b):
 		if str(a.last) != str(b.last):
 			return str(a.last) > str(b.last)
@@ -483,7 +578,7 @@ static func options_for(l: Dictionary, hist: Dictionary, avoid: Array = [], mark
 	var vars = []
 	for k in hist:
 		# (not a physical therapy variation: that is the PT row's, not a way of the lift)
-		if k != keys[0] and move_of.call(str(hist[k].name)) == mk and not Pt.is_pt(marks, str(hist[k].name)):
+		if k != keys[0] and mkey.call(str(hist[k].name)) == mk and not Pt.is_pt(marks, str(hist[k].name)):
 			vars.append(hist[k])
 	TTUtil.stable_sort(vars, latest)
 	for st in vars.slice(0, 2):
@@ -493,12 +588,12 @@ static func options_for(l: Dictionary, hist: Dictionary, avoid: Array = [], mark
 	if picked.size() == 1 and e != null:
 		add.call(other_gear(e, name, keys))
 	# 5. stand-ins from the family.
-	var fam = family_of(str(LiftNames.split(name).move)).filter(func(m): return not avoid.has(Xp.normalize_exercise(str(m))))
+	var fam = family_of(move_of(name)).filter(func(m): return not avoid.has(Xp.normalize_exercise(str(m))))
 	var fam_keys = fam.map(func(m): return Xp.normalize_exercise(str(m)))
 	var own = {}
 	for k in hist:
 		var n = str(hist[k].name)
-		var nk = move_of.call(n)
+		var nk = mkey.call(n)
 		if fam_keys.has(nk) and not Pt.is_pt(marks, n) and (not own.has(nk) or str(hist[k].last) > str(own[nk].last)):
 			own[nk] = hist[k]
 	var mine = own.values()
@@ -556,7 +651,7 @@ static func new_words(nw: Dictionary) -> String:
 static func stands_in(lift_name: String, same: Dictionary) -> bool:
 	if same.is_empty() or str(same.get("part", "")) == "" or str(same.part) == "other":
 		return false
-	var mk = Xp.normalize_exercise(str(LiftNames.split(lift_name).move))
+	var mk = Xp.normalize_exercise(move_of(lift_name))
 	if same.get("moves", []).has(mk):
 		return false
 	if bool(same.get("known", false)):
@@ -566,7 +661,7 @@ static func stands_in(lift_name: String, same: Dictionary) -> bool:
 
 ## What stands in for a planned lift (stands_in).
 static func same_of(lift_name: String, plan: Dictionary) -> Dictionary:
-	var move = str(LiftNames.split(lift_name).move)
+	var move = move_of(lift_name)
 	return {"part": part_of(lift_name), "kind": kind_of(lift_name), "moves": plan.get("moves", []),
 		"known": LiftNames.movement(move) != null, "family": family_of(move).map(func(m): return Xp.normalize_exercise(str(m)))}
 
@@ -586,7 +681,7 @@ static func beat_any(sessions: Array, names: Array, move: String, date: String, 
 			var k = Xp.normalize_exercise(n)
 			if seen.has(k) or LiftTrend.real_sets(ex.get("sets", [])).is_empty():
 				continue
-			if keys.has(k) or (mk != "" and Xp.normalize_exercise(str(LiftNames.split(n).move)) == mk) or stands_in(n, same):
+			if keys.has(k) or (mk != "" and Xp.normalize_exercise(move_of(n)) == mk) or stands_in(n, same):
 				seen[k] = n
 	for k in seen:
 		if _history_before(sessions, str(seen[k]), date).is_empty() or beat_on(sessions, str(seen[k]), date):
@@ -612,7 +707,7 @@ static func new_by(sessions: Array, today: String, plan: Dictionary) -> String:
 		if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) < today:
 			for ex in s.get("exercises", []):
 				if not LiftTrend.real_sets(ex.get("sets", [])).is_empty():
-					known[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+					known[Xp.normalize_exercise(move_of(str(ex.get("name", ""))))] = true
 	var wants = [Xp.normalize_exercise(str(nw.move))]
 	for a in nw.get("alts", []):
 		wants.append(Xp.normalize_exercise(str(a.move)))
@@ -624,7 +719,7 @@ static func new_by(sessions: Array, today: String, plan: Dictionary) -> String:
 			var n = str(ex.get("name", ""))
 			if LiftTrend.real_sets(ex.get("sets", [])).is_empty():
 				continue
-			var mk = Xp.normalize_exercise(str(LiftNames.split(n).move))
+			var mk = Xp.normalize_exercise(move_of(n))
 			if known.has(mk):
 				continue
 			if wants.has(mk):
@@ -667,7 +762,7 @@ static func lift_done(l: Dictionary, plan: Dictionary, sessions: Array, today: S
 	if l.has("dose"):
 		var got = Dose.extra_done(l, sessions, today, same)
 		return str(got.name) if int(got.sets) >= int(l.dose.sets) else ""
-	return done_of(sessions, ways, today, str(LiftNames.split(str(l.name)).move), same)
+	return done_of(sessions, ways, today, move_of(str(l.name)), same)
 
 
 ## The boxes of the Today card, ticked as TodayView ticks them: a row per
@@ -768,7 +863,7 @@ static func done_of(sessions: Array, names: Array, date: String, move: String = 
 			var n = str(ex.get("name", ""))
 			if LiftTrend.real_sets(ex.get("sets", [])).is_empty():
 				continue
-			if keys.has(Xp.normalize_exercise(n)) or (mk != "" and Xp.normalize_exercise(str(LiftNames.split(n).move)) == mk) or stands_in(n, same):
+			if keys.has(Xp.normalize_exercise(n)) or (mk != "" and Xp.normalize_exercise(move_of(n)) == mk) or stands_in(n, same):
 				return n
 	return ""
 
@@ -849,13 +944,14 @@ static func likely_lifts(sessions: Array, today: String, marks: Dictionary = {},
 			days_of[n][d].append_array(sets)
 	var wd = Dates.weekday_index(today)
 	var day_name = Dates.format_date(today, {"weekday": "long"})
+	var moved = done_kinds(sessions, today, marks)
 	var groups = {}
 	var last_of = {}
 	for n in days_of:
 		var ds = days_of[n].keys()
 		ds.sort()
 		last_of[n] = str(ds[ds.size() - 1])
-		var gk = n if Pt.is_pt(marks, n) else "m:" + Xp.normalize_exercise(str(LiftNames.split(n).move))
+		var gk = n if Pt.is_pt(marks, n) else "m:" + Xp.normalize_exercise(move_of(n))
 		if not groups.has(gk):
 			groups[gk] = {"names": [], "days": {}}
 		groups[gk].names.append(n)
@@ -880,7 +976,8 @@ static func likely_lifts(sessions: Array, today: String, marks: Dictionary = {},
 				same += 1
 		var due = clampf(float(since) / maxf(gap, 1.0), 0.0, 1.5)
 		var pt = Pt.is_pt(marks, n)
-		var lk = kind_of(n)
+		# (where it is really done, when that is another kind of day than its body part's)
+		var lk = str(moved.get(Xp.normalize_exercise(move_of(n)), kind_of(n)))
 		var on_day = kind != "" and fits(lk, kind)
 		if kind != "" and lk != "" and not on_day and not pt:
 			continue
@@ -1024,7 +1121,7 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	# (the heavy press before the flyes), and nothing else in the plan offers
 	# their movements.
 	var hist = LiftLibrary.stats(before)
-	var avoid = lifts.map(func(l): return Xp.normalize_exercise(str(LiftNames.split(str(l.name)).move)))
+	var avoid = lifts.map(func(l): return Xp.normalize_exercise(move_of(str(l.name))))
 	var extra = []
 	if Dose.plan_id(settings) != "":
 		if not off:
@@ -1044,7 +1141,7 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		for s in before:
 			if str(s.get("discipline", "")) == "lift":
 				for ex in s.get("exercises", []):
-					done[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+					done[Xp.normalize_exercise(move_of(str(ex.get("name", ""))))] = true
 		# A movement of the area (or of the day's kind) not done: the staples of
 		# its areas taken in turn, then the rest of the library.
 		var fit = func(e): return fits(kind_of(str(e.name)), kind) if kind != "" else str(GROUP.get(str(e.part), "")) == group
@@ -1302,7 +1399,7 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 		if not alts.is_empty():
 			desc += " Or: %s." % ", ".join(PackedStringArray(alts))
 		var ways = l.options.map(func(o): return str(o.name))
-		var did = beat_any(sessions, ways, str(LiftNames.split(str(l.name)).move), today, same_of(str(l.name), plan))
+		var did = beat_any(sessions, ways, move_of(str(l.name)), today, same_of(str(l.name), plan))
 		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "Beat it: %s" % str(main.move), desc, "sword", "lift",
 			1, 1 if did else 0, "", 200, claims,
 			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "planned": str(l.name)}))
@@ -1418,13 +1515,13 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 	for s in sessions:
 		if str(s.get("discipline", "")) == "lift" and str(s.get("date", "")) < wk:
 			for ex in s.get("exercises", []):
-				seen_before[Xp.normalize_exercise(str(LiftNames.split(str(ex.get("name", ""))).move))] = true
+				seen_before[Xp.normalize_exercise(move_of(str(ex.get("name", ""))))] = true
 	for s in week:
 		if str(s.get("discipline", "")) != "lift":
 			continue
 		for ex in s.get("exercises", []):
 			var n = str(ex.get("name", ""))
-			var mv = Xp.normalize_exercise(str(LiftNames.split(n).move))
+			var mv = Xp.normalize_exercise(move_of(n))
 			if not seen_before.has(mv):
 				new_moves[mv] = true
 			var hist = _history_before(sessions, n, str(s.date))
