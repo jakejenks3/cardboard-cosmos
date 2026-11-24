@@ -22,7 +22,7 @@ extends RefCounted
 ## turns them into that first, so 3 and 3.0 are the same.
 
 ## Lists of records merged by their `id`.
-const RECORD_LISTS = ["sessions", "body", "claims", "purchases", "projects", "todos"]
+const RECORD_LISTS = ["sessions", "body", "claims", "purchases", "projects", "todos", "books"]
 
 ## Stands for "not there" while comparing.
 const NONE = "§tiny-titan:none§"

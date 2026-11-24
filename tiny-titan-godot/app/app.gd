@@ -326,6 +326,103 @@ func clear_done_todos() -> int:
 	return n
 
 
+## Books (game/books.gd), as stored: the shelf and the book being read. A
+## change saves and redraws; only the pages a bookmark adds go into the
+## reading log (set_book_page), and that works the hero out again.
+func books() -> Array:
+	if not (saved.get("books") is Array):
+		saved["books"] = []
+	return saved.books
+
+
+func _books_changed() -> void:
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## Add books (Books.parse_list rows, or one). A book already there (the same
+## title and author) is left as it is. Returns how many were added.
+func add_books(items: Array) -> int:
+	var have = {}
+	for b in books():
+		have[Books.key(str(b.title), str(b.author))] = true
+		have[Books.key(str(b.title))] = true
+	var n = 0
+	for it in items:
+		if not (it is Dictionary) or Books.clean(it.get("title", "")) == "":
+			continue
+		var k = Books.key(str(it.title), str(it.get("author", "")))
+		if have.has(k) or (str(it.get("author", "")) == "" and have.has(Books.key(str(it.title)))):
+			continue
+		have[k] = true
+		var status = str(it.get("status", "finished"))
+		var b = Books.new_book(str(it.title), str(it.get("author", "")), str(it.get("series", "")), int(it.get("num", 0)), int(it.get("pages", 0)),
+			status, int(it.get("page", 0)), now_ms() + n, "")
+		books().append(b)
+		n += 1
+	if n > 0:
+		_books_changed()
+	return n
+
+
+## The page the reading of a book stopped on, today: the day's pages of it
+## change by what the bookmark moved (Books.set_page), and the reading log
+## with them. Returns {"delta", "pages" (of this book today), "day" (all the
+## day's pages)}, or {} when there is no such book.
+func set_book_page(id: String, page: int) -> Dictionary:
+	var b = Books.find(books(), id)
+	if b == null:
+		return {}
+	var r = Books.set_page(b, page, today)
+	var i = books().find(b)
+	saved.books[i] = r.book
+	var e = Reading.entry_on(reading(), today)
+	var cur = int(e.pages) if e != null else 0
+	var want = Reading.clamp_pages(cur + int(r.delta))
+	var day = cur
+	if want != cur:
+		# (set_reading saves the book with the day's pages)
+		day = set_reading(today, want)
+	else:
+		_books_changed()
+	return {"delta": day - cur, "pages": int(r.pages), "day": day}
+
+
+## Finish a book (today), or put it back to being read.
+func set_book_finished(id: String, finished: bool) -> void:
+	var b = Books.find(books(), id)
+	if b == null:
+		return
+	b.status = "finished" if finished else "reading"
+	b.finished = today if finished else ""
+	_books_changed()
+
+
+## Change what is known of a book: {"title", "author", "series", "num", "pages", "page"}.
+## The bookmark set here moves no pages (it is where the reading stands, not reading done).
+func update_book(id: String, fields: Dictionary) -> void:
+	var b = Books.find(books(), id)
+	if b == null:
+		return
+	for k in ["title", "author", "series"]:
+		if fields.has(k) and (k != "title" or Books.clean(fields[k]) != ""):
+			b[k] = Books.clean(fields[k])
+	for k in ["num", "pages", "page"]:
+		if fields.has(k):
+			b[k] = clampi(int(fields[k]), 0, Books.MAX_PAGE)
+	_books_changed()
+
+
+## Take a book off the shelf. The pages it added to the reading log stay.
+func remove_book(id: String) -> void:
+	var b = Books.find(books(), id)
+	if b == null:
+		return
+	books().erase(b)
+	_books_changed()
+
+
 ## Climbing projects (game/projects.gd), as stored: open, sent and set aside.
 func projects() -> Array:
 	return saved.projects
@@ -1348,6 +1445,7 @@ static func empty_saved() -> Dictionary:
 		"pt": {},
 		"projects": [],
 		"todos": [],
+		"books": [],
 	}
 
 
@@ -1379,6 +1477,7 @@ static func parse_saved(raw):
 	out.reading = Reading.parse_log(o.get("reading"))
 	out.projects = Projects.parse(o.get("projects"))
 	out.todos = Todos.parse(o.get("todos"))
+	out.books = Books.parse(o.get("books"))
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)
 	if o.get("activePet") is String:

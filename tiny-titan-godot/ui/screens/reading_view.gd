@@ -1,8 +1,10 @@
 class_name ReadingView
 extends RefCounted
 ## Reading (game/reading.gd) on screen: the card on the Hero tab, where one
-## tap adds pages, and the sheet behind it (the bookshelf, the last two weeks,
-## any day's pages, the daily goal).
+## tap adds pages (or, with a book being read, the page it stopped on works
+## them out: BookView), and the sheet behind it (the book being read, the
+## bookshelf of finished books, adding books, the last two weeks, any day's
+## pages, the daily goal).
 
 const QUICK = [1, 5, 10, 25]
 const DAYS_SHOWN = 14
@@ -66,14 +68,20 @@ static func card() -> Control:
 	top.add_child(fl)
 	c.add(top)
 
-	var keys = Kit.hbox(6)
-	for n in QUICK:
-		var b = Kit.button("+%d" % n, "ghost", Callable(), "sm")
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.tooltip_text = "Add %d page%s to today" % [n, "" if n == 1 else "s"]
-		b.pressed.connect(ReadingView.add.bind(n, "", b))
-		keys.add_child(b)
-	c.add(keys)
+	# A book being read: the page it stopped on works the pages out. Without
+	# one, a tap adds pages.
+	var now = Books.reading_now(App.books())
+	if not now.is_empty():
+		c.add(BookView.card_rows(now[0]))
+	else:
+		var keys = Kit.hbox(6)
+		for n in QUICK:
+			var b = Kit.button("+%d" % n, "ghost", Callable(), "sm")
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.tooltip_text = "Add %d page%s to today" % [n, "" if n == 1 else "s"]
+			b.pressed.connect(ReadingView.add.bind(n, "", b))
+			keys.add_child(b)
+		c.add(keys)
 	Kit.passthrough(top)
 	if Time.get_ticks_msec() - _added_at < 400:
 		big.ready.connect(Kit.pop.bind(big, 1.25, 0.3), CONNECT_DEFERRED)
@@ -174,19 +182,14 @@ static func _fill(box: VBoxContainer) -> void:
 	lrow.add_child(Kit.vcenter(Kit.muted("%d pages to Lv %d" % [int(lv.toNext) - int(lv.into), int(lv.level) + 1], 11)))
 	box.add_child(lrow)
 
-	# --- the bookshelf: a book for every hundred pages ---------------------------
-	var shelf_card = Kit.card(6, Callable(), 10)
-	shelf_card.accent(Pal.READ_DARK)
-	var sh = Kit.hbox(6)
-	var books = Reading.books(s)
-	sh.add_child(Kit.clip("Bookshelf", 14, null, true))
-	var to_next = Reading.BOOK_PAGES - (total % Reading.BOOK_PAGES)
-	sh.add_child(Kit.vcenter(Kit.muted("%d book%s · next in %d page%s" % [books, "" if books == 1 else "s", to_next, "" if to_next == 1 else "s"], 11)))
-	shelf_card.add(sh)
-	var shelf = Shelf.new()
-	shelf.setup(books, float(total % Reading.BOOK_PAGES) / float(Reading.BOOK_PAGES))
-	shelf_card.add(shelf)
-	box.add_child(shelf_card)
+	# --- the books: the one being read, the shelf, adding one ---------------------
+	var reading_books = Books.reading_now(App.books())
+	if not reading_books.is_empty():
+		box.add_child(Kit.section_title("Reading now"))
+		for b in reading_books:
+			box.add_child(BookView.reading_card(b))
+	box.add_child(BookView.shelf_card())
+	box.add_child(BookView.add_card())
 
 	# --- one day: its pages and the keys that change them --------------------------
 	var day_card = Kit.card(8, Callable(), 10)
@@ -280,14 +283,16 @@ class Shelf:
 	extends Control
 	## Books stand on planks, left to right; a new plank starts when one is full.
 	## The book being read lies open at the end, as filled as it is read.
+	## A book is a spine of Books.spine: {"w", "h", "color"}.
 
 	const PXS = 3
 	const BOOK_COLORS = ["#e2574c", "#3d9bff", "#23c29b", "#ffb21f", "#a66bff", "#f272b8", "#8fd14f", "#ff8a3d", "#5ad1e6", "#c9a36b"]
 	const ROW_H = 20
 	const MAX_ROWS = 3
 
-	var _books: int = 0
+	var _spines: Array = []
 	var _part: float = 0.0
+	var _open: bool = true
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -295,9 +300,10 @@ class Shelf:
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		custom_minimum_size = Vector2(120, ROW_H * PXS)
 
-	func setup(books: int, part: float) -> void:
-		_books = maxi(0, books)
+	func setup(spines: Array, part: float, open_book: bool = true) -> void:
+		_spines = spines
 		_part = clampf(part, 0.0, 1.0)
+		_open = open_book
 		resized.connect(_fit)
 		_fit()
 
@@ -315,13 +321,15 @@ class Shelf:
 		var x = 1
 		var cols = _cols()
 		# The open book at the end needs 12 art pixels of the last plank.
-		for i in range(_books):
-			var w = Shelf.shape(i).x + 1
+		for i in range(_spines.size()):
+			var w = int(_spines[i].w) + 1
 			if x + w > cols - 1:
 				rows.append([])
 				x = 1
 			rows[rows.size() - 1].append([i, x])
 			x += w
+		if not _open:
+			return rows
 		if x + 13 > cols - 1:
 			rows.append([])
 			x = 1
@@ -354,8 +362,8 @@ class Shelf:
 				if i < 0:
 					_open_book(x, base)
 					continue
-				var sz = Shelf.shape(i)
-				var col = Color(BOOK_COLORS[Rng.hash_string("ink:%d" % i) % BOOK_COLORS.size()])
+				var sz = Vector2i(int(_spines[i].w), int(_spines[i].h))
+				var col: Color = _spines[i].color
 				var top = base - sz.y
 				_cell(x, top, sz.x, sz.y, col)
 				_cell(x, top, 1, sz.y, col.lightened(0.3))

@@ -1435,6 +1435,38 @@ is the Windows handoff.
     (front delts, traps) only when there is room, and is read against its most ("3 -> 9.5").
   - Tests: dose_test (heads, `also_of`, `done_kinds`), missions_test, ahead_test; the walkthroughs
     were held while the user played a game on the PC and run once they were off it.
+- Books: a shelf of finished books and a bookmark that does the page math (2026-11-23, night). The
+  user: "create a bookshelf with my finished books. And to not have to figure out the number of pages
+  each day, just putting the page number I finished on when I do read and have the app do the math."
+  - `game/books.gd` (`Books`, pure). STORED: `saved.books` = [{id, title, author, series, num, pages
+    (its length, 0 unknown), status "reading" | "finished", finished (day or ""), page (the bookmark),
+    log {day: [from, to]}, at}] (kept by `App.parse_saved`, in `SaveMerge.RECORD_LISTS`). Nothing in
+    the rules reads it.
+  - The page math: `Books.set_page(book, page, day)`: a day's pages of a book are `to - from`, `from`
+    being the bookmark as the day began (`start_of`); typing again the same day replaces the day's
+    end (a correction corrects, `delta` can be negative); the next day starts where the last ended.
+    `App.set_book_page(id, page)` puts the `delta` into today's reading (`set_reading`), so XP, the
+    level and the streak work as for any pages; pages typed by hand (+N) stay beside it.
+  - Books added as finished (read before the game) add NO pages to the log: the shelf only says them.
+    A book started with a page ("reading, page 249") has that bookmark and nothing read yet today.
+  - `Books.parse_list(text)`: books split by ";" or new lines (the phone's typing field is one line),
+    `Title | Author | Series 1 | 541 pages | reading, page 249`; only the title is needed, finished
+    unless it says reading or a page. `App.add_books` leaves out a book already there (title and
+    author, any case). Also `set_book_finished`, `update_book` (the bookmark set there moves no
+    pages), `remove_book` (its pages stay in the reading log).
+  - Screens: `ui/screens/book_view.gd` (`BookView`). The Hero tab's reading card shows the book being
+    read (`card_rows`, meta `book_row`: title, series tag, progress, "+51 pages today (from p. 249)",
+    "Stopped on page [box] Save", metas `book_page_box`, `book_page_save`) IN PLACE of the +N keys;
+    Done on the keyboard saves too. Its last page asks "Finished ...?" (`finish`: the shelf, a
+    fanfare). The reading sheet: "Reading now" cards (meta `book_card`, "Finished it"), the bookshelf
+    (meta `bookshelf`: `ReadingView.Shelf` now draws real spines, `Books.spine`: thicker for a longer
+    book, a series keeps its colour; the titles under it, newest first, meta `shelf_book`, a tap opens
+    the book's sheet `open_book`: title, author, series, length, bookmark, Finished / Reading it again,
+    Remove), "Add a book" (meta `book_add`: title, author, length, on page; Start reading / Already
+    read) with "Add several at once" (meta `book_paste`). The old shelf of "a book per 100 pages" is
+    gone from the screen; `Reading.books` stays for its trophies.
+  - The user's own books went in by a paste from chat (their list is not in the source).
+  - Tests: `tests/books_test.gd`; walkthrough `tests/shots/books.gd` (year data, also `--fingers`).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1605,6 +1637,7 @@ godot --headless --path . --script res://tests/run_splits_test.gd
 godot --headless --path . --script res://tests/sides_test.gd
 godot --headless --path . --script res://tests/units_test.gd
 godot --headless --path . --script res://tests/sfx_test.gd
+godot --headless --path . --script res://tests/books_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1639,6 +1672,7 @@ units (pounds and miles where the rules write kg and km: record cards, XP chips,
 picks (the Log form's "From today's plan" card and an exercise card's up / down keys; year data),
 filed (how a new exercise typed in the Log tab will be filed: the note at the search box, the line under its name; year data),
 update (the phone app's "new version ready" card and its Settings row, pretended on the PC; year data),
+books (books pasted in, the page box on the reading card doing the page math, finishing one, the bookshelf; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`
