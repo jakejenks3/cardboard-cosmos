@@ -103,6 +103,31 @@ func _init() -> void:
 	var row_m = find(after, ":beat:bent over row - barbell")
 	ok(lat_m != null and lat_m.done and row_m != null and not row_m.done, "one more rep beats it; a lighter row does not")
 	ok(find(after, ":new").done and find(after, ":pt").done and find(after, ":show").done, "the new movement, the PT and showing up are done", [find(after, ":new"), find(after, ":pt"), find(after, ":show")])
+
+	# --- physical therapy: 3 a day, not every exercise (2026-11-24) -------------------------
+	var pt_marks = {}
+	for nm in ["Big Toe Stretch", "Calf Stretch", "Hip T Stretch", "Neck 4 Way", "Wrist Curl", "Dead Hang"]:
+		pt_marks[Pt.key(nm)] = {"name": nm, "perWeek": 1 if nm == "Dead Hang" else 3}
+	var pt_log = log + [lift("2026-11-17", {"Dead Hang": [[1, 5]]})]
+	var pt_plan5 = Missions.day_plan(pt_log, TODAY, pt_marks)
+	ok(pt_plan5.pt.size() == 5 and Missions.pt_goal(pt_plan5) == 3, "five PT exercises still needed this week: today's goal is 3", [pt_plan5.pt.size(), Missions.pt_goal(pt_plan5)])
+	ok(Missions.pt_goal(plan) == 1, "only one still needed: the goal is that one", Missions.pt_goal(plan))
+	var pdata = {"sessions": pt_log, "pt": pt_marks, "settings": {"weightUnit": "kg", "distanceUnit": "km", "weeklyGoal": 3}, "reading": []}
+	var ptm1 = find(Missions.daily(TODAY, pdata, state, []), ":pt")
+	ok(ptm1 != null and int(ptm1.target) == 3 and str(ptm1.desc).begins_with("Do 3 today, any of:"), "the PT mission asks for 3, any of them", ptm1)
+	var two_pt = lift(TODAY, {"Big Toe Stretch": [[10, 5]], "Wrist Curl": [[10, 5]]})
+	pdata.sessions = pt_log + [two_pt]
+	var ptm2 = find(Missions.daily(TODAY, pdata, state, []), ":pt")
+	var box2 = Missions.day_boxes(pt_plan5, pt_log + [two_pt], TODAY).filter(func(b): return b.what == "pt")
+	ok(int(ptm2.progress) == 2 and not ptm2.done and not box2[0].done, "two done: not yet", [ptm2.progress, box2])
+	ok(Missions.pt_left(pt_plan5, pt_log + [two_pt], TODAY).size() == 3, "three still to pick from", Missions.pt_left(pt_plan5, pt_log + [two_pt], TODAY))
+	var three_pt = lift(TODAY, {"Big Toe Stretch": [[10, 5]], "Wrist Curl": [[10, 5]], "Dead Hang": [[1, 5]]})
+	pdata.sessions = pt_log + [three_pt]
+	var ptm3 = find(Missions.daily(TODAY, pdata, state, []), ":pt")
+	var box3 = Missions.day_boxes(pt_plan5, pt_log + [three_pt], TODAY).filter(func(b): return b.what == "pt")
+	ok(ptm3.done and int(ptm3.progress) == 3 and box3[0].done, "three done (one already on target this week counts): the day's PT is done", [ptm3.progress, box3])
+	var eve = Missions.evening_text(pt_plan5, pt_log + [two_pt], TODAY, false)
+	ok(eve.contains("- PT: 1 more, any of"), "the evening check says how many more", eve)
 	# "Try something new" is only done by sets really logged: not by the movement
 	# added to the workout and left empty, not by a new physical therapy exercise.
 	var nw = plan.new

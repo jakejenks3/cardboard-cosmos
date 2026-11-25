@@ -1,9 +1,11 @@
 class_name DoseView
 extends RefCounted
-## The training focus on screen (game/dose.gd): a row on the Today card with
-## the sets the day's muscles got in the last seven days against their weekly
-## target, and a sheet with every muscle, what counted, the rest days and the
-## run. Colours say the state: orange short, green on target, blue plenty.
+## The training focus on screen (game/dose.gd): a flat row in the Today section
+## with the sets the day's muscles got in the last seven days against their
+## weekly target (a bar each: solid = done, faded = today's plan, a white tick =
+## the least a week), and a sheet with every muscle, what counted, the rest
+## days and the run. Colours say the state: orange short, green on target,
+## blue plenty.
 
 static func state_color(state: String) -> Color:
 	match state:
@@ -44,43 +46,50 @@ static func state_of(total: float, least: float, most: float) -> String:
 	return "short" if total < least - 0.01 else ("plenty" if total > most + 0.01 else "ok")
 
 
-## One muscle in a row of small bars: its name, a bar of `now` against the
-## least it needs, and "now / least", or "now → after / least" when a plan
-## will take it further. The colour says where `after` leaves it.
+## One muscle in a row of small bars: its name, a bar, and "now / least", or
+## "now → after / least" when a plan will take it further. The bar: solid =
+## `now`, faded after it = what the plan adds, a white tick = the least a week,
+## all on a scale of the most of them. The colour says where `after` leaves it.
 static func cell(part: String, now: float, after: float, least: float, most: float) -> Control:
 	var col = state_color(state_of(maxf(now, after), least, most))
 	var v = Kit.vbox(2)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.clip(Dose.part_name(part), 11, Pal.TEXT, true))
+	v.add_child(Kit.clip(Dose.part_name(part), 12, Pal.TEXT, true))
 	# (a muscle that needs no sets of its own, least 0: against the most it should get)
-	var ref = least if least > 0.0 else most
-	v.add_child(Kit.bar(clampf(now / maxf(1.0, ref), 0.0, 1.0), col, 6))
+	var scale = maxf(1.0, maxf(after, most if most > 0.0 else least))
+	var b = Kit.bar(clampf(now / scale, 0.0, 1.0), col, 8)
+	b.extra = maxf(0.0, after - now) / scale
+	b.mark = least / scale if least > 0.0 else -1.0
+	v.add_child(b)
 	var said = "%s / %s" % [Dosage._n(now), Dosage._n(least)] if least > 0.0 else "%s · max %s" % [Dosage._n(now), Dosage._n(most)]
 	if after > now + 0.01:
 		said = "%s → %s / %s" % [Dosage._n(now), Dosage._n(after), Dosage._n(least)] if least > 0.0 else "%s → %s" % [Dosage._n(now), Dosage._n(after)]
-	v.add_child(Kit.clip(said, 11, col, true))
+	v.add_child(Kit.clip(said, 12, col, true))
 	return v
 
 
-## The Today card's row: a small bar per muscle of the day. On a lift day it
-## is the PLAN's sum: the sets of the last seven days now, and where today's
+## The Today section's row: a small bar per muscle of the day. On a lift day
+## it is the PLAN's sum: the sets of the last seven days now, and where today's
 ## plan takes each muscle ("3 → 10 / 10"), against the least it needs in a
-## week. Otherwise the last seven days as they stand.
-static func row(plan: Dictionary) -> Control:
+## week. Otherwise the last seven days as they stand. `compact`: two muscles
+## to a line, for beside the muscle map.
+static func row(plan: Dictionary, compact: bool = false) -> Control:
 	var w = _window()
 	var today = plan.get("doseToday", [])
-	var c = Kit.card(4, DoseView.open, 8)
+	var c = Kit.row(DoseView.open, Pal.LINE, null, 8, 4)
 	c.tooltip_text = "Your weekly sets per muscle, and what counts"
 	c.set_meta("dose_row", true)
 	var head = Kit.hbox(6)
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var t = Kit.label("SETS THIS WEEK · NOW → AFTER TODAY'S PLAN" if not today.is_empty() else "LAST 7 DAYS · SETS", 10, Pal.LIFT, true)
+	var t = Kit.label("SETS THIS WEEK" if not today.is_empty() else "LAST 7 DAYS · SETS", 11, Pal.TEXT, true)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t)
 	head.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
 	c.add(head)
-	var cells = Kit.hbox(10)
+	if not today.is_empty():
+		c.add(Kit.clip("now → after today's plan" if compact else "now → after today's plan, of the least a week", 11, Pal.MUTED))
+	var cells = Kit.grid(2, 10) if compact else Kit.hbox(10)
 	cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if today.is_empty():
 		for p in row_parts(plan, w):

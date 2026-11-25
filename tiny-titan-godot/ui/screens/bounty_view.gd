@@ -3,6 +3,11 @@ extends RefCounted
 ## The weekly bounty on screen (rules in game/bounty.gd): the card shown on the
 ## Hero and Adventure tabs, and the sheet with the details, the next rewards
 ## and the past weeks.
+##
+## On the Hero tab (`card(false)`, 2026-11-24) it is a flat row (Kit.row) with a
+## strong violet tint, so it stays vivid inside its section and never looks like
+## the campaign boss (red); a claimed bounty keeps the violet with a green tag.
+## The Adventure tab's big card (`card(true)`) is as it was.
 
 
 ## The coins a win this week would pay (streak included), before any crush bonus.
@@ -38,6 +43,8 @@ static func card(big: bool = false) -> Control:
 	var w = Bounty.of(App.state)
 	if w == null:
 		return Kit.gap(0)
+	if not big:
+		return _row(w)
 	var cur = w.current
 	var mon = Bounty.monster(cur.monster)
 	var hp_left = maxf(0.0, float(cur.hp) - float(cur.damage))
@@ -86,6 +93,61 @@ static func card(big: bool = false) -> Control:
 		if big:
 			# Clipped, so a long line can never make the card wider than the screen.
 			foot.add_child(Kit.vcenter(Kit.clip(mon.epithet, 11, Pal.MUTED)))
+		main.add_child(foot)
+	row.add_child(main)
+	row.add_child(Kit.vcenter(Icons.rect("chevron_right", 18)))
+	c.add(row)
+	return c
+
+
+## The Hero tab's bounty: a flat row in the bounty's violet (Kit.row, tinted
+## strongly), the monster, its name (a Label holding exactly the name), the HP
+## bar or what it paid, the coins.
+static func _row(w: Dictionary) -> Control:
+	var cur = w.current
+	var mon = Bounty.monster(cur.monster)
+	var hp_left = maxf(0.0, float(cur.hp) - float(cur.damage))
+	var c = Kit.row(BountyView.open, Pal.BOUNTY, Pal.BOUNTY, 8, 6, 0.4)
+	c.tooltip_text = "A new monster every Monday, sized from your last four weeks.\nBeat it by Sunday night for coins."
+	var row = Kit.hbox(10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bv = BossView.new()
+	bv.setup(cur.monster, 48.0, not cur.defeated)
+	bv.set_dim(cur.defeated)
+	row.add_child(Kit.vcenter(bv))
+	var main = Kit.vbox(4)
+	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var kick = Kit.hbox(6)
+	if cur.defeated:
+		kick.add_child(Kit.tag("CRUSHED" if cur.crushed else "BOUNTY CLAIMED", Pal.GOOD, true, 11))
+		kick.add_child(Kit.vcenter(Icons.rect("check", 14)))
+	else:
+		kick.add_child(Kit.tag("WEEKLY BOUNTY", Pal.BOUNTY, false, 11))
+		kick.add_child(Kit.vcenter(Kit.clip(_left_text(), 11, Pal.with_alpha(Pal.TEXT, 0.75), true)))
+	main.add_child(kick)
+	var top = Kit.hbox(8)
+	top.add_child(Kit.clip(mon.name, 15, null, true))
+	if cur.weak != null and not cur.defeated:
+		top.add_child(weak_pill(cur.weak))
+	if cur.get("weakPart") != null and not cur.defeated:
+		top.add_child(part_pill(str(cur.weakPart)))
+	main.add_child(top)
+	if cur.defeated:
+		var done = Kit.hbox(6)
+		done.add_child(Kit.coin_pill(cur.coins, "Coins this bounty paid"))
+		if not cur.crushed:
+			var more = int(ceil(float(cur.hp) * Bounty.CRUSH_MULT)) - int(cur.damage)
+			done.add_child(Kit.vcenter(Kit.clip("%s more damage crushes it: +%d" % [Xp.fmt_int(more), Bounty.COINS_CRUSH], 11, Pal.MUTED)))
+		elif int(w.streak) >= 2:
+			done.add_child(Kit.icon_chip("flame", "%d in a row" % int(w.streak), Pal.ACCENT2, "Bounties won in a row", Color.WHITE))
+		main.add_child(done)
+	else:
+		main.add_child(Kit.hp_bar(hp_left, float(cur.hp), 14))
+		var foot = Kit.hbox(6)
+		foot.add_child(Kit.coin_pill(coins_now(w), "Coins for beating it this week", 11))
+		if int(w.streak) >= 1:
+			foot.add_child(Kit.icon_chip("flame", "%d in a row" % int(w.streak), Pal.ACCENT2, "Bounties won in a row: each adds %d coins, up to %d" % [Bounty.COINS_STREAK_STEP, Bounty.COINS_STREAK_MAX], Color.WHITE))
 		main.add_child(foot)
 	row.add_child(main)
 	row.add_child(Kit.vcenter(Icons.rect("chevron_right", 18)))

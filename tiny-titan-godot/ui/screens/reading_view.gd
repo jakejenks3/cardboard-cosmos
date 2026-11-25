@@ -5,6 +5,11 @@ extends RefCounted
 ## them out: BookView), and the sheet behind it (the book being read, the
 ## bookshelf of finished books, adding books, the last two weeks, any day's
 ## pages, the daily goal).
+##
+## On the Hero tab it is a section (Kit.section "READING", 2026-11-24): the
+## band holds the reading level, "Goal" once the day's goal is met and the
+## day streak (a small flame); the body the ring, today's pages, the level bar
+## and the book being read or the quick keys.
 
 const QUICK = [1, 5, 10, 25]
 const DAYS_SHOWN = 14
@@ -29,8 +34,23 @@ static func card() -> Control:
 	var lv = Reading.level_of(s)
 	var streak = Reading.streak(s)
 
-	var c = Kit.card(8, ReadingView.open, 10)
-	c.accent(Pal.READ)
+	# The band: "Goal" (once met), the level, the day streak.
+	var right = Kit.hbox(6)
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if pages_today >= goal:
+		right.add_child(Kit.vcenter(Kit.pill("check", "Goal", Pal.GOOD, "", null, 11)))
+	right.add_child(Kit.vcenter(Kit.pill("", "LV %d" % int(lv.level), Pal.READ, "", null, 11)))
+	var fl = Kit.hbox(3)
+	fl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var flame = Icons.rect("flame", 16, null if streak > 0 else Pal.LINE)
+	if streak > 0:
+		Fx.flicker(flame)
+		Fx.embers(flame, Pal.ACCENT2, 2)
+	fl.add_child(Kit.vcenter(flame))
+	fl.add_child(Kit.vcenter(PixelFont.rect("%dD" % streak, 2, Pal.ACCENT2 if streak > 0 else Pal.MUTED)))
+	right.add_child(Kit.vcenter(fl))
+	Kit.passthrough(right)
+	var c = Kit.section("reading", "READING", "book", Pal.READ, right, ReadingView.open, 8, 10)
 	c.tooltip_text = "Reading. Tap for the bookshelf and other days."
 
 	var top = Kit.hbox(10)
@@ -41,31 +61,13 @@ static func card() -> Control:
 	var main = Kit.vbox(3)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var head = Kit.hbox(6)
-	head.add_child(Kit.vcenter(Kit.label("Reading", 15, null, true)))
-	head.add_child(Kit.vcenter(Kit.pill("", "LV %d" % int(lv.level), Pal.READ, "", null, 10)))
-	if pages_today >= goal:
-		head.add_child(Kit.vcenter(Kit.pill("check", "Goal", Pal.GOOD, "", null, 10)))
-	main.add_child(head)
 	var nums = Kit.hbox(6)
 	var big = PixelFont.rect(Xp.fmt_int(pages_today), 3, Pal.READ if pages_today > 0 else Pal.MUTED)
 	nums.add_child(Kit.vcenter(big))
-	nums.add_child(Kit.vcenter(Kit.muted("of %d pages today" % goal, 12)))
+	nums.add_child(Kit.vcenter(Kit.clip("of %d pages today" % goal, 12, Pal.MUTED)))
 	main.add_child(nums)
 	main.add_child(Kit.bar(float(lv.progress), Pal.READ, 4))
 	top.add_child(main)
-
-	var fl = Kit.vbox(0)
-	fl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var flame = Icons.rect("flame", 32, null if streak > 0 else Pal.LINE)
-	if streak > 0:
-		Fx.flicker(flame)
-		Fx.embers(flame, Pal.ACCENT2, 2)
-	fl.add_child(flame)
-	var days = PixelFont.rect("%dD" % streak, 2, Pal.ACCENT2 if streak > 0 else Pal.MUTED)
-	days.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	fl.add_child(days)
-	top.add_child(fl)
 	c.add(top)
 
 	# A book being read: the page it stopped on works the pages out. Without

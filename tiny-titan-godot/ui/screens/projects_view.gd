@@ -3,7 +3,8 @@ extends RefCounted
 ## Climbing projects (game/projects.gd): a boulder or route the player works on
 ## until it goes.
 ##
-##   ProjectsView.card()   the Hero tab's card: the open projects and how long
+##   ProjectsView.card()   the Hero tab's section "PROJECTS" (Kit.section, the
+##                         climbing colour): the open projects and how long
 ##                         they have taken so far; for a climber with none, a
 ##                         line to pick one (null for a player who does not climb)
 ##   ProjectsView.open()   the sheet: the open ones with "I sent it!" and "Set
@@ -44,24 +45,17 @@ static func _climbs_lately() -> bool:
 	return false
 
 
-## The Hero tab's card, or null for a player who does not climb.
+## The Hero tab's section, or null for a player who does not climb.
 static func card():
 	var open_list = App.open_projects()
 	if open_list.is_empty() and not _climbs_lately():
 		return null
-	var c = Kit.card(6, ProjectsView.open, 12)
-	c.accent(Pal.CLIMB)
-	c.tooltip_text = "Climbing projects: the climbs you are working on"
-	var head = _ig(Kit.hbox(8))
-	head.add_child(Kit.vcenter(_ig(Icons.rect("climb", 16))))
-	head.add_child(Kit.vcenter(PixelFont.rect("PROJECTS", 2, Pal.CLIMB)))
-	var gap = _ig(Control.new())
-	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(gap)
+	var right = _ig(Kit.hbox(6))
 	if open_list.is_empty():
-		head.add_child(Kit.vcenter(Kit.tag("+ Pick one", Pal.CLIMB, true, 11)))
-	head.add_child(Kit.vcenter(_ig(Icons.rect("chevron_right", 16))))
-	c.add(head)
+		right.add_child(Kit.vcenter(Kit.tag("+ Pick one", Pal.CLIMB, true, 11)))
+	right.add_child(Kit.vcenter(_ig(Icons.rect("chevron_right", 16))))
+	var c = Kit.section("projects", "PROJECTS", "climb", Pal.CLIMB, right, ProjectsView.open, 6, 10)
+	c.tooltip_text = "Climbing projects: the climbs you are working on"
 	if open_list.is_empty():
 		c.add(_ig(Kit.clip("A climb you cannot send yet: see how many sessions it takes.", 12, Pal.MUTED)))
 		return c

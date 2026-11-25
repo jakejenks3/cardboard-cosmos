@@ -87,6 +87,14 @@ static var HP = Color("ff4d6d")
 ## The weekly bounty: violet, so it never reads as the campaign boss.
 static var BOUNTY = Color("a66bff")
 
+## What a colour means on the Hero tab (2026-11-24, "things blend together"):
+## gold (ACCENT) is a reward (XP, coins, the level, the chest, Claim) and the one
+## main action (Start workout), never a target or a frame for everything. A
+## section's colour is what it is about (LIFT for today's lifting, PT, CLIMB,
+## READ) or the tab it leads to (Pal.tab). GOOD means done, ACCENT2 a warning,
+## DANGER stuck or down. Sections are Kit.section (a band in Pal.band), rows
+## inside them Kit.row (a Pal.slot fill with a stripe).
+
 ## Each tab has its own accent, used for its headings, sub-tabs and tab-bar label,
 ## so the five areas of the game do not all look the same.
 const TAB_ACCENT = {
@@ -177,6 +185,18 @@ static func hex(s) -> Color:
 
 static func with_alpha(c: Color, a: float) -> Color:
 	return Color(c.r, c.g, c.b, a)
+
+
+## The header band of a section in colour `c` (Kit.section): a deep shade lit a
+## little towards `c` (deep alone is too close to the panel for blues).
+static func band(c: Color) -> Color:
+	return deep(c).lerp(c, 0.22)
+
+
+## The fill of a row inside a section (Kit.row): a little darker than the panel,
+## so tags and outlined chips stand out on it. Worked out on each call (themes).
+static func slot() -> Color:
+	return WELL.lerp(PANEL, 0.55)
 
 
 ## A deep shade of `c`, for filling a box that is colour-coded by what it shows.

@@ -1,11 +1,22 @@
 class_name HomeScreen
 extends UiScreen
-## The Hero tab, built to be looked at rather than read: your hero in the gym
-## with the level and XP bar under it, the boss you are fighting, a bright
-## tile per discipline, your streak, the goals you are closest to as rings,
-## today's quests and your latest sessions.
+## The Hero tab. Since 2026-11-24 (the user: "things kinda blend together and
+## are hard to look at") every block is a framed SECTION with a coloured band
+## across its top (Kit.section), rows inside a section are flat (Kit.row), and
+## sections sit further apart (22) than the rows inside them (6-8), so the page
+## reads as groups before a word is read. Top to bottom:
+##   the name, title, coins and settings; slim notices when due (the phone
+##   note, a new version, a backup, a recap); TODAY (the plan, to read before
+##   the workout); COMING UP; TO DO; READING (its page box is filled daily);
+##   MISSIONS (ready ones with their Claim key, the rest as small tiles; the
+##   perfect day is the Today card's chest, not listed twice); the hero in the
+##   gym with the level and the companion's line; ADVENTURE (the campaign boss
+##   and the weekly bounty); PT THIS WEEK; PROJECTS; YOUR WEEK (the level
+##   tiles, the streak, this week's numbers); ALMOST THERE; RECENT.
 
 const SETTINGS = "res://ui/screens/settings.gd"
+## Between two sections (inside one: 6 to 8).
+const SECTION_GAP = 22
 
 
 func build() -> void:
@@ -13,6 +24,7 @@ func build() -> void:
 	var profile = App.profile()
 	if profile == null:
 		return
+	add_theme_constant_override("separation", SECTION_GAP)
 
 	# --- name, title, settings ------------------------------------------------
 	var top = Kit.hbox(10)
@@ -28,68 +40,15 @@ func build() -> void:
 	top.add_child(Kit.vcenter(Kit.icon_button("settings", _open_settings, "Settings")))
 	add_child(top)
 
-	# --- new entries from the phone inbox (never opened by itself) -----------
-	var pend = App.inbox.pending() if App.inbox != null else []
-	if not pend.is_empty():
-		var ic = Kit.card(4, InboxSheet.open_pending, 10)
-		ic.accent(Pal.GOOD)
-		var irow = Kit.hbox(10)
-		irow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		irow.add_child(Kit.vcenter(Icons.rect("speech", 26)))
-		var n = pend.size()
-		irow.add_child(Kit.para("%d new entr%s from your phone" % [n, "y" if n == 1 else "ies"], 15, null, true))
-		irow.add_child(Kit.vcenter(Kit.tag("Review", Pal.GOOD, true, 12)))
-		ic.add(irow)
-		add_child(ic)
-	elif App.inbox != null and App.inbox.note_all_in() > 0:
-		# Everything in the note is in the game: the player can clear it.
-		var n_in = App.inbox.note_all_in()
-		var dc = Kit.card(4, InboxSheet.open_pending, 8)
-		var drow = Kit.hbox(8)
-		drow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		drow.add_child(Kit.vcenter(Icons.rect("check", 18)))
-		drow.add_child(Kit.para("Phone note all imported (%d entr%s): safe to clear it" % [n_in, "y" if n_in == 1 else "ies"], 12, Pal.MUTED))
-		dc.add(drow)
-		add_child(dc)
+	# --- slim notices, only when something is due -----------------------------
+	var notes = _notices()
+	if notes.get_child_count() > 0:
+		add_child(notes)
+	else:
+		notes.free()
 
-	# --- the phone app: a newer version is on the phone, one restart away --------
-	if WebUpdate.ready():
-		add_child(PhoneAppCard.update_card())
-
-	# --- the phone app: time to make a backup file (the only copy elsewhere) ------
-	if OS.has_feature("web") and App.backup_due():
-		var bc = Kit.card(6, Callable(), 10)
-		bc.accent(Pal.ACCENT)
-		var brow = Kit.hbox(10)
-		brow.add_child(Kit.vcenter(Icons.rect("chest", 26)))
-		var bv = Kit.vbox(0)
-		bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bv.add_child(Kit.clip("Back up your log", 15, null, true))
-		bv.add_child(Kit.clip("Last backup: %s" % App.backup_age_text(), 12, Pal.MUTED))
-		brow.add_child(bv)
-		brow.add_child(Kit.vcenter(Kit.button("Back up", "primary", SettingsPanel.pick_export, "sm")))
-		bc.add(brow)
-		add_child(bc)
-
-	# --- a finished week or month has a recap waiting ---------------------------
-	var ready = _recap_ready()
-	if ready != null:
-		var rc = Kit.card(4, _open_recap.bind(ready[0], ready[1]), 10)
-		rc.accent(Pal.tab("journey"), true)
-		var rrow = Kit.hbox(10)
-		rrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		rrow.add_child(Kit.vcenter(Icons.rect("calendar", 26)))
-		var what = "Last week's recap is ready" if ready[0] == "week" else "Your %s recap is ready" % Recap.MONTHS[int(str(ready[1]).substr(5, 2)) - 1]
-		var rl = Kit.para(what, 15, null, true)
-		rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		rrow.add_child(rl)
-		rrow.add_child(Kit.vcenter(Kit.tag("Open", Pal.tab("journey"), true, 12)))
-		rc.add(rrow)
-		add_child(rc)
-
-	# --- today: what is probably next, and the day's missions ------------------
-	# First on the page, to read before the workout (also sent to the phone in
-	# the morning: MorningAlert).
+	# --- today: the plan, first on the page, to read before the workout ------
+	# (also sent to the phone in the morning: MorningAlert / PhonePush)
 	add_child(TodayView.card())
 	# The days after it, to look ahead (nothing in it is logged).
 	var coming = AheadView.card()
@@ -97,18 +56,118 @@ func build() -> void:
 		add_child(coming)
 	# A plain to-do list, apart from the game (game/todos.gd).
 	add_child(TodoView.card())
-	var yesterday = App.quests().get("yesterday", [])
-	if not yesterday.is_empty():
-		add_child(Kit.section_title("From yesterday"))
-		add_child(Parts.quest_list(yesterday, true))
-	add_child(Kit.section_title("Missions", Kit.link("All →", App.go.bind("adventure", "quests"))))
-	add_child(Parts.quest_list(App.quests().daily, true))
+	# Reading: the page box is filled in every day, so it sits up here.
+	add_child(ReadingView.card())
+	add_child(_missions())
 
-	# --- the hero in the gym, with the level right under it -------------------
+	# --- the hero in the gym, the level, the companion's line -----------------
+	var boss = Campaign.boss_at(s.campaign.index)
+	var hp_left = boss.hp - s.campaign.damage
+	var goals = App.next_goals(3)
+	add_child(_hero_card(s, profile, boss, hp_left, goals))
+
+	# --- adventure: the campaign boss and this week's bounty ------------------
+	var adv_col = Pal.tab("adventure")
+	var adv = Kit.section("adventure", "ADVENTURE", "sword", adv_col, Kit.link("All →", App.go.bind("adventure", "campaign"), 13, adv_col.lightened(0.5)), Callable(), 6, 10)
+	adv.add(_boss_row(boss, hp_left))
+	adv.add(BountyView.card(false))
+	add_child(adv)
+	# Physical therapy (game/pt.gd): only when a lift is marked.
+	var pt_card = PtView.card()
+	if pt_card != null:
+		add_child(pt_card)
+	# Climbing projects (game/projects.gd): for a player who climbs.
+	var pj_card = ProjectsView.card()
+	if pj_card != null:
+		add_child(pj_card)
+
+	# --- your week: the level tiles, the streak, this week in numbers ---------
+	add_child(_week_section(s))
+
+	# --- almost there: the closest goals as rings -----------------------------
+	if goals.size() > 0:
+		var g = Kit.section("goals", "ALMOST THERE", "trophy", adv_col, Kit.link("All →", App.go.bind("adventure", "trophies"), 13, adv_col.lightened(0.5)), Callable(), 8, 10)
+		var grow = Kit.grid(goals.size(), 8)
+		for goal in goals:
+			grow.add_child(Parts.goal_tile(goal, true))
+		g.add(grow)
+		add_child(g)
+
+	# --- recent sessions ------------------------------------------------------
+	var sessions = App.sessions()
+	if sessions.is_empty():
+		var first = Kit.button("Log your first workout", "primary", App.open_log.bind(null), "lg", "plus")
+		first.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		add_child(first)
+	else:
+		var jcol = Pal.tab("journey")
+		var rc = Kit.section("recent", "RECENT", "journey", jcol, Kit.link("All →", App.go.bind("journey", "history"), 13, jcol.lightened(0.5)), Callable(), 6, 10)
+		var recent = sessions.duplicate()
+		TTUtil.stable_sort(recent, func(a, b): return a.createdAt > b.createdAt)
+		for i in range(mini(3, recent.size())):
+			var sess = recent[i]
+			rc.add(Parts.session_row(sess, s.sessionXp.get(sess.id, 0), true))
+		add_child(rc)
+
+
+## The slim notices above Today, in this order: the phone note, a new version,
+## a backup that is due, a recap that is ready. An empty box when none is due.
+func _notices() -> VBoxContainer:
+	var notes = Kit.vbox(6)
+	var pend = App.inbox.pending() if App.inbox != null else []
+	if not pend.is_empty():
+		var n = pend.size()
+		notes.add_child(Kit.notice("speech", "%d new entr%s from your phone" % [n, "y" if n == 1 else "ies"], "", Pal.GOOD, Kit.tag("Review", Pal.GOOD, true, 12), InboxSheet.open_pending))
+	elif App.inbox != null and App.inbox.note_all_in() > 0:
+		# Everything in the note is in the game: the player can clear it.
+		var n_in = App.inbox.note_all_in()
+		notes.add_child(Kit.notice("check", "Phone note all imported", "%d entr%s: safe to clear it" % [n_in, "y" if n_in == 1 else "ies"], Pal.MUTED, null, InboxSheet.open_pending))
+	# The phone app: a newer version is on the phone, one restart away.
+	if WebUpdate.ready():
+		notes.add_child(PhoneAppCard.update_card())
+	# The phone app: time to make a backup file (the only copy elsewhere).
+	if OS.has_feature("web") and App.backup_due():
+		notes.add_child(Kit.notice("chest", "Back up your log", "Last backup: %s" % App.backup_age_text(), Pal.ACCENT2, Kit.button("Back up", "secondary", SettingsPanel.pick_export, "sm")))
+	# A finished week or month has a recap waiting.
+	var ready = _recap_ready()
+	if ready != null:
+		var what = "Last week's recap is ready" if ready[0] == "week" else "Your %s recap is ready" % Recap.MONTHS[int(str(ready[1]).substr(5, 2)) - 1]
+		notes.add_child(Kit.notice("calendar", what, "", Pal.tab("journey"), Kit.tag("Open", Pal.tab("journey"), true, 12), _open_recap.bind(ready[0], ready[1])))
+	return notes
+
+
+## MISSIONS: yesterday's done ones and today's done ones as rows with their
+## Claim key, then the ones still open as small tiles two across. The perfect
+## day is the Today card's chest, so it is not listed here as well.
+func _missions() -> Control:
+	var q = App.quests()
+	var yesterday = q.get("yesterday", [])
+	var daily = q.daily.filter(func(m): return not bool(m.get("perfect", false)))
+	var done = daily.filter(func(m): return bool(m.done))
+	var still = daily.filter(func(m): return not bool(m.done))
+	var right = Kit.hbox(8)
+	right.add_child(Kit.vcenter(Kit.label("%d / %d" % [done.size(), daily.size()], 12, Pal.TEXT, true)))
+	right.add_child(Kit.vcenter(Kit.link("All →", App.go.bind("adventure", "quests"), 13, Pal.ACCENT.lightened(0.45))))
+	var c = Kit.section("missions", "MISSIONS", "quest", Pal.ACCENT, right, Callable(), 6, 10)
+	if not yesterday.is_empty():
+		c.add(Kit.sub_head("FROM YESTERDAY", Pal.GOOD))
+		c.add(Parts.quest_list(yesterday, true, true))
+	if not done.is_empty():
+		c.add(Kit.sub_head("DONE TODAY", Pal.GOOD))
+		c.add(Parts.quest_list(done, true, true))
+	if not still.is_empty():
+		if not yesterday.is_empty() or not done.is_empty():
+			c.add(Kit.sub_head("STILL OPEN", Pal.ACCENT))
+		c.add(Parts.mission_grid(still))
+	return c
+
+
+## The hero in the gym (tap to flex), the level under it, and the companion's
+## line in a quiet bubble inside the same card (the companion stands in the gym).
+func _hero_card(s: Dictionary, profile, boss: Dictionary, hp_left, goals: Array) -> Control:
 	var lv = s.levels.hero
 	var stage = Xp.STAGES[s.stage]
 	var stage_card = Kit.card(8, Callable(), 8)
-	stage_card.accent(Pal.ACCENT)
 	var hero = HeroView.new()
 	hero.setup(s, profile, App.loadout(), App.active_pet(), true)
 	hero.custom_minimum_size = Vector2(Art.SCENE_W * 4, Art.SCENE_H * 4)
@@ -128,20 +187,12 @@ func build() -> void:
 	lmain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var lhead = Kit.hbox(6)
 	lhead.add_child(Kit.clip(stage.name, 16, null, true))
-	lhead.add_child(Kit.muted("%s / %s" % [Xp.fmt_int(lv.into), Xp.fmt_int(lv.toNext)], 11))
+	lhead.add_child(Kit.muted("%s / %s" % [Xp.fmt_int(lv.into), Xp.fmt_int(lv.toNext)], 12))
 	lmain.add_child(lhead)
 	lmain.add_child(Kit.bar(lv.progress, Pal.ACCENT, 12))
 	lrow.add_child(lmain)
 	stage_card.add(Kit.pad(lrow, 4, 0, 4, 2))
-	add_child(stage_card)
-
-	# --- the companion (or coach) says one thing ----------------------------
-	var boss = Campaign.boss_at(s.campaign.index)
-	var hp_left = boss.hp - s.campaign.damage
-	var goals = App.next_goals(3)
-	var pet = null
-	if App.active_pet() != null and s.pets.has(App.active_pet()):
-		pet = Pets.by_id(App.active_pet())
+	# The companion (or coach) says one thing.
 	var line = Chatter.pet_line({
 		"s": s,
 		"today": App.today,
@@ -152,33 +203,35 @@ func build() -> void:
 		"bossHpLeft": hp_left,
 		"nearest": goals[0] if goals.size() > 0 else null,
 	})
-	var srow = Kit.hbox(10)
-	if pet != null:
-		var pv = PetView.new()
-		pv.setup(pet.id, 40.0, true)
-		srow.add_child(Kit.vcenter(pv))
-	else:
-		srow.add_child(Kit.vcenter(Icons.rect("speech", 28)))
 	var bubble = PanelContainer.new()
 	bubble.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bubble.add_theme_stylebox_override("panel", PixBox.make(Pal.TEXT, {"lip": 1, "lip_color": Pal.MUTED.darkened(0.3), "pad_h": 12, "pad_v": 7}))
-	bubble.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bubble.add_child(Kit.para(Icons.strip_emoji(line), 14, Pal.INK, true))
-	srow.add_child(bubble)
-	add_child(srow)
+	bubble.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL2, {"ring": Pal.BORDER, "lip": 1, "pad_h": 10, "pad_v": 6}))
+	var brow = Kit.hbox(8)
+	brow.add_child(Kit.vcenter(Icons.rect("speech", 16)))
+	var said = Kit.para(Icons.strip_emoji(line), 13, Pal.TEXT, true)
+	said.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	brow.add_child(said)
+	bubble.add_child(brow)
+	stage_card.add(Kit.pad(bubble, 4, 0, 4, 2))
+	return stage_card
 
-	# --- the boss you are fighting -------------------------------------------
-	var boss_card = Kit.card(6, App.go.bind("adventure", "campaign"), 10)
-	boss_card.accent(Pal.HP, true)
-	var brow = Kit.hbox(12)
+
+## The campaign boss as a row of the Adventure section: a strong red, so it is
+## never confused with the violet bounty under it.
+func _boss_row(boss: Dictionary, hp_left) -> Control:
+	var c = Kit.row(App.go.bind("adventure", "campaign"), Pal.HP, Pal.HP, 8, 4, 0.4)
+	var brow = Kit.hbox(10)
+	brow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bv = BossView.new()
-	bv.setup(boss.id, 72.0, true)
+	bv.setup(boss.id, 56.0, true)
 	brow.add_child(Kit.vcenter(bv))
-	var bmain = Kit.vbox(5)
+	var bmain = Kit.vbox(4)
 	bmain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bmain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bmain.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var btop = Kit.hbox(8)
-	btop.add_child(Kit.clip(boss.name, 16, null, true))
+	var kick = Kit.label("CAMPAIGN BOSS", 11, Pal.HP.lightened(0.3), true)
+	btop.add_child(Kit.vcenter(kick))
 	if boss.get("weak") != null:
 		var weak = PanelContainer.new()
 		weak.add_theme_stylebox_override("panel", Kit.sbox(Pal.disc(boss.weak), 5, null, 0, 6, 2))
@@ -191,59 +244,49 @@ func build() -> void:
 		weak.add_child(wrow)
 		btop.add_child(weak)
 	bmain.add_child(btop)
-	bmain.add_child(Kit.bar(float(hp_left) / float(boss.hp), Pal.HP, 14))
+	bmain.add_child(Kit.clip(boss.name, 15, null, true))
+	bmain.add_child(Kit.bar(float(hp_left) / float(boss.hp), Pal.HP, 12))
 	var hp_row = Kit.hbox(4)
 	hp_row.add_child(Icons.rect("heart", 14))
 	hp_row.add_child(Kit.clip("%s / %s" % [Xp.fmt_int(hp_left), Xp.fmt_int(boss.hp)], 12, Pal.TEXT, true))
 	bmain.add_child(hp_row)
 	brow.add_child(bmain)
-	brow.add_child(Kit.vcenter(Icons.rect("chevron_right", 18)))
-	boss_card.add(brow)
-	add_child(boss_card)
+	brow.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
+	c.add(brow)
+	return c
 
-	# --- this week's bounty ----------------------------------------------------
-	add_child(BountyView.card(false))
-	# Physical therapy (game/pt.gd): only when a lift is marked, and high up,
-	# because keeping up with it is the point.
-	var pt_card = PtView.card()
-	if pt_card != null:
-		add_child(pt_card)
-	# Climbing projects (game/projects.gd): for a player who climbs.
-	var pj_card = ProjectsView.card()
-	if pj_card != null:
-		add_child(pj_card)
 
-	# --- the main disciplines: one bright tile each (cycling is kept in the
-	# Miscellaneous area: Misc.MAIN) -------------------------------------------
+## YOUR WEEK: the three level tiles (Misc.MAIN: cycling is kept in the
+## Miscellaneous area), the week streak, and this week against last.
+func _week_section(s: Dictionary) -> Control:
+	var sec = Kit.section("week", "YOUR WEEK", "calendar", Pal.tab("journey"), null, Callable(), 8, 10)
 	var tiles = Kit.grid(Misc.MAIN.size(), 8)
 	for d in Misc.MAIN:
 		tiles.add_child(Parts.stat_tile(d, s.levels[d]))
-	add_child(tiles)
-
-	# --- weekly streak --------------------------------------------------------
+	sec.add(tiles)
 	var streak = s.streak
-	var sc = Kit.card(6, Callable(), 10)
-	if int(streak.current) > 0:
-		sc.accent(Pal.ACCENT2)
+	var on = int(streak.current) > 0
+	var sc = Kit.row(Callable(), Pal.ACCENT2 if on else Pal.LINE, Pal.ACCENT2 if on else null, 8, 0, 0.12)
 	sc.tooltip_text = "Hit your weekly goal to keep the streak. Best: %d weeks." % int(streak.best)
 	sc.mouse_filter = Control.MOUSE_FILTER_STOP
 	var strow = Kit.hbox(10)
-	var flame = Icons.rect("flame" if int(streak.current) > 0 else "ember", 34)
-	if int(streak.current) > 0:
+	strow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var flame = Icons.rect("flame" if on else "ember", 30)
+	if on:
 		Fx.flicker(flame)
 		Fx.embers(flame, Pal.ACCENT2, 3)
 	strow.add_child(Kit.vcenter(flame))
-	strow.add_child(Kit.vcenter(PixelFont.rect(str(int(streak.current)), 4, Pal.ACCENT2 if int(streak.current) > 0 else Pal.MUTED)))
-	var st = Kit.label("week streak" if int(streak.current) != 1 else "week streak", 14, null, true)
+	strow.add_child(Kit.vcenter(PixelFont.rect(str(int(streak.current)), 3, Pal.ACCENT2 if on else Pal.MUTED)))
+	var st = Kit.label("week streak", 14, null, true)
 	st.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	strow.add_child(Kit.vcenter(st))
 	var dots = Kit.hbox(4)
 	dots.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dots.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for i in range(int(streak.goal)):
-		var on = i < int(streak.thisWeek)
 		var dot = Panel.new()
 		dot.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		if on:
+		if i < int(streak.thisWeek):
 			dot.add_theme_stylebox_override("panel", PixBox.make(Pal.ACCENT, {"lip": 1, "lip_color": Pal.ACCENT_DARK, "pad_h": 0, "pad_v": 0}))
 		else:
 			dot.add_theme_stylebox_override("panel", PixBox.well(0, 0, null))
@@ -252,37 +295,9 @@ func build() -> void:
 		dots.add_child(dot)
 	strow.add_child(dots)
 	sc.add(strow)
-	add_child(sc)
-
-	# --- reading: today's pages, one tap to add more ---------------------------
-	add_child(ReadingView.card())
-
-	# --- this week in numbers, against last week -----------------------------
-	add_child(_week_card(s))
-
-	# --- almost there: the closest goals as rings -----------------------------
-	if goals.size() > 0:
-		add_child(Kit.section_title("Almost there", Kit.link("All →", App.go.bind("adventure", "trophies"))))
-		var grow = Kit.grid(goals.size(), 8)
-		for g in goals:
-			grow.add_child(Parts.goal_tile(g))
-		add_child(grow)
-
-	# --- recent sessions ------------------------------------------------------
-	var sessions = App.sessions()
-	if sessions.is_empty():
-		var first = Kit.button("Log your first workout", "primary", App.open_log.bind(null), "lg", "plus")
-		first.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		add_child(first)
-	else:
-		add_child(Kit.section_title("Recent", Kit.link("All →", App.go.bind("journey", "history"))))
-		var recent = sessions.duplicate()
-		TTUtil.stable_sort(recent, func(a, b): return a.createdAt > b.createdAt)
-		var list = Kit.vbox(8)
-		for i in range(mini(3, recent.size())):
-			var sess = recent[i]
-			list.add_child(Parts.session_row(sess, s.sessionXp.get(sess.id, 0)))
-		add_child(list)
+	sec.add(sc)
+	sec.add(_week_card(s))
+	return sec
 
 
 ## XP, sessions per discipline and PRs of one Monday-week.
@@ -306,8 +321,7 @@ func _week_card(s: Dictionary) -> Control:
 	var wk = Dates.week_key(App.today)
 	var now = _week_numbers(s, wk)
 	var last = _week_numbers(s, Dates.add_weeks(wk, -1))
-	var c = Kit.card(6, RecapSheet.open.bind("week", wk), 10)
-	c.accent(Pal.SECOND)
+	var c = Kit.row(RecapSheet.open.bind("week", wk), Pal.SECOND, null, 8, 6)
 	c.tooltip_text = "Monday to Sunday. Tap for this week's recap."
 	var head = Kit.hbox(8)
 	var ttl = Kit.clip("This week", 14, null, true)

@@ -4,6 +4,12 @@ extends RefCounted
 ## session rows, discipline tiles, the appearance picker. Kit knows nothing
 ## about the game; these do. They are colour-coded by what they show and keep
 ## words to a minimum: an icon, a title, a bar, a number.
+##
+## Inside a Hero tab section (2026-11-24) rows are FLAT (Kit.row: a darker
+## fill, a stripe down the left), never raised boxes in a box: `quest_list`,
+## `goal_tile` and `session_row` take `flat = true` for that, and
+## `mission_grid` lays the open missions out as small flat tiles two across.
+## Without it they look as before (the Adventure and Journey tabs).
 
 const KIND_LABEL = {"achievement": "Trophy", "item": "Gear", "pet": "Companion", "stage": "Evolution", "rank": "Rank"}
 
@@ -43,29 +49,41 @@ static func _claim(q: Dictionary, from: Control) -> void:
 
 ## A list of quest rows: icon, title, bar and the reward. A finished quest turns
 ## green with a Claim button; `compact` hides the description and progress text.
-static func quest_list(quests: Array, compact: bool = false) -> Control:
-	var list = Kit.vbox(8)
+## `flat`: rows for a section (Kit.row, striped in the mission's colour, green
+## once done), each as tall with its Claim key as with "Done", so nothing under
+## a row moves when one is claimed.
+static func quest_list(quests: Array, compact: bool = false, flat: bool = false) -> Control:
+	var list = Kit.vbox(6 if flat else 8)
 	var settings = App.settings()
 	for q in quests:
 		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
 		# A mission about one lift opens that lift's page (last time, what to beat).
-		var card = Kit.card(5, JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else Callable(), 10)
-		if q.claimed:
-			card.modulate.a = 0.6
-		elif q.done:
-			card.accent(Pal.GOOD)
+		var tap = JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else Callable()
+		var card
+		if flat:
+			card = Kit.row(tap, Pal.GOOD if q.done else color, Pal.GOOD if (q.done and not q.claimed) else null, 8, 4)
+			if q.claimed:
+				card.modulate.a = 0.6
+		else:
+			card = Kit.card(5, tap, 10)
+			if q.claimed:
+				card.modulate.a = 0.6
+			elif q.done:
+				card.accent(Pal.GOOD)
 		var row = Kit.hbox(10)
-		row.add_child(Kit.vcenter(Icons.rect("check" if q.claimed else Icons.for_emoji(q.icon), 30)))
+		if flat:
+			row.custom_minimum_size.y = 44 if Kit.fingers else 40
+		row.add_child(Kit.vcenter(Icons.rect("check" if q.claimed else Icons.for_emoji(q.icon), 28 if flat else 30)))
 		var main = Kit.vbox(4)
 		main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		main.add_child(Kit.clip(Icons.strip_emoji(q.title), 15, null, true))
+		main.add_child(Kit.clip(Icons.strip_emoji(q.title), 14 if flat else 15, null, true))
 		if not compact:
 			main.add_child(Kit.muted_para(Icons.strip_emoji(q.desc), 12))
 		var ratio = 0.0
 		if float(q.target) > 0.0:
 			ratio = float(q.progress) / float(q.target)
-		main.add_child(Kit.bar(ratio, color, 8))
+		main.add_child(Kit.bar(ratio, color, 6 if flat else 8))
 		if not compact:
 			main.add_child(Kit.muted(quest_progress_text(q, settings), 11))
 		row.add_child(main)
@@ -73,6 +91,9 @@ static func quest_list(quests: Array, compact: bool = false) -> Control:
 			row.add_child(Kit.vcenter(Kit.muted("Done", 12)))
 		elif q.done:
 			var claim = Kit.button("Claim +%s" % Xp.fmt_int(q.xp), "good", Callable(), "sm")
+			# (its own name: after a claim it is gone, and no other key of the same
+			# text is put under the finger in its place)
+			claim.set_meta("anchor_id", "claim:" + str(q.id))
 			claim.pressed.connect(_claim.bind(q, claim))
 			Fx.shine(claim, 2.6, 0.5, 0.45)
 			row.add_child(Kit.vcenter(claim))
@@ -81,6 +102,38 @@ static func quest_list(quests: Array, compact: bool = false) -> Control:
 		card.add(row)
 		list.add_child(card)
 	return list
+
+
+## The missions still open as small flat tiles, two across: the icon and the
+## mission's own title (two lines at most), a thin bar and the reward. A
+## mission about one lift opens that lift's page, any other the Missions list.
+static func mission_grid(quests: Array) -> GridContainer:
+	var g = Kit.grid(2, 6)
+	for q in quests:
+		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
+		var tap = JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else App.go.bind("adventure", "quests")
+		var t = Kit.row(tap, color, null, 8, 3)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.tooltip_text = Icons.strip_emoji(str(q.get("desc", "")))
+		var line = Kit.hbox(6)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_child(Kit.vcenter(Icons.rect(Icons.for_emoji(q.icon), 20)))
+		var title = Kit.para(Icons.strip_emoji(q.title), 12, Pal.TEXT, true)
+		title.max_lines_visible = 2
+		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.add_child(title)
+		t.add(line)
+		var foot = Kit.hbox(6)
+		foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ratio = 0.0
+		if float(q.target) > 0.0:
+			ratio = float(q.progress) / float(q.target)
+		foot.add_child(Kit.vcenter(Kit.bar(ratio, color, 4)))
+		foot.add_child(Kit.vcenter(xp_chip(q.xp, 11)))
+		t.add(foot)
+		g.add_child(t)
+	return g
 
 
 ## One "next goal" row (from App.next_goals): icon, title, a bar and the percentage.
@@ -105,10 +158,10 @@ static func goal_row(goal: Dictionary) -> Control:
 
 
 ## A goal as a small tile: a progress ring around its icon, the percentage and
-## a short name. The details are in the tooltip.
-static func goal_tile(goal: Dictionary) -> Control:
+## a short name. The details are in the tooltip. `flat`: a flat row for a section.
+static func goal_tile(goal: Dictionary, flat: bool = false) -> Control:
 	var color = Pal.disc(goal.discipline) if goal.get("discipline") != null else Pal.ACCENT
-	var card = Kit.card(4, Callable(), 8)
+	var card = Kit.row(Callable(), Pal.LINE, null, 8, 4) if flat else Kit.card(4, Callable(), 8)
 	card.tooltip_text = "%s\n%s\n%s" % [Icons.strip_emoji(goal.title), Units.text(Icons.strip_emoji(goal.sub), App.settings()), Fmt.fmt_progress(goal.progress, App.settings())]
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	var ring = Ring.new()
@@ -200,12 +253,13 @@ static func stat_tile(d: String, level: Dictionary) -> Control:
 
 ## One logged session: discipline badge, title, summary, XP. A tap opens
 ## everything that was done in it (SessionView.open), with an Edit key there.
-static func session_row(session: Dictionary, xp) -> Control:
+## `flat`: a flat row for a section, striped in the discipline's colour.
+static func session_row(session: Dictionary, xp, flat: bool = false) -> Control:
 	var d = session.discipline
-	var card = Kit.card(4, SessionView.open.bind(session), 8)
+	var card = Kit.row(SessionView.open.bind(session), Pal.disc(d), null, 8, 4) if flat else Kit.card(4, SessionView.open.bind(session), 8)
 	card.tooltip_text = "Everything you did"
 	var row = Kit.hbox(10)
-	row.add_child(session_badge(session, 38))
+	row.add_child(session_badge(session, 32 if flat else 38))
 	var main = Kit.vbox(1)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -213,7 +267,7 @@ static func session_row(session: Dictionary, xp) -> Control:
 	if title == null or str(title) == "":
 		title = Misc.title(session) if Misc.is_misc(session) else TT.DISCIPLINE_META[d].name
 	var head = Kit.hbox(6)
-	head.add_child(Kit.clip(Icons.strip_emoji(title), 14, null, true))
+	head.add_child(Kit.clip(Icons.strip_emoji(title), 15 if flat else 14, null, true))
 	head.add_child(Kit.muted(Dates.relative_day(session.date, App.today), 11))
 	main.add_child(head)
 	var sub = Summary.summarize_session(session, App.settings())

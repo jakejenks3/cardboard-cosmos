@@ -268,11 +268,17 @@ func run(m: Node, t: SceneTree) -> void:
 	var chip = ShotHelper.find_button(main, "Deadlift")
 	check(chip != null, "the Log tab's Deadlift key")
 	if chip != null:
+		# (on some weekdays the day's plan above it is long: it can be below the
+		# window, where a finger cannot tap it)
+		ShotHelper.reveal(chip)
+		await ShotHelper.frames(tree, 4)
 		await _tap(_center(chip))
 		await ShotHelper.wait(tree, 0.5)
 	var st = _stepper()
 	check(st != null, "a stepper to press")
 	if st != null:
+		ShotHelper.reveal(st._plus)
+		await ShotHelper.frames(tree, 4)
 		var v0 = int(st.number())
 		await _tap(_center(st._plus))
 		await ShotHelper.wait(tree, 0.4)

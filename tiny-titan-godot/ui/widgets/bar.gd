@@ -5,6 +5,10 @@ extends Control
 
 var value: float = 0.0
 var color: Color = Pal.ACCENT
+## 0..1 more drawn faded after the fill (today's plan on top of what is done).
+var extra: float = 0.0
+## A target line across the bar at 0..1 (-1 = none).
+var mark: float = -1.0
 var _shown: float = 0.0
 var _tween = null
 ## Every few seconds a glint runs along the filled part (set by Kit.bar on thick bars).
@@ -89,13 +93,23 @@ func _draw() -> void:
 	var inner = Rect2(s, s, w - 2.0 * s, h - 2.0 * s)
 	draw_rect(inner, Pal.WELL)
 	draw_rect(Rect2(inner.position, Vector2(inner.size.x, s)), Pal.WELL.darkened(0.35))
-	if _shown <= 0.001:
+	var fw = 0.0
+	if _shown > 0.001:
+		fw = clampf(floor(inner.size.x * _shown / s) * s, s, inner.size.x)
+		draw_rect(Rect2(inner.position, Vector2(fw, inner.size.y)), color)
+		if inner.size.y >= 3.0 * s:
+			draw_rect(Rect2(inner.position, Vector2(fw, s)), color.lightened(0.38))
+			draw_rect(Rect2(inner.position + Vector2(0, inner.size.y - s), Vector2(fw, s)), color.darkened(0.22))
+	if extra > 0.001 and fw < inner.size.x:
+		# What today's plan adds, faded, after what is done.
+		var ew = minf(floor(inner.size.x * clampf(extra, 0.0, 1.0) / s) * s, inner.size.x - fw)
+		if ew > 0.0:
+			draw_rect(Rect2(inner.position + Vector2(fw, 0), Vector2(ew, inner.size.y)), Pal.with_alpha(color, 0.42))
+	if mark >= 0.0:
+		var mx = clampf(floor(inner.size.x * mark / s) * s, 0.0, inner.size.x - s)
+		draw_rect(Rect2(inner.position.x + mx, 0, s, h), Pal.TEXT)
+	if fw <= 0.0:
 		return
-	var fw = clampf(floor(inner.size.x * _shown / s) * s, s, inner.size.x)
-	draw_rect(Rect2(inner.position, Vector2(fw, inner.size.y)), color)
-	if inner.size.y >= 3.0 * s:
-		draw_rect(Rect2(inner.position, Vector2(fw, s)), color.lightened(0.38))
-		draw_rect(Rect2(inner.position + Vector2(0, inner.size.y - s), Vector2(fw, s)), color.darkened(0.22))
 	# A bright leading edge, like a gauge needle.
 	if fw < inner.size.x and fw > 2.0 * s:
 		draw_rect(Rect2(inner.position + Vector2(fw - s, 0), Vector2(s, inner.size.y)), color.lightened(0.5))

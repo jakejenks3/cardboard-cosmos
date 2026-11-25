@@ -64,7 +64,11 @@ func run(m: Node, t: SceneTree) -> void:
 	var card = _with_meta("update_card")
 	var key = _with_meta("update_restart")
 	check(card != null and ShotHelper.find_text(card, "New version ready") != null and key != null and str(key.text) == "Restart", "the Hero tab has a New version ready card with a Restart key")
-	var today = ShotHelper.find_text(main, "Feeling")
+	var today = null
+	for n in ShotHelper.walk(main):
+		if n.has_meta("section") and str(n.get_meta("section")) == "today":
+			today = n
+			break
 	check(card != null and today != null and card.global_position.y < today.global_position.y, "above the day's plan")
 	await ShotHelper.snap(tree, "update_1_hero")
 	if key != null:

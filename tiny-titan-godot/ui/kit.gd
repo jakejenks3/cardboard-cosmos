@@ -2,6 +2,15 @@ class_name Kit
 extends RefCounted
 ## The UI toolkit: every screen is built in code from these helpers, so the
 ## whole game shares one look. Nothing here knows about game rules.
+##
+## Four looks, each with one meaning (2026-11-24, the Hero tab's clean-up):
+##   - a raised key with a lip (button, chip): it DOES something;
+##   - a sunken track with one key raised (choice_track + choice): PICK ONE;
+##   - an outlined chip (option_chip): ANOTHER WAY, opens a page;
+##   - a flat tag (tag, pill): it only SAYS something.
+## One framed section per subject (section: a band in its colour across the
+## top), rows inside it flat (row: a stripe down the left edge), groups inside
+## it under a sub_head, done boxes as tick_box, counts as pips.
 
 ## Where modal sheets and overlays are added. Set by main.gd.
 static var overlay_root: Control = null
@@ -528,7 +537,7 @@ static func icon_button(icon: String, on_press: Callable = Callable(), tip: Stri
 
 
 ## A text link ("All trophies →").
-static func link(text, on_press: Callable = Callable(), size: int = 13) -> Button:
+static func link(text, on_press: Callable = Callable(), size: int = 13, color = null) -> Button:
 	var b = Button.new()
 	b.text = str(text)
 	b.flat = true
@@ -537,10 +546,13 @@ static func link(text, on_press: Callable = Callable(), size: int = 13) -> Butto
 	var empty = StyleBoxEmpty.new()
 	for s in ["normal", "hover", "pressed", "focus", "disabled"]:
 		b.add_theme_stylebox_override(s, empty)
-	b.add_theme_color_override("font_color", Pal.ACCENT)
-	b.add_theme_color_override("font_hover_color", Pal.ACCENT.lightened(0.25))
-	b.add_theme_color_override("font_pressed_color", Pal.ACCENT.darkened(0.15))
-	b.add_theme_color_override("font_focus_color", Pal.ACCENT)
+	var col = Pal.ACCENT if color == null else color
+	if fingers:
+		b.custom_minimum_size.y = 34
+	b.add_theme_color_override("font_color", col)
+	b.add_theme_color_override("font_hover_color", col.lightened(0.25))
+	b.add_theme_color_override("font_pressed_color", col.darkened(0.15))
+	b.add_theme_color_override("font_focus_color", col)
 	b.add_theme_font_size_override("font_size", size)
 	if on_press.is_valid():
 		b.pressed.connect(on_press)
@@ -591,6 +603,224 @@ static func tag(text, color: Color, dark_text: bool = true, size: int = 11) -> P
 	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	p.add_child(label(text, size, Pal.INK if dark_text else Pal.TEXT, true))
 	return p
+
+
+# ---------------------------------------------------------------------------
+# Sections and rows (the Hero tab's look; see the top of this file)
+# ---------------------------------------------------------------------------
+
+## A framed section: one Card with a band across its top in `color` (an icon,
+## the title in pixel letters, `right` at the end: a count, a link, a key) and
+## a frame in the same colour. `add()` fills the body under the band. Tests find
+## a section by its meta "section" = `id` (pixel letters are not Label text).
+static func section(id: String, title: String, icon: String, color: Color, right: Control = null, tap: Callable = Callable(), sep: int = 8, pad_px: int = 10) -> Card:
+	var c = card(sep, tap, pad_px)
+	c.accent(color)
+	var head = PanelContainer.new()
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.custom_minimum_size = Vector2(0, 40 if fingers else 34)
+	var sb = sbox(Pal.band(color), 0, null, 0, 8, 3)
+	sb.border_width_bottom = 2
+	sb.border_color = Pal.with_alpha(color, 0.85)
+	head.add_theme_stylebox_override("panel", sb)
+	var h = hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon != "":
+		h.add_child(vcenter(Icons.rect(icon, 16)))
+	var t = PixelFont.rect(title, 2, color.lightened(0.25))
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(vcenter(t))
+	h.add_child(spacer())
+	if right != null:
+		h.add_child(vcenter(right))
+	head.add_child(h)
+	c.with_head(head, pad_px, sep)
+	c.set_meta("section", id)
+	return c
+
+
+## A row inside a section: a flat fill (Pal.slot) with a stripe of `stripe`
+## down its left edge (null: a quiet line), tinted `amount` towards `tint`.
+## Tappable with `tap`, like any Card.
+static func row(tap: Callable = Callable(), stripe = null, tint = null, pad_px: int = 8, sep: int = 4, amount: float = 0.16) -> Card:
+	var c = Card.new(sep, pad_px)
+	c.flat(Pal.LINE if stripe == null else stripe, tint, amount)
+	if tap.is_valid():
+		c.on_tap(tap)
+	return c
+
+
+## A group's heading inside a section: a short bar of `color`, the words, and
+## `right` at the end (a Label there is cut off with "..." rather than widen the row).
+static func sub_head(text: String, color: Color, right: Control = null, tip: String = "") -> HBoxContainer:
+	var h = hbox(6)
+	h.custom_minimum_size = Vector2(0, 22)
+	var bar = ColorRect.new()
+	bar.color = color
+	bar.custom_minimum_size = Vector2(4, 14)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(vcenter(bar))
+	var l = label(text, 12, Pal.TEXT, true)
+	if tip != "":
+		l.tooltip_text = tip
+		l.mouse_filter = Control.MOUSE_FILTER_PASS
+	h.add_child(vcenter(l))
+	if right is Label:
+		right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		h.add_child(vcenter(right))
+	else:
+		h.add_child(spacer())
+		if right != null:
+			h.add_child(vcenter(right))
+	return h
+
+
+## One key of a pick-one track (choice_track): raised in `color` when it is the
+## one picked, else just its word on the track. Both are the same height, so
+## nothing moves when the pick changes.
+static func choice(text, on: bool, on_press: Callable, color: Color, size: int = 13) -> Button:
+	var b = Button.new()
+	b.text = str(text)
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var pv = 8 if fingers else 5
+	# A raised key's lip: 1 art pixel of colour plus the outline row under it.
+	var lip = 2 * PixBox.S
+	var fg = Pal.MUTED
+	if on:
+		var looks = PixBox.button_set(color, color.darkened(0.42), 10, pv, 1, null)
+		for k in ["normal", "hover", "pressed"]:
+			b.add_theme_stylebox_override(k, looks[k].duplicate())
+		b.add_theme_stylebox_override("hover_pressed", looks["pressed"].duplicate())
+		fg = Pal.INK
+	else:
+		var off = StyleBoxEmpty.new()
+		off.content_margin_left = 10
+		off.content_margin_right = 10
+		off.content_margin_top = pv
+		off.content_margin_bottom = pv + lip
+		b.add_theme_stylebox_override("normal", off)
+		var hov = sbox(Pal.with_alpha(Pal.TEXT, 0.07), 3, null, 0, 10, pv)
+		hov.content_margin_bottom = pv + lip
+		b.add_theme_stylebox_override("hover", hov)
+		var prs = sbox(Pal.with_alpha(color, 0.3), 3, null, 0, 10, pv)
+		prs.content_margin_bottom = pv + lip
+		b.add_theme_stylebox_override("pressed", prs)
+		b.add_theme_stylebox_override("hover_pressed", prs.duplicate())
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	for k in ["font_color", "font_pressed_color", "font_focus_color", "font_disabled_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, fg)
+	b.add_theme_color_override("font_hover_color", Pal.INK if on else Pal.TEXT)
+	b.add_theme_font_size_override("font_size", size)
+	b.add_theme_font_override("font", font_bold())
+	juice(b)
+	if on_press.is_valid():
+		b.pressed.connect(on_press)
+	return b
+
+
+## The sunken track a set of `choice` keys sits in.
+static func choice_track(buttons: Array) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.add_theme_stylebox_override("panel", PixBox.well(3, 3, null))
+	var h = hbox(2)
+	for b in buttons:
+		h.add_child(b)
+	p.add_child(h)
+	return p
+
+
+## Another way to do something (the OR options of a lift): an outlined chip
+## that opens a page. `color` null = neutral; a colour marks it (blue: new to you).
+static func option_chip(text, color = null, on_press: Callable = Callable(), size: int = 12) -> Button:
+	var b = Button.new()
+	b.text = str(text)
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var pv = 8 if fingers else 4
+	var edge = Pal.LINE.lightened(0.2) if color == null else Pal.with_alpha(color, 0.75)
+	var tint = Pal.BORDER if color == null else color
+	b.add_theme_stylebox_override("normal", sbox(Pal.with_alpha(tint, 0.1), 3, edge, 2, 8, pv))
+	b.add_theme_stylebox_override("hover", sbox(Pal.with_alpha(tint, 0.2), 3, edge, 2, 8, pv))
+	b.add_theme_stylebox_override("pressed", sbox(Pal.with_alpha(tint, 0.32), 3, edge, 2, 8, pv))
+	b.add_theme_stylebox_override("hover_pressed", sbox(Pal.with_alpha(tint, 0.32), 3, edge, 2, 8, pv))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(k, Pal.TEXT)
+	b.add_theme_font_size_override("font_size", size)
+	b.add_theme_font_override("font", font_bold())
+	if fingers:
+		b.custom_minimum_size.y = 38
+	juice(b)
+	if on_press.is_valid():
+		b.pressed.connect(on_press)
+	return b
+
+
+## A done box, the same everywhere: an empty well while still to do, solid
+## green with a tick once done. The same size in both states.
+static func tick_box(done: bool, px: int = 26) -> PanelContainer:
+	var box = PanelContainer.new()
+	var side = px + (4 if fingers else 0)
+	box.custom_minimum_size = Vector2(side, side)
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if done:
+		box.add_theme_stylebox_override("panel", sbox(Pal.GOOD, 4, Pal.GOOD_DARK, 2, 0, 0))
+	else:
+		box.add_theme_stylebox_override("panel", sbox(Pal.WELL, 4, Pal.LINE.lightened(0.1), 2, 0, 0))
+	var mid = CenterContainer.new()
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if done:
+		mid.add_child(Icons.rect("check", 16, Pal.INK))
+	box.add_child(mid)
+	return box
+
+
+## A count as small squares: `done` filled in `color`, the rest empty (ten at
+## most, then "done/total").
+static func pips(done: int, total: int, color: Color, px: int = 10) -> HBoxContainer:
+	var h = hbox(3)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	for i in range(mini(total, 10)):
+		var p = Panel.new()
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		p.custom_minimum_size = Vector2(px, px)
+		var on = i < done
+		p.add_theme_stylebox_override("panel", sbox(color if on else Pal.WELL, 2, color.darkened(0.4) if on else Pal.LINE, 1, 0, 0))
+		h.add_child(vcenter(p))
+	if total > 10:
+		h.add_child(vcenter(label("%d/%d" % [done, total], 11, Pal.MUTED, true)))
+	return h
+
+
+## A slim notice above the page (a backup is due, a new version, the phone
+## note): a row striped and tinted in `color`, an icon, a line or two, an
+## optional key at the end.
+static func notice(icon: String, title: String, sub: String, color: Color, action: Control = null, tap: Callable = Callable()) -> Card:
+	var c = row(tap, color, color, 8, 0, 0.12)
+	var h = hbox(10)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(vcenter(Icons.rect(icon, 24)))
+	var v = vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(clip(title, 14, null, true))
+	if sub != "":
+		v.add_child(clip(sub, 12, Pal.MUTED))
+	h.add_child(v)
+	if action != null:
+		h.add_child(vcenter(action))
+	c.add(h)
+	return c
 
 
 static func rarity_badge(rarity: String) -> PanelContainer:

@@ -4,8 +4,9 @@ extends RefCounted
 ## becomes a PT lift by "(PT)" in the phone note or the Log tab, or by the
 ## switch on its page (JourneyLifts).
 ##
-##   PtView.card()        the Hero tab's card: this week for every PT lift
-##                        (null when there is none)
+##   PtView.card()        the Hero tab's section "PT THIS WEEK" (Kit.section,
+##                        done / goal in its band): this week for every PT
+##                        lift (null when there is none)
 ##   PtView.open()        the sheet: each lift's week, eight weeks of bars, the
 ##                        days a week to aim for
 ##   PtView.state_tag(r)  "Done" / "2 to go" / "Behind" for a row of Pt.status
@@ -50,25 +51,22 @@ static func _ig(c: Control) -> Control:
 	return c
 
 
-## The Hero tab's card, or null when no lift is marked as physical therapy.
+## The Hero tab's section, or null when no lift is marked as physical therapy.
 static func card():
 	var rows = Pt.status(App.sessions(), App.pt(), App.today)
 	if rows.is_empty():
 		return null
 	var sum = Pt.summary(rows)
-	var c = Kit.card(6, PtView.open, 12)
-	c.accent(Pal.PT)
+	var right = _ig(Kit.hbox(6))
+	# (on the PT band: light text, a green tag once the week is done)
+	if int(sum.left) == 0:
+		right.add_child(Kit.vcenter(Kit.tag("%d / %d" % [int(sum.done), int(sum.goal)], Pal.GOOD, true, 12)))
+	else:
+		right.add_child(Kit.vcenter(Kit.label("%d / %d" % [int(sum.done), int(sum.goal)], 14, Pal.TEXT, true)))
+	right.add_child(Kit.vcenter(_ig(Icons.rect("chevron_right", 16))))
+	var c = Kit.section("pt", "PT THIS WEEK", "pt", Pal.PT, right, PtView.open, 6, 10)
+	# The section alone carries this tooltip (the detail walkthrough finds the card by it).
 	c.tooltip_text = "Physical therapy: are you keeping up?"
-	var head = _ig(Kit.hbox(8))
-	head.add_child(Kit.vcenter(Icons.rect("pt", 16)))
-	var title = PixelFont.rect("PHYSICAL THERAPY", 2, Pal.PT)
-	head.add_child(Kit.vcenter(title))
-	var gap = _ig(Control.new())
-	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(gap)
-	head.add_child(Kit.vcenter(Kit.label("%d / %d" % [int(sum.done), int(sum.goal)], 14, Pal.GOOD if int(sum.left) == 0 else null, true)))
-	head.add_child(Kit.vcenter(_ig(Icons.rect("chevron_right", 16))))
-	c.add(head)
 	c.add(Kit.bar(float(sum.done) / float(maxi(1, int(sum.goal))), Pal.PT, 10))
 	var today_i = Dates.weekday_index(App.today)
 	for i in range(mini(rows.size(), CARD_ROWS)):
@@ -84,7 +82,7 @@ static func card():
 		line.add_child(Kit.vcenter(count))
 		c.add(line)
 	if rows.size() > CARD_ROWS:
-		c.add(Kit.muted("and %d more" % (rows.size() - CARD_ROWS), 11))
+		c.add(Kit.clip("and %d more" % (rows.size() - CARD_ROWS), 12, Pal.MUTED))
 	return c
 
 

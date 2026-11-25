@@ -1,7 +1,7 @@
 class_name AheadView
 extends RefCounted
-## The days ahead (Missions.ahead via App.ahead()): a card under the Today card
-## with the next few days in a word each ("Tue Push", "Thu Legs"), and a sheet
+## The days ahead (Missions.ahead via App.ahead()): a section under the Today
+## section with the next few days in a word each ("Tue Push", "Thu Legs"), and a sheet
 ## with every day as it will go: its kind, the lifts with what to aim for and
 ## the other ways to do them, the lift a training focus adds, the movement to
 ## try, the PT, the likely climb or run. Every day is a lift day: no rest day
@@ -38,24 +38,15 @@ static func _any(days: Array) -> bool:
 	return days.any(func(a): return bool(a.lift) or bool(a.rest) or not a.others.is_empty())
 
 
-## The Hero tab's card, or null when there is no pattern to look ahead from.
+## The Hero tab's COMING UP section (right under Today), or null when there is
+## no pattern to look ahead from. A tap anywhere on it opens the sheet.
 static func card():
 	var days = App.ahead()
 	if not _any(days):
 		return null
-	var c = Kit.card(6, AheadView.open, 10)
+	var c = Kit.section("ahead", "COMING UP", "calendar", Pal.BORDER, Icons.rect("chevron_right", 16), AheadView.open, 6, 10)
 	c.tooltip_text = "The next days, if each goes as planned"
 	c.set_meta("ahead_card", true)
-	var head = Kit.hbox(8)
-	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_child(Kit.vcenter(Icons.rect("calendar", 20)))
-	var t = PixelFont.rect("COMING UP", 2, Pal.ACCENT)
-	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_child(t)
-	head.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
-	c.add(head)
 	var cells = Kit.hbox(6)
 	cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for a in days.slice(0, STRIP_DAYS):
@@ -63,7 +54,7 @@ static func card():
 		var v = Kit.vbox(2)
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var wd = Kit.label(Dates.format_date(str(a.date), {"weekday": "short"}).to_upper(), 10, Pal.MUTED, true)
+		var wd = Kit.label(Dates.format_date(str(a.date), {"weekday": "short"}).to_upper(), 11, Pal.MUTED, true)
 		wd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		v.add_child(wd)
 		var tag = Kit.tag(str(w.text), _color(str(w.what)), true, 12)

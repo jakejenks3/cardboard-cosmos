@@ -134,6 +134,10 @@ static func _is_anchor(c: Node) -> bool:
 
 ## A label that identifies a control across rebuilds (its text, tooltip or first caption).
 static func _anchor_label(c: Node) -> String:
+	# A control that names itself (a to-do row, a mission's Claim key): found
+	# again by that name only, whatever its text or tooltip says by then.
+	if c.has_meta("anchor_id"):
+		return "id:" + str(c.get_meta("anchor_id"))
 	if c is Button and c.text != "":
 		return c.text
 	if c is LineEdit:

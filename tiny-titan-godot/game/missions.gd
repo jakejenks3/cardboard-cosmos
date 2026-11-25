@@ -769,6 +769,40 @@ static func lift_done(l: Dictionary, plan: Dictionary, sessions: Array, today: S
 ## The boxes of the Today card, ticked as TodayView ticks them: a row per
 ## planned lift (done any way), the movement to try, the PT (all of it), the
 ## first two other activities (logged). [{"what", "done"}].
+## Physical therapy a day (the user, 2026-11-24: "Make it so I'm not having to
+## do every single PT exercise each day, aiming for 3+ per day"). The day's PT
+## goal is this many exercises, any of the player's PT lifts, or fewer when
+## fewer are still needed this week (plan.pt, the furthest behind first).
+const PT_A_DAY = 3
+
+
+## The day's PT goal: how many PT exercises to do today (0: none is needed).
+static func pt_goal(plan: Dictionary) -> int:
+	return mini(PT_A_DAY, plan.get("pt", []).size())
+
+
+## The PT exercises done today with sets, each counted once: any of the
+## player's PT lifts, also one already done enough this week.
+static func pt_today(plan: Dictionary, sessions: Array, today: String) -> int:
+	var marks = plan.get("marks", {})
+	var seen = {}
+	for s in sessions:
+		if str(s.get("discipline", "")) != "lift" or str(s.get("date", "")) != today:
+			continue
+		for ex in s.get("exercises", []):
+			var n = str(ex.get("name", ""))
+			if n == "" or not Pt.is_pt(marks, n) or LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+				continue
+			seen[Xp.normalize_exercise(Pt.mark_of(marks, n))] = true
+	return seen.size()
+
+
+## The PT exercises still needed this week that were not done today, by name,
+## the furthest behind first.
+static func pt_left(plan: Dictionary, sessions: Array, today: String) -> Array:
+	return plan.get("pt", []).filter(func(r): return sets_on(sessions, str(r.name), today).is_empty()).map(func(r): return str(r.name))
+
+
 static func day_boxes(plan: Dictionary, sessions: Array, today: String) -> Array:
 	var out = []
 	for l in plan.get("lifts", []):
@@ -776,7 +810,7 @@ static func day_boxes(plan: Dictionary, sessions: Array, today: String) -> Array
 	if plan.get("new") != null:
 		out.append({"what": "new", "done": new_done(sessions, today, plan)})
 	if not plan.get("pt", []).is_empty():
-		out.append({"what": "pt", "done": plan.pt.all(func(r): return not sets_on(sessions, str(r.name), today).is_empty())})
+		out.append({"what": "pt", "done": pt_today(plan, sessions, today) >= pt_goal(plan)})
 	for o in plan.get("others", []).slice(0, 2):
 		var d = str(o.discipline)
 		out.append({"what": d, "done": sessions.any(func(s): return str(s.get("date", "")) == today and str(s.get("discipline", "")) == d)})
@@ -1408,13 +1442,12 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 
 	if not plan.pt.is_empty():
 		var names = []
-		var done = 0
 		for r in plan.pt:
 			names.append(str(r.name))
-			if not sets_on(sessions, str(r.name), today).is_empty():
-				done += 1
-		out.append(_mission("t:%s:pt" % today, "daily", today, "Physical therapy", "Do today: %s." % ", ".join(PackedStringArray(names)), "pt", null,
-			names.size(), done, "", 150, claims))
+		var goal = pt_goal(plan)
+		var desc = ("Do %d today, any of: %s." % [goal, ", ".join(PackedStringArray(names))]) if goal < names.size() else ("Do today: %s." % ", ".join(PackedStringArray(names)))
+		out.append(_mission("t:%s:pt" % today, "daily", today, "Physical therapy", desc, "pt", null,
+			goal, mini(goal, pt_today(plan, sessions, today)), "", 150, claims))
 
 	# The likeliest other activity (the weekly run of a focus has its own goals, below).
 	var run_today = bool(plan.get("runToday", false))
@@ -1616,7 +1649,8 @@ static func pretend_lift(log: Array, day: String, plan: Dictionary, with_new: bo
 				sets.append({"reps": 8, "weightKg": 0.0})
 			exercises.append({"name": nm, "sets": sets})
 			invented.append(nm)
-	for r in plan.pt:
+	# (the day's PT goal, the furthest behind first: not every PT lift every day)
+	for r in plan.pt.slice(0, pt_goal(plan)):
 		var k2 = Xp.normalize_exercise(str(r.name))
 		var lp2 = last.get(k2)
 		if lp2 == null or have.has(k2):
@@ -1780,8 +1814,8 @@ static func evening_text(plan: Dictionary, sessions: Array, today: String, perfe
 			"new":
 				lines.append("- Try: %s" % new_words(plan.new))
 			"pt":
-				var left = plan.pt.filter(func(r): return sets_on(sessions, str(r.name), today).is_empty()).map(func(r): return str(r.name))
-				lines.append("- PT: %s" % ", ".join(PackedStringArray(left)))
+				var more = maxi(0, pt_goal(plan) - pt_today(plan, sessions, today))
+				lines.append("- PT: %d more, any of %s" % [more, ", ".join(PackedStringArray(pt_left(plan, sessions, today)))])
 			"climb", "run", "ride", "misc":
 				lines.append("- %s" % TT.DISCIPLINE_META[str(b.what)].name)
 			_:
@@ -1832,7 +1866,8 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String, du
 		var names = []
 		for r in plan.pt:
 			names.append(str(r.name))
-		lines.append("PT: %s" % ", ".join(PackedStringArray(names)))
+		var goal = pt_goal(plan)
+		lines.append(("PT: %d of %s" % [goal, ", ".join(PackedStringArray(names))]) if goal < names.size() else ("PT: %s" % ", ".join(PackedStringArray(names))))
 	for o in plan.others.slice(0, 1):
 		var why = str(o.why)
 		if str(o.discipline) == "run" and plan.get("run") != null:

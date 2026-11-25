@@ -9,6 +9,8 @@ extends VBoxContainer
 ## In the phone app: the same state, or, before it is connected, a box to paste
 ## the code into; and how to put the app on the Home Screen.
 ## The state line follows the sync as it happens (status_changed).
+## Also here: the Hero tab's "New version ready" notice (update_card, a slim
+## Kit.notice since 2026-11-24) and its row in Settings (update_row).
 
 const ABOUT = [
 	"Your log is kept in your phone note's script, in your own Google account, so the PC and the phone app share one log.",
@@ -149,22 +151,13 @@ func _home_screen_hint_plain() -> void:
 
 ## "New version ready": the build on screen has been replaced behind it
 ## (WebUpdate). One tap loads the app again, into the new one; a workout under
-## way is kept (the draft) and so is everything saved. For the Hero tab.
+## way is kept (the draft) and so is everything saved. For the Hero tab, as one
+## of its slim notices (Kit.notice, 2026-11-24).
 static func update_card() -> Control:
-	var c = Kit.card(6, Callable(), 10)
-	c.accent(Pal.GOOD)
-	c.set_meta("update_card", true)
-	var row = Kit.hbox(10)
-	row.add_child(Kit.vcenter(Icons.rect("sparkle", 26)))
-	var v = Kit.vbox(0)
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.add_child(Kit.clip("New version ready", 15, null, true))
-	v.add_child(Kit.clip("Restart to use it. Your log is kept.", 12, Pal.MUTED))
-	row.add_child(v)
 	var b = Kit.button("Restart", "good", restart_now, "sm")
 	b.set_meta("update_restart", true)
-	row.add_child(Kit.vcenter(b))
-	c.add(row)
+	var c = Kit.notice("sparkle", "New version ready", "Restart to use it. Your log is kept.", Pal.SECOND, b)
+	c.set_meta("update_card", true)
 	return c
 
 

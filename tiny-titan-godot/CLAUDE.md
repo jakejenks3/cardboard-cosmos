@@ -1489,6 +1489,49 @@ is the Windows handoff.
   - Tests: missions_test (one row, one box, one mission, the morning text); walkthroughs picks (a
     PT-marked lift has no key) and today (does every planned lift before the chest: a lift due by its
     gap shows up on some weekdays, which made it fail on a Tuesday).
+  - THREE A DAY, NOT ALL (2026-11-24, "Make it so I'm not having to do every single PT exercise each
+    day, aiming for 3+ per day"). `Missions.PT_A_DAY` 3; `pt_goal(plan)` = 3, or fewer when fewer are
+    still needed this week (`plan.pt`, furthest behind first); `pt_today(plan, sessions, today)` = the
+    PT lifts done today with sets, each once, ANY of the player's PT lifts (one already on target this
+    week counts too); `pt_left` = the ones still needed and not done today. The daily mission's target
+    is the goal ("Do 3 today, any of: ..."; the id is unchanged), the Today box and row tick at the goal
+    (pips of the goal, "Any 2 of: ..."), the morning text says "PT: 3 of ...", the evening "PT: 1 more,
+    any of ...", the look-ahead pretends only the goal's worth (the furthest behind). The weekly "PT on
+    target" (every lift's days a week) is unchanged: with many PT lifts it may not be reachable at three
+    a day; the per-lift goals are on the PT sheet.
+- The Hero tab's look (2026-11-24). The user: "Visuals are getting clunky with everything we've added... Things kinda
+  blend together and are hard to look at and get a clear idea of each section and thing within them". Three design reviews,
+  a mock-up the user approved ("Looks good. Can add all, plus take out the how am I feeling question"). Nothing removed but
+  the Feeling row; no rule or number changed.
+  - Shared pieces (ui/kit.gd, top comment; ui/widgets/card.gd): `Kit.section(id, title, icon, color, right, tap, sep, pad)`
+    = one Card with a band across its top (`Pal.band(color)`, the title in pixel letters, `right` at its end: a count, a
+    link, a key) and a frame in that colour; `Card.with_head` makes `add()` fill the body; meta `section` = id (pixel
+    letters are not Label text: tests find a section by this meta). `Kit.row(tap, stripe, tint, pad, sep, amount)` /
+    `Card.flat`: a row INSIDE a section is a flat `Pal.slot()` fill with a 4 px stripe down its left edge, never a raised
+    card in a card. `Kit.sub_head` (a group inside a section), `Kit.choice` + `Kit.choice_track` (pick one: a sunken track,
+    the picked key raised, both the same height), `Kit.option_chip` (an OR alternative: outlined, neutral, blue = never
+    done), `Kit.tick_box` (every done box: an empty well, solid green with a tick), `Kit.pips`, `Kit.notice` (the slim rows
+    above Today). `Bar.extra` (faded: today's plan after what is done) and `Bar.mark` (a target line). `Kit.link(..., color)`.
+  - The colour rule (top of ui/pal.gd): gold is a reward or THE main action (XP, coins, the level, the chest, Claim, Start
+    workout), never a target or a frame for everything (aims are white now); a section's colour is what it is about or the
+    tab it leads to; GOOD = done, ACCENT2 = a warning, DANGER = stuck.
+  - The page (`HomeScreen`, `SECTION_GAP` 22 between sections, 6 to 8 inside them): top bar; notices (phone note, new
+    version, backup, recap); TODAY (`TodayView.card`: the date and why, the split track with Rest, the body row = muscle tile
+    `RecoveryView.tile` + `DoseView.row(plan, true)` + a "Recovering: ..." line, YOUR FOCUS ADDS, PROBABLY TODAY with the
+    shared reason and "N of M done" in its sub-head, the lift rows (name, then cap + aim on their own line, OR chips), try
+    something new, physical therapy, Start workout, run / climb, the perfect-day chest with pips); COMING UP
+    (`AheadView.card`, a section of its own); TO DO; READING (moved up: its page box is filled daily); MISSIONS (`_missions`:
+    yesterday's and today's done ones as `Parts.quest_list(..., true, true)` rows with their Claim key, the rest as
+    `Parts.mission_grid` tiles two across; the perfect-day mission is the Today chest, not listed here); the hero card (no
+    ring; the companion's line in a quiet bubble inside it); ADVENTURE (`_boss_row`, red, and `BountyView.card(false)`, now a
+    violet row); PT THIS WEEK; PROJECTS; YOUR WEEK (level tiles, streak row, This week row); ALMOST THERE; RECENT.
+  - Gone: the Feeling row (`TodayView._feel_row`) and the PC morning message's "How do you feel?" buttons. `settings.feels`,
+    `Missions.feel_of` and the note's phone logger buttons are untouched (it is a mark the player already made).
+  - `quest_list`, `goal_tile`, `session_row` keep their old look by default (Adventure, Journey); `flat = true` is the Hero
+    tab's. The other tabs were not restyled this time.
+  - A new Hero card must be a `Kit.section` (or a `Kit.row` inside one), take its colour by the rule, use `Kit.clip` for any
+    text in a row, and keep its metas. The home walkthrough checks the section order, the gap, and that MISSIONS repeats no
+    Today done box.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1503,6 +1546,9 @@ is the Windows handoff.
     in parts of a unit; the glide before it had stopped between two units (the page was long enough
     for it not to reach the end), and that part of a unit stayed (`tt_fine`). It now goes back to
     the top with `ts._scroll_to`.
+  - The touch walkthrough reveals the Log tab's Deadlift key and the stepper before it taps them
+    (2026-11-24: on a Tuesday the day's plan card above them was long enough to push the key below
+    the window, and the tap landed on nothing).
   - The demo player trains by the weekday (lifts on Mondays and Fridays), and `ShotHelper.demo_saved`
     logs today too. The `today` and `workout` walkthroughs failed on those days (rows already ticked,
     "Continue workout", the plan full of the demo's own lifts): both now take out the demo's sessions

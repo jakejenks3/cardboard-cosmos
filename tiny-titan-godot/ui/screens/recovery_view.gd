@@ -1,8 +1,10 @@
 class_name RecoveryView
 extends RefCounted
 ## The muscle map: the hero with every body part tinted by how recently it was
-## worked (game/recovery.gd). A row on the Today card (small map, the parts
-## still recovering) and a sheet with the big map and every part.
+## worked (game/recovery.gd). On the Today section: a flat row (small map, the
+## parts still recovering), or with a training focus a narrow tile beside the
+## weekly sets (`tile`, the parts by name in `warm_words` under both). A sheet
+## with the big map and every part.
 
 ## Heat colours, for the chips and the legend (amber = some, red = worked hard today).
 const WARM = Color("ffb21f")
@@ -13,11 +15,11 @@ static func heat_color(h: float) -> Color:
 	return WARM.lerp(HOT, clampf(h, 0.0, 1.0))
 
 
-## The Today card's row: the small map and the parts still recovering.
+## The Today section's row: the small map and the parts still recovering.
 static func row() -> Control:
 	var h = Recovery.heat(App.sessions(), App.today)
 	var warm = Recovery.warm(h, 0.15)
-	var c = Kit.card(0, RecoveryView.open, 8)
+	var c = Kit.row(RecoveryView.open, Pal.LINE, null, 8, 0)
 	c.tooltip_text = "Muscle map: what is still recovering"
 	var r = Kit.hbox(10)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -29,7 +31,7 @@ static func row() -> Control:
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.label("MUSCLE MAP", 10, WARM, true))
+	v.add_child(Kit.label("MUSCLE MAP", 11, WARM, true))
 	if warm.is_empty():
 		v.add_child(Kit.clip("Everything is fresh", 13, Pal.TEXT, true))
 	else:
@@ -43,6 +45,42 @@ static func row() -> Control:
 	r.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
 	c.add(r)
 	return c
+
+
+## The narrow tile beside the weekly sets (a training focus): the small map and
+## how many parts are still recovering. A tap opens the sheet.
+static func tile() -> Control:
+	var h = Recovery.heat(App.sessions(), App.today)
+	var warm = Recovery.warm(h, 0.15)
+	var c = Kit.row(RecoveryView.open, Pal.LINE, null, 8, 4)
+	var pic = PixelRect.make(Art.muscle_texture(App.state, App.profile(), h), 1.0)
+	c.size_flags_horizontal = Control.SIZE_FILL
+	c.custom_minimum_size.x = maxf(92.0, pic.custom_minimum_size.x + 20.0)
+	c.tooltip_text = "Muscle map: " + (warm_words() if not warm.is_empty() else "everything is fresh")
+	c.set_meta("muscle_tile", true)
+	# (as tall as the sets beside it: the map in the middle)
+	c.box.alignment = BoxContainer.ALIGNMENT_CENTER
+	var t = Kit.label("MUSCLE MAP", 11, WARM, true)
+	t.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	c.add(t)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	c.add(pic)
+	var n = Kit.label("%d recovering" % warm.size() if not warm.is_empty() else "All fresh", 11, WARM if not warm.is_empty() else Pal.GOOD, true)
+	n.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	c.add(n)
+	return c
+
+
+## The parts still recovering by name, the warmest first ("back, shoulders,
+## biceps"), or "" when everything is fresh.
+static func warm_words() -> String:
+	var warm = Recovery.warm(Recovery.heat(App.sessions(), App.today), 0.15)
+	var names = []
+	for w in warm:
+		names.append(str(w.name).to_lower())
+	return ", ".join(PackedStringArray(names))
 
 
 ## The sheet: the big map, the legend, every part with when it was worked.

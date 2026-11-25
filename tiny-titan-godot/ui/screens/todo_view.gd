@@ -8,6 +8,13 @@ extends RefCounted
 ## day. A row says so with a small "+20 XP" chip (bright while it is to be
 ## had, quiet once earned), and the XP rises from the row when it is paid.
 ##
+## The look (2026-11-24, the Hero tab's clean-up): the card is a section
+## (Kit.section "TO DO", a grey band with the open count and the plus key) and
+## every item is a flat row (Kit.row) with the shared tick box (Kit.tick_box);
+## a done row is striped and tinted green. The "+20 XP" chip has the same
+## padding and words in every state (open: gold outline, earned: green,
+## none: unseen), so a row is never wider or narrower after a tick.
+##
 ## Nothing may move under the finger: a ticked item stays where it is (on the
 ## card until tomorrow, in the sheet until it is cleared), the sheet's status
 ## line is always there, and the box to type in is at the bottom, where the
@@ -23,38 +30,52 @@ static func _busy() -> bool:
 	return Time.get_ticks_msec() < _quiet_until
 
 
-## A tick box: empty while to do, ticked once done.
+## A tick box: empty while to do, ticked once done (Kit.tick_box, the same
+## box as everywhere else).
 static func _box(done: bool) -> Control:
-	var box = PanelContainer.new()
-	box.custom_minimum_size = Vector2(24, 24)
-	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var box = Kit.tick_box(done)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	box.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(Pal.GOOD, 0.2) if done else Pal.PANEL2, 4, Pal.GOOD if done else Pal.LINE, 2, 2, 2))
-	var mid = CenterContainer.new()
-	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if done:
-		mid.add_child(Icons.rect("check", 16))
-	box.add_child(mid)
 	box.set_meta("todo_box", done)
 	return box
 
 
-## One item: its box and its words; a tap anywhere on it ticks or unticks it.
-## With `on_remove`, a cross at the end takes it off the list; `wrap` lets long
-## words run over several lines (the sheet) in place of being cut off (the card).
+## The "+20 XP" chip: the same padding and the same words in every state, so
+## it is as wide open as earned; `state` is "open" (gold outline: a tick pays
+## it), "earned" (green: paid) or "none" (unseen, the slot kept).
+static func _bonus_chip(state: String) -> Control:
+	var col = Pal.GOOD if state == "earned" else Pal.ACCENT
+	var edge = Pal.with_alpha(Pal.GOOD, 0.6) if state == "earned" else Pal.ACCENT
+	var chip = PanelContainer.new()
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chip.size_flags_horizontal = Control.SIZE_SHRINK_END
+	chip.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(col, 0.12), 3, edge, 1, 6, 1))
+	chip.add_child(Kit.label("+%d XP" % Todos.BONUS_XP, 11, col, true))
+	chip.set_meta("todo_bonus", state)
+	if state == "none":
+		chip.modulate.a = 0.0
+	return chip
+
+
+## One item: a flat row with its box and its words; a tap anywhere on it ticks
+## or unticks it. With `on_remove`, a cross at the end takes it off the list;
+## `wrap` lets long words run over several lines (the sheet) in place of being
+## cut off (the card).
 static func _row(t: Dictionary, on_toggle: Callable, on_remove: Callable = Callable(), wrap: bool = false) -> Control:
 	var done = bool(t.done)
-	var c = Kit.card(0, Callable(), 6)
+	var c = Kit.row(Callable(), Pal.GOOD if done else Pal.LINE, Pal.GOOD if done else null, 8, 0)
 	# The row itself goes to the tap: what a tick pays rises from it. (Bound
 	# on top of what `on_toggle` already carries, it arrives FIRST.)
 	c.on_tap(on_toggle.bind(c))
 	c.set_meta("todo_row", str(t.id))
+	# (the row is found again by its item after a tick: its tooltip changes)
+	c.set_meta("anchor_id", "todo:" + str(t.id))
 	c.tooltip_text = "Untick it" if done else "Tick it off"
 	var h = Kit.hbox(8)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(_box(done))
-	var l = Kit.para(str(t.text), 14, Pal.MUTED if done else Pal.TEXT, not done) if wrap else Kit.clip(str(t.text), 14, Pal.MUTED if done else Pal.TEXT, not done)
+	var col = Pal.MUTED if done else Pal.TEXT
+	var l = Kit.para(str(t.text), 15, col) if wrap else Kit.clip(str(t.text), 15, col)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -65,11 +86,7 @@ static func _row(t: Dictionary, on_toggle: Callable, on_remove: Callable = Calla
 	var claims = App.saved.claims
 	var bonus = 0 if done else Todos.bonus_for(claims, str(t.id), App.today)
 	var earned = done and Todos.paid(claims, str(t.id))
-	var chip = Kit.tag("+%d XP" % Todos.BONUS_XP, Pal.ACCENT if bonus > 0 else Pal.PANEL2, bonus > 0, 10)
-	chip.set_meta("todo_bonus", "open" if bonus > 0 else ("earned" if earned else "none"))
-	if bonus <= 0 and not earned:
-		chip.modulate.a = 0.0
-	h.add_child(Kit.vcenter(chip))
+	h.add_child(_bonus_chip("open" if bonus > 0 else ("earned" if earned else "none")))
 	if on_remove.is_valid():
 		var x = Kit.icon_button("close", on_remove, "Take it off the list", 30)
 		x.set_meta("todo_remove", str(t.id))
@@ -97,28 +114,26 @@ static func _toggle(row, id: String, done: bool) -> void:
 	App.set_todo_done(id, done)
 
 
-## The Hero tab's card: the open items (and the ones ticked today), a key to add.
+## The Hero tab's section: the open items (and the ones ticked today), the
+## open count and a key to add in its band.
 static func card() -> Control:
 	var list = App.todos()
 	var shown = Todos.shown(list, App.today)
-	var c = Kit.card(6, TodoView.open, 10)
+	var n = Todos.open_count(list)
+	var right = Kit.hbox(8)
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if n > 0:
+		right.add_child(Kit.vcenter(Kit.label("%d open" % n, 12, Pal.MUTED, true)))
+	# Small, so this band is as tall as the others (the whole section opens
+	# the same sheet, so the key need not be a big target).
+	var add = Kit.icon_button("plus", TodoView.open, "Add to your list", 28)
+	if Kit.fingers:
+		add.custom_minimum_size = Vector2(34, 34)
+	add.set_meta("todo_plus", true)
+	right.add_child(Kit.vcenter(add))
+	var c = Kit.section("todo", "TO DO", "check", Pal.MUTED, right, TodoView.open, 6, 10)
 	c.tooltip_text = "Your list of things to do. Ticking one off pays a small bonus."
 	c.set_meta("todo_card", true)
-	var head = Kit.hbox(8)
-	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_child(Kit.vcenter(Icons.rect("check", 20)))
-	var title = PixelFont.rect("TO DO", 2, Pal.ACCENT)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	head.add_child(title)
-	var n = Todos.open_count(list)
-	if n > 0:
-		head.add_child(Kit.vcenter(Kit.tag("%d open" % n, Pal.ACCENT, true, 11)))
-	var add = Kit.icon_button("plus", TodoView.open, "Add to your list", 32)
-	add.set_meta("todo_plus", true)
-	head.add_child(Kit.vcenter(add))
-	c.add(head)
 	if list.is_empty():
 		c.add(Kit.clip("Nothing on your list. Tap to add something.", 12, Pal.MUTED))
 	elif shown.is_empty():
@@ -127,7 +142,7 @@ static func card() -> Control:
 		for t in shown.slice(0, Todos.CARD_ROWS):
 			c.add(_row(t, _toggle.bind(str(t.id), not bool(t.done))))
 		if shown.size() > Todos.CARD_ROWS:
-			c.add(Kit.clip("+%d more" % (shown.size() - Todos.CARD_ROWS), 11, Pal.MUTED))
+			c.add(Kit.clip("+%d more" % (shown.size() - Todos.CARD_ROWS), 12, Pal.MUTED))
 	return c
 
 
