@@ -162,10 +162,18 @@ func _take_draft() -> void:
 					var row = {"reps": str(s.get("reps", "")), "weight": str(s.get("weight", ""))}
 					if str(s.get("hold", "")) != "":
 						row["hold"] = str(s.hold)
+					if str(s.get("band", "")) != "":
+						row["band"] = str(s.band)
 					sets.append(row)
 			var one = {"name": str(e.get("name", "")), "bodyweight": bool(e.get("bodyweight", false)), "timed": bool(e.get("timed", false)), "sets": sets}
 			if bool(e.get("planned", false)):
 				one["planned"] = true
+			# (a band instead of a weight, and the L+R and PT keys once touched)
+			if bool(e.get("band", false)):
+				one["band"] = true
+			for k in ["both", "pt"]:
+				if e.get(k) is bool:
+					one[k] = bool(e[k])
 			lift.exercises.append(one)
 	for c in cl:
 		if c is Dictionary and c.has("grade") and c.has("count"):

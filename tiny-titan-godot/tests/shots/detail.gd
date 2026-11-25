@@ -148,13 +148,15 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.frames(tree, 3)
 	ShotHelper.press(sw[0])
 	await ShotHelper.frames(tree, 5)
-	check(Pt.is_pt(App.pt(), lift_name) and ShotHelper.find_text(page, "of 3 this week") != null and _by_tip("One day more").size() == 1, "switched on: it is a PT lift, aiming for 3 days a week")
+	# PT is counted in sets: 3 days a week x Pt.SETS_A_DAY (3) = 9 sets.
+	check(Pt.is_pt(App.pt(), lift_name) and ShotHelper.find_text(page, "of 9 sets this week") != null and ShotHelper.find_text(page, "days a week · 3 sets a day") != null and _by_tip("One day more").size() == 1, "switched on: it is a PT lift, aiming for 3 days a week, 9 sets")
 	var plus = _by_tip("One day more")[0]
 	var plus_at = plus.get_global_rect().position
 	ShotHelper.press(plus)
 	await ShotHelper.frames(tree, 5)
 	var plus2 = _by_tip("One day more")
 	check(Pt.per_week(App.pt(), lift_name) == 4 and plus2.size() == 1 and plus2[0].get_global_rect().position.distance_to(plus_at) <= 1.0, "one day more: 4 a week, and the key did not move")
+	check(ShotHelper.find_text(page, "of 12 sets this week") != null, "4 days a week is 12 sets")
 	await ShotHelper.snap(tree, "detail_4_lift_pt")
 	ShotHelper.press(_by_tip("One day fewer")[0])
 	await ShotHelper.frames(tree, 5)
@@ -166,6 +168,9 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.8)
 	var card = _by_tip("Physical therapy: are you keeping up?", main)
 	check(card.size() == 1 and ShotHelper.find_text(card[0], lift_name) != null, "the Hero tab has a physical therapy card with the lift on it")
+	var pt_rows = Pt.status(App.sessions(), App.pt(), today).filter(func(r): return str(r.key) == Pt.mark_of(App.pt(), lift_name))
+	var pt_sets = int(pt_rows[0].sets) if not pt_rows.is_empty() else -1
+	check(card.size() == 1 and App.pt().size() == 1 and ShotHelper.find_text(card[0], "%d / 9" % mini(pt_sets, 9)) != null and ShotHelper.find_text(card[0], "%d/9" % pt_sets) != null, "the card counts sets: %d of 9 this week, in its band and on the lift's line" % pt_sets)
 	if card.size() == 1:
 		ShotHelper.reveal(card[0])
 		await ShotHelper.frames(tree, 4)
@@ -173,7 +178,7 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.click(tree, card[0])
 		await ShotHelper.wait(tree, 0.7)
 	var pts = _sheet()
-	check(pts != null and ShotHelper.find_text(pts, lift_name) != null and ShotHelper.find_text(pts, "this week") != null and _count(WeekBars) == 1, "the card opens the sheet: the week, and eight weeks of bars")
+	check(pts != null and ShotHelper.find_text(pts, lift_name) != null and ShotHelper.find_text(pts, "sets done this week") != null and ShotHelper.find_text(pts, "of 9 sets this week") != null and ShotHelper.find_text(pts, "days a week · 3 sets a day") != null and _count(WeekBars) == 1, "the card opens the sheet: the week in sets, and eight weeks of bars")
 	var more = _by_tip("One day more")
 	var more_at = more[0].get_global_rect().position if not more.is_empty() else Vector2.ZERO
 	for i in range(3):
@@ -228,7 +233,7 @@ func run(m: Node, t: SceneTree) -> void:
 	for row in status:
 		if row.name == "Wall Slide":
 			wall = row
-	check(status.size() == 4 and wall != null and wall.thisWeek == 1 and wall.daysSince == 0, "four PT lifts, and today's counts for its week")
+	check(status.size() == 4 and wall != null and wall.thisWeek == 1 and wall.daysSince == 0 and int(wall.sets) == 2 and int(wall.setsGoal) == 9, "four PT lifts, and today's two sets count for its week (2 of 9)")
 
 	# --- the library marks them, and the mark comes off again --------------------------------
 	App.go("journey", "lifts")

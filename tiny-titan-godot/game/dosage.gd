@@ -51,10 +51,12 @@ static func part(lift_name: String) -> String:
 
 
 ## A lift's sets in words. A band has no weight to log: it is not "bodyweight".
+## Sets logged with their band say which ("3×15 · green band", LiftHistory);
+## older ones of a band lift, logged with no band, are "(a band, no weight)".
 ## `sides` 2: the reps are both sides added up, and what that is a side is said.
 static func sets_words(lift_name: String, sets: Array, fmt_w: Callable, sides: int = 1) -> String:
 	var t = LiftHistory.describe_sets(sets, fmt_w)
-	if str(LiftNames.split(lift_name).variation).to_lower().contains("band"):
+	if Bands.top(sets) == "" and str(LiftNames.split(lift_name).variation).to_lower().contains("band"):
 		t = t.replace(" bodyweight", " (a band, no weight)")
 	if sides > 1 and Sides.side_words(sets) != "":
 		t += " (both sides added up: %s)" % Sides.side_words(sets)

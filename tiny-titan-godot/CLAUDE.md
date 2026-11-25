@@ -1499,6 +1499,54 @@ is the Windows handoff.
     any of ...", the look-ahead pretends only the goal's worth (the furthest behind). The weekly "PT on
     target" (every lift's days a week) is unchanged: with many PT lifts it may not be reachable at three
     a day; the per-lift goals are on the PT sheet.
+  - COUNTED IN SETS (2026-11-25, "making it total sets instead of exercises. Sometimes I'll just do a set
+    and want to make sure that doesn't get counted as much as if I did 3 sets of the same thing"; their
+    PT is nearly always 3 sets an exercise). `Pt.SETS_A_DAY` 3: a day of a PT lift counts up to 3 of its
+    real sets, so one set is a third of a day. The stored goal stays `perWeek` DAYS; the week's target is
+    perWeek x 3 sets. `Pt.status` rows add `daySets`, `sets` (this week's credit), `setsGoal`,
+    `weekShare` (7 shares 0..1: `WeekBars.Dots` part-fills a day); `left`, `state`, `weeks[].n` / `hit`
+    and `Pt.summary` are in SETS; `thisWeek` (days) stays. `Pt.row_of(sessions, marks, lift, today)`.
+    The day: `Missions.pt_goal` = min(9, the sets the PT lifts still need, at most 3 each), `pt_today` =
+    today's sets per PT mark, each capped at 3 (two sessions of a day add up), `pt_left` = PT lifts under
+    3 sets today. The mission "Do 9 sets today, up to 3 of each exercise: ...", the Today row "4 of 9
+    sets" with "Up to 3 sets of each count. Any of: ...", morning "PT: 9 sets, up to 3 of each: ...",
+    evening "PT: 5 more sets, any of ...". The PT sheet, the Hero's PT section, the lift page's PT card
+    ("N of M sets this week", `PtView.aim_words`: "days a week · 3 sets a day") and the Logbook's PT
+    bars all count sets.
+- Resistance bands instead of a weight (2026-11-25, "can we add a way to add bands to exs, instead of
+  weight for resistances"). `game/bands.gd` (`Bands`, pure): the ladder light to heavy yellow, orange,
+  red, green, blue, black, purple, silver, gold (most therapy bands; a brand may differ), `DEFAULT`
+  red, `level`, `name_of`, `words`, `color_of` (real-world swatches, consts), `text_color`, `step`,
+  `is_band`, `top`, `of_name` (a colour in the variation), `says_band`. STORED on a set: `{reps,
+  weightKg: 0.0, band: "<id>"}`: the rules see a bodyweight set (no XP or parity change). Carried like
+  `holdSec` wherever sets are copied (LiftLibrary.stats, SessionView, the kept draft in
+  `LogSessionForm._take_draft`). The phone note's "blue band" in a Weight cell still becomes part of
+  the name (unchanged; the note is PC only).
+  - The Log tab's exercise card (rebuilt 2026-11-25 for the PT key below): the name and the cross on
+    their own line; under them a pick-one track `Kit.choice_track` of `LogLiftEditor.MODES` (Weight,
+    BW, Band, Hold; meta `mode_key`; the Band key also `band_chip`), then L+R (switched off, not
+    hidden, for a hold) and PT. Every key is always there, so none moves when one is tapped.
+    `_mode_of(e)`, `_set_mode(i, m)` (the lit key tapped again goes back to Weight; `_toggle_bw` /
+    `_toggle_timed` / `_toggle_band` call it). Draft `band: true`, set rows `band`; into Band every set
+    gets this lift's last band, else the name's colour, else the band used last, else red. A new lift
+    that `says_band` starts with a band. The set row: `BandPicker` (`ui/widgets/band_picker.gd`:
+    lighter key, a fixed-width pill in the band's colour, heavier key; metas `band_of` "i:j",
+    `band_key`) changes the band IN PLACE (`_on_band`), "+1 band" (meta `band_bump`), "+ Set" copies.
+    Badges "+1 band" / "-1 band", "PR!" for a heavier band than ever.
+  - `LiftHistory.describe_sets`: "3×15 · green band", "15, 15, 12 · red band". `LiftTrend`: `day().band`
+    (level) / `bandId`, series "band", compare / pairs by band then reps, `records` "Heaviest band",
+    `next_target` kind "band" (+1 rep to `BAND_HIGH_REPS` 20, then the next band at `BAND_DOWN_TO`
+    12), `banded`, `main_value` / `best_row` with `in_band` (an older weightless day of the lift ranks
+    below every band day); no ghost, plateau or strength-standard card for a band lift. The lift page:
+    band words and pills, Progress metrics Band / Reps, Logbook blocks by band level, records tiles.
+    The Beat it mission says "Past 20 reps a set the band is too light: the next band up".
+  - Tests: `tests/bands_test.gd`; walkthrough `tests/shots/bands.gd` (year data, also `--fingers`).
+- The PT key (2026-11-25, "a way to tick an exercise as PT while adding it, instead of having to go back
+  and do it after logging"): on every exercise card, beside L+R (meta `pt_chip`). Lit when the lift is
+  PT, or "(PT)" is typed in front of the name, or the key was tapped (draft `pt`, only once touched;
+  `LogLiftEditor._pt_on`). A line says what saving will do (meta `pt_hint`, `_pt_words`).
+  `session_exercises` passes `pt` true / false; `App.absorb_pt` marks the lift, or takes its mark off
+  (off also drops a typed "(PT)"). Tests in bands_test and the bands walkthrough.
 - The Hero tab's look (2026-11-24). The user: "Visuals are getting clunky with everything we've added... Things kinda
   blend together and are hard to look at and get a clear idea of each section and thing within them". Three design reviews,
   a mock-up the user approved ("Looks good. Can add all, plus take out the how am I feeling question"). Nothing removed but
@@ -1706,6 +1754,7 @@ godot --headless --path . --script res://tests/sides_test.gd
 godot --headless --path . --script res://tests/units_test.gd
 godot --headless --path . --script res://tests/sfx_test.gd
 godot --headless --path . --script res://tests/books_test.gd
+godot --headless --path . --script res://tests/bands_test.gd
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1741,6 +1790,7 @@ picks (the Log form's "From today's plan" card and an exercise card's up / down 
 filed (how a new exercise typed in the Log tab will be filed: the note at the search box, the line under its name; year data),
 update (the phone app's "new version ready" card and its Settings row, pretended on the PC; year data),
 books (books pasted in, the page box on the reading card doing the page math, finishing one, the bookshelf; year data),
+bands (a band instead of a weight in the Log tab, the band picker, the PT key on an exercise card, the band words on the lift page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

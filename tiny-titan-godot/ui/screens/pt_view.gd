@@ -5,11 +5,15 @@ extends RefCounted
 ## switch on its page (JourneyLifts).
 ##
 ##   PtView.card()        the Hero tab's section "PT THIS WEEK" (Kit.section,
-##                        done / goal in its band): this week for every PT
-##                        lift (null when there is none)
+##                        sets done / sets aimed for in its band): this week
+##                        for every PT lift (null when there is none)
 ##   PtView.open()        the sheet: each lift's week, eight weeks of bars, the
 ##                        days a week to aim for
-##   PtView.state_tag(r)  "Done" / "2 to go" / "Behind" for a row of Pt.status
+##   PtView.state_tag(r)  "Done" / "4 sets to go" / "Behind" for a row of Pt.status
+##
+## Everything is counted in SETS (Pt.SETS_A_DAY of a lift count on a day, so a
+## single set is a third of a day): a day's square fills by that share, and a
+## lift's goal is its days a week x Pt.SETS_A_DAY sets.
 
 ## How many lifts the Hero tab's card lists.
 const CARD_ROWS = 4
@@ -30,7 +34,7 @@ static func state_tag(r: Dictionary) -> Control:
 			return Kit.tag("Done", Pal.GOOD, true, 10)
 		"behind":
 			return Kit.tag("Behind", Pal.DANGER, false, 10)
-	return Kit.tag("%d to go" % int(r.left), Pal.PANEL2, false, 10)
+	return Kit.tag("%d %s to go" % [int(r.left), "set" if int(r.left) == 1 else "sets"], Pal.PANEL2, false, 10)
 
 
 ## "Last done 2 days ago · 3 weeks in a row", or that it was never done.
@@ -73,11 +77,12 @@ static func card():
 		var r = rows[i]
 		var line = _ig(Kit.hbox(8))
 		line.add_child(Kit.clip(str(r.name), 13, null, true))
+		# (a day's square fills by its share of Pt.SETS_A_DAY sets)
 		var dots = WeekBars.Dots.new()
-		dots.setup(r.week, today_i, Pal.PT, 10)
+		dots.setup(r.weekShare, today_i, Pal.PT, 10)
 		line.add_child(dots)
-		var count = Kit.label("%d/%d" % [int(r.thisWeek), int(r.perWeek)], 13, state_color(r), true)
-		count.custom_minimum_size.x = 28
+		var count = Kit.label("%d/%d" % [int(r.sets), int(r.setsGoal)], 13, state_color(r), true)
+		count.custom_minimum_size.x = 40
 		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		line.add_child(Kit.vcenter(count))
 		c.add(line)
@@ -124,8 +129,8 @@ static func _fill(sheet: Sheet) -> void:
 		var words = Kit.vbox(2)
 		words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		words.add_child(Kit.clip("days done this week", 13, null, true))
-		var note = "All done for the week" if int(sum.left) == 0 else "%d to go" % int(sum.left)
+		words.add_child(Kit.clip("sets done this week", 13, null, true))
+		var note = "All done for the week" if int(sum.left) == 0 else "%d %s to go" % [int(sum.left), "set" if int(sum.left) == 1 else "sets"]
 		if int(sum.behind) > 0:
 			note += " · %d behind" % int(sum.behind)
 		words.add_child(Kit.clip(note, 12, Pal.MUTED))
@@ -137,8 +142,15 @@ static func _fill(sheet: Sheet) -> void:
 	box.add_child(Kit.muted_para("To add one: write (PT) in front of an exercise in your phone note, or switch it on on a lift's page.", 12))
 
 
-## One PT lift: this week's days, eight weeks of bars against its goal, and
-## the goal itself.
+## "days a week · 3 sets a day": the words after the Aim for stepper (the goal
+## is kept in days; each day is Pt.SETS_A_DAY sets).
+static func aim_words(per_week: int) -> String:
+	return "day%s a week · %d sets a day" % ["" if per_week == 1 else "s", Pt.SETS_A_DAY]
+
+
+## One PT lift: this week's sets (a square a day, filled by its share of
+## Pt.SETS_A_DAY), eight weeks of bars of sets against its goal, and the goal
+## itself, in days a week.
 static func _lift_card(sheet: Sheet, r: Dictionary) -> Card:
 	var c = Kit.card(6, Callable(), 10)
 	c.accent(Pal.DANGER if str(r.state) == "behind" else Pal.PT)
@@ -148,24 +160,27 @@ static func _lift_card(sheet: Sheet, r: Dictionary) -> Card:
 	c.add(head)
 	var week = Kit.hbox(8)
 	var dots = WeekBars.Dots.new()
-	dots.setup(r.week, Dates.weekday_index(App.today), Pal.PT, 14)
+	dots.setup(r.weekShare, Dates.weekday_index(App.today), Pal.PT, 14)
 	week.add_child(dots)
-	week.add_child(Kit.vcenter(Kit.clip("%d of %d this week" % [int(r.thisWeek), int(r.perWeek)], 13, null, true)))
+	week.add_child(Kit.vcenter(Kit.clip("%d of %d sets this week" % [int(r.sets), int(r.setsGoal)], 13, null, true)))
 	c.add(week)
 	var bars = WeekBars.new()
-	bars.setup(r.weeks, Pal.PT, int(r.perWeek))
+	bars.setup(r.weeks, Pal.PT, int(r.setsGoal), "set")
 	c.add(bars)
-	c.add(Kit.clip(facts(r), 12, Pal.MUTED))
+	# (the Trends key sits here, beside the facts, so the Aim for row has room
+	# for its words)
+	var foot = Kit.hbox(6)
+	foot.add_child(Kit.vcenter(Kit.clip(facts(r), 12, Pal.MUTED)))
+	var more = Kit.button("Trends", "ghost", JourneyLifts.open_named.bind(str(r.name), {}), "sm", "chevron_right")
+	more.tooltip_text = "Weight, reps and history of %s" % str(r.name)
+	foot.add_child(Kit.vcenter(more))
+	c.add(foot)
 	var goal = Kit.hbox(6)
 	goal.add_child(Kit.vcenter(Kit.label("Aim for", 13, Pal.MUTED)))
 	goal.add_child(Kit.vcenter(Kit.icon_button("minus", PtView._set_goal.bind(sheet, str(r.name), int(r.perWeek) - 1), "One day fewer", 28)))
 	goal.add_child(Kit.vcenter(PixelFont.rect(str(int(r.perWeek)), 2, Pal.PT)))
 	goal.add_child(Kit.vcenter(Kit.icon_button("plus", PtView._set_goal.bind(sheet, str(r.name), int(r.perWeek) + 1), "One day more", 28)))
-	var per = Kit.clip("day%s a week" % ("" if int(r.perWeek) == 1 else "s"), 13, Pal.MUTED)
-	goal.add_child(Kit.vcenter(per))
-	var more = Kit.button("Trends", "ghost", JourneyLifts.open_named.bind(str(r.name), {}), "sm", "chevron_right")
-	more.tooltip_text = "Weight, reps and history of %s" % str(r.name)
-	goal.add_child(Kit.vcenter(more))
+	goal.add_child(Kit.vcenter(Kit.clip(aim_words(int(r.perWeek)), 13, Pal.MUTED)))
 	c.add(goal)
 	return c
 

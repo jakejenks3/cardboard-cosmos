@@ -8,9 +8,12 @@ extends ChartBase
 ##
 ##   setup(points, opts)
 ##     points: [{"x": date, "y": value, "bar": work (optional), "tip": a line
-##              for the tooltip (optional), "note": true for the note's sets}]
+##              for the tooltip (optional), "note": true for the note's sets,
+##              "dot": a Color for its marker (optional: a band's colour)}]
 ##     opts:   {"color", "fmt": Callable(value) -> String, "bar_fmt": Callable,
-##              "records": indexes of new bests (LiftTrend.record_points)}
+##              "records": indexes of new bests (LiftTrend.record_points),
+##              "ticks": the values the axis names (optional: else the lowest,
+##              the middle and the highest; bands give their levels)}
 
 const H = 196.0
 const PAD_R = 16.0
@@ -57,6 +60,9 @@ func setup(pts: Array, opts: Dictionary = {}) -> void:
 	lo = mn - (mx - mn) * 0.45
 	hi = mx + (mx - mn) * 0.1
 	ticks = [mn, (mn + mx) / 2.0, mx]
+	var own_ticks = opts.get("ticks", [])
+	if own_ticks is Array and not own_ticks.is_empty():
+		ticks = own_ticks
 	bar_max = 0.0
 	for p in points:
 		bar_max = maxf(bar_max, float(p.get("bar", 0.0)))
@@ -135,7 +141,8 @@ func _draw() -> void:
 		elif marks.has(i):
 			_marker(pp[i], 4.0 if i == hover else 3.0, Pal.ACCENT)
 		elif not dense or i == hover:
-			_marker(pp[i], 4.0 if i == hover else 3.0, color)
+			var dot = points[i].get("dot")
+			_marker(pp[i], 4.0 if i == hover else 3.0, dot if dot is Color else color)
 	# The crown over the best day ever (when it was beaten by nothing after it).
 	if best_i > 0 and marks.has(best_i):
 		var crown = Icons.tex("crown", Pal.ACCENT, 1)

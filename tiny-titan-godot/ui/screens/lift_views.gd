@@ -80,23 +80,28 @@ static func _pick(view: String, ctx: Dictionary) -> void:
 # Small shared pieces
 # ---------------------------------------------------------------------------
 
-## What a lift is judged by: "sec" (a hold), "kg" (it carries weight) or "reps".
+## What a lift is judged by: "sec" (a hold), "kg" (it carries weight), "band"
+## (done with a resistance band, Bands) or "reps".
 static func mode_of(history: Array) -> String:
 	if LiftTrend.held(history):
 		return "sec"
-	return "kg" if LiftTrend.weighted(history) else "reps"
+	if LiftTrend.weighted(history):
+		return "kg"
+	return "band" if LiftTrend.banded(history) else "reps"
 
 
 static func _fmt_w(wu: String) -> Callable:
 	return func(kg): return Fmt.fmt_weight(float(kg), wu)
 
 
-## One set in words: "60 kg × 10", "12 reps", "3 × 30 s".
+## One set in words: "60 kg × 10", "12 reps", "3 × 30 s", "15 × green band".
 static func set_text(one, wu: String) -> String:
 	if one == null:
 		return "-"
 	if LiftTrend.is_hold(one):
 		return "%d s" % int(one.holdSec) if int(one.reps) == 1 else "%d × %d s" % [int(one.reps), int(one.holdSec)]
+	if Bands.is_band(one):
+		return "%d × %s" % [int(one.reps), Bands.words(one.band)]
 	if float(one.get("weightKg", 0)) > 0.0:
 		return "%s × %d" % [Fmt.fmt_weight(float(one.weightKg), wu), int(one.reps)]
 	return "%d rep%s" % [int(one.reps), "" if int(one.reps) == 1 else "s"]
@@ -109,6 +114,8 @@ static func main_text(d: Dictionary, mode: String, wu: String) -> Array:
 	if mode == "kg" and float(d.topKg) > 0.0:
 		var parts = JourneyScreen.split_unit(Fmt.fmt_weight(float(d.topKg), wu))
 		return [str(parts[0]), "%s · top set" % str(parts[1])]
+	if mode == "band" and int(d.get("band", 0)) > 0:
+		return [Bands.name_of(d.bandId), "band · × %d" % int(d.get("bandReps", 0))]
 	return [str(int(d.bestReps)), "reps · best set"]
 
 
@@ -147,7 +154,10 @@ static func compare(holder: Control, ctx: Dictionary) -> void:
 	var before = history.slice(history.find(cur) + 1)
 	var mode = mode_of(history)
 	var last = before[0] if not before.is_empty() else null
-	var best = LiftTrend.best_row(before)
+	# (judged as a band lift when any day of it has a band, the days before
+	# bands could be logged among them: LiftTrend.main_value)
+	var in_band = LiftTrend.banded(history)
+	var best = LiftTrend.best_row(before, in_band)
 	var against = str(ctx.get("against", "last"))
 	if best == null or best == last:
 		against = "last"
@@ -167,12 +177,16 @@ static func compare(holder: Control, ctx: Dictionary) -> void:
 	holder.add_child(_totals(cur, other, mode, wu))
 	if not recs.is_empty():
 		holder.add_child(_records_card(recs, wu))
-	elif best != null and LiftTrend.main_value(LiftTrend.day(best.sets)) > LiftTrend.main_value(LiftTrend.day(cur.sets)) + 1e-6:
+	elif best != null and LiftTrend.main_value(LiftTrend.day(best.sets), in_band) > LiftTrend.main_value(LiftTrend.day(cur.sets), in_band) + 1e-6 \
+			and (mode != "band" or (int(LiftTrend.day(best.sets).get("band", 0)) > 0 and int(LiftTrend.day(cur.sets).get("band", 0)) > 0)):
+		# (a band lift: only a band day against a band day; a day logged before
+		# bands could be has nothing to say about one)
 		holder.add_child(_best_card(cur, best, mode, wu))
 	var g = LiftTrend.ghost(history, cur)
 	if g != null:
 		holder.add_child(_ghost_card(g, mode, wu))
-	var std = _standard_card(history, str(ctx.get("lift", "")), wu)
+	# (no strength level for a band: a band-assisted pull-up is not a pull-up's reps)
+	var std = _standard_card(history, str(ctx.get("lift", "")), wu) if mode != "band" else null
 	if std != null:
 		holder.add_child(std)
 	var stuck = LiftTrend.plateau(history)
@@ -235,6 +249,12 @@ static func _side(h: Dictionary, kicker: String, lit: bool, mode: String, wu: St
 	var big = PixelFont.rect(str(mt[0]), 4 if lit and str(mt[0]).length() <= 4 else 3, (Pal.GOOD if note else Pal.ACCENT) if lit else Pal.MUTED)
 	big.size_flags_horizontal = Control.SIZE_SHRINK_END if lit else Control.SIZE_SHRINK_BEGIN
 	v.add_child(big)
+	if mode == "band" and int(d.get("band", 0)) > 0:
+		# The band's own colour under its name.
+		var sw = BandPicker.swatch(d.bandId, 10)
+		sw.custom_minimum_size = Vector2(44, 10)
+		sw.size_flags_horizontal = Control.SIZE_SHRINK_END if lit else Control.SIZE_SHRINK_BEGIN
+		v.add_child(sw)
 	var unit = Kit.label(str(mt[1]), 10, Pal.MUTED, true)
 	unit.horizontal_alignment = align
 	v.add_child(unit)
@@ -259,6 +279,10 @@ static func _verdict(cmp: Dictionary, recs: Array, other, against: String, wu: S
 	elif int(cmp.get("sec", 0)) != 0:
 		where = "on your longest hold"
 	var who = "your best day" if against == "best" else "last time"
+	if int(cmp.get("band", 0)) != 0:
+		# A band: "+1 band: a heavier band than last time."
+		var heavier = int(cmp.band) > 0
+		return banner("arrow_up" if heavier else "arrow_down", "%s: a %s band than %s." % [said, "heavier" if heavier else "lighter", who], Pal.GOOD if heavier else Pal.ACCENT2)
 	match str(cmp.kind):
 		"up":
 			return banner("arrow_up", "%s %s. Better than %s." % [said, where, who], Pal.GOOD)
@@ -307,7 +331,7 @@ static func _pair_row(p: Dictionary, wu: String) -> Control:
 	num.add_child(nl)
 	row.add_child(Kit.vcenter(_col(num, 26)))
 	var prev = Kit.clip(set_text(p.prev, wu), 13, Pal.MUTED, false)
-	row.add_child(Kit.vcenter(prev))
+	row.add_child(_with_swatch(prev, p.prev, false))
 	var mid = CenterContainer.new()
 	mid.custom_minimum_size = Vector2(84, 24)
 	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -315,9 +339,29 @@ static func _pair_row(p: Dictionary, wu: String) -> Control:
 	row.add_child(mid)
 	var now = Kit.clip(set_text(p.cur, wu), 13, Pal.TEXT, true)
 	now.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	row.add_child(Kit.vcenter(now))
+	row.add_child(_with_swatch(now, p.cur, true))
 	panel.add_child(row)
 	return panel
+
+
+## A set's words, with a square of its band's colour beside them when it was
+## done with a band (on the outer side: left of last time's, right of this time's).
+static func _with_swatch(words: Label, one, right: bool) -> Control:
+	if not (one is Dictionary and Bands.is_band(one)):
+		return Kit.vcenter(words)
+	var h = Kit.hbox(5)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sw = BandPicker.swatch(one.band, 10)
+	if right:
+		h.add_child(words)
+		h.add_child(sw)
+	else:
+		h.add_child(sw)
+		h.add_child(words)
+	return h
 
 
 static func _pair_chip(p: Dictionary, wu: String) -> Control:
@@ -332,6 +376,8 @@ static func _pair_chip(p: Dictionary, wu: String) -> Control:
 	var text = ""
 	if absf(float(p.dkg)) > 1e-6:
 		text = "%s%s" % ["+" if p.dkg > 0.0 else "-", Fmt.fmt_weight(absf(float(p.dkg)), wu)]
+	elif int(p.get("dband", 0)) != 0:
+		text = SessionView.band_change(int(p.dband))
 	elif int(p.dsec) != 0:
 		text = "%s%d s" % ["+" if p.dsec > 0 else "-", absi(int(p.dsec))]
 	else:
@@ -394,6 +440,8 @@ static func record_value(r: Dictionary, wu: String) -> String:
 			return Fmt.fmt_weight(float(r.value), wu, 0) if str(r.id) == "volume" or str(r.id) == "strength" else Fmt.fmt_weight(float(r.value), wu)
 		"sec":
 			return "%d s" % int(r.value)
+		"band":
+			return "%s band" % Bands.name_of(r.get("band", ""))
 	return "%d reps" % int(r.value)
 
 
@@ -427,6 +475,14 @@ static func _best_card(cur: Dictionary, best: Dictionary, mode: String, wu: Stri
 	words.add_child(Kit.clip("Your best: %s %s on %s" % [str(top_set[0]), str(top_set[1]).get_slice(" · ", 0), Dates.format_date(str(best.date))], 13, Pal.TEXT, true))
 	var gap = LiftTrend.main_value(d) - LiftTrend.main_value(LiftTrend.day(cur.sets))
 	var gap_text = "%d s more than this time" % int(gap) if mode == "sec" else ("%s more than this time" % Fmt.fmt_weight(gap, wu) if mode == "kg" else "%d more reps in a set than this time" % int(gap))
+	if mode == "band":
+		# A heavier band, or more reps with the same band.
+		var cd = LiftTrend.day(cur.sets)
+		var steps = int(d.get("band", 0)) - int(cd.get("band", 0))
+		if steps > 0:
+			gap_text = "%s heavier than this time" % SessionView.band_change(steps).substr(1)
+		else:
+			gap_text = "%d more reps with the %s than this time" % [maxi(0, int(d.get("bandReps", 0)) - int(cd.get("bandReps", 0))), Bands.words(d.get("bandId", ""))]
 	words.add_child(Kit.clip(gap_text, 12, Pal.MUTED))
 	row.add_child(words)
 	c.add(row)
@@ -575,6 +631,11 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 	head.add_child(Kit.vcenter(PixelFont.rect("NEXT TIME", 2, Pal.SECOND)))
 	c.add(head)
 	c.add(Kit.para(LiftHistory.describe_sets(t.sets, _fmt_w(wu)), 16, Pal.TEXT, true))
+	if Bands.top(t.sets) != "":
+		# The band to use, in its own colour.
+		var bp = BandPicker.pill(Bands.top(t.sets), 12)
+		bp.set_meta("next_band", Bands.top(t.sets))
+		c.add(bp)
 	# Reps logged as both sides added up (Sides): what that is for one side.
 	var both = int(t.get("sides", 1)) > 1
 	if both and Sides.side_words(LiftTrend.real_sets(t.sets)) != "":
@@ -593,10 +654,16 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 		"reps":
 			if float(t.kg) > 0.0:
 				why = "One more rep on set %d: %d reps at %s." % [int(t.set), int(t.reps), Fmt.fmt_weight(float(t.kg), wu)]
+			elif str(t.get("band", "")) != "":
+				why = "One more rep on set %d: %d reps with the %s." % [int(t.set), int(t.reps), Bands.words(t.band)]
 			else:
 				why = "One more rep on set %d: %d reps." % [int(t.set), int(t.reps)]
 		"hold":
 			why = "Hold each one %d seconds longer." % int(t.addSec)
+		"band":
+			# Every set with the band got its reps: the next band up, fewer reps.
+			var each = " a side" if both else ""
+			why = "Every set with the %s got %d reps%s: move up to the %s and come back to %d reps%s." % [Bands.words(t.band), LiftTrend.BAND_HIGH_REPS, each, Bands.words(t.toBand), LiftTrend.BAND_DOWN_TO, each]
 	c.add(Kit.para(why, 12, Pal.MUTED))
 	return c
 
@@ -611,10 +678,13 @@ static func metric_options(mode: String) -> Array:
 			return [{"value": "weight", "label": "Top set"}, {"value": "e1rm", "label": "Est. 1RM"}, {"value": "reps", "label": "Reps"}, {"value": "volume", "label": "Moved"}]
 		"sec":
 			return [{"value": "hold", "label": "Hold"}, {"value": "reps", "label": "Reps"}]
+		"band":
+			return [{"value": "band", "label": "Band"}, {"value": "reps", "label": "Reps"}]
 	return [{"value": "best", "label": "Best set"}, {"value": "reps", "label": "Reps in all"}]
 
 
-## A number of the chart with its unit: "52.5 lb", "3.4k lb", "30 s", "68".
+## A number of the chart with its unit: "52.5 lb", "3.4k lb", "30 s", "68",
+## "Green" (a band's level on the ladder).
 static func metric_text(metric: String, v: float, wu: String) -> String:
 	match metric:
 		"weight", "e1rm":
@@ -623,12 +693,16 @@ static func metric_text(metric: String, v: float, wu: String) -> String:
 			return "%s %s" % [Charts.fmt_k(v), wu]
 		"hold":
 			return "%d s" % TTUtil.jsround(v)
+		"band":
+			var lv = TTUtil.jsround(v)
+			return Bands.name_of(Bands.LADDER[lv - 1]) if lv >= 1 and lv <= Bands.LADDER.size() else ""
 	return str(TTUtil.jsround(v))
 
 
 const RANGES = [{"id": "1m", "label": "1M", "days": 31}, {"id": "3m", "label": "3M", "days": 92}, {"id": "1y", "label": "1Y", "days": 366}, {"id": "all", "label": "All", "days": 0}]
 const METRIC_WORDS = {"weight": "Heaviest set of each day", "e1rm": "Estimated strength: the one-rep max worked out from your best set",
-	"reps": "Every rep of each day", "volume": "Weight × reps of each day", "hold": "Longest hold of each day", "best": "Most reps in one set of each day"}
+	"reps": "Every rep of each day", "volume": "Weight × reps of each day", "hold": "Longest hold of each day", "best": "Most reps in one set of each day",
+	"band": "Heaviest band of each day"}
 
 
 static func progress(holder: Control, ctx: Dictionary) -> void:
@@ -665,12 +739,18 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 				y = float(row.holdSec)
 			"best":
 				y = float(row.bestReps)
+			"band":
+				y = float(row.get("band", 0))
 			_:
 				y = float(row.reps)
 		if y <= 0.0 and metric != "reps":
 			continue
 		var bar = Fmt.kg_to_unit(float(row.volumeKg), wu) if mode == "kg" else (float(row.holdTotal) if mode == "sec" else float(row.reps))
-		points.append({"x": row.date, "y": y, "bar": bar, "tip": LiftHistory.describe_sets(sets_of.get(row.date, []), _fmt_w(wu)), "note": row.date == note_day})
+		var pt = {"x": row.date, "y": y, "bar": bar, "tip": LiftHistory.describe_sets(sets_of.get(row.date, []), _fmt_w(wu)), "note": row.date == note_day}
+		if metric == "band":
+			# Each day's point in the colour of its band.
+			pt["dot"] = Bands.color_of(row.get("bandId", ""))
+		points.append(pt)
 	if points.is_empty():
 		holder.add_child(Kit.para("Nothing to chart here yet.", 12, Pal.MUTED))
 		return
@@ -709,6 +789,9 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 		var up = delta > 0.0
 		var flat = absf(delta) < 0.05
 		var said = metric_text(metric, absf(delta), wu)
+		if metric == "band":
+			# A change of band is counted in bands: "2 bands".
+			said = SessionView.band_change(maxi(1, absi(TTUtil.jsround(delta)))).substr(1)
 		var parts = JourneyScreen.split_unit(said)
 		var col = Pal.GOOD if up else Pal.ACCENT2
 		var num = Kit.hbox(4)
@@ -741,12 +824,23 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 		chips.queue_free()
 	var chart = ProgressChart.new()
 	var bar_word = "moved" if mode == "kg" else ("held in all" if mode == "sec" else "reps in all")
-	chart.setup(shown, {"color": Pal.LIFT, "records": marks,
+	var chart_opts = {"color": Pal.LIFT, "records": marks,
 		"fmt": func(val): return LiftViews.metric_text(metric, float(val), wu),
-		"bar_fmt": func(val): return ("%s %s" % [Fmt.fmt_big_kg(Fmt.unit_to_kg(float(val), wu), wu), bar_word]) if mode == "kg" else ("%d %s" % [TTUtil.jsround(float(val)), "s held" if mode == "sec" else "reps"])})
+		"bar_fmt": func(val): return ("%s %s" % [Fmt.fmt_big_kg(Fmt.unit_to_kg(float(val), wu), wu), bar_word]) if mode == "kg" else ("%d %s" % [TTUtil.jsround(float(val)), "s held" if mode == "sec" else "reps"])}
+	if metric == "band":
+		# The axis says the bands the line goes through, by name.
+		var levels = []
+		for p in shown:
+			if not levels.has(int(p.y)):
+				levels.append(int(p.y))
+		levels.sort()
+		if levels.size() > 4:
+			levels = [levels[0], levels[int(levels.size() / 2.0)], levels[levels.size() - 1]]
+		chart_opts["ticks"] = levels.map(func(lv): return float(lv))
+	chart.setup(shown, chart_opts)
 	chart.tooltip_text = METRIC_WORDS.get(metric, "")
 	c.add(chart)
-	var legend = [{"name": {"weight": "Top set", "e1rm": "Estimated 1-rep max", "volume": "Moved", "hold": "Longest hold", "best": "Best set"}.get(metric, "Reps"), "color": Pal.LIFT},
+	var legend = [{"name": {"weight": "Top set", "e1rm": "Estimated 1-rep max", "volume": "Moved", "hold": "Longest hold", "best": "Best set", "band": "Heaviest band"}.get(metric, "Reps"), "color": Pal.LIFT},
 		{"name": "Work that day", "color": Pal.with_alpha(Pal.MUTED, 0.6)}, {"name": "New best", "color": Pal.ACCENT}]
 	if note_day != "":
 		legend.append({"name": "Your note", "color": Pal.GOOD})
@@ -844,9 +938,14 @@ static func logbook(holder: Control, ctx: Dictionary) -> void:
 	if int(ctx.get("goal", 0)) > 0:
 		var g = Kit.card(6, Callable(), 10)
 		g.accent(Pal.PT)
-		g.add(Kit.clip("Physical therapy: %d days a week" % int(ctx.goal), 13, Pal.TEXT, true))
+		g.add(Kit.clip("Physical therapy: %d sets a week" % (int(ctx.goal) * Pt.SETS_A_DAY), 13, Pal.TEXT, true))
 		var bars = WeekBars.new()
-		bars.setup(LiftTrend.per_week(history, App.today, 8), Pal.PT, int(ctx.goal))
+		# (in sets, as the PT sheet counts them: a day counts up to Pt.SETS_A_DAY)
+		var pt_row = Pt.row_of(App.sessions(), App.pt(), str(ctx.lift), App.today)
+		if pt_row != null:
+			bars.setup(pt_row.weeks, Pal.PT, int(pt_row.setsGoal), "set")
+		else:
+			bars.setup(LiftTrend.per_week(history, App.today, 8), Pal.PT, int(ctx.goal))
 		g.add(bars)
 		holder.add_child(g)
 
@@ -854,6 +953,10 @@ static func logbook(holder: Control, ctx: Dictionary) -> void:
 	var top = 0.0
 	for h in history:
 		for one in LiftTrend.real_sets(h.get("sets", [])):
+			if mode == "band":
+				# A band: the block is as tall as its band against the heaviest one.
+				top = maxf(top, float(Bands.level(one.get("band", ""))))
+				continue
 			top = maxf(top, float(one.get("holdSec", 0)) if mode == "sec" else (float(one.get("weightKg", 0)) if mode == "kg" else float(one.reps)))
 	var shown = history.size() if bool(ctx.get("all", false)) else mini(LOGBOOK_SHOWN, history.size())
 	var month = ""

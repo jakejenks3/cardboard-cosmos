@@ -48,16 +48,23 @@ static func _before(data: Dictionary, skip_id = null) -> Array:
 	return out
 
 
-## "+2.5 lb", "-4 reps": a change with its sign.
+## "+2.5 lb", "-4 reps", "+1 band": a change with its sign.
 static func delta_text(cmp: Dictionary, wu: String) -> String:
 	if absf(float(cmp.get("kg", 0.0))) > 1e-6:
 		return "%s%s" % ["+" if float(cmp.kg) > 0.0 else "-", Fmt.fmt_weight(absf(float(cmp.kg)), wu)]
 	if int(cmp.get("sec", 0)) != 0:
 		return "%s%d s" % ["+" if int(cmp.sec) > 0 else "-", absi(int(cmp.sec))]
+	if int(cmp.get("band", 0)) != 0:
+		return band_change(int(cmp.band))
 	var r = int(cmp.get("reps", 0))
 	if r != 0:
 		return "%s%d rep%s" % ["+" if r > 0 else "-", absi(r), "" if absi(r) == 1 else "s"]
 	return ""
+
+
+## A change of resistance band in steps of the ladder: "+1 band", "-2 bands".
+static func band_change(d: int) -> String:
+	return "%s%d band%s" % ["+" if d > 0 else "-", absi(d), "" if absi(d) == 1 else "s"]
 
 
 ## How a session's sets compare with the time before (LiftTrend.compare), as a
@@ -89,6 +96,8 @@ static func done_sets(ex: Dictionary) -> Array:
 			var kept = {"reps": int(one.reps), "weightKg": float(one.get("weightKg", 0))}
 			if int(one.get("holdSec", 0)) > 0:
 				kept["holdSec"] = int(one.holdSec)
+			if Bands.is_band(one):
+				kept["band"] = str(one.band).strip_edges().to_lower()
 			out.append(kept)
 	return out
 
@@ -121,9 +130,11 @@ static func lift_rows(data: Dictionary, opts: Dictionary = {}) -> Control:
 		var spark = []
 		if not hist.is_empty():
 			var days = LiftTrend.by_day(hist)
+			# (a band lift: its days from before bands below its band days)
+			var in_band = LiftTrend.banded(hist) or LiftTrend.banded([{"sets": sets}])
 			for d in days.slice(maxi(0, days.size() - 7)):
-				spark.append(LiftTrend.main_value(d))
-			spark.append(LiftTrend.main_value(LiftTrend.day(sets)))
+				spark.append(LiftTrend.main_value(d, in_band))
+			spark.append(LiftTrend.main_value(LiftTrend.day(sets), in_band))
 		box.add_child(_lift_row(lift, sets, cmp, bool(ex.get("pt", false)) or Pt.is_pt(marks, lift), wu, page, spark))
 	return box
 
@@ -146,7 +157,17 @@ static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: 
 		top.add_child(Kit.vcenter(pt_tag()))
 	words.add_child(top)
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
-	words.add_child(Kit.clip(LiftHistory.describe_sets(sets, fmt_w), 12, Pal.MUTED))
+	var said = Kit.clip(LiftHistory.describe_sets(sets, fmt_w), 12, Pal.MUTED)
+	if Bands.top(sets) != "":
+		# Done with a band: a square of its colour before the sets.
+		var line = Kit.hbox(5)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_child(BandPicker.swatch(Bands.top(sets), 10))
+		line.add_child(said)
+		line.set_meta("band_sets", Bands.top(sets))
+		words.add_child(line)
+	else:
+		words.add_child(said)
 	row.add_child(words)
 	if spark.size() >= 2:
 		var bars = SparkBars.new()

@@ -580,6 +580,8 @@ func absorb_pt(session: Dictionary) -> void:
 	for ex in session.get("exercises", []):
 		var tag = Pt.untag(str(ex.get("name", "")))
 		var on = bool(tag.pt) or bool(ex.get("pt", false))
+		# (the Log tab's PT key switched off on a lift that is PT: no longer PT)
+		var off = ex.get("pt") is bool and not bool(ex.pt) and not bool(tag.pt)
 		ex.erase("pt")
 		var both = ex.get("bothSides")
 		ex.erase("bothSides")
@@ -591,6 +593,8 @@ func absorb_pt(session: Dictionary) -> void:
 		ex["name"] = n
 		if on and Pt.mark_of(saved.pt, n) == "":
 			saved.pt[Pt.key(n)] = {"name": n, "perWeek": Pt.DEFAULT_PER_WEEK}
+		elif off and Pt.mark_of(saved.pt, n) != "":
+			saved.pt.erase(Pt.mark_of(saved.pt, n))
 		if both is bool and Sides.both(saved.settings, n) != both:
 			saved.settings[Sides.KEY] = Sides.with_mark(saved.settings, n, both)
 

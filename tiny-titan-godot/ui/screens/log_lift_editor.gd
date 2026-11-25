@@ -16,7 +16,9 @@ var editing_id = null
 ## and not touched yet (the form asks about those before it saves). `both`
 ## (true / false, only once the "L+R" key was touched) = the reps are both
 ## sides added up, or are not (Sides): stored for the lift when the workout
-## is saved.
+## is saved. `band: true` = done with a resistance band (the "Band" key): its
+## sets have `band` (a Bands id) where the weight would be, and are saved with
+## weight 0 and that band. Band, Hold and BW are one at a time.
 var exercises: Array = []
 var query: String = ""
 var wu: String = "kg"
@@ -34,6 +36,11 @@ var _wsteps: Array = []  # [exercise][set] -> the weight stepper (where a PR bur
 var _deltas: Array = []  # [exercise] -> VBoxContainer slot for the volume note
 var _cards: Array = []  # [exercise] -> its Card (the edge lights up at the first touch)
 var _filed: Array = []  # [exercise] -> VBoxContainer slot: how a new name will be filed
+## The heaviest band (Bands.level) ever done on each lift (normalized name), and
+## the band the player used last on any lift: for the badges and for filling in
+## a band when the "Band" key is tapped.
+var _band_best: Dictionary = {}
+var _band_last: String = ""
 ## The player's lifts (App.lift_names) and their keys, and whether a name typed
 ## here is filed when the workout is saved (App.absorb_pt: not for a session
 ## that came from the phone note, whose names stay as they are).
@@ -62,6 +69,17 @@ static func draft_from_sets(ex_name: String, sets: Array, unit: String) -> Dicti
 	for s in sets:
 		if float(s.weightKg) != 0.0:
 			bw = false
+	# Done with a resistance band: its sets say which (Bands). An older lift
+	# named for its band ("Face Pull - Green band", weight 0 everywhere) opens
+	# as sets with that band.
+	var top_band = Bands.top(sets)
+	var banded = top_band != ""
+	for s in sets:
+		if Bands.is_band(s):
+			banded = true
+	if not banded and bw and Bands.of_name(ex_name) != "" and not sets.any(func(s): return int(s.get("holdSec", 0)) > 0):
+		banded = true
+		top_band = Bands.of_name(ex_name)
 	var rows = []
 	var timed = false
 	for s in sets:
@@ -70,24 +88,34 @@ static func draft_from_sets(ex_name: String, sets: Array, unit: String) -> Dicti
 		if int(s.get("holdSec", 0)) > 0:
 			row["hold"] = str(int(s.holdSec))
 			timed = true
+		if banded:
+			row["band"] = str(s.band).strip_edges().to_lower() if Bands.is_band(s) else (top_band if top_band != "" else Bands.DEFAULT)
 		rows.append(row)
 	if rows.is_empty():
 		rows.append({"reps": "", "weight": ""})
-	return {"name": ex_name, "bodyweight": bw, "timed": timed, "sets": rows}
+	var out = {"name": ex_name, "bodyweight": bw and not (banded and not timed), "timed": timed, "sets": rows}
+	if banded and not timed:
+		out["band"] = true
+	return out
 
 
-## Empty or zero-rep sets are dropped (as the web app does).
+## Empty or zero-rep sets are dropped (as the web app does). A set done with a
+## band is saved with weight 0 and its band (Bands.DEFAULT when it has none).
 static func sets_from_draft(e: Dictionary, unit: String) -> Array:
 	var out = []
 	var timed = bool(e.get("timed", false))
+	var banded = bool(e.get("band", false)) and not timed
 	for s in e.sets:
 		var reps = maxi(0, TTUtil.jsround(LogWidgets.num(s.reps)))
-		var kg = 0.0 if (e.bodyweight or timed) else maxf(0.0, Fmt.unit_to_kg(LogWidgets.num(s.weight), unit))
+		var kg = 0.0 if (e.bodyweight or timed or banded) else maxf(0.0, Fmt.unit_to_kg(LogWidgets.num(s.weight), unit))
 		if reps > 0:
 			var one = {"reps": reps, "weightKg": kg}
 			var sec = maxi(0, TTUtil.jsround(LogWidgets.num(s.get("hold", "")))) if timed else 0
 			if sec > 0:
 				one["holdSec"] = sec
+			if banded:
+				var b = str(s.get("band", "")).strip_edges().to_lower()
+				one["band"] = b if b != "" else Bands.DEFAULT
 			out.append(one)
 	return out
 
@@ -118,6 +146,12 @@ func session_exercises() -> Array:
 			# lift and takes the flag off again.
 			if e.has("both"):
 				one["bothSides"] = bool(e.both)
+			# The PT key was touched: App.absorb_pt marks the lift, or takes its
+			# mark off, and drops the flag. Off also takes a typed "(PT)" off.
+			if e.get("pt") is bool:
+				one["pt"] = bool(e.pt)
+				if not bool(e.pt):
+					one.name = str(Pt.untag(nm).name).strip_edges()
 			out.append(one)
 	return out
 
@@ -140,6 +174,7 @@ func build(parent: Control) -> void:
 	_last = LiftHistory.last_performances(sessions, editing_id)
 	_suggestions = LiftHistory.exercise_suggestions(sessions, LiftNames.defaults(), editing_id)
 	_bests = App.state.prs.lifts
+	_read_bands(sessions)
 	var owner_form = _form()
 	_files_names = owner_form == null or owner_form.editing == null or str(owner_form.editing.get("inboxKey", "")) == ""
 	_own = App.lift_names() if _files_names else []
@@ -181,7 +216,7 @@ func build(parent: Control) -> void:
 		else:
 			# (never done: an empty set; from the plan it is "planned" like the
 			# others, so its key in "From today's plan" takes it back again)
-			var blank = {"name": pend, "bodyweight": false, "sets": [{"reps": "", "weight": ""}]}
+			var blank = _blank(pend)
 			if bool(pair[1]):
 				blank["planned"] = true
 			exercises.append(blank)
@@ -222,6 +257,55 @@ static func _has_reps(sets: Array) -> bool:
 	return false
 
 
+## The heaviest band done on each lift, and the band of the newest lift done
+## with one (the session being edited left out).
+func _read_bands(sessions: Array) -> void:
+	_band_best = {}
+	_band_last = ""
+	var newest = ""
+	var newest_at = -1.0
+	for s in sessions:
+		if str(s.get("discipline", "")) != "lift" or (editing_id != null and s.get("id") == editing_id):
+			continue
+		for ex in s.get("exercises", []):
+			var top = Bands.top(ex.get("sets", []))
+			if top == "":
+				continue
+			var k = Xp.normalize_exercise(str(ex.get("name", "")))
+			_band_best[k] = maxi(int(_band_best.get(k, 0)), Bands.level(top))
+			var d = str(s.get("date", ""))
+			var at = float(s.get("createdAt", 0))
+			if d > newest or (d == newest and at > newest_at):
+				newest = d
+				newest_at = at
+				_band_last = top
+
+
+## A band to start a lift's sets with: the band it was done with last time,
+## else a band its name says, else the band used last on any lift, else
+## Bands.DEFAULT.
+func _band_fill(e: Dictionary) -> String:
+	var nm = str(e.get("name", "")).strip_edges()
+	var lp = _last.get(Xp.normalize_exercise(nm))
+	if lp != null and Bands.top(lp.sets) != "":
+		return Bands.top(lp.sets)
+	if Bands.of_name(nm) != "":
+		return Bands.of_name(nm)
+	if _band_last != "":
+		return _band_last
+	return Bands.DEFAULT
+
+
+## A new exercise, never done: one empty set. A name that says it is done with
+## a band ("Pull-Apart", "March - Band") starts with a band instead of a weight.
+func _blank(ex_name: String) -> Dictionary:
+	var one = {"name": ex_name.strip_edges(), "bodyweight": false, "sets": [{"reps": "", "weight": ""}]}
+	if Bands.says_band(ex_name):
+		one["band"] = true
+		one.sets[0]["band"] = _band_fill(one)
+	return one
+
+
 ## Collapsed picker: about two rows of chips.
 const CHIPS_COLLAPSED = 6
 ## The widest a movement and a variation are written on an exercise key.
@@ -244,7 +328,8 @@ func _exercise_card(i: int) -> Card:
 	c.set_meta("exercise_card", i)
 	_cards.append(c)
 
-	# Name · BW · remove
+	# The name and the cross on a line of their own (the user, 2026-11-24, asking for a
+	# PT key: five keys beside it left the name too little room on a phone).
 	var head = Kit.hbox(4)
 	var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
 	name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
@@ -252,24 +337,39 @@ func _exercise_card(i: int) -> Card:
 	name_edit.focus_exited.connect(_on_name_done.bind(i))
 	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
 	head.add_child(name_edit)
-	# (three keys beside the name: a little less padding each, so the name keeps its room)
-	var chip_pad = 8 if timed else 6
-	if not timed:
-		var bw = LogWidgets.mini_chip("BW", e.bodyweight, _toggle_bw.bind(i), Pal.LIFT, chip_pad)
-		bw.tooltip_text = "Bodyweight exercise (no weight)"
-		head.add_child(bw)
-	var hold = LogWidgets.mini_chip("Hold", timed, _toggle_timed.bind(i), Pal.LIFT, chip_pad)
-	hold.tooltip_text = "A stretch or a hold: seconds instead of weight"
-	head.add_child(hold)
-	# A single arm or single leg lift typed as left + right in one number.
-	var both = not timed and _both(e)
-	if not timed:
-		var lr = LogWidgets.mini_chip(Sides.SHORT, both, _toggle_both.bind(i), Pal.LIFT, chip_pad)
-		lr.tooltip_text = "Reps are both sides added up (left + right)"
-		lr.set_meta("both_chip", both)
-		head.add_child(lr)
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
+	# What goes beside the reps, one of four (a pick-one track: every key is always
+	# there, so none moves when one is tapped): a weight, nothing (bodyweight), a
+	# resistance band (Bands) or seconds held (a stretch). Then two switches:
+	# L+R (reps are both sides added up) and PT (a physical therapy exercise).
+	var banded = bool(e.get("band", false)) and not timed
+	var mode = _mode_of(e)
+	var modes = Kit.hbox(6)
+	var keys = []
+	for m in MODES:
+		var k = Kit.choice(m[1], mode == m[0], _set_mode.bind(i, m[0]), Pal.LIFT, 12)
+		k.tooltip_text = m[2]
+		k.set_meta("mode_key", m[0])
+		# (the tooltip and the text never change with the state, so the screen
+		# finds the same key again after the rebuild and keeps it under the finger)
+		if m[0] == "band":
+			k.set_meta("band_chip", banded)
+		keys.append(k)
+	modes.add_child(Kit.choice_track(keys))
+	var both = not timed and _both(e)
+	var lr = LogWidgets.mini_chip(Sides.SHORT, both, _toggle_both.bind(i), Pal.LIFT, 8)
+	lr.tooltip_text = "Reps are both sides added up (left + right)"
+	lr.set_meta("both_chip", both)
+	# (a hold has no reps to add up; the key stays in its place, switched off)
+	lr.disabled = timed
+	modes.add_child(Kit.vcenter(lr))
+	var pt_on = _pt_on(e)
+	var ptk = LogWidgets.mini_chip("PT", pt_on, _toggle_pt.bind(i), Pal.PT, 8)
+	ptk.tooltip_text = "Physical therapy: counts toward the day's PT once the workout is saved"
+	ptk.set_meta("pt_chip", pt_on)
+	modes.add_child(Kit.vcenter(ptk))
+	c.add(modes)
 	# How a name that is new to the log will be filed, said while it is typed:
 	# the movement, and its variation as a tag (_refresh_filed).
 	var filed = Kit.vbox(1)
@@ -282,6 +382,12 @@ func _exercise_card(i: int) -> Card:
 		var hint = Kit.clip("%s · reps are both sides added up" % Sides.SHORT, 11, Pal.LIFT)
 		hint.set_meta("both_hint", true)
 		c.add(Kit.pad(hint, 6, 0, 4, 0))
+	# The PT key changed in this workout: what saving it will do, in words.
+	var pt_words = _pt_words(e)
+	if pt_words != "":
+		var pth = Kit.clip(pt_words, 11, Pal.PT)
+		pth.set_meta("pt_hint", true)
+		c.add(Kit.pad(pth, 6, 0, 4, 0))
 
 	# Last time · best, one line (the date is in the tooltip)
 	var has_best = best != null and float(best.weightKg) > 0.0
@@ -290,6 +396,9 @@ func _exercise_card(i: int) -> Card:
 		ref.mouse_filter = Control.MOUSE_FILTER_PASS
 		if lp != null:
 			var last_words = "Last " + LiftHistory.describe_sets(lp.sets, _fmt_w)
+			# (done with a band before bands could be logged: it was no bodyweight lift)
+			if banded and Bands.top(lp.sets) == "":
+				last_words = last_words.replace(" bodyweight", "")
 			if both and Sides.side_words(lp.sets) != "":
 				last_words += " · " + Sides.side_words(lp.sets)
 			ref.add_child(Kit.clip(last_words, 12, Pal.MUTED))
@@ -306,6 +415,7 @@ func _exercise_card(i: int) -> Card:
 	var label_name = str(e.name).strip_edges()
 	if label_name == "":
 		label_name = "Exercise %d" % (i + 1)
+	var fill = _band_fill(e) if banded else ""
 	for j in range(e.sets.size()):
 		var s = e.sets[j]
 		var ref_set = _ref_set(lp, j)
@@ -333,6 +443,20 @@ func _exercise_card(i: int) -> Card:
 			ws.changed.connect(_on_set_text.bind(i, j, "hold"))
 			row.add_child(ws)
 			row.add_child(Kit.vcenter(Kit.label("s", 11, Pal.MUTED)))
+		elif banded:
+			# A resistance band where the weight would be: lighter / the band /
+			# heavier (BandPicker). A tap changes it in place (_on_band). (No "×"
+			# on a phone: its keys take the room.)
+			if not Kit.fingers:
+				row.add_child(Kit.vcenter(Kit.label("×", 13, Pal.MUTED)))
+			if str(s.get("band", "")).strip_edges() == "":
+				s["band"] = fill
+			var bp = BandPicker.new()
+			bp.setup(str(s.band), "%s set %d" % [label_name, j + 1])
+			bp.set_meta("band_of", "%d:%d" % [i, j])
+			bp.changed.connect(_on_band.bind(i, j))
+			ws = bp
+			row.add_child(bp)
 		elif not e.bodyweight:
 			row.add_child(Kit.vcenter(Kit.label("×", 13, Pal.MUTED)))
 			var w_opts = {"placeholder": wu, "width": 54, "snap": true, "min": 0, "compact": true}
@@ -372,6 +496,13 @@ func _exercise_card(i: int) -> Card:
 		var h_btn = LogWidgets.mini_chip("+5 s", false, bump_all.bind(i, "hold"))
 		h_btn.tooltip_text = "Hold every set five seconds longer"
 		acts.add_child(h_btn)
+	elif banded:
+		var b_btn = LogWidgets.mini_chip("+1 band", false, bump_all.bind(i, "band"))
+		# (the tooltip names the lift: after the rebuild the screen finds this
+		# lift's key again and keeps it under the finger, UiScreen)
+		b_btn.tooltip_text = "%s: every set one band heavier" % label_name
+		b_btn.set_meta("band_bump", true)
+		acts.add_child(b_btn)
 	elif not e.bodyweight:
 		var w_btn = LogWidgets.mini_chip("+%s %s" % [TTUtil.num_str(_step()), wu], false, bump_all.bind(i, "weight"))
 		w_btn.tooltip_text = "Add one weight step to every set"
@@ -494,6 +625,7 @@ func _refresh_exercise(i: int) -> void:
 	var lp = _last.get(key)
 	var best = _bests.get(key)
 	var best_kg = float(best.weightKg) if best != null else 0.0
+	var banded = bool(e.get("band", false)) and not bool(e.get("timed", false))
 	var slots = _badges[i]
 	for j in range(mini(slots.size(), e.sets.size())):
 		var slot = slots[j]
@@ -501,11 +633,17 @@ func _refresh_exercise(i: int) -> void:
 			continue
 		Kit.clear(slot)
 		var s = e.sets[j]
-		var cur = {"reps": TTUtil.jsround(LogWidgets.num(s.reps)), "weightKg": 0.0 if (e.bodyweight or bool(e.get("timed", false))) else Fmt.unit_to_kg(LogWidgets.num(s.weight), wu)}
+		var cur = {"reps": TTUtil.jsround(LogWidgets.num(s.reps)), "weightKg": 0.0 if (e.bodyweight or bool(e.get("timed", false)) or banded) else Fmt.unit_to_kg(LogWidgets.num(s.weight), wu)}
 		var prev = null
 		if lp != null and j < lp.sets.size():
 			prev = lp.sets[j]
-		var trend = LiftHistory.compare_set(cur, prev, lp != null, best_kg)
+		var trend = null
+		if banded:
+			# A band: a heavier or lighter one than that set last time, else the reps.
+			cur["band"] = str(s.get("band", ""))
+			trend = LiftHistory.compare_band_set(cur, prev, lp != null, int(_band_best.get(key, 0)))
+		else:
+			trend = LiftHistory.compare_set(cur, prev, lp != null, best_kg)
 		var badge = _trend_badge(trend)
 		if badge != null:
 			slot.add_child(badge)
@@ -528,6 +666,9 @@ func _refresh_exercise(i: int) -> void:
 		last_reps += int(s.reps)
 	var text = ""
 	var good = false
+	var tip = "Volume (reps × weight) compared with last time"
+	var now_band = Bands.level(Bands.top(cur_sets))
+	var last_band = Bands.level(Bands.top(lp.sets))
 	var held = 0
 	for s in cur_sets:
 		held += int(s.reps) * int(s.get("holdSec", 0))
@@ -543,6 +684,14 @@ func _refresh_exercise(i: int) -> void:
 			text = "= last hold"
 		else:
 			text = "%d s to match" % (last_held - held)
+	elif banded and now_band > 0 and last_band > 0 and now_band != last_band:
+		# A band: the heaviest one against last time's (the reps say the rest).
+		tip = "Your heaviest band compared with last time"
+		if now_band > last_band:
+			text = "▲ %s" % SessionView.band_change(now_band - last_band).substr(1)
+			good = true
+		else:
+			text = "lighter band"
 	elif e.bodyweight or last_vol == 0.0:
 		if reps > last_reps:
 			text = "▲ %d reps" % (reps - last_reps)
@@ -560,7 +709,7 @@ func _refresh_exercise(i: int) -> void:
 		text = "%s to match" % _fmt_w(last_vol - vol)
 	var note = Kit.clip(text, 12, Pal.GOOD if good else Pal.MUTED, true)
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	note.tooltip_text = "Volume (reps × weight) compared with last time"
+	note.tooltip_text = tip
 	note.mouse_filter = Control.MOUSE_FILTER_PASS
 	dslot.add_child(note)
 
@@ -587,7 +736,15 @@ func _trend_badge(trend):
 	match str(trend.kind):
 		"pr":
 			t = LogWidgets.badge("PR!", Pal.ACCENT, 12)
-			t.tooltip_text = "Heavier than you have ever lifted on this exercise"
+			t.tooltip_text = "A heavier band than ever on this exercise" if bool(trend.get("band", false)) else "Heavier than you have ever lifted on this exercise"
+		"band":
+			# "+1 band" / "-2 bands" (on a phone without the plural: the row's room).
+			var dl = int(trend.delta)
+			var said = SessionView.band_change(dl)
+			if Kit.fingers and absi(dl) > 1:
+				said = said.trim_suffix("s")
+			t = LogWidgets.badge(said, Pal.GOOD if dl > 0 else Pal.ACCENT2, 11)
+			t.tooltip_text = "A heavier band than last time" if dl > 0 else "A lighter band than last time"
 		"weight":
 			if absf(Fmt.kg_to_unit(float(trend.deltaKg), wu)) < 0.05:
 				return null
@@ -752,7 +909,7 @@ func add_exercise(ex_name: String, from_search: bool = false) -> void:
 	if lp != null:
 		exercises.append(draft_from_sets(str(lp.name), lp.sets, wu))
 	else:
-		exercises.append({"name": ex_name.strip_edges(), "bodyweight": false, "sets": [{"reps": "", "weight": ""}]})
+		exercises.append(_blank(ex_name))
 	query = ""
 	var i = exercises.size() - 1
 	if lp == null:
@@ -783,7 +940,7 @@ func plan_toggle(ex_name: String) -> void:
 		return
 	Sfx.pop()
 	var lp = _last.get(key)
-	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else {"name": ex_name.strip_edges(), "bodyweight": false, "sets": [{"reps": "", "weight": ""}]}
+	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else _blank(ex_name)
 	one["planned"] = true
 	exercises.append(one)
 	_changed(true)
@@ -871,6 +1028,23 @@ func remove_exercise(i: int) -> void:
 
 
 func bump_all(i: int, field: String) -> void:
+	if field == "band":
+		# Every set one band heavier; at the heaviest band already, nothing moves.
+		var any = false
+		for s in exercises[i].sets:
+			var was = str(s.get("band", "")).strip_edges()
+			if was == "":
+				was = _band_fill(exercises[i])
+			s["band"] = Bands.step(was, 1)
+			if s.band != was:
+				any = true
+		if not any:
+			Sfx.error()
+			return
+		Sfx.step(1)
+		_touched(i)
+		_changed(true)
+		return
 	Sfx.tick()
 	_touched(i)
 	for s in exercises[i].sets:
@@ -902,16 +1076,110 @@ func cycle_step() -> void:
 
 
 func _toggle_bw(i: int) -> void:
-	_touched(i)
-	exercises[i].bodyweight = not exercises[i].bodyweight
-	_changed(true)
+	_set_mode(i, "bw")
 
 
 ## A hold (a stretch): seconds where the weight would be.
 func _toggle_timed(i: int) -> void:
+	_set_mode(i, "hold")
+
+
+## A resistance band where the weight would be (Bands), or back to a weight.
+func _toggle_band(i: int) -> void:
+	_set_mode(i, "band")
+
+
+## A set's band was changed on its picker: in place, nothing is rebuilt (the
+## picker has already redrawn itself), as a number typed into a set.
+func _on_band(id: String, i: int, j: int) -> void:
+	if i >= exercises.size() or j >= exercises[i].sets.size():
+		return
+	exercises[i].sets[j]["band"] = str(id)
+	if bool(exercises[i].get("planned", false)):
+		_touched(i)
+		if i < _cards.size() and is_instance_valid(_cards[i]):
+			_cards[i].accent(Pal.LIFT)
+	_refresh_exercise(i)
+	_changed(false)
+
+
+## What goes beside the reps: [mode, the key's text, its tooltip], in the track's order.
+const MODES = [
+	["weight", "Weight", "A weight on the bar, the dumbbells or the stack"],
+	["bw", "BW", "Bodyweight exercise (no weight)"],
+	["band", "Band", "Done with a resistance band: a band instead of a weight"],
+	["hold", "Hold", "A stretch or a hold: seconds instead of weight"],
+]
+
+
+static func _mode_of(e: Dictionary) -> String:
+	if bool(e.get("timed", false)):
+		return "hold"
+	if bool(e.get("band", false)):
+		return "band"
+	if bool(e.get("bodyweight", false)):
+		return "bw"
+	return "weight"
+
+
+## A key of the track: that is what goes beside the reps now. The key that is
+## on, tapped again, goes back to a weight (as BW and Hold always did). Into a
+## band: every set gets the band this lift was done with last time, else the
+## one its name says, else the one used last on any lift, else Bands.DEFAULT
+## (_band_fill).
+func _set_mode(i: int, m: String) -> void:
+	if i >= exercises.size():
+		return
+	var e = exercises[i]
+	var was = _mode_of(e)
+	if m == was:
+		if m == "weight":
+			return
+		m = "weight"
 	Sfx.tick()
 	_touched(i)
-	exercises[i]["timed"] = not bool(exercises[i].get("timed", false))
+	e["bodyweight"] = m == "bw"
+	e["timed"] = m == "hold"
+	if m == "band":
+		e["band"] = true
+		var fill = _band_fill(e)
+		for s in e.sets:
+			s["band"] = fill
+	else:
+		e.erase("band")
+	_changed(true)
+
+
+## Is this exercise a physical therapy one: what the PT key says once it was
+## touched in this workout, else "(PT)" typed in front of its name, else the
+## lift's mark (Pt). Saved by App.absorb_pt (session_exercises passes it on).
+func _pt_on(e: Dictionary) -> bool:
+	if e.get("pt") is bool:
+		return bool(e.pt)
+	var tag = Pt.untag(str(e.get("name", "")))
+	return bool(tag.pt) or Pt.is_pt(App.pt(), str(tag.name).strip_edges())
+
+
+## What saving will do about PT, when the key says something the lift is not yet:
+## "" when it says what the lift already is.
+func _pt_words(e: Dictionary) -> String:
+	if not (e.get("pt") is bool):
+		return ""
+	var tag = Pt.untag(str(e.get("name", "")))
+	var was = Pt.is_pt(App.pt(), str(tag.name).strip_edges())
+	if bool(e.pt) and not was:
+		return "PT · saved as physical therapy: counts toward today's PT"
+	if not bool(e.pt) and was:
+		return "Not PT · no longer physical therapy once saved"
+	return ""
+
+
+## The PT key: this exercise is physical therapy, or is not.
+func _toggle_pt(i: int) -> void:
+	if i >= exercises.size():
+		return
+	Sfx.tick()
+	exercises[i]["pt"] = not _pt_on(exercises[i])
 	_changed(true)
 
 

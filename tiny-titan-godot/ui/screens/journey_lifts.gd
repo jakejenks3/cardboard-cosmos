@@ -169,9 +169,10 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 		var latest = e.get("done", [])
 		if not latest.is_empty() and latest[0].st != null and latest[0].st.history.size() >= 2:
 			var days = LiftTrend.by_day(latest[0].st.history)
+			var in_band = LiftTrend.banded(latest[0].st.history)
 			var vals = []
 			for d in days.slice(maxi(0, days.size() - 8)):
-				vals.append(LiftTrend.main_value(d))
+				vals.append(LiftTrend.main_value(d, in_band))
 			var sb = SparkBars.new()
 			sb.setup(vals, Pal.LIFT)
 			sb.tooltip_text = "The last %d times" % vals.size()
@@ -189,13 +190,31 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 	return c
 
 
-## "100 kg × 5", or "15 reps" for a lift only done with bodyweight.
+## "100 kg × 5", "Blue band × 12" for a lift done with a band, or "15 reps" for
+## a lift only done with bodyweight.
 static func best_text(st: Dictionary, wu: String) -> String:
 	if float(st.bestKg) > 0.0:
 		return "%s × %d" % [Fmt.fmt_weight(float(st.bestKg), wu), int(st.bestReps)]
 	if LiftTrend.held(st.history):
 		return "%d s hold" % longest_hold(st.history)
+	var hb = heaviest_band(st.history)
+	if not hb.is_empty():
+		return "%s band × %d" % [Bands.name_of(hb.band), int(hb.reps)]
 	return "%d reps" % int(st.bwReps)
+
+
+## The heaviest band in a lift's history, with the most reps done with it:
+## {"band", "reps", "level"}, {} when it was never done with a band.
+static func heaviest_band(history: Array) -> Dictionary:
+	var out = {}
+	for h in history:
+		var d = LiftTrend.day(h.get("sets", []))
+		var lv = int(d.get("band", 0))
+		if lv <= 0:
+			continue
+		if out.is_empty() or lv > int(out.level) or (lv == int(out.level) and int(d.bandReps) > int(out.reps)):
+			out = {"band": str(d.bandId), "reps": int(d.bandReps), "level": lv}
+	return out
 
 
 ## The longest hold in a lift's history, in seconds (0 when it has none).
@@ -240,7 +259,8 @@ static func open_named(lift_name: String, opts: Dictionary = {}) -> void:
 
 
 ## The physical therapy card of a lift: a switch, and when it is on, this
-## week's days and how many days a week to aim for. Rebuilt in place.
+## week's sets (a day counts up to Pt.SETS_A_DAY of them) and how many days a
+## week to aim for. Rebuilt in place.
 static func _pt_block(holder: Control, lift: String) -> void:
 	if not is_instance_valid(holder):
 		return
@@ -259,16 +279,13 @@ static func _pt_block(holder: Control, lift: String) -> void:
 	row.add_child(Kit.switch(on, JourneyLifts._set_pt.bind(holder, lift), "Keep track of how often you do it"))
 	c.add(row)
 	if on:
-		var mine = null
-		for r in Pt.status(App.sessions(), marks, App.today):
-			if str(r.key) == Pt.mark_of(marks, lift):
-				mine = r
+		var mine = Pt.row_of(App.sessions(), marks, lift, App.today)
 		if mine != null:
 			var week = Kit.hbox(8)
 			var dots = WeekBars.Dots.new()
-			dots.setup(mine.week, Dates.weekday_index(App.today), Pal.PT, 12)
+			dots.setup(mine.weekShare, Dates.weekday_index(App.today), Pal.PT, 12)
 			week.add_child(dots)
-			week.add_child(Kit.vcenter(Kit.clip("%d of %d this week" % [int(mine.thisWeek), int(mine.perWeek)], 13, null, true)))
+			week.add_child(Kit.vcenter(Kit.clip("%d of %d sets this week" % [int(mine.sets), int(mine.setsGoal)], 13, null, true)))
 			week.add_child(Kit.vcenter(PtView.state_tag(mine)))
 			c.add(week)
 			var goal = Kit.hbox(6)
@@ -276,7 +293,7 @@ static func _pt_block(holder: Control, lift: String) -> void:
 			goal.add_child(Kit.vcenter(Kit.icon_button("minus", JourneyLifts._set_goal.bind(holder, lift, int(mine.perWeek) - 1), "One day fewer", 28)))
 			goal.add_child(Kit.vcenter(PixelFont.rect(str(int(mine.perWeek)), 2, Pal.PT)))
 			goal.add_child(Kit.vcenter(Kit.icon_button("plus", JourneyLifts._set_goal.bind(holder, lift, int(mine.perWeek) + 1), "One day more", 28)))
-			goal.add_child(Kit.vcenter(Kit.label("day%s a week" % ("" if int(mine.perWeek) == 1 else "s"), 13, Pal.MUTED)))
+			goal.add_child(Kit.vcenter(Kit.clip(PtView.aim_words(int(mine.perWeek)), 13, Pal.MUTED)))
 			c.add(goal)
 	holder.add_child(c)
 
@@ -380,6 +397,11 @@ static func _records(box: Control, st: Dictionary, wu: String, side_e1rm: float 
 		# A stretch or other hold: seconds are what counts.
 		vals = [str(longest_hold(st.history)), Xp.fmt_int(st.reps), str(int(st.count))]
 		caps = ["s longest hold", "Holds in all", "Sessions"]
+	elif not heaviest_band(st.history).is_empty():
+		# Done with a resistance band: the heaviest band, the most reps with it.
+		var hb = heaviest_band(st.history)
+		vals = [Bands.name_of(hb.band), str(int(hb.reps)), str(int(st.count))]
+		caps = ["Heaviest band", "Reps with it", "Sessions"]
 	else:
 		vals = [str(int(st.bwReps)), Xp.fmt_int(st.reps), str(int(st.count))]
 		caps = ["Best set", "Reps in all", "Sessions"]
@@ -390,6 +412,8 @@ static func _records(box: Control, st: Dictionary, wu: String, side_e1rm: float 
 	for i in range(3):
 		var t = JourneyScreen.well_tile(vals[i], caps[i], cols[i], sc)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if i == 0 and caps[0] == "Heaviest band":
+			t.set_meta("band_record", heaviest_band(st.history).band)
 		g.add_child(t)
 	box.add_child(g)
 	# (The heaviest set for each number of reps is the ladder under it: LiftViews.progress.)

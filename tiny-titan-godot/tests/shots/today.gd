@@ -82,7 +82,8 @@ func run(m: Node, t: SceneTree) -> void:
 		"exercises": [{"name": "Bench Press - Dumbbell", "sets": [{"reps": 10, "weightKg": 22.0}, {"reps": 10, "weightKg": 22.0}]}]})
 	App.commit_sessions(habit, "Workout logged!")
 	await _dismiss_reels()
-	# A physical therapy lift done twice this week, so the plan has PT in it.
+	# A physical therapy lift done this week (one set on Monday: a third of a day,
+	# PT counts sets), so the plan has PT in it.
 	var monday = Dates.week_key(App.today)
 	if monday != App.today:
 		App.set_pt("Neck 4 Way", true)
@@ -99,6 +100,10 @@ func run(m: Node, t: SceneTree) -> void:
 	var beats = q.daily.filter(func(x): return str(x.id).contains(":beat:"))
 	check(not beats.is_empty() and q.daily.all(func(x): return str(x.unit) != "min") and q.weekly.all(func(x): return str(x.unit) != "min"), "missions to beat a lift, and none about minutes (%s)" % str(q.daily.map(func(x): return x.title)))
 	check(said.contains("Beat it: "), "the missions are on the Hero tab")
+	if not plan.pt.is_empty():
+		# 8 of 9 sets still to do this week, at most 3 of an exercise a day: today's goal is 3 sets.
+		var pt_goal = Missions.pt_goal(plan)
+		check(pt_goal == 3 and ShotHelper.find_text(main, "0 of 3 sets") != null and ShotHelper.find_text(main, "Up to 3 sets of each count") != null and str(q.daily.filter(func(x): return str(x.id).ends_with(":pt"))[0].desc).contains("3 sets"), "the PT row and mission count sets: 0 of 3 today (goal %d)" % pt_goal)
 	await ShotHelper.snap(tree, "today_1_hero")
 	# Without a training split the day has two chips, Lift and Rest: a rest day
 	# (a rest from lifting) is one tap, and one more takes it back.
@@ -208,8 +213,9 @@ func run(m: Node, t: SceneTree) -> void:
 		var left = App.plan().lifts.filter(func(l): return Missions.lift_done(l, App.plan(), App.sessions(), App.today) == "")
 		if not pt_names.is_empty() or not left.is_empty():
 			var exs = []
+			# (PT counts sets: three of each, a day's worth)
 			for n in pt_names:
-				exs.append({"name": n, "sets": [{"reps": 20, "weightKg": 4.5}]})
+				exs.append({"name": n, "sets": [{"reps": 20, "weightKg": 4.5}, {"reps": 20, "weightKg": 4.5}, {"reps": 20, "weightKg": 4.5}]})
 			for l in left:
 				exs.append({"name": str(l.name), "sets": LiftTrend.real_sets(l.last.sets).duplicate(true)})
 			App.commit_sessions([{"id": "pt2", "discipline": "lift", "date": App.today, "createdAt": App.now_ms() + 9, "source": "manual", "exercises": exs}], "Workout logged!")
@@ -217,6 +223,8 @@ func run(m: Node, t: SceneTree) -> void:
 			await _home()
 		var open_key = ShotHelper.find_button(main, "Open the chest")
 		check(not _ticks().has(false) and open_key != null, "every box ticked: the chest can be opened (%s)" % str(_ticks()))
+		if not pt_names.is_empty():
+			check(ShotHelper.find_text(main, "That is today's PT") != null, "the PT row says the day's sets are in")
 		if open_key != null:
 			ShotHelper.reveal(open_key)
 			await ShotHelper.frames(tree, 3)

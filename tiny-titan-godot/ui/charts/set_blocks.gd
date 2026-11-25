@@ -3,10 +3,12 @@ extends ChartBase
 ## One session's sets as a row of blocks, so the shape of a workout shows at a
 ## glance (straight sets, a pyramid, a drop set): each block is as tall as the
 ## set's weight (reps without weight, seconds for a hold) against the lift's
-## best ever, with the reps on top. The heaviest set of the day is lit.
+## best ever, with the reps on top. The heaviest set of the day is lit. A set
+## done with a resistance band (mode "band") is as tall as its band's place on
+## the ladder against the lift's heaviest band, in the band's own colour.
 ##
 ##   setup(sets, top_value, color, mode, fmt_w)
-##     mode: "kg" | "reps" | "sec"   fmt_w: Callable(kg) -> "60 kg" for the tooltip
+##     mode: "kg" | "reps" | "sec" | "band"   fmt_w: Callable(kg) -> "60 kg" for the tooltip
 
 const H = 50.0
 const W = 14.0
@@ -38,6 +40,8 @@ func _value(one: Dictionary) -> float:
 			return float(one.get("holdSec", 0))
 		"reps":
 			return float(one.get("reps", 0))
+		"band":
+			return float(Bands.level(one.get("band", "")))
 	return float(one.get("weightKg", 0))
 
 
@@ -62,7 +66,8 @@ func _draw() -> void:
 		var bh = maxf(4.0, roundf(v / top * room))
 		var x = i * (W + GAP)
 		var lit = v >= day_top - 1e-6
-		var col = color if lit else color.darkened(0.35)
+		var face = Bands.color_of(one.band) if mode == "band" and Bands.is_band(one) else color
+		var col = face if lit else face.darkened(0.35)
 		if i == hover:
 			col = col.lightened(0.25)
 		draw_rect(Rect2(x - 1.0, base - bh - 1.0, W + 2.0, bh + 2.0), Pal.OUTLINE)
@@ -78,6 +83,8 @@ func _draw() -> void:
 		var said = "%d reps" % int(one.reps)
 		if mode == "sec":
 			said = "%d × %d s hold" % [int(one.reps), int(one.get("holdSec", 0))]
+		elif Bands.is_band(one):
+			said = "%s × %d" % [Bands.words(one.band), int(one.reps)]
 		elif float(one.get("weightKg", 0)) > 0.0 and fmt_w.is_valid():
 			said = "%s × %d" % [fmt_w.call(float(one.weightKg)), int(one.reps)]
 		tooltip_text = "Set %d: %s" % [hover + 1, said]

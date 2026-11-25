@@ -546,9 +546,10 @@ static func _new_row(nw: Dictionary) -> Card:
 	return c
 
 
-## Physical therapy as ONE row: the day's goal (Missions.pt_goal: 3 a day, or
-## fewer when fewer are still needed this week) as pips, done today of it, and
-## the ones still needed this week, the furthest behind first, to pick from.
+## Physical therapy as ONE row: the day's goal in SETS (Missions.pt_goal: 9 a
+## day, up to Pt.SETS_A_DAY of each exercise, or fewer when fewer are still
+## needed this week) as pips, the sets done today of it, and the exercises
+## still needed this week, the furthest behind first, to pick from.
 ## (The week itself is the PT THIS WEEK section.)
 static func _pt_row(plan: Dictionary) -> Control:
 	var goal = Missions.pt_goal(plan)
@@ -557,7 +558,7 @@ static func _pt_row(plan: Dictionary) -> Control:
 	var all_done = done >= goal
 	var c = Kit.row(PtView.open, Pal.GOOD if all_done else Pal.PT, Pal.GOOD if all_done else null, 8, 4)
 	# (not the PT section's "Physical therapy: are you keeping up?": tests count that one)
-	c.tooltip_text = "Today: any %d of your PT exercises, the ones furthest behind first (the week is on the PT page)" % goal
+	c.tooltip_text = "Today: %d %s of your PT exercises, up to %d of each, the ones furthest behind first (the week is on the PT page)" % [goal, Missions._sets_word(goal), Pt.SETS_A_DAY]
 	var v = Kit.vbox(2)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var line1 = Kit.hbox(6)
@@ -568,17 +569,21 @@ static func _pt_row(plan: Dictionary) -> Control:
 	v.add_child(line1)
 	var line2 = Kit.hbox(8)
 	line2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# (the goal is 9 sets at most: Kit.pips draws up to 10 squares)
 	line2.add_child(Kit.pips(mini(done, goal), goal, Pal.GOOD if all_done else Pal.PT, 10))
-	var count = ("%d of %d done" % [done, goal]) if done <= goal else ("%d done, %d was the goal" % [done, goal])
+	var count = ("%d of %d %s" % [done, goal, Missions._sets_word(goal)]) if done <= goal else ("%d sets, %d was the goal" % [done, goal])
 	line2.add_child(Kit.vcenter(Kit.label(count, 12, Pal.GOOD if all_done else Pal.MUTED, true)))
 	v.add_child(line2)
 	var said = ""
 	if all_done:
 		said = "That is today's PT. More is a bonus."
 	elif not left.is_empty():
-		said = "Any %d of: %s" % [goal - done, ", ".join(PackedStringArray(left))]
+		said = "Up to %d sets of each count. Any of: %s" % [Pt.SETS_A_DAY, ", ".join(PackedStringArray(left))]
 	if said != "":
-		v.add_child(Kit.clip(said, 12, Pal.MUTED))
+		# (wrapped, not cut off: the names are what to pick from)
+		var said_l = Kit.para(said, 12, Pal.MUTED)
+		said_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(said_l)
 	c.add(v)
 	return c
 

@@ -161,7 +161,8 @@ static func _top_set(valid: Array) -> Dictionary:
 	return top
 
 
-## "3×5 @ 100 kg", "5, 5, 4 @ 62.5 kg", "3 sets, top 100 kg × 5", "3×8 bodyweight".
+## "3×5 @ 100 kg", "5, 5, 4 @ 62.5 kg", "3 sets, top 100 kg × 5", "3×8 bodyweight",
+## "3×15 · green band" (band_text), "3 × 30 s hold" (LiftTrend.hold_text).
 ## `fmt_w` is a Callable(kg) -> String that formats a weight in display units.
 static func describe_sets(sets: Array, fmt_w: Callable) -> String:
 	var valid: Array = _done_sets(sets)
@@ -171,6 +172,10 @@ static func describe_sets(sets: Array, fmt_w: Callable) -> String:
 	var held: String = LiftTrend.hold_text(valid)
 	if held != "":
 		return held
+	# Done with a resistance band ("band" on its sets, Bands): "3×15 · green band".
+	var banded: String = band_text(valid)
+	if banded != "":
+		return banded
 	var w0 = valid[0].weightKg
 	var r0 = valid[0].reps
 	var same_w: bool = true
@@ -191,16 +196,83 @@ static func describe_sets(sets: Array, fmt_w: Callable) -> String:
 	return "%s sets, top %s × %s" % [str(valid.size()), fmt_w.call(top.weightKg), TTUtil.num_str(top.reps)]
 
 
-## Short label for a chip: the heaviest set, e.g. "105×5". `to_unit` is a
+## Short label for a chip: the heaviest set, e.g. "105×5" ("blue×12" for a
+## band, the heaviest band of the sets). `to_unit` is a
 ## Callable(kg) -> number that converts to display units (shown to one decimal).
 static func top_set_label(sets: Array, to_unit: Callable) -> String:
 	var valid: Array = _done_sets(sets)
 	if valid.is_empty():
 		return ""
 	var top: Dictionary = _top_set(valid)
+	var band_top: Dictionary = _top_band_set(valid)
+	if not band_top.is_empty() and top.weightKg <= 0:
+		return "%s×%s" % [str(band_top.band).to_lower(), TTUtil.num_str(band_top.reps)]
 	if top.weightKg <= 0:
 		return "%s×%s" % [str(valid.size()), TTUtil.num_str(top.reps)]
 	return "%s×%s" % [_tenths_str(TTUtil.jsround(to_unit.call(top.weightKg) * 10.0)), TTUtil.num_str(top.reps)]
+
+
+## The set with the heaviest band (Bands.level), the most reps of equal bands;
+## {} when no set has a band.
+static func _top_band_set(valid: Array) -> Dictionary:
+	var top: Dictionary = {}
+	for s in valid:
+		if not Bands.is_band(s):
+			continue
+		if top.is_empty() or Bands.level(s.band) > Bands.level(top.band) or (Bands.level(s.band) == Bands.level(top.band) and int(s.reps) > int(top.reps)):
+			top = s
+	return top
+
+
+## Sets done with a resistance band in words: "3×15 · green band", "15, 15, 12
+## · red band", and with more than one band "3 sets, top blue band × 12". ""
+## when no set has a band (describe_sets then says it the usual way).
+static func band_text(sets: Array) -> String:
+	var valid: Array = _done_sets(sets)
+	var top: Dictionary = _top_band_set(valid)
+	if top.is_empty():
+		return ""
+	var b0: String = str(valid[0].get("band", ""))
+	var r0 = valid[0].reps
+	var same_b: bool = true
+	var same_r: bool = true
+	var reps: Array = []
+	for s in valid:
+		if str(s.get("band", "")) != b0:
+			same_b = false
+		if s.reps != r0:
+			same_r = false
+		reps.append(TTUtil.num_str(s.reps))
+	if same_b and same_r:
+		return "%s×%s · %s" % [str(valid.size()), TTUtil.num_str(r0), Bands.words(b0)]
+	if same_b:
+		return "%s · %s" % [", ".join(PackedStringArray(reps)), Bands.words(b0)]
+	return "%s sets, top %s × %s" % [str(valid.size()), Bands.words(top.band), TTUtil.num_str(top.reps)]
+
+
+## How a set done with a band compares with the same set last time (the Log
+## tab's badge beside a set): {kind: "pr"} a heavier band than ever on this
+## lift (`best_level`, 0 = none before), {kind: "band", delta} a heavier or
+## lighter band than that set last time, {kind: "reps", delta} more reps with
+## the same band, {kind: "extra"} a set more than last time; null when there is
+## nothing to say. A set last time without a band is compared by its reps.
+static func compare_band_set(cur: Dictionary, prev, had_history: bool, best_level: int):
+	if int(cur.get("reps", 0)) <= 0:
+		return null
+	var lv: int = Bands.level(cur.get("band", ""))
+	if best_level > 0 and lv > best_level:
+		return {"kind": "pr", "band": true}
+	if prev == null:
+		return {"kind": "extra"} if had_history else null
+	if Bands.is_band(prev):
+		var d: int = lv - Bands.level(prev.band)
+		if d != 0:
+			return {"kind": "band", "delta": d}
+	elif float(prev.get("weightKg", 0)) > 0.0:
+		return null
+	if int(cur.reps) > int(prev.reps):
+		return {"kind": "reps", "delta": int(cur.reps) - int(prev.reps)}
+	return null
 
 
 ## Text of `tenths / 10` the way JS prints it: 1405 -> "140.5", 1400 -> "140".

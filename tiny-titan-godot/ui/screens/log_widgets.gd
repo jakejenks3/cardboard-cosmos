@@ -328,6 +328,17 @@ static func mini_chip_width(text: String, pad_h: int = 9) -> float:
 	return Kit.font_bold().get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + pad_h * 2 + 2
 
 
+## An empty place exactly as wide as a mini_chip with this text (the text and
+## its padding; mini_chip_width keeps 2 px of slack on top): left where a chip is
+## hidden for a while, so the keys beside it do not slide under the finger.
+static func mini_chip_space(text: String, pad_h: int = 9) -> Control:
+	var gap = Control.new()
+	gap.custom_minimum_size = Vector2(Kit.font_bold().get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + pad_h * 2, 1)
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gap.set_meta("chip_space", text)
+	return gap
+
+
 ## An icon button with no box of its own (remove set / exercise): muted icon,
 ## a pixel key appears under it on hover and goes red when pressed.
 static func quiet_icon(icon: String, on_press: Callable, tip: String, px: int = 28) -> Button:

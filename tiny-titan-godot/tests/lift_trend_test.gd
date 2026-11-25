@@ -116,37 +116,62 @@ func _init() -> void:
 	ok(Pt.untag("PT: band pull apart") == {"pt": true, "name": "band pull apart"} and Pt.untag("(PT) - clamshells") == {"pt": true, "name": "clamshells"} and Pt.untag("calf raise (PT) 3x15") == {"pt": true, "name": "calf raise 3x15"}, "'pt:', a dash after it, and the tag after the name", [Pt.untag("PT: band pull apart"), Pt.untag("calf raise (PT) 3x15")])
 	ok(Pt.untag("3 pt row") == {"pt": false, "name": "3 pt row"} and Pt.untag("pt cruiser carry") == {"pt": false, "name": "pt cruiser carry"} and Pt.untag("bench press") == {"pt": false, "name": "bench press"}, "the bare letters are not a tag")
 
-	# --- keeping up ------------------------------------------------------------------------
+	# --- keeping up, in SETS (2026-11-25): a day counts up to Pt.SETS_A_DAY of its sets ---------
+	var three = [[20, 2], [20, 2], [20, 2]]
 	var log = [
-		lift("2026-11-18", "Neck 4 Way", [[20, 2]]), lift("2026-11-16", "Neck 4 Way", [[20, 2]]), lift("2026-11-16", "neck 4 way", [[20, 2]]),
-		lift("2026-11-13", "Neck 4 Way", [[20, 2]]), lift("2026-11-11", "Neck 4 Way", [[20, 2]]), lift("2026-11-09", "Neck 4 Way", [[20, 2]]),
-		lift("2026-11-06", "Neck 4 Way", [[20, 2]]), lift("2026-11-04", "Neck 4 Way", [[20, 2]]), lift("2026-11-02", "Neck 4 Way", [[20, 2]]),
-		lift("2026-10-28", "Neck 4 Way", [[20, 2]]),
+		lift("2026-11-18", "Neck 4 Way", three), lift("2026-11-16", "Neck 4 Way", [[20, 2]]), lift("2026-11-16", "neck 4 way", [[20, 2], [20, 2]]),
+		lift("2026-11-13", "Neck 4 Way", three), lift("2026-11-11", "Neck 4 Way", three), lift("2026-11-09", "Neck 4 Way", three),
+		lift("2026-11-06", "Neck 4 Way", three), lift("2026-11-04", "Neck 4 Way", three), lift("2026-11-02", "Neck 4 Way", three),
+		lift("2026-10-28", "Neck 4 Way", three),
 		lift("2026-11-17", "Clamshell", [[15, 0]]),
 		lift("2026-11-10", "Calf Raise", [[15, 0]]), lift("2026-11-17", "Squat", [[5, 100]]),
 	]
 	var marks = {"neck 4 way": {"name": "Neck 4 Way", "perWeek": 3}, "clamshell": {"name": "Clamshell", "perWeek": 7},
 		"calf raise": {"name": "Calf Raise", "perWeek": 2}, "wall slide": {"name": "Wall Slide"}}
 	var rows = Pt.status(log, marks, TODAY)
-	ok(rows.size() == 4 and Pt.status(log, {}, TODAY).is_empty(), "one row per marked lift, none without marks", rows.size())
+	ok(Pt.SETS_A_DAY == 3 and rows.size() == 4 and Pt.status(log, {}, TODAY).is_empty(), "one row per marked lift, none without marks", rows.size())
 	var neck = row_of(rows, "Neck 4 Way")
-	ok(not neck.is_empty() and neck.thisWeek == 2 and neck.left == 1 and neck.state == "on" and neck.week == [true, false, true, false, false, false, false] and neck.daysSince == 0 and neck.last == "2026-11-18", "this week: Monday and today done, one to go, on track", neck.get("week"))
-	ok(not neck.is_empty() and neck.weeks.size() == 8 and neck.weeks[6].n == 3 and neck.weeks[6].hit and neck.weeks[5].n == 3 and neck.weeks[4].n == 1 and not neck.weeks[4].hit and neck.run == 2, "the weeks before: two on target in a row, then one that missed", [neck.get("weeks"), neck.get("run")])
+	ok(not neck.is_empty() and neck.thisWeek == 2 and neck.sets == 6 and neck.setsGoal == 9 and neck.left == 3 and neck.state == "on" and neck.week == [true, false, true, false, false, false, false] and neck.daysSince == 0 and neck.last == "2026-11-18", "this week: Monday and today, 3 sets each, 6 of 9 sets, 3 to go, on track", [neck.get("sets"), neck.get("left"), neck.get("week")])
+	ok(not neck.is_empty() and int(neck.daySets["2026-11-16"]) == 3 and near(neck.weekShare[0], 1.0) and near(neck.weekShare[1], 0.0) and near(neck.weekShare[2], 1.0) and neck.weekShare.size() == 7, "two sessions on a day add their sets up (1 + 2 = a full day)", [neck.get("daySets"), neck.get("weekShare")])
+	ok(not neck.is_empty() and neck.weeks.size() == 8 and neck.weeks[6].n == 9 and neck.weeks[6].hit and neck.weeks[5].n == 9 and neck.weeks[4].n == 3 and not neck.weeks[4].hit and neck.weeks[7].n == 6 and neck.run == 2, "the weeks before, in sets: two on target in a row, then one that missed", [neck.get("weeks"), neck.get("run")])
 	var clam = row_of(rows, "Clamshell")
-	ok(not clam.is_empty() and clam.perWeek == 7 and clam.thisWeek == 1 and clam.state == "behind" and clam.left == 6, "seven days asked, one done by Wednesday: behind", clam.get("state"))
+	ok(not clam.is_empty() and clam.perWeek == 7 and clam.thisWeek == 1 and clam.sets == 1 and clam.setsGoal == 21 and clam.state == "behind" and clam.left == 20, "seven days asked (21 sets), one set by Wednesday: 20 to go cannot fit in 15, behind", [clam.get("state"), clam.get("left")])
 	var heel = row_of(rows, "Calf Raise")
-	ok(not heel.is_empty() and heel.key == "calf raise" and heel.count == 1 and heel.thisWeek == 0 and heel.daysSince == 8 and heel.state == "on", "a mark is on one lift, by its name", heel.get("name"))
+	ok(not heel.is_empty() and heel.key == "calf raise" and heel.count == 1 and heel.thisWeek == 0 and heel.sets == 0 and heel.left == 6 and heel.daysSince == 8 and heel.state == "on", "a mark is on one lift, by its name", heel.get("name"))
 	var wall = row_of(rows, "Wall Slide")
-	ok(not wall.is_empty() and wall.count == 0 and wall.daysSince == -1 and wall.last == "" and wall.perWeek == Pt.DEFAULT_PER_WEEK and wall.state == "on", "marked but never done still has a row, with the usual goal", wall.get("state"))
+	ok(not wall.is_empty() and wall.count == 0 and wall.daysSince == -1 and wall.last == "" and wall.perWeek == Pt.DEFAULT_PER_WEEK and wall.setsGoal == 3 * Pt.DEFAULT_PER_WEEK and wall.state == "on", "marked but never done still has a row, with the usual goal", wall.get("state"))
 	ok(rows[0].name == "Clamshell" and row_of(rows, "Squat").is_empty(), "the one that is behind comes first; a lift that is not marked is not listed", rows[0].name)
-	var done_rows = Pt.status(log + [lift("2026-11-17", "Neck 4 Way", [[20, 2]])], marks, TODAY)
+	ok(rows.map(func(r): return str(r.name)) == ["Clamshell", "Wall Slide", "Calf Raise", "Neck 4 Way"], "then the most sets still to do first", rows.map(func(r): return str(r.name)))
+	var done_rows = Pt.status(log + [lift("2026-11-17", "Neck 4 Way", three)], marks, TODAY)
 	var neck_done = row_of(done_rows, "Neck 4 Way")
-	ok(neck_done.state == "done" and neck_done.left == 0 and neck_done.run == 3 and done_rows[done_rows.size() - 1].name == "Neck 4 Way", "three days in: done for the week, the run counts it, and it sinks to the end", [neck_done.get("state"), neck_done.get("run")])
+	ok(neck_done.state == "done" and neck_done.left == 0 and neck_done.sets == 9 and neck_done.run == 3 and done_rows[done_rows.size() - 1].name == "Neck 4 Way", "three full days in: done for the week, the run counts it, and it sinks to the end", [neck_done.get("state"), neck_done.get("run")])
 	var late = row_of(Pt.status(log, marks, "2026-11-22"), "Neck 4 Way")
-	ok(late.state == "on" and late.left == 1 and row_of(Pt.status(log, marks, "2026-11-22"), "Calf Raise").state == "behind", "on Sunday one day can still be made, two cannot", late.get("state"))
+	ok(late.state == "on" and late.left == 3 and row_of(Pt.status(log, marks, "2026-11-22"), "Calf Raise").state == "behind", "on Sunday one more day's 3 sets can still be made, 6 cannot", late.get("state"))
 	var sum = Pt.summary(rows)
-	ok(sum.lifts == 4 and sum.done == 3 and sum.goal == 3 + 7 + 2 + 3 and sum.behind == 1 and sum.left == 12, "the week in all", sum)
+	ok(sum.lifts == 4 and sum.done == 6 + 1 and sum.goal == 9 + 21 + 6 + 9 and sum.behind == 1 and sum.left == 38, "the week in all, in sets", sum)
 	ok(Pt.is_pt(marks, "Neck 4 way") and not Pt.is_pt(marks, "Squat") and Pt.per_week(marks, "clamshell") == 7 and Pt.per_week(marks, "Squat") == 3 and Pt.per_week({"x": {"perWeek": 40}}, "x") == 7, "is it PT, and for how many days a week")
+	# One set is a third of a day; three a full day; five on one day still count three.
+	var bmark = {Pt.key("Band Pull Apart"): {"name": "Band Pull Apart", "perWeek": 3}}
+	var one_set = row_of(Pt.status([lift("2026-11-16", "Band Pull Apart", [[15, 0]])], bmark, TODAY), "Band Pull Apart")
+	ok(one_set.sets == 1 and one_set.thisWeek == 1 and near(one_set.weekShare[0], 1.0 / 3.0) and one_set.left == 8 and int(one_set.daySets["2026-11-16"]) == 1, "one set counts a third of a day", [one_set.get("sets"), one_set.get("weekShare")])
+	var full = row_of(Pt.status([lift("2026-11-16", "Band Pull Apart", [[15, 0], [15, 0], [15, 0]])], bmark, TODAY), "Band Pull Apart")
+	ok(full.sets == 3 and near(full.weekShare[0], 1.0) and full.left == 6, "three sets: a full day", [full.get("sets"), full.get("weekShare")])
+	var five = row_of(Pt.status([lift("2026-11-16", "Band Pull Apart", [[15, 0], [15, 0], [15, 0], [15, 0], [15, 0]])], bmark, TODAY), "Band Pull Apart")
+	ok(five.sets == 3 and int(five.daySets["2026-11-16"]) == 5 and near(five.weekShare[0], 1.0) and five.left == 6, "five sets on one day count three for the week", [five.get("sets"), five.get("daySets")])
+	var singles = [lift("2026-11-16", "Band Pull Apart", [[15, 0]]), lift("2026-11-17", "Band Pull Apart", [[15, 0]]), lift("2026-11-18", "Band Pull Apart", [[15, 0]])]
+	var thin = row_of(Pt.status(singles, bmark, TODAY), "Band Pull Apart")
+	ok(thin.thisWeek == 3 and thin.sets == 3 and thin.state != "done" and thin.left == 6, "three days of one set each are a third of a 3-day week, not all of it", [thin.get("sets"), thin.get("state")])
+	ok(row_of(Pt.status(singles, {Pt.key("Band Pull Apart"): {"name": "Band Pull Apart", "perWeek": 1}}, TODAY), "Band Pull Apart").state == "done", "and a 1-day goal (3 sets) is met by them")
+	ok(row_of(Pt.status([lift("2026-11-16", "Band Pull Apart", [[0, 0], [0, 5]])], bmark, TODAY), "Band Pull Apart").sets == 0, "a set without reps does not count")
+	var sat_mark = {Pt.key("Band Pull Apart"): {"name": "Band Pull Apart", "perWeek": 2}}
+	var sat_row = row_of(Pt.status([lift("2026-11-21", "Band Pull Apart", [[15, 0]])], sat_mark, "2026-11-21"), "Band Pull Apart")
+	ok(sat_row.left == 5 and sat_row.state == "on", "Saturday, one set done: 5 to go fit in today's 2 and Sunday's 3", [sat_row.get("left"), sat_row.get("state")])
+	var sat_row2 = row_of(Pt.status([lift("2026-11-20", "Band Pull Apart", [[15, 0]])], sat_mark, "2026-11-21"), "Band Pull Apart")
+	ok(sat_row2.left == 5 and sat_row2.state == "on" and row_of(Pt.status([], sat_mark, "2026-11-21"), "Band Pull Apart").state == "on" and row_of(Pt.status([], {Pt.key("Band Pull Apart"): {"name": "Band Pull Apart", "perWeek": 3}}, "2026-11-21"), "Band Pull Apart").state == "behind", "Saturday with nothing today: 6 fit, 9 do not", sat_row2.get("state"))
+	var own_row = Pt.row_of(singles, bmark, "Band Pull Apart", TODAY)
+	ok(own_row != null and int(own_row.sets) == 3 and int(own_row.setsGoal) == 9 and own_row.weeks.size() == 8 and int(own_row.weeks[7].n) == 3 and not own_row.weeks[7].hit
+		and Pt.row_of(singles, bmark, "Bench Press - Barbell", TODAY) == null and Pt.row_of(singles, bmark, "Band Pull Apart", TODAY, 4).weeks.size() == 4,
+		"row_of: one lift's row (a lift page's PT card and Logbook bars), null when not PT", own_row.get("weeks") if own_row != null else null)
 	_views()
 	# --- the ghost: you about four weeks earlier -------------------------------------------------------
 	var gh = [{"date": "2026-11-20", "sets": [{"reps": 5, "weightKg": 100.0}]}, {"date": "2026-11-06", "sets": [{"reps": 5, "weightKg": 97.5}]},

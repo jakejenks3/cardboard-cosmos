@@ -447,6 +447,8 @@ static func stats(sessions: Array) -> Dictionary:
 					var kept = {"reps": int(one.reps), "weightKg": float(one.get("weightKg", 0))}
 					if int(one.get("holdSec", 0)) > 0:
 						kept["holdSec"] = int(one.holdSec)
+					if Bands.is_band(one):
+						kept["band"] = str(one.band).strip_edges().to_lower()
 					done.append(kept)
 			if key == "" or done.is_empty():
 				continue

@@ -20,10 +20,31 @@ extends RefCounted
 ##
 ## The lift's page (JourneyLifts.open_detail, LiftViews) draws these, and every
 ## list of exercises (SessionView) shows `compare` beside each one.
-## Pure logic, no scene and no autoload: tests/lift_trend_test.gd.
+##
+## A lift done with a RESISTANCE BAND (sets with "band", Bands) is judged by
+## its band first, then its reps: a day's "band" (the heaviest band's level on
+## Bands' ladder) and "bandId", series "band", compare / pairs / records /
+## next_target with a band, best_row and main_value by band then reps. It has
+## no ghost and no plateau (both null). Those keys are only there when a set
+## has a band, so every result for sets without one is as it was.
+## Pure logic, no scene and no autoload: tests/lift_trend_test.gd, tests/bands_test.gd.
 
 ## What can be charted. "often" is per_week, the rest are `series`.
-const METRICS = ["weight", "hold", "reps", "volume", "often"]
+const METRICS = ["weight", "hold", "band", "reps", "volume", "often"]
+
+
+## A set done with a resistance band (Bands): "band" instead of a weight.
+static func is_band(one: Dictionary) -> bool:
+	return Bands.is_band(one)
+
+
+## Is any of it done with a band?
+static func banded(history: Array) -> bool:
+	for h in history:
+		for one in h.get("sets", []):
+			if Bands.is_band(one) and int(one.get("reps", 0)) > 0:
+				return true
+	return false
 
 
 ## A stretch or any other hold: a set with "holdSec" (seconds each rep is held)
@@ -73,6 +94,8 @@ static func held(history: Array) -> bool:
 ## topReps is the most reps in a set. Reps are as they were logged; only the
 ## estimate (e1rm) goes by one side for a lift logged as both sides added up
 ## (sets tagged by Sides.tag_sets).
+## With a set done with a band, also "band" (the heaviest band's level,
+## Bands.level), "bandId" and "bandReps" (the most reps with that band).
 static func day(sets: Array) -> Dictionary:
 	var out = {"sets": 0, "reps": 0, "topKg": 0.0, "topReps": 0, "bestReps": 0, "volumeKg": 0.0, "e1rm": 0.0, "holdSec": 0, "holdTotal": 0}
 	for one in sets:
@@ -85,6 +108,12 @@ static func day(sets: Array) -> Dictionary:
 		if is_hold(one):
 			out.holdSec = maxi(int(out.holdSec), int(one.holdSec))
 			out.holdTotal += r * int(one.holdSec)
+		if Bands.is_band(one):
+			var lv = Bands.level(one.band)
+			if not out.has("band") or lv > int(out.band) or (lv == int(out.band) and r > int(out.bandReps)):
+				out["band"] = lv
+				out["bandId"] = str(one.band).strip_edges().to_lower()
+				out["bandReps"] = r
 		out.bestReps = maxi(int(out.bestReps), r)
 		out.volumeKg += r * w
 		if w > float(out.topKg) + 1e-9 or (absf(w - float(out.topKg)) <= 1e-9 and r > int(out.topReps)):
@@ -135,6 +164,7 @@ static func weighted(history: Array) -> bool:
 ##   "e1rm":   the best estimated one-rep max of the day, in kg
 ##   "best":   the most reps in one set of the day
 ##   "hold":   the longest hold of the day, in seconds
+##   "band":   the heaviest band of the day, its level on Bands' ladder
 static func series(history: Array, metric: String) -> Array:
 	var out = []
 	for row in by_day(history):
@@ -144,6 +174,8 @@ static func series(history: Array, metric: String) -> Array:
 				y = float(row.topKg)
 			"hold":
 				y = float(row.holdSec)
+			"band":
+				y = float(row.get("band", 0))
 			"volume":
 				y = float(row.volumeKg)
 			"e1rm":
@@ -223,6 +255,23 @@ static func compare(sets: Array, before: Array) -> Dictionary:
 		elif more != 0:
 			how = "up" if more > 0 else "down"
 		return {"kind": how, "kg": 0.0, "reps": more, "sec": dsec, "pr": int(cur.holdSec) > longest, "last": str(before[0].get("date", ""))}
+	if int(cur.get("band", 0)) > 0 and float(cur.topKg) <= 0.0:
+		# Done with a band: a heavier or lighter band than last time first
+		# ("band": the change in steps of the ladder), else all the reps. A record
+		# is a heavier band than ever (only when one was used before).
+		var highest = 0
+		for h in before:
+			highest = maxi(highest, int(day(h.get("sets", [])).get("band", 0)))
+		var pb = int(prev.get("band", 0))
+		var dband = int(cur.band) - pb if pb > 0 else 0
+		var more_r = int(cur.reps) - int(prev.reps)
+		var how_b = "same"
+		if dband != 0:
+			how_b = "up" if dband > 0 else "down"
+			more_r = 0
+		elif more_r != 0:
+			how_b = "up" if more_r > 0 else "down"
+		return {"kind": how_b, "kg": 0.0, "reps": more_r, "sec": 0, "band": dband, "pr": highest > 0 and int(cur.band) > highest, "last": str(before[0].get("date", ""))}
 	var best_kg = 0.0
 	var best_reps = 0
 	for h in before:
@@ -267,7 +316,9 @@ static func real_sets(sets: Array) -> Array:
 ## gym log): [{"i" (1-based), "cur", "prev" (a set, or null), "kind", "dkg",
 ## "dreps", "dsec"}]. kind: "up" | "down" | "same" | "added" (no set at that
 ## place before) | "dropped" (that set was not done this time). A hold is
-## compared by its seconds, then reps; a weighted set by its weight, then reps.
+## compared by its seconds, then reps; a weighted set by its weight, then reps;
+## a set done with a band by its band, then reps ("dband": steps of the ladder,
+## there when either set has a band).
 static func pairs(sets: Array, prev_sets: Array) -> Array:
 	var cur = real_sets(sets)
 	var prev = real_sets(prev_sets)
@@ -288,6 +339,12 @@ static func pairs(sets: Array, prev_sets: Array) -> Array:
 					row.kind = "up" if row.dsec > 0 else "down"
 				elif row.dreps != 0:
 					row.kind = "up" if row.dreps > 0 else "down"
+			elif Bands.is_band(c) or Bands.is_band(p):
+				row["dband"] = Bands.level(c.band) - Bands.level(p.band) if Bands.is_band(c) and Bands.is_band(p) else 0
+				if int(row.dband) != 0:
+					row.kind = "up" if int(row.dband) > 0 else "down"
+				elif row.dreps != 0:
+					row.kind = "up" if row.dreps > 0 else "down"
 			else:
 				var dkg = float(c.get("weightKg", 0)) - float(p.get("weightKg", 0))
 				if absf(dkg) > 1e-6:
@@ -300,13 +357,17 @@ static func pairs(sets: Array, prev_sets: Array) -> Array:
 
 
 ## The day the lift went best: the history row with the heaviest top set (a
-## hold: the longest; bodyweight: the most reps in a set), the newest of equal
-## days. Null for an empty history.
-static func best_row(history: Array):
+## hold: the longest; a band: the heaviest band, then the most reps with it;
+## bodyweight: the most reps in a set), the newest of equal days. Null for an
+## empty history. `in_band`: judge as a lift done with a band (main_value); null
+## = when this history has a band (pass the whole history's when `history` is
+## only the days before one).
+static func best_row(history: Array, in_band = null):
+	var bd = banded(history) if in_band == null else bool(in_band)
 	var best = null
 	var best_v = -1.0
 	for h in history:
-		var v = main_value(day(h.get("sets", [])))
+		var v = main_value(day(h.get("sets", [])), bd)
 		if v > best_v + 1e-9:
 			best_v = v
 			best = h
@@ -321,6 +382,9 @@ const GHOST_DAYS = 28
 
 
 static func ghost(history: Array, cur: Dictionary):
+	# A lift done with a band has no strength number to duel with.
+	if banded(history) or banded([cur]):
+		return null
 	var at = str(cur.get("date", ""))
 	var best = null
 	var best_gap = 99999
@@ -351,6 +415,9 @@ const STUCK_AFTER = 3
 ## its best before them (ghost_score, 1% of slack)? {"stuck", "days", "best",
 ## "best_date", "since"} or null when not stuck. `history`: newest first.
 static func plateau(history: Array):
+	# (not for a lift done with a band: its steps are too coarse to call it stuck)
+	if banded(history):
+		return null
 	var days = by_day(history)
 	if days.size() < STUCK_AFTER + 2:
 		return null
@@ -404,12 +471,22 @@ static func ghost_score(d: Dictionary) -> float:
 
 
 ## The number a session of this lift is judged by: the longest hold, else the
-## heaviest set, else the most reps in a set.
-static func main_value(d: Dictionary) -> float:
+## heaviest set, else (a band) the band's level with the reps done with it as
+## thousandths (a heavier band always counts for more), else the most reps in
+## a set.
+## `in_band`: the lift's history has days done with a band (banded). A day of it
+## with no band, no weight and no hold (logged before bands could be, its band
+## at most in the lift's name) is then its reps as thousandths: below every day
+## done with a band, never 15 against a green band's 4.015.
+static func main_value(d: Dictionary, in_band: bool = false) -> float:
 	if int(d.holdSec) > 0:
 		return float(d.holdSec)
 	if float(d.topKg) > 0.0:
 		return float(d.topKg)
+	if int(d.get("band", 0)) > 0:
+		return float(d.band) + mini(int(d.get("bandReps", 0)), 999) / 1000.0
+	if in_band:
+		return mini(int(d.bestReps), 999) / 1000.0
 	return float(d.bestReps)
 
 
@@ -421,8 +498,10 @@ static func main_value(d: Dictionary) -> float:
 ##   strength  best estimated strength (one-rep max worked out from a set)
 ##   volume    most weight moved in one day of it
 ##   reps      most reps in one set (no weight)
-##   day_reps  most reps in one day (no weight)
+##   day_reps  most reps in one day (no weight, or a band)
 ##   hold      longest hold
+##   band      heaviest band ever ("unit": "band", "value": its level, "band": its id)
+##   reps_band most reps with this band or a heavier one (when the band is not new)
 static func records(sets: Array, before: Array) -> Array:
 	var cur = day(sets)
 	if int(cur.sets) == 0 or before.is_empty():
@@ -444,6 +523,24 @@ static func records(sets: Array, before: Array) -> Array:
 	if int(cur.holdSec) > 0:
 		if int(cur.holdSec) > int(b.hold):
 			out.append({"id": "hold", "label": "Longest hold", "value": int(cur.holdSec), "unit": "sec"})
+		return out
+	if int(cur.get("band", 0)) > 0 and float(cur.topKg) <= 0.0:
+		# Done with a band: a band never used before and heavier than any before
+		# ("value": its level, "band": its id), else the most reps with this band
+		# or a heavier one. Only against days that had a band to beat.
+		var top_band = 0
+		var reps_band = 0
+		for h in before:
+			top_band = maxi(top_band, int(day(h.get("sets", [])).get("band", 0)))
+			for one in real_sets(h.get("sets", [])):
+				if Bands.is_band(one) and Bands.level(one.band) >= int(cur.band):
+					reps_band = maxi(reps_band, int(one.reps))
+		if top_band > 0 and int(cur.band) > top_band:
+			out.append({"id": "band", "label": "Heaviest band", "value": int(cur.band), "band": str(cur.bandId), "unit": "band"})
+		elif top_band > 0 and int(cur.bandReps) > reps_band:
+			out.append({"id": "reps_band", "label": "Most reps with this band", "value": int(cur.bandReps), "unit": "reps"})
+		if int(cur.reps) > int(b.day_reps):
+			out.append({"id": "day_reps", "label": "Most reps in a day", "value": int(cur.reps), "unit": "reps"})
 		return out
 	if float(cur.topKg) > 0.0:
 		if float(cur.topKg) > float(b.top) + 1e-6:
@@ -475,7 +572,9 @@ const DOWN_TO = 10
 ## A lift logged as BOTH SIDES ADDED UP (sets tagged by Sides.tag_sets:
 ## "sides": 2) is judged by one side: 25 reps are a 12 and a 13, so it only
 ## goes heavier past HIGH_REPS a side (30), down to DOWN_TO a side (20).
-## {"kind": "weight" | "reps" | "hold" | "none", "sets": the sets to aim for,
+## Sets done with a BAND go by the band (_band_target): reps up to
+## BAND_HIGH_REPS, then the next band ("kind": "band").
+## {"kind": "weight" | "reps" | "hold" | "band" | "none", "sets": the sets to aim for,
 ##  "set": the set that changes (1-based, 0 = all), "reps": its reps, "addKg",
 ##  "addSec", "kg": the working weight, "sides": 1, or 2 when the reps are
 ##  both sides added up}. `step_kg`: the weight to add (2.5 kg, or 5 lb in kg).
@@ -498,6 +597,9 @@ static func next_target(sets: Array, step_kg: float) -> Dictionary:
 		out.sets = aim
 		out.addSec = 5
 		return out
+	var with_band = real.filter(func(one): return Bands.is_band(one))
+	if not with_band.is_empty():
+		return _band_target(real, aim, out, sides)
 	var top = 0.0
 	for one in real:
 		top = maxf(top, float(one.get("weightKg", 0)))
@@ -539,6 +641,51 @@ static func next_target(sets: Array, step_kg: float) -> Dictionary:
 	return out
 
 
+## A band's reps on every working set before it is time for the next band up
+## (a side, for a lift logged as both sides added up).
+const BAND_HIGH_REPS = 20
+## The reps to come back down to with the heavier band.
+const BAND_DOWN_TO = 12
+
+
+## next_target for sets done with a band: one more rep on the weakest set done
+## with the heaviest band until every one of them gets BAND_HIGH_REPS, then the
+## next band up at BAND_DOWN_TO reps (kind "band", "addBand": 1, "heavier":
+## true, "toBand"). At the heaviest band there is no next one: reps go on.
+## "band": the working band this time.
+static func _band_target(real: Array, aim: Array, out: Dictionary, sides: int) -> Dictionary:
+	var top_id = Bands.top(real)
+	var top_lv = Bands.level(top_id)
+	var work = []
+	for i in range(real.size()):
+		if Bands.is_band(real[i]) and Bands.level(real[i].band) == top_lv:
+			work.append(i)
+	var least_i = work[0]
+	for i in work:
+		if int(real[i].reps) < int(real[least_i].reps):
+			least_i = i
+	out["band"] = top_id
+	out["addBand"] = 0
+	if int(real[least_i].reps) >= BAND_HIGH_REPS * sides and top_lv > 0 and top_lv < Bands.LADDER.size():
+		var up = Bands.step(top_id, 1)
+		for i in work:
+			aim[i].band = up
+			aim[i].reps = BAND_DOWN_TO * sides
+		out.kind = "band"
+		out.addBand = 1
+		out.reps = BAND_DOWN_TO * sides
+		out.sets = aim
+		out["toBand"] = up
+		out["heavier"] = true
+		return out
+	aim[least_i].reps = int(aim[least_i].reps) + 1
+	out.kind = "reps"
+	out.set = least_i + 1
+	out.reps = int(aim[least_i].reps)
+	out.sets = aim
+	return out
+
+
 ## The points of a chart that set a new best: indexes into `points` (oldest
 ## first) whose y beats every point before it. The first point is not one.
 static func record_points(points: Array) -> Array:
@@ -570,6 +717,7 @@ static func calendar(history: Array, today: String, weeks: int) -> Array:
 	var size_of = {}
 	var biggest = 0.0
 	var loaded = weighted(history)
+	var in_band = banded(history)
 	var pr_days = {}
 	var best = -1.0
 	for i in range(rows.size()):
@@ -577,7 +725,7 @@ static func calendar(history: Array, today: String, weeks: int) -> Array:
 		var v = float(r.volumeKg) if loaded else float(r.reps + r.holdTotal)
 		size_of[r.date] = {"v": v, "sets": int(r.sets)}
 		biggest = maxf(biggest, v)
-		var m = main_value(r)
+		var m = main_value(r, in_band)
 		if i > 0 and m > best + 1e-9:
 			pr_days[r.date] = true
 		best = maxf(best, m)
