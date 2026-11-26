@@ -98,6 +98,7 @@ const MARKED_STACKS = 2
 # --- the fight's numbers -----------------------------------------------------
 
 const K_DEF = 60.0
+const CORE_FLOOR = 0.6
 const LEVEL_STEP = 0.03
 const LEVEL_MAX = 60
 const HP_BASE = 80.0
@@ -147,9 +148,9 @@ const PET_RARITY = {"common": 1.0, "uncommon": 1.1, "rare": 1.2, "epic": 1.35, "
 # --- the reference hero and the foes solved from it (tune) -------------------
 
 ## The stat the road expects of the hero's attack school at tiers 1..8.
-const REF_STAT = [12.0, 22.0, 31.0, 39.0, 46.0, 52.0, 57.0, 61.0]
+const REF_STAT = [12.0, 20.0, 27.0, 33.0, 38.0, 43.0, 48.0, 52.0]
 const REF_STAT_PAST = 3.0
-const REF_SIDE = 0.7
+const REF_SIDE = 0.55
 const TTK = 3.3
 const HIT = 0.065
 ## role -> [hp, atk, speed ratio, guard pips, def multiplier].
@@ -160,9 +161,9 @@ const ROLES = {
 	"tank": [1.5, 0.8, 0.9, 5, 1.5],
 	"caster": [0.75, 1.0, 1.05, 2, 1.0],
 	"healer": [0.8, 0.6, 1.05, 3, 1.0],
-	"bomb": [0.9, 0.5, 0.95, 2, 1.0],
-	"elite": [2.5, 1.1, 1.0, 6, 1.0],
-	"boss": [5.0, 1.25, 1.0, 6, 1.0],
+	"bomb": [0.9, 0.8, 0.95, 2, 1.0],
+	"elite": [2.4, 1.5, 1.0, 6, 1.0],
+	"boss": [3.3, 2.0, 1.2, 6, 1.0],
 }
 ## An elite's or a boss's adds.
 const ADD_MULT = 0.5
@@ -195,7 +196,7 @@ const PLUS_STEP = 0.5
 const PLUS_PCT_CAP = 3.0
 const PLUS_COST = 30.0
 const PLUS_COST_GROW = 1.2
-const XP_FOE = 10.0
+const XP_FOE = 12.0
 const XP_GROW = 1.2
 const ORE_FOE = 6.0
 const ORE_GROW = 1.15
@@ -273,8 +274,12 @@ static func hero_hp(endurance: float, legs: float, core: float, level: int) -> f
 	return HP_BASE + HP_LEVEL * float(level) + 2.0 * endurance + legs + core
 
 
+## The core share has a floor of CORE_FLOOR of might: a hero who lifts but has
+## logged little core work still has a trunk (the balance pass, 2026-11-27: a
+## Core of 7 beside a might of 28 alone turned an even boss into a lost one).
+## More core still pays: above the floor it counts in full, and Guard reads it.
 static func hero_def(core: float, might: float, armor: float) -> float:
-	return 0.5 * core + 0.2 * might + armor
+	return 0.5 * maxf(core, CORE_FLOOR * might) + 0.2 * might + armor
 
 
 ## The share of a hit that gets through a defence.

@@ -403,23 +403,36 @@ func add_books(items: Array) -> int:
 ## change by what the bookmark moved (Books.set_page), and the reading log
 ## with them. Returns {"delta", "pages" (of this book today), "day" (all the
 ## day's pages)}, or {} when there is no such book.
-func set_book_page(id: String, page: int) -> Dictionary:
+## `on` = the day the page was stopped on ("" = today). An EARLIER day works
+## too (Books.set_page_on): that day's pages are set from the page, and the
+## day after it, when it was already logged, is counted from this page on.
+func set_book_page(id: String, page: int, on: String = "") -> Dictionary:
 	var b = Books.find(books(), id)
 	if b == null:
 		return {}
-	var r = Books.set_page(b, page, today)
+	var date = on if (on != "" and on <= today) else today
+	var r = Books.set_page_on(b, page, date)
 	var i = books().find(b)
 	saved.books[i] = r.book
-	var e = Reading.entry_on(reading(), today)
-	var cur = int(e.pages) if e != null else 0
-	var want = Reading.clamp_pages(cur + int(r.delta))
-	var day = cur
-	if want != cur:
-		# (set_reading saves the book with the day's pages)
-		day = set_reading(today, want)
-	else:
+	var out = {"delta": 0, "pages": int(r.pages), "day": 0}
+	var moved = false
+	var days = r.deltas.keys()
+	days.sort()
+	for d in days:
+		var e = Reading.entry_on(reading(), str(d))
+		var cur = int(e.pages) if e != null else 0
+		var want = Reading.clamp_pages(cur + int(r.deltas[d]))
+		var now = cur
+		if want != cur:
+			# (set_reading saves the book with the day's pages)
+			now = set_reading(str(d), want)
+			moved = true
+		if str(d) == date:
+			out.delta = now - cur
+			out.day = now
+	if not moved:
 		_books_changed()
-	return {"delta": day - cur, "pages": int(r.pages), "day": day}
+	return out
 
 
 ## Finish a book (today), or put it back to being read.

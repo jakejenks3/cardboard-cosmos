@@ -12,7 +12,7 @@ extends RefCounted
 ##
 ## A row without "text" gets one made from its effects (RpgBattle.fx_words).
 ##
-## To add an item: one more row in ROWS.
+## To add an item: one more row in ROWS (and its id in SHOP if the camp sells it).
 
 const ROWS = [
 	{"id": "protein_shake", "name": "Protein Shake", "icon": "it_shake", "price": 25,
@@ -32,6 +32,9 @@ const ROWS = [
 	{"id": "pre_workout", "name": "Pre-Workout", "icon": "it_pre", "price": 70,
 		"fx": [{"k": "gauge", "n": 40}]},
 ]
+
+## What the camp shop sells, in the order shown (prices 25 to 70 ore).
+const SHOP = ["protein_shake", "electrolytes", "chalk_ball", "smelling_salts", "energy_gel", "ice_pack", "mega_shake", "pre_workout"]
 
 static var _all = null
 static var _by_id = null
@@ -63,3 +66,16 @@ static func by_id(id: String) -> Variant:
 			map[it.id] = it
 		_by_id = map
 	return _by_id.get(id)
+
+
+## What an item does, in words ("Heals 35% of max HP."). Takes a row or an id;
+## "" for one nobody knows.
+static func words(item) -> String:
+	var row = by_id(item) if item is String else item
+	return str(row.get("text", "")) if row is Dictionary else ""
+
+
+## Ore for one at the camp shop (0: not sold there).
+static func price(id: String) -> int:
+	var row = by_id(id)
+	return int(row.price) if (row != null and SHOP.has(id)) else 0

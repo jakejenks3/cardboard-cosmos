@@ -8,12 +8,14 @@ extends RefCounted
 ##   start(setup) -> B                  setup = {"hero": unit (RpgHero.build), "pet": unit or null (RpgHero.pet_unit),
 ##                                               "waves": [[{"foe": id, "n": index, ...}, ...], ...], "seed": int,
 ##                                               "what": {...}, "rules": [ids of RULES], "known": {key: [schools]}, "day": date,
-##                                               "custom": {"moves", "foes", "foe_moves", "pets": {id: row}}}
+##                                               "custom": {"moves", "foes", "foe_moves", "pets", "items": {id: row}}}
 ##                                      a wave entry may carry "weak", "resist" (set by the setup: shown, never learned),
-##                                      "start": [{"id", "turns", "stacks", "amount"}] (statuses), "mult", "guard_add",
-##                                      and "row": a whole foe row for a foe that is not in RpgFoes (the rival)
+##                                      "start": [{"id", "turns", "stacks", "amount"}] (statuses), "mult" (its share of hp
+##                                      and attack, instead of the pack's), "guard_add", and "row": a whole foe row for a
+##                                      foe that is not in RpgFoes (the rival). At most three foes a wave.
 ##   opening(B) -> Array                the events before the hero's first choice (kept in B until the first act)
-##   options(B) -> Dictionary           what the hero may do now
+##   options(B) -> Dictionary           what the hero may do now (its shape is at the function)
+##   illegal(B, action) -> String       "" or why not: over, wait, unknown, cooldown, energy, gauge, item, rule, pet
 ##   preview(B, action, truth = false)  what an attack would do to its target, as far as the player may know
 ##   act(B, action) -> Array            the hero's action, then foes / companion / ticks until the hero must choose
 ##                                      again or the battle ends; the events in order ([{"t": "no", "why"}] = not allowed)
@@ -23,14 +25,20 @@ extends RefCounted
 ##   next_intent(B, foe unit id)        the intent after the shown one (for Insight)
 ##   check_move / check_mod / check_fx / check_passive / check_foe / check_foe_move / check_pet / check_item -> String
 ##                                      "" = fine, else what is wrong. They accept exactly what the engine implements.
-##   fx_words / mod_words / passive_words -> String    a short phrase for the screens
+##   fx_words(effect, attack = true) / mod_words(mod) / passive_words(passive effect) -> String
+##                                      a short phrase for the screens ("Exposed for 2 turns (70%)", "+30% against
+##                                      Exposed foes", "Push moves +10%"); "" for a kind nobody knows
 ##   aggregate(fx) -> Dictionary        the sums of a list of passive effects (RpgHero and RpgFoes bake numbers from it)
+##   json_safe(B) -> String             "" when B is exactly what a JSON round trip gives back
+##
+## Actions: {"t": "move", "id", "target"} · {"t": "strike", "target"} · {"t": "guard"} · {"t": "item", "id"} ·
+##   {"t": "ult", "target"} · {"t": "pet", "target"} (free: the turn goes on) · {"t": "flee"}.
+##   A missing or dead target is the first living foe.
 ##
 ## ---------------------------------------------------------------------------
 ## THE VOCABULARY (content is written against this; the validators are the last word)
 ##
-## A hero move: see rpg_moves.gd. `power` is the power of ALL its hits together.
-## Its damage, per hit:
+## A hero move's damage, per hit (`power` is the power of ALL its hits together):
 ##   max(1, floor(power / hits * offence * mitigation(target def) * mult * (0.92 + 0.16 rand) + rand))
 ##   offence = RpgDefs.offence(the scale's stats by weight, hero.w[school], level)
 ##   mult    = (1 + every "+N%" below, added up) * weak 1.25 or resist 0.7 * Broken 1.4
@@ -44,11 +52,12 @@ extends RefCounted
 ##   vs_full_hp {pct}           the target is at full HP
 ##   execute {below, pct}       the target's HP share is under `below`
 ##   ignore_def {pct}           that share of the target's defence is ignored (1 = all)
-##   crit {add}                 crit chance added, for this move (on top of the hero's capped chance)
+##   crit {add}                 crit chance added, for this move (on top of the hero's own chance, which RpgDefs caps)
 ##   sure_crit                  every hit is a crit
 ##   ramp_use {pct, max}        per earlier use of this move this battle
 ##   ramp_turn {pct, max}       per hero turn of the battle already gone (turn 1: nothing)
-##   streak {pct, max}          per attacking hero turn in a row before this one
+##   streak {pct, max}          per attacking hero turn in a row before this one (Strike counts; Guard, an item, a
+##                              support move or a lost turn ends it)
 ##   smart                      chips 1 guard pip even when the school is not weak (never when resisted)
 ##   missing_hp {pct}           times the share of HP the hero has LOST (at 1 HP: nearly all of pct)
 ##
@@ -56,19 +65,21 @@ extends RefCounted
 ## "target" | "self" | "all_foes" | "allies" | "ally". Where `to` is left out:
 ##   a status lands on the target of an attack and on the user of a support move, an item, a passive;
 ##   heal, shield and cleanse land on the user; delay, dispel, interrupt and chip on the target;
-##   in a foe move everything lands on the move's own target ("hero", "self", "ally", "allies"),
-##   but heal / shield / cleanse of a move aimed at the hero land on the foe itself.
+##   in a foe move everything lands on the move's own target ("hero", "self", "ally" = the most hurt foe, "allies"
+##   = every foe), but heal / shield / cleanse of a move aimed at the hero land on the foe itself.
 ##   A companion's "self" is the hero. An effect on an attack's target needs the attack to have landed.
-##   status {id, turns, chance, stacks, amount, to}   a status of RpgDefs.STATUS. turns 0 or none = until used up
-##                              (focus, evade, marked) or for the whole wave; chance left out = it lands
-##                              (Stun always rolls); stacks for bleed / focus / evade / marked; amount = Counter's power
-##   heal {pct, to}             a share of max HP (a hero's: * RpgDefs.heal_mult)
-##   shield {pct, to}           a Shield of that share of max HP (the larger of old and new is kept)
+##   status {id, turns, chance, stacks, amount, to}   a status of RpgDefs.STATUS (never "shield": that is the effect
+##                              below). turns: needed, except for focus / evade / marked / stun; 0 = until used up or
+##                              for the whole wave. chance left out = it lands (Stun always rolls, at most 95%); a
+##                              chance against the other side is moved by tec against res. stacks for bleed / focus /
+##                              evade / marked; amount = a Counter's power.
+##   heal {pct, to}             a share of max HP (the hero's side: * RpgDefs.heal_mult)
+##   shield {pct, to}           a Shield of that share of max HP, same multiplier (the larger of old and new is kept)
 ##   energy {n}                 the HERO's energy, whoever acts (negative drains; 99 = full)
-##   gauge {n}                  the hero's gauge, as written (no multiplier)
+##   gauge {n}                  the hero's gauge, as written (no multiplier; negative drains)
 ##   delay {pct, to}            pushes the next action back by that share of a rank-1 delay (half on a boss)
 ##   cleanse {n} / {ids}        removes n debuffs, oldest first (0 = all), or the statuses named
-##   dispel {n, to}             removes n buffs (0 = all)
+##   dispel {n, to}             removes n buffs, oldest first (0 = all)
 ##   interrupt {to}             cancels a wind-up or a countdown: the foe chooses again
 ##   cd_cut {n}                 the hero's other cooldowns go down by n
 ##   hp_cost {pct}              the user pays that share of its CURRENT HP (never the last one)
@@ -76,27 +87,31 @@ extends RefCounted
 ##   refund {n}                 +n energy when the action killed
 ##   extra_turn                 the hero acts again at once
 ##   chip {n, to}               chips n guard pips whatever the school
-##   when {hp_below, do}        `do` (an effect) only if the user's HP share is under hp_below
+##   when {hp_below, do}        `do` (one effect, not another when) only if the user's HP share is under hp_below
 ##   self_ko                    the user falls (a foe's bomb)
 ##
 ## PASSIVE EFFECTS, {"p": kind, ...}: board passives, gear, runes, sets, relics, pets, boosts, foe traits.
-##   baked into the hero's numbers by RpgHero.build (a foe's by RpgFoes.make):
+##   baked into the hero's numbers by RpgHero.build (a foe's hp, hp_pct, armor, def_pct, spd_pct, res_add, crit_add
+##   and dodge_add by RpgFoes.make):
 ##     stat_pct {stat, pct} ("all", "body" allowed) · hp_pct / def_pct / spd_pct {pct} · crit_add / dodge_add /
 ##     res_add {v} · atk {school, v} ("all" allowed) · armor {v} · hp {v} · en_max {n}
 ##   read by the engine from unit.fx (unit.agg holds their sums):
 ##     stat_dmg {stat, pct}       moves scaled by that stat: +pct times the stat's weight in the move
-##     school_pct {school, pct}   moves of that school ("all": everything, Strike too)
+##     school_pct {school, pct}   moves of that school ("all": everything, Strike too; "plain": Strike alone)
 ##     heal_pct {pct} · gauge_rate {pct} · en_start {n} · gauge_start {n} · guard_pct {v} (Guard blocks that much
 ##     more) · guard_en {n} · lifesteal {pct} (of the damage of its attacks)
 ##     start_status {id, turns, stacks, amount} · start_shield {pct}     at the start of EVERY wave
 ##     on {ev, do, every, once}   ev: "break" | "kill" | "crit" | "weak" (once an action) | "guard" | "hit_taken" |
-##                                "turn" (the start of its turn) | "wave" (the start of every wave). `do` is an
-##                                effect: "self" = the owner, "target" = the other unit of the event.
-##     low_hp {below, do}         once a battle, when its HP share falls under `below`
-##     survive {pct}              once a battle: a lethal blow leaves it at that share of max HP (0 = 1 HP)
-##     cost / cd {school, add}    its moves of that school cost / rest that much more (negative = less)
+##                                "turn" (the start of its turn) | "wave" (the start of every wave). `do` is one
+##                                effect: "self" = the owner, "target" = the other unit of the event. every: only
+##                                each Nth time; once: once a battle.
+##     low_hp {below, do}         once a battle, when a hit or a tick takes its HP share under `below`
+##     survive {pct}              once a battle: a lethal blow leaves it standing at that share of max HP (0 = 1 HP)
+##     cost / cd {school, add}    its moves of that school ("all" allowed) cost / rest that much more (negative =
+##                                less; never under 0; a move that rests never rests less than 1)
 ##     next_cost {school, add}    after a move of that school, the next one of it costs that much more
-##     chip {on, add}             on "crit": a crit chips that many pips; on a school: its weak hits chip more
+##     chip {on, add}             on "crit": a crit chips that many pips (once a move a target, not through a
+##                                resistance, not with Strike); on a school: its weak hits chip that many more
 ##     status_turns {on, add}     "debuff": debuffs it gives to enemies; "buff": buffs it gives itself;
 ##                                "self_debuff": debuffs ON it (never under 1 turn)
 ##     status_chance {add} · vs_broken {pct} · vs_status {id, pct} · first_hit {pct} (the first hit on each foe)
@@ -105,18 +120,86 @@ extends RefCounted
 ##     ramp {pct, max}            per turn of its own already gone
 ##     first_turn                 it acts first · bounce: the first debuff of the battle bounces off
 ##     reward {what, pct}         "ore" | "xp" | "luck": not the engine's; summary(B).reward adds them up
-##     adapt                      (foes) resists the attack school that last hit it
+##     adapt                      (foes) resists the attack school that last hit it, and that one only
 ##     quicken {pct, max}         (foes) that much faster after each of its actions
+##   On a FOE (traits) these do something: the baked ones above, school_pct "all" (its hits), vs_status (the
+##   hero has it), ramp, heal_pct, status_turns, status_chance, start_status, start_shield, on, low_hp, survive,
+##   bounce, adapt, quicken. Of `on` a foe has hit_taken, turn and wave.
+##
+## ---------------------------------------------------------------------------
+## THE ROWS (every key always there in what all() / by_id() give; a table may leave defaults out)
+##
+## A HERO MOVE (rpg_moves.gd, check_move):
+##   {"id" (RpgDefs.id_of(name)), "name", "school": "push"|"pull"|"legs"|"speed"|"grip"|"mind"|"flow"|"grit",
+##    "kind": "attack"|"support",
+##    "scale": {stat id: weight}   weights above 0 that sum to 1 (an attack needs one)
+##    "power": 0 for a support move, above 0 (at most 12) for an attack: ALL its hits together
+##    "hits": 1..8 (a support move: 1) · "target": "foe"|"all"|"random"|"self" (an attack never "self", a support
+##    move "self" or "foe") · "splash": 0..1 (an attack on one "foe": every other foe takes that share of each hit)
+##    "cost": 0..9 energy · "cd": 0..9 hero turns of rest · "rank": 0.3..2.0 · "chip": 0..4 pips a weak hit takes
+##    "mods": [mod] (attacks only) · "fx": [effect] · "tags": [String] · "text" · "ult": bool · "tier": int}
+##   An ultimate costs 0 and acts at RpgDefs.ULT_RANK. Never self_ko; a support move has no lifesteal / refund,
+##   and with target "self" nothing that needs a foe (delay, dispel, interrupt, chip, anything "to": "target").
+## A BOARD PASSIVE (rpg_passives.gd): {"id", "name", "board", "tier", "text", "fx": [passive effects]}; relics,
+##   gear lines, boosts and a companion's "passive" are lists of the same passive effects (check_passive each).
+## A FOE (rpg_foes.gd, check_foe):
+##   {"id", "name", "region", "role" (a key of RpgDefs.ROLES; "boss" / "elite" exactly when the flag is set),
+##    "weak": [2 different attack schools], "resist": [0 or 1 attack school, not a weak one],
+##    "guard": null (the role's pips) or 0..12, "moves": [foe move ids] (every move its pattern, rules and phases use),
+##    "pattern": [move ids, round and round],
+##    "rules": [{"if": "hp_below"|"ally_hurt"|"turn_mod"|"alone"|"hero_has"|"self_lacks", "v", "use": move id, "once": bool}]
+##        looked at before the pattern, the first that holds and can be used: hp_below / ally_hurt v = an HP share ·
+##        turn_mod v = N or [N, r] (its first turn is 1) · hero_has / self_lacks v = a status id
+##    "traits": [passive effects],
+##    "phases": [{"at": HP share (going down, between 1 and 0), "say", "pattern", "weak" (2, or none: as before),
+##                "resist", "summon": [foe ids], "fx": [effects on itself]}],
+##    "boss": bool, "elite": bool, "text"}
+## A FOE MOVE (rpg_foes.gd MOVES, check_foe_move):
+##   {"id", "name", "kind": "attack"|"multi"|"heavy"|"debuff"|"buff"|"heal"|"shield"|"summon"|"drain"|"bomb" (what
+##    the intent shows; a "bomb" and only a bomb has a count, a "summon" and only a summon brings foes),
+##    "power": 0..6, ALL hits together, in units of the foe's attack (only with target "hero"), "hits": 1..8,
+##    "windup": 0|1 (it spends one turn charging first), "count": 0..9 (its turns until a bomb goes off),
+##    "rank": 0.3..2.0, "target": "hero"|"self"|"ally"|"allies", "fx": [effects] (not cd_cut, refund, extra_turn,
+##    interrupt, chip), "foes": [ids a summon brings], "icon" ("" = the kind's), "text"}. It must do something.
+##   A move that only heals (kind "heal", no power) is passed over while no foe is hurt; a summon while three stand.
+## A COMPANION'S KIT (rpg_pets.gd, check_pet):
+##   {"id" (a pet id of Pets), "auto": {"name", "kind": "attack"|"support", "power": 0..4 (an attack: above 0),
+##    "school", "fx": [effects], "every": 1.. (only each Nth of its turns), "target" (optional)},
+##    "command": {"name", "charge": 1..6, "power", "target": "foe"|"all"|"self", "school", "fx", "text" (optional)},
+##    "passive": [passive effects]}. Never self_ko, hp_cost, cd_cut. Its hits are never weak, never crit, never chip.
+## A BELT ITEM (rpg_items.gd, check_item): {"id", "name", "icon", "text", "fx": [effects, at least one; not
+##   lifesteal, refund, self_ko], "price": ore}. Its effects land on the hero unless one says "to".
+##
+## ---------------------------------------------------------------------------
+## RULINGS (where the plan leaves room; the tests hold the engine to these)
+##   - A pair of statuses cancels: the new one is not put on and the old one goes (both are gone).
+##   - The same status again keeps the longer time; Bleed, Focus and Evade add stacks; Marked is set back to 2.
+##   - Durations tick at the end of the unit's own turn; a status put on a unit DURING its own turn does not lose
+##     that turn. The wait after a turn is set by the speed the unit had in it.
+##   - Burn and Bleed are not hits: no Shield, Guard, Braced or dodge against them, no Counter.
+##   - A foe that is Broken and stunned at once loses one action for the two.
+##   - A wind-up: the intent shows it, the foe's next turn is the charging (rank 1), the turn after is the hit.
+##   - An intent's number is the middle of the roll, all hits, no crit, before a Shield or a dodge, as things stand;
+##     it is brought up to date after everything that happens.
+##   - The ultimate fills no gauge (not by its hits, a break, or what strikes back during it).
+##   - Counter strikes back once per action of the attacker (a foe's: once per hero move), and never crits.
+##   - A win is checked first; then the next wave; then a loss.
 ##
 ## EVENTS (act's result; every one has "t"; numbers are JSON-normalized, so cast before use):
 ##   turn {who, n} · act {who, kind, id, name, school, target} (kind: move, strike, guard, item, ult, flee, lost,
 ##   auto, command, charge, count, or a foe move's kind) · dmg {src, dst, amount, crit, weak, resist, chip, hp,
-##   guard, school, absorbed, counter?} · miss {src, dst} · heal {dst, amount, hp} · status {dst, id, on, turns,
-##   stacks, resisted, cancel?, bounced?} · tick {dst, id, amount, hp} · break {dst} · recover {dst, guard} ·
-##   ko {dst} · energy {v} · gauge {v} · intent {who, intent} · learn {key, school} · phase {who, say, phase} ·
-##   summon {units, by} · wave {n, of, units} · say {text} · end {win}
+##   guard, school, absorbed, counter?} (amount = what got past the Shield) · miss {src, dst} · heal {dst, amount,
+##   hp} · status {dst, id, on, turns, stacks, resisted, cancel?, bounced?, amount? (a Shield)} · tick {dst, id
+##   (burn, bleed, hp_cost), amount, hp} · break {dst} · recover {dst, guard} · ko {dst} · energy {v} · gauge {v} ·
+##   intent {who, intent} · learn {key, school} · phase {who, say, phase} · summon {units, by} · wave {n, of,
+##   units} · say {text} · end {win}
 ##   and, beyond the plan's list: no {why} · survive {dst, hp} · chip {dst, chip, guard} · interrupt {dst} ·
 ##   delay {dst, stun?} · adapt {dst, school} · charge {v}
+##
+## A UNIT in B (RPG_PLAN.md 11.3) also carries what the engine keeps: "agg" (aggregate of its fx), "turns", "flags",
+##   and a foe "n" (its difficulty index), "slot" (its place, 0..2), "moves", "pattern", "rules", "phases".
+##   An intent: {"move", "name", "kind" ("stunned" = it will lose its action), "dmg", "hits", "windup", "charged",
+##   "count", "icon", "text", "target"}.
 ##
 ## JSON-SAFETY. After `start` and after every `act`, B is in "settled" form: every
 ## float is rounded to six decimals and a whole one is an int, exactly what
@@ -246,7 +329,8 @@ static func start(setup: Dictionary) -> Dictionary:
 		pet["statuses"] = []
 		pet["turns"] = 0
 		pet["charge"] = 0
-		pet["charge_max"] = maxi(1, _i(pet, "charge_max", 3))
+		var kit0 = pet_kit(B, str(pet.get("pet", "")))
+		pet["charge_max"] = maxi(1, _i(pet, "charge_max", int(kit0.get("command", {}).get("charge", 3)) if kit0 != null else 3))
 		pet["lvl"] = int(hero.lvl)
 		pet["atk"] = RpgDefs.offence(float(best_body(hero).v) * 0.5, 0.0, int(hero.lvl)) * float(RpgDefs.PET_RARITY.get(str(pet.get("rarity", "common")), 1.0))
 		pet["tec"] = _f(hero.s, "mind", 1.0)
@@ -501,7 +585,7 @@ static func next_intent(B: Dictionary, id: String) -> Dictionary:
 	var f = unit(B, id)
 	if f == null or not f.get("alive", false) or str(f.get("side", "")) != "foe":
 		return {}
-	return intent_for(B, f, str(RpgAi.choose(B, f).move))
+	return intent_for(B, f, str(RpgAi.choose(B, f, 1).move))
 
 
 ## What an attack would do to its target, total over its hits, without a crit:
@@ -1023,7 +1107,7 @@ static func _tick(B: Dictionary, ev: Array, u: Dictionary, id: String, amount: i
 		saved = _survive(u)
 		if saved > 0:
 			lost = maxi(0, hp - saved)
-	u["hp"] = hp - lost
+	u["hp"] = saved if saved > 0 else hp - lost      # survived: it STANDS at that share, even if it had less
 	ev.append({"t": "tick", "dst": str(u.id), "id": id, "amount": lost, "hp": int(u.hp)})
 	if saved > 0:
 		ev.append({"t": "survive", "dst": str(u.id), "hp": int(u.hp)})
@@ -1235,6 +1319,8 @@ static func _do_move(B: Dictionary, ev: Array, move: Dictionary, target_id: Stri
 				B.sum.schools.append(school)
 	h.flags["streak"] = (_i(h.flags, "streak") + 1) if attack else 0
 	B["ulting"] = false
+	if how == "ult":
+		return RpgDefs.ULT_RANK             # whatever its row says (4.3)
 	return float(move.get("rank", 1.0))
 
 
@@ -1446,19 +1532,19 @@ static func _foe_hit(B: Dictionary, ev: Array, f: Dictionary, power: float, run:
 	if int(h.hp) <= 0:
 		_ko(B, ev, h)
 	else:
-		_check_low(B, ev, h)
 		_fire(B, ev, h, "hit_taken", f)
 
 
 ## What a foe's hit on the hero is multiplied by as things stand: its own
 ## bonuses, the statuses on both, and the hero's Guard.
-static func _foe_mult(B: Dictionary, f: Dictionary) -> float:
+static func _foe_mult(B: Dictionary, f: Dictionary, ahead: int = 0) -> float:
 	var h = B.hero
 	var agg = f.get("agg", {})
 	var b = _f(agg, "school_pct:all")
 	for st in h.get("statuses", []):
 		b += _f(agg, "vs_status:" + str(st.id))
-	b += minf(_f(agg, "ramp_max"), _f(agg, "ramp") * float(maxi(0, _i(f, "turns") - 1)))
+	# `ahead`: how many of its turns from now the hit comes (0 = it is hitting now), for a `ramp` trait
+	b += minf(_f(agg, "ramp_max"), _f(agg, "ramp") * float(maxi(0, _i(f, "turns") - 1 + ahead)))
 	var mult = maxf(0.1, 1.0 + b) * _status_mult(f, h)
 	if bool(h.get("guarding", false)):
 		mult *= RpgDefs.guard_mult(_f(h.s, "core", 1.0), _f(h.agg, "guard_pct"))
@@ -1481,7 +1567,7 @@ static func _hurt(B: Dictionary, ev: Array, dst: Dictionary, amount: int, info: 
 		saved = _survive(dst)
 		if saved > 0:
 			lost = maxi(0, hp - saved)
-	dst["hp"] = hp - lost
+	dst["hp"] = saved if saved > 0 else hp - lost    # survived: it STANDS at that share, even if it had less
 	var e = {"t": "dmg", "src": str(info.get("src", "")), "dst": str(dst.id), "amount": hit, "crit": bool(info.get("crit", false)),
 		"weak": bool(info.get("weak", false)), "resist": bool(info.get("resist", false)), "chip": int(info.get("chip", 0)),
 		"hp": int(dst.hp), "guard": _i(dst, "guard"), "school": str(info.get("school", "")), "absorbed": absorbed}
@@ -1496,6 +1582,8 @@ static func _hurt(B: Dictionary, ev: Array, dst: Dictionary, amount: int, info: 
 		B.sum["dealt"] = _i(B.sum, "dealt") + lost
 	else:
 		_took(B, ev, lost, true)
+	if int(dst.hp) > 0:
+		_check_low(B, ev, dst)          # "low_hp" passives, the hero's and a foe's
 	return lost
 
 
@@ -1845,11 +1933,14 @@ static func _apply_fx(B: Dictionary, ev: Array, e: Dictionary, ctx: Dictionary) 
 				ev.append({"t": "delay", "dst": str(u.id)})
 		"cleanse":
 			for u in _fx_units(B, e, ctx, str(ctx.get("help_to", "self"))):
+				var stunned = has_status(u, "stun")
 				if e.get("ids") is Array:
 					for id in e.ids:
 						_drop_status(B, ev, u, str(id))
 				else:
 					_strip(B, ev, u, "debuff", int(e.get("n", 0)))
+				if stunned and not has_status(u, "stun") and str(u.side) == "foe" and not bool(u.get("broken", false)) and str(B.acting) != str(u.id):
+					_set_intent(B, ev, u)       # it will act after all: its intent must say what (4.5)
 		"dispel":
 			for u in _fx_units(B, e, ctx, "target"):
 				_strip(B, ev, u, "buff", int(e.get("n", 0)))
@@ -1966,7 +2057,8 @@ static func _wave_passives(B: Dictionary, ev: Array, u: Dictionary) -> void:
 			var p = str(e.get("p", ""))
 			if p == "start_status":
 				var id = str(e.get("id", ""))
-				var res = _put_status(u, id, int(e.get("turns", 0)), int(e.get("stacks", RpgDefs.MARKED_STACKS if id == "marked" else 1)), float(e.get("amount", 0.0)), str(u.id), false)
+				# a wave that stands up in the middle of the hero's own turn (its kill): that turn's end does not count
+				var res = _put_status(u, id, int(e.get("turns", 0)), int(e.get("stacks", RpgDefs.MARKED_STACKS if id == "marked" else 1)), float(e.get("amount", 0.0)), str(u.id), str(B.acting) == str(u.id))
 				if bool(res.on):
 					var st = status_of(u, id)
 					ev.append({"t": "status", "dst": str(u.id), "id": id, "on": true, "turns": _i(st, "turns"), "stacks": _i(st, "stacks", 1), "resisted": false})
@@ -2101,13 +2193,15 @@ static func _lost_intent(why: String) -> Dictionary:
 
 
 ## The damage a foe's move will do to the hero as things stand: the middle of
-## the roll, every hit, no crit, before a Shield or a dodge.
-static func _intent_dmg(B: Dictionary, f: Dictionary, mv: Dictionary) -> int:
+## the roll, every hit, no crit, before a Shield or a dodge. `ahead` = in how
+## many of the foe's turns the hit comes (1 = its next turn; a wind-up still to
+## charge 2; a countdown its count).
+static func _intent_dmg(B: Dictionary, f: Dictionary, mv: Dictionary, ahead: int = 1) -> int:
 	var power = float(mv.get("power", 0.0))
 	if power <= 0.0 or str(mv.get("target", "hero")) != "hero":
 		return 0
 	var hits = maxi(1, int(mv.get("hits", 1)))
-	var base = power / float(hits) * _f(f, "atk") * RpgDefs.mitigation(_f(B.hero, "def")) * _foe_mult(B, f)
+	var base = power / float(hits) * _f(f, "atk") * RpgDefs.mitigation(_f(B.hero, "def")) * _foe_mult(B, f, maxi(1, ahead))
 	return hits * maxi(1, int(floor(base + 0.5)))
 
 
@@ -2120,8 +2214,9 @@ static func intent_for(B: Dictionary, f: Dictionary, move_id: String) -> Diction
 		mv = BASIC
 	var windup = int(mv.get("windup", 0)) > 0
 	var power = float(mv.get("power", 0.0))
+	var count = maxi(0, int(mv.get("count", 0)))
 	return {"move": str(mv.id), "name": str(mv.get("name", "")), "kind": str(mv.get("kind", "attack")),
-		"dmg": _intent_dmg(B, f, mv), "hits": maxi(1, int(mv.get("hits", 1))) if power > 0.0 else 0,
+		"dmg": _intent_dmg(B, f, mv, 2 if windup else maxi(1, count)), "hits": maxi(1, int(mv.get("hits", 1))) if power > 0.0 else 0,
 		"windup": windup, "charged": false, "count": maxi(0, int(mv.get("count", 0))),
 		"icon": "in_charge" if windup else str(mv.get("icon", "in_attack")), "text": str(mv.get("text", "")),
 		"target": str(mv.get("target", "hero"))}
@@ -2156,7 +2251,7 @@ static func _refresh_intents(B: Dictionary, ev: Array) -> void:
 		var mv = foe_move(B, id)
 		if mv == null:
 			continue
-		var dmg = _intent_dmg(B, f, mv)
+		var dmg = _intent_dmg(B, f, mv, 2 if bool(it.get("windup", false)) else maxi(1, _i(it, "count")))
 		if dmg != _i(it, "dmg"):
 			it["dmg"] = dmg
 			ev.append({"t": "intent", "who": str(f.id), "intent": it.duplicate(true)})
@@ -3066,6 +3161,26 @@ static func _turns(n: int) -> String:
 	return "%d turn%s" % [n, "" if n == 1 else "s"]
 
 
+## A phrase that follows "...: " inside another: its first letter goes small,
+## unless it begins with a status (those are names: "Exposed", "Shield").
+static func _inner(w: String) -> String:
+	if w == "":
+		return w
+	var head = w.get_slice(" ", 0)
+	if head == "Stunned" or head == "Shield":
+		return w
+	for id in RpgDefs.STATUS:
+		if head == str(RpgDefs.STATUS[id].name):
+			return w
+	return w.left(1).to_lower() + w.substr(1)
+
+
+static func _nth(n: int) -> String:
+	if n % 100 >= 11 and n % 100 <= 13:
+		return "%dth" % n
+	return "%d%s" % [n, ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]]
+
+
 static func _status_name(id: String) -> String:
 	return "Stun" if id == "stun" else str(RpgDefs.STATUS.get(id, {}).get("name", id))
 
@@ -3153,7 +3268,7 @@ static func fx_words(e: Dictionary, attack: bool = true) -> String:
 			return "Chips %d guard, whatever the school" % int(e.get("n", 1))
 		"when":
 			var inner = fx_words(e.get("do", {}), attack) if e.get("do") is Dictionary else ""
-			return "Under %s HP: %s" % [_pct(e.get("hp_below", 0.0)), inner.left(1).to_lower() + inner.substr(1)]
+			return "Under %s HP: %s" % [_pct(e.get("hp_below", 0.0)), _inner(inner)]
 		"self_ko":
 			return "It falls"
 	return ""
@@ -3205,8 +3320,10 @@ static func _on_words(ev: String, every: int) -> String:
 		return "Each turn" if every <= 1 else "Every %d turns" % every
 	var w = {"break": "On a break", "kill": "On a kill", "crit": "On a crit", "weak": "On a weakness hit", "guard": "On Guard",
 		"hit_taken": "When hit", "wave": "At the start of a wave"}
-	var s = str(w.get(ev, ev))
-	return s if every <= 1 else "%s (every %d)" % [s, every]
+	if every <= 1:
+		return str(w.get(ev, ev))
+	var each = {"break": "break", "kill": "kill", "crit": "crit", "weak": "weakness hit", "guard": "Guard", "hit_taken": "hit taken", "wave": "wave"}
+	return "Every %s %s" % [_nth(every), str(each.get(ev, ev))]
 
 
 ## What a passive effect does, in a few words: "Push moves +10%".
@@ -3223,7 +3340,10 @@ static func passive_words(fx: Dictionary) -> String:
 		"stat_dmg":
 			return "%s moves +%s" % [str(RpgDefs.STAT_NAMES.get(str(fx.get("stat", "")), "")), pct]
 		"school_pct":
-			return "All damage +%s" % pct if str(fx.get("school", "")) == "all" else "%s moves +%s" % [_school_word(str(fx.get("school", ""))), pct]
+			var psc = str(fx.get("school", ""))
+			if psc == "all":
+				return "All damage +%s" % pct
+			return "Strike +%s" % pct if psc == "plain" else "%s moves +%s" % [_school_word(psc), pct]
 		"hp_pct":
 			return "Max HP +%s" % pct
 		"def_pct":
@@ -3249,7 +3369,7 @@ static func passive_words(fx: Dictionary) -> String:
 		"en_max":
 			return "Max energy %s" % _signed(n)
 		"en_start":
-			return "Starts with %s energy" % _signed(n)
+			return "Starts with %d %s energy" % [absi(n), "less" if n < 0 else "more"]
 		"gauge_start":
 			return "The gauge starts at %s" % TTUtil.num_str(fx.get("n", 0))
 		"guard_pct":
@@ -3271,10 +3391,10 @@ static func passive_words(fx: Dictionary) -> String:
 			var head = _on_words(str(fx.get("ev", "")), int(fx.get("every", 1)))
 			if bool(fx.get("once", false)):
 				head = "Once a battle, " + head.left(1).to_lower() + head.substr(1)
-			return "%s: %s" % [head, inner.left(1).to_lower() + inner.substr(1)]
+			return "%s: %s" % [head, _inner(inner)]
 		"low_hp":
 			var lw = fx_words(fx.get("do", {}), false) if fx.get("do") is Dictionary else ""
-			return "Once a battle, under %s HP: %s" % [_pct(fx.get("below", 0.0)), lw.left(1).to_lower() + lw.substr(1)]
+			return "Once a battle, under %s HP: %s" % [_pct(fx.get("below", 0.0)), _inner(lw)]
 		"survive":
 			return "Once a battle, survives a lethal hit %s" % ("at 1 HP" if float(fx.get("pct", 0.0)) <= 0.0 else "at %s HP" % pct)
 		"cost":

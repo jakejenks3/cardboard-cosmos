@@ -128,6 +128,49 @@ static func set_page(b: Dictionary, page: int, day: String) -> Dictionary:
 	return {"book": out, "delta": now - before, "pages": now}
 
 
+## The bookmark for ANY day, an earlier one too (the user, 2026-11-27: "Allow
+## me to go back to previous day to put what page I ended on... I can add
+## pages but then game gets confused about the following day"). The day's
+## reading starts where the last logged day BEFORE it ended (else where that
+## day itself started, else where the next logged day started, else the
+## bookmark), and the next logged day AFTER it now starts on this page, so
+## the pages of both days are right. The bookmark itself is the end of the
+## latest logged day. Returns {"book", "deltas": {day: change of that day's
+## pages}, "pages": the day's pages now}.
+static func set_page_on(b: Dictionary, page: int, day: String) -> Dictionary:
+	var out = b.duplicate(true)
+	var p = clampi(page, 0, MAX_PAGE)
+	var days = out.log.keys()
+	days.sort()
+	var prev = ""
+	var next = ""
+	for d in days:
+		if str(d) < day:
+			prev = str(d)
+		elif str(d) > day and next == "":
+			next = str(d)
+	var from = int(b.page)
+	if prev != "":
+		from = int(out.log[prev][1])
+	elif out.log.get(day) is Array:
+		from = int(out.log[day][0])
+	elif next != "":
+		from = int(out.log[next][0])
+	var deltas = {}
+	var before = pages_on(b, day)
+	out.log[day] = [mini(from, p), p]
+	deltas[day] = pages_on(out, day) - before
+	if next != "":
+		var was = pages_on(b, next)
+		var end = int(out.log[next][1])
+		out.log[next] = [mini(p, end), end]
+		if pages_on(out, next) != was:
+			deltas[next] = pages_on(out, next) - was
+	else:
+		out.page = p
+	return {"book": out, "deltas": deltas, "pages": pages_on(out, day)}
+
+
 ## The books being read, the one read last first.
 static func reading_now(books: Array) -> Array:
 	var out = books.filter(func(b): return str(b.status) == "reading")

@@ -49,8 +49,41 @@ static func progress_row(b: Dictionary) -> Control:
 	return row
 
 
+## How many days back the page box is for (0 = today). Back to today after a save.
+static var days_back = 0
+const BACK_DAYS = 3
+
+
+## The day the page box is for.
+static func page_day() -> String:
+	return Dates.add_days(App.today, -clampi(days_back, 0, BACK_DAYS - 1))
+
+
+static func _pick_day(n: int) -> void:
+	if days_back == n:
+		return
+	days_back = n
+	Sfx.tick()
+	App.changed.emit()
+
+
+## "For: Today | Yesterday | Mon": which day the page is for (an earlier day
+## can be filled in afterwards; the day after it is then counted from there).
+static func day_row() -> Control:
+	var keys = []
+	for n in range(BACK_DAYS):
+		var word = "Today" if n == 0 else ("Yesterday" if n == 1 else Dates.format_date(Dates.add_days(App.today, -n), {"weekday": "short"}))
+		var k = Kit.choice(word, days_back == n, BookView._pick_day.bind(n), Pal.READ, 12)
+		k.set_meta("book_day", n)
+		k.set_meta("anchor_id", "book_day:%d" % n)
+		keys.append(k)
+	var track = Kit.choice_track(keys)
+	track.set_meta("book_days", true)
+	return track
+
+
 ## "Stopped on page [   ] Save": typing the page and Done (or Save) works out
-## today's pages of the book.
+## that day's pages of the book.
 static func page_row(b: Dictionary) -> Control:
 	var row = Kit.hbox(6)
 	var l = Kit.label("Stopped on page", 12, Pal.MUTED, true)
@@ -92,6 +125,7 @@ static func card_rows(b: Dictionary) -> Control:
 	if tl != null:
 		v.add_child(tl)
 	v.add_child(page_row(b))
+	v.add_child(day_row())
 	return v
 
 
@@ -110,9 +144,14 @@ static func save_page(id: String, text: String, from = null) -> void:
 	var page = int(t)
 	var title = str(b.title)
 	var length = int(b.pages)
-	var xp_before = Reading.day_xp(Reading.pages_on(App.state, App.today))
+	var day = page_day()
+	var xp_before = Reading.day_xp(Reading.pages_on(App.state, day))
 	var at_from = from is Control and is_instance_valid(from)
-	var r = App.set_book_page(id, page)
+	var was_back = days_back
+	days_back = 0
+	var r = App.set_book_page(id, page, day)
+	if was_back > 0:
+		App.toast("Set for %s" % ("yesterday" if was_back == 1 else Dates.format_date(day, {"weekday": "long"})), "info", "book")
 	var got = int(r.get("delta", 0))
 	if at_from:
 		Kit.burst(from, Pal.READ, 14)

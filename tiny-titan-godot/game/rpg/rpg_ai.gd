@@ -5,7 +5,7 @@ extends RefCounted
 ## simulator, the balance sweep). Pure and deterministic: every function reads
 ## the battle `B` (RpgBattle) and changes nothing in it.
 ##
-##   choose(B, foe unit) -> {"move": foe move id, "pi": the pattern index after it, "rule": the rule's index or -1}
+##   choose(B, foe unit, ahead = 0) -> {"move": foe move id, "pi": the pattern index after it, "rule": the rule's index or -1}
 ##       The foe's next move: its rules first, in order (the first that holds and
 ##       can be used; a "once" rule only once), then its pattern, round and round.
 ##       A move that cannot be used now is passed over: a summon with no place
@@ -16,7 +16,8 @@ extends RefCounted
 ##
 ##   hero_action(B, policy = "heuristic") -> an action for RpgBattle.act
 ##       "heuristic"       a sensible player: the companion's command when it is charged (it is free: ask again
-##                         after it), finish a foe if it can, break a guard, Guard a telegraphed heavy hit or a
+##                         after it), finish a foe if it can, break a guard, Guard a telegraphed heavy hit (it reads
+##                         the turn order: a wind-up of a foe that acts twice before the hero does is due) or a
 ##                         blow that would kill, heal when low, the ultimate on a broken or dangerous foe, a buff
 ##                         when the fight will last, otherwise the most damage for the time it takes.
 ##                         It knows only what the player may know (RpgBattle.preview without `truth`): a weakness
@@ -32,6 +33,8 @@ extends RefCounted
 ##   hero_has v    the hero has the status v
 ##   self_lacks v  it does not have the status v
 
+## The hit a foe is reckoned to make after a wind-up or a countdown has landed, as a share of that one.
+const AFTER_BIG = 0.4
 ## A hit this big (a share of the hero's max HP) is worth a Guard even when it is not a wind-up.
 const HEAVY = 0.3
 ## Under this share of HP the hero heals if it can.
@@ -53,7 +56,8 @@ static func _share(u: Dictionary) -> float:
 
 
 ## Does a foe's rule hold as things stand?
-static func holds(B: Dictionary, f: Dictionary, rule: Dictionary) -> bool:
+## `ahead`: 0 = for its next turn, 1 = for the one after (RpgBattle.next_intent).
+static func holds(B: Dictionary, f: Dictionary, rule: Dictionary, ahead: int = 0) -> bool:
 	var v = rule.get("v")
 	match str(rule.get("if", "")):
 		"hp_below":
@@ -73,7 +77,7 @@ static func holds(B: Dictionary, f: Dictionary, rule: Dictionary) -> bool:
 				rem = int(v[1])
 			elif v is int or v is float:
 				n = maxi(1, int(v))
-			return (int(f.get("turns", 0)) + 1) % n == rem % n
+			return (int(f.get("turns", 0)) + 1 + ahead) % n == rem % n
 		"alone":
 			return RpgBattle.foes(B).size() <= 1
 		"hero_has":
@@ -110,7 +114,7 @@ static func usable(B: Dictionary, _f: Dictionary, move_id: String) -> bool:
 
 
 ## The foe's next move (see the top). Reads only; RpgBattle writes what it returns.
-static func choose(B: Dictionary, f: Dictionary) -> Dictionary:
+static func choose(B: Dictionary, f: Dictionary, ahead: int = 0) -> Dictionary:
 	var pi = int(f.get("pi", 0))
 	var rules = f.get("rules", [])
 	var spent = f.get("flags", {}).get("rules", {})
@@ -121,7 +125,7 @@ static func choose(B: Dictionary, f: Dictionary) -> Dictionary:
 		if bool(r.get("once", false)) and spent.has("r" + str(i)):
 			continue
 		var id = str(r.get("use", ""))
-		if holds(B, f, r) and usable(B, f, id):
+		if holds(B, f, r, ahead) and usable(B, f, id):
 			return {"move": id, "pi": pi, "rule": i}
 	var pattern = f.get("pattern", [])
 	var n = pattern.size()
@@ -206,13 +210,73 @@ static func _shield(u: Dictionary) -> float:
 	return 0.0 if sh == null else float(sh.get("amount", 0))
 
 
-## What a foe is about to do to the hero before the hero acts again (a wind-up
-## still to charge and a countdown not yet at its end are not due).
-static func _due(f: Dictionary) -> float:
+## How many times a foe acts before the hero's next turn, if the hero now does
+## something of that rank (the foe's own actions counted at rank 1, as the
+## timeline on screen shows them).
+static func _acts_before(B: Dictionary, f: Dictionary, rank: float = 1.0) -> int:
+	var h = B.hero
+	var next = float(h.get("at", 0.0)) + RpgDefs.delay(rank, RpgBattle.speed_of(h))
+	var step = maxf(1.0, RpgDefs.delay(1.0, RpgBattle.speed_of(f)))
+	var first = float(f.get("at", 0.0))
+	if first >= next:
+		return 0
+	# a wind-up takes its move's own time to charge (a heavy one comes a little later than the turn order says)
 	var it = f.get("intent", {})
-	if bool(it.get("windup", false)) or int(it.get("count", 0)) > 1:
+	var second = step
+	if bool(it.get("windup", false)):
+		var mv = RpgBattle.foe_move(B, str(it.get("move", "")))
+		if mv != null:
+			second = maxf(1.0, RpgDefs.delay(float(mv.get("rank", 1.0)), RpgBattle.speed_of(f)))
+	if first + second >= next:
+		return 1
+	return 2 + int(floor((next - first - second - 0.0001) / step))
+
+
+## What a foe is about to do to the hero before the hero acts again, if the
+## hero now does something of that rank. A hit that is ready lands on the
+## foe's next action (when that comes first); a wind-up still to charge
+## lands only when the foe gets two actions in before the hero's next turn (a
+## quick foe, or a slow move of the hero's), a countdown when it gets as many
+## as the count: the timeline shows it, so a player sees it coming too.
+static func _due(B: Dictionary, f: Dictionary, rank: float = 1.0) -> float:
+	var it = f.get("intent", {})
+	var need = 1
+	if bool(it.get("windup", false)):
+		need = 2
+	elif int(it.get("count", 0)) > 1:
+		need = int(it.get("count", 0))
+	var acts = _acts_before(B, f, rank)
+	if acts < need:
 		return 0.0
-	return float(it.get("dmg", 0))
+	# what it does after the hit that is shown cannot be known: reckon with a plain hit for each action more
+	var dmg = float(it.get("dmg", 0))
+	return dmg + float(acts - need) * dmg * (1.0 if need == 1 and not bool(it.get("charged", false)) else AFTER_BIG)
+
+
+## Everything that lands on the hero before the next turn, if the hero now does something of that rank.
+static func _lands(B: Dictionary, living: Array, rank: float) -> float:
+	var sum = 0.0
+	for f in living:
+		sum += _due(B, f, rank)
+	return sum
+
+
+## When a Guard now would be over before the hit it is meant for (the foe has
+## still to charge, or the hero is up again first): something quick enough that
+## nothing lands during it either: the heal when hurt, else the best such
+## attack. {} when there is nothing like that (then Guard, and Guard again).
+static func _quiet(B: Dictionary, living: Array, attacks: Array, heal, share: float) -> Dictionary:
+	if heal != null and share < 0.75:
+		var hrow = RpgBattle.move_row(B, str(heal.get("id", "")))
+		if _lands(B, living, float(hrow.get("rank", 1.0)) if hrow != null else 1.0) <= 0.0:
+			return heal
+	var quick = null
+	for a in attacks:
+		if bool(a.ult) or float(a.get("lands", 1.0)) > 0.0:
+			continue
+		if quick == null or float(a.score) > float(quick.score):
+			quick = a
+	return {} if quick == null else quick.action
 
 
 ## One attack on one target, weighed: {"action", "value" (damage that counts,
@@ -253,12 +317,12 @@ static func _weigh(B: Dictionary, action: Dictionary, move: Dictionary, living: 
 			out.kills = int(out.kills) + 1
 			if sure:
 				out.sure = int(out.sure) + 1
-				out.stops = float(out.stops) + _due(f)
+				out.stops = float(out.stops) + _due(B, f, float(move.get("rank", 1.0)))
 			out.value = float(out.value) + float(f.get("intent", {}).get("dmg", 0)) + 0.1 * float(f.hp_max)
 		elif int(pv.chip) > 0 and int(f.get("guard", 0)) > 0 and int(pv.chip) >= int(f.get("guard", 0)) and (i == 0 or mode == "all"):
 			# a break: its next action is lost and the next hits land 40% harder
 			out.breaks = int(out.breaks) + 1
-			out.stops = float(out.stops) + _due(f)
+			out.stops = float(out.stops) + _due(B, f, float(move.get("rank", 1.0)))
 			out.value = float(out.value) + float(f.get("intent", {}).get("dmg", 0)) + 0.4 * avg
 		elif int(pv.chip) > 0:
 			out.value = float(out.value) + 0.08 * avg * float(pv.chip)
@@ -382,11 +446,12 @@ static func _heuristic(B: Dictionary, opt: Dictionary) -> Dictionary:
 	var left_total = 0.0
 	var big_foe = false
 	for f in living:
-		var d = _due(f)
+		var d = _due(B, f)
 		incoming += d
 		biggest = maxf(biggest, d)
 		var it = f.get("intent", {})
-		if d > 0.0 and (bool(it.get("charged", false)) or int(it.get("count", 0)) == 1):
+		# a wind-up or a countdown that lands before the next turn: charged, at its last count, or the foe is quick enough
+		if d > 0.0 and (bool(it.get("charged", false)) or bool(it.get("windup", false)) or int(it.get("count", 0)) >= 1):
 			telegraphed = true
 		left_total += float(f.hp)
 		if bool(f.get("boss", false)) or bool(f.get("elite", false)):
@@ -396,26 +461,39 @@ static func _heuristic(B: Dictionary, opt: Dictionary) -> Dictionary:
 	var best = null            # the most that counts for the time it takes
 	var finisher = null        # a sure kill, the cheapest way
 	var stopper = null         # what takes the most out of this round
+	var deadly = false         # some attack would let a killing blow in
 	for a in attacks:
 		var score = float(a.value) / maxf(0.5, float(a.rank))
 		a["score"] = score
+		# what lands before the next turn if this is done now (a slow move lets a quick foe act twice)
+		a["lands"] = _lands(B, living, float(a.rank))
+		var ends = living.size() == int(a.sure) and int(B.wave) >= B.waves.size() - 1
+		a["deadly"] = float(a.lands) - float(a.stops) >= hp and not ends
 		if bool(a.ult):
+			continue
+		if int(a.sure) > 0 and not bool(a.deadly) and (finisher == null or int(a.sure) > int(finisher.sure) or (int(a.sure) == int(finisher.sure) and int(a.cost) < int(finisher.cost))):
+			finisher = a
+		if float(a.stops) > 0.0 and (stopper == null or float(a.stops) > float(stopper.stops)):
+			stopper = a
+		if bool(a.deadly):
+			deadly = true
 			continue
 		# clearly more, or about as much (within 5%) for less energy
 		if best == null or score > float(best.score) * 1.05 or (score > float(best.score) * 0.95 and int(a.cost) < int(best.cost)):
 			best = a
-		if int(a.sure) > 0 and (finisher == null or int(a.sure) > int(finisher.sure) or (int(a.sure) == int(finisher.sure) and int(a.cost) < int(finisher.cost))):
-			finisher = a
-		if float(a.stops) > 0.0 and (stopper == null or float(a.stops) > float(stopper.stops)):
-			stopper = a
 
 	# the supports at hand: moves, then the belt
 	var heal = null
 	var support = null
 	var support_worth = 0.0
 	var target_unit = RpgBattle.unit(B, focus)
+	var heal_short = false     # a heal that is rested and only wants energy
 	for m in opt.moves:
 		if not bool(m.ok):
+			if str(m.get("why", "")) == "energy":
+				var short = RpgBattle.move_row(B, str(m.id))
+				if short != null and str(short.get("kind", "attack")) == "support" and _has_heal(short.get("fx", [])):
+					heal_short = true
 			continue
 		var row = RpgBattle.move_row(B, str(m.id))
 		if row == null or str(row.get("kind", "attack")) != "support":
@@ -447,7 +525,13 @@ static func _heuristic(B: Dictionary, opt: Dictionary) -> Dictionary:
 			return stopper.action
 		if finisher != null and living.size() == int(finisher.kills) and int(B.wave) >= B.waves.size() - 1:
 			return finisher.action
-		var guarded = incoming * RpgDefs.guard_mult(float(h.s.get("core", 1.0)), float(h.get("agg", {}).get("guard_pct", 0.0)))
+		var in_guard = _lands(B, living, RpgDefs.GUARD_RANK)
+		if in_guard <= 0.0:
+			var q = _quiet(B, living, attacks, heal, share)
+			if not q.is_empty():
+				return q
+		# a Guard is short: only what lands while it lasts counts against it
+		var guarded = in_guard * RpgDefs.guard_mult(float(h.s.get("core", 1.0)), float(h.get("agg", {}).get("guard_pct", 0.0)))
 		if guarded < hp:
 			return {"t": "guard"}
 		if heal != null:
@@ -462,13 +546,22 @@ static func _heuristic(B: Dictionary, opt: Dictionary) -> Dictionary:
 	if telegraphed or biggest >= HEAVY * hp_max:
 		if stopper != null and float(stopper.stops) >= biggest:
 			return stopper.action
+		if _lands(B, living, RpgDefs.GUARD_RANK) <= 0.0:
+			var q = _quiet(B, living, attacks, heal, share)
+			if not q.is_empty():
+				return q
 		return {"t": "guard"}
-	# 4. heal when low
+	# 4. heal when low (short of the energy for it: Guard, which brings 2, or Strike, which brings 1)
 	if share < LOW_HP:
 		if heal != null:
 			return heal
 		if heal_item != null and share < 0.3:
 			return heal_item
+		if heal_short:
+			if incoming > 0.0:
+				return {"t": "guard"}
+			if bool(opt.strike):
+				return {"t": "strike", "target": focus}
 	# 5. the ultimate: on a broken or a dangerous foe, or whenever little of it would be wasted
 	if bool(opt.ult.ok):
 		var urow = RpgBattle.move_row(B, str(opt.ult.id))
@@ -488,7 +581,9 @@ static func _heuristic(B: Dictionary, opt: Dictionary) -> Dictionary:
 	# 6. a buff or a debuff when the fight will last
 	if support != null and support_worth >= SUPPORT_MIN and (best == null or left_total > 2.0 * float(best.raw)):
 		return support
-	# 7. the most damage for the time it takes
+	# 7. the most damage for the time it takes (never a move so slow that a killing blow gets in)
 	if best != null:
 		return best.action
+	if deadly:
+		return {"t": "guard"}
 	return {"t": "strike", "target": focus}

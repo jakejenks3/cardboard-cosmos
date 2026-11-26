@@ -485,10 +485,11 @@ func _run() -> void:
 	await _frames(4)
 	var realm = main._screen
 	ok(_is(realm, "RealmScreen") and _is(realm, "UiScreen") and app.tab == "realm", "the Realm tab opens its screen")
+	# A Realm never opened: the first visit (RPG_PLAN.md 10.0) stands in for the hub.
 	var realm_sections = _with_meta(realm, "section").map(func(n): return str(n.get_meta("section")))
-	ok(realm_sections == ["realm", "realm_body", "realm_traits", "realm_boosts"], "its sections: the word on what is coming, the body stats, the traits, the boosts", realm_sections)
+	ok(realm_sections == ["realm_first"] and not bool(app.rpg().opened), "a Realm never opened shows the first visit, one section", realm_sections)
 	var said = " ".join(PackedStringArray(_words(realm)))
-	ok(said.contains("Ironwild") and said.contains("opening soon") and said.contains("training already counts"), "it says the Ironwild is opening soon and that training already counts", said)
+	ok(said.contains("Enter the Ironwild") and said.contains("already earned") and _with_meta(realm, "first_stat").map(func(n): return str(n.get_meta("first_stat"))) == RpgDefs.STATS, "it lists the twelve stats, says what the training has earned, and has the key into the Ironwild", said)
 	ok(_too_wide(main) == "", "the Realm's page fits the column", _too_wide(main))
 	# With keys sized for fingers (a phone): the two new pages still fit.
 	var kit = _S("res://ui/kit.gd")
@@ -512,7 +513,10 @@ func _run() -> void:
 	counts.rpg = 0
 	app.set_rpg(RpgSave.copy(rpg))
 	await _frames(3)
-	ok(counts.rpg == 1 and counts.changed == 0 and not is_instance_valid(realm_first) and is_instance_valid(realm) and realm.get_child_count() == 4, "set_rpg draws the Realm's screen again")
+	# (The made-up save is an opened one: the hub takes the first visit's place.)
+	var hub_sections = _with_meta(realm, "section").map(func(n): return str(n.get_meta("section"))).filter(func(id): return id.begins_with("realm_") and id != "realm_notices")
+	ok(counts.rpg == 1 and counts.changed == 0 and not is_instance_valid(realm_first) and is_instance_valid(realm) and hub_sections == ["realm_banner", "realm_boosts", "realm_tabs", "realm_map"], "set_rpg draws the Realm's screen again: the hub (banner, boosts, sub-tabs, the Map)", hub_sections)
+	ok(_too_wide(main) == "" and _with_meta(realm, "realm_tab").map(func(n): return str(n.get_meta("realm_tab"))) == ["map", "hero", "moves", "skills", "gear"] and _with_meta(realm, "map_stage").size() == 10, "the hub fits the column, with its five sub-tabs and the Map's ten stage nodes", _too_wide(main))
 	app.go("home")
 	await _frames(4)
 	var home_first = main._screen.get_child(0)

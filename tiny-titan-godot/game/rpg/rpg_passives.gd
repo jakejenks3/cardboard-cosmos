@@ -3,7 +3,8 @@ extends RefCounted
 ## Board passives (RPG_PLAN.md 6): three slots, opened at fighter level 3, 10
 ## and 20. Pure data: a const table and its readers.
 ##
-## A passive: {"id", "name", "board" (its school), "tier" (1, 3 or 4: the board
+## A passive: {"id", "name", "board" (its school; "school" holds the same, for
+## code that treats moves and passives alike), "tier" (1, 3 or 4: the board
 ## tier of its node), "text", "fx": [passive effects]}. The passive effects are
 ## the engine's vocabulary (the `p` kinds at the top of rpg_battle.gd); the same
 ## vocabulary serves gear, runes, sets, relics, pets, boosts and foe traits.
@@ -69,6 +70,7 @@ static func all() -> Array:
 		for row in ROWS:
 			var p = row.duplicate(true)
 			p["id"] = RpgDefs.id_of(str(row.name))
+			p["school"] = str(row.board)
 			if str(p.get("text", "")) == "":
 				p["text"] = words(p.fx)
 			list.append(p)
@@ -84,3 +86,8 @@ static func by_id(id: String) -> Variant:
 			map[p.id] = p
 		_by_id = map
 	return _by_id.get(id)
+
+
+## The passives of one board, in tier order.
+static func of_board(board: String) -> Array:
+	return all().filter(func(p): return str(p.board) == board)

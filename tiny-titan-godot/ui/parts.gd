@@ -209,8 +209,9 @@ static func session_badge(session: Dictionary, px: int = 40) -> Control:
 
 
 ## A discipline as a bright tile: icon, level in big pixel digits, and how far
-## through the level you are. Tap to log that discipline.
-static func stat_tile(d: String, level: Dictionary) -> Control:
+## through the level you are. Tap to log that discipline, or, with `tap`, to do
+## that instead (the Hero tab: the discipline's sheet). Meta "stat_tile" = d.
+static func stat_tile(d: String, level: Dictionary, tap: Callable = Callable()) -> Control:
 	var col = Pal.disc(d)
 	var b = Button.new()
 	b.focus_mode = Control.FOCUS_NONE
@@ -246,7 +247,8 @@ static func stat_tile(d: String, level: Dictionary) -> Control:
 	b.button_up.connect(func():
 		v.offset_top = 8
 		v.offset_bottom = -8 - drop)
-	b.pressed.connect(App.open_log.bind(d))
+	b.pressed.connect(tap if tap.is_valid() else App.open_log.bind(d))
+	b.set_meta("stat_tile", d)
 	Kit.juice(b)
 	return b
 

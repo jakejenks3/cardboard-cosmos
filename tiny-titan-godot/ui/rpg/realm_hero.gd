@@ -1,3 +1,317 @@
 class_name RealmHero
 extends RefCounted
-## The Hero page (RPG_PLAN.md 10.1). A stub: its builder fills it in.
+## The Hero page of the Realm (RPG_PLAN.md 10.1): what the training has made of
+## the hero. It only READS (the stat sheet, the boosts, the hero as a battle
+## unit); nothing here changes the save.
+##
+##   BODY        the hero with the six body stats around it, three a side: each a
+##               tile (icon, name, the value to one decimal, the change this
+##               week, a thin bar to the next whole point)
+##   TRAITS      the six traits as rows with the same parts
+##   IN A FIGHT  Power, HP, Defence, Speed, Crit, Dodge, Energy: a tile each with
+##               one line on where the number comes from
+##   BOOSTS      every boost in full: name, what it does, why, until when
+## A tap on a stat opens its sheet: what it does in a fight, what it is made
+## of, what raises it, and which skill tiers it has reached.
+##
+## Metas for tests: sections "realm_body", "realm_traits", "realm_fight",
+## "realm_boosts"; "hero_stat" = stat id on every stat tile and row (its value
+## in "hero_value", a gain line in "hero_gain"); "fight_num" = hp | def | spd |
+## crit | dodge | energy | power; "hero_boost" = boost id; the stat sheet's box
+## has "hero_stat_sheet" = stat id and its tier rows "stat_tier" = tier.
+
+
+static func fill(box: VBoxContainer, _screen) -> void:
+	var sheet = RpgUi.sheet()
+	box.add_child(_body(sheet))
+	box.add_child(_traits(sheet))
+	box.add_child(_fight())
+	box.add_child(_boosts())
+
+
+## The colour of a stat: its school's (Endurance: the Realm's own).
+static func stat_color(id: String) -> Color:
+	return RpgUi.color(str(RpgDefs.STAT_SCHOOL.get(id, "realm")))
+
+
+## A stat to one decimal, never rounded up to a point it has not reached.
+static func one(raw: float) -> String:
+	return TTUtil.to_fixed1(floor(raw * 10.0 + 0.0001) / 10.0)
+
+
+static func _gain(st: Dictionary) -> float:
+	return float(st.get("raw", 1.0)) - float(st.get("was", st.get("raw", 1.0)))
+
+
+## The thin bar to the next whole point.
+static func _next_bar(raw: float, col: Color, h: int) -> Control:
+	var b = Kit.bar(raw - floor(raw), col, h)
+	b.set_meta("hero_next", raw - floor(raw))
+	return b
+
+
+# ---------------------------------------------------------------------------
+# BODY
+# ---------------------------------------------------------------------------
+
+static func _body(sheet: Dictionary) -> Control:
+	var col = RpgUi.color("push")
+	var might = Kit.tag("Might %s" % one(float(sheet.get("might", 1.0))), col)
+	var sec = Kit.section("realm_body", "BODY", "muscle", col, might, Callable(), 8, 10)
+	var ids = sheet.get("body", RpgDefs.BODY)
+	var row = Kit.hbox(6)
+	var left = Kit.vbox(6)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var right = Kit.vbox(6)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for i in range(ids.size()):
+		var st = sheet.get("stats", {}).get(ids[i])
+		if st == null:
+			continue
+		(left if i < 3 else right).add_child(_stat_tile(st))
+	row.add_child(left)
+	row.add_child(_figure())
+	row.add_child(right)
+	sec.add(row)
+	sec.add(Kit.muted_para("Built by your lifting. A stat never goes down. Tap one to see what it is made of.", 12))
+	return sec
+
+
+## The hero in the Realm's gear, on a little stage between the two columns.
+static func _figure() -> Control:
+	var well = PanelContainer.new()
+	well.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	well.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": null, "lip": 0, "inset": true, "pad_h": 4, "pad_v": 4}))
+	well.set_meta("hero_figure", true)
+	var stage = Stage.new()
+	stage.setup(RpgUi.color("realm"), 2)
+	well.add_child(stage)
+	well.add_child(hero_view(2))
+	return well
+
+
+## The hero in the Realm's gear at a whole-number scale, standing on the floor
+## of the stage it is put on. (A save with no hero made yet draws none.)
+static func hero_view(art_scale: int) -> HeroView:
+	var look = RpgUi.hero_look()
+	var hero = HeroView.new()
+	hero.min_scale = art_scale
+	if look.get("state") is Dictionary and look.get("profile") is Dictionary and look.profile.has("skin"):
+		hero.setup(look.state, look.profile, look.get("loadout", {}), null, false)
+	else:
+		hero._show_scene = false
+		hero._update_min_size()
+	hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	hero.size_flags_vertical = Control.SIZE_SHRINK_END
+	return hero
+
+
+## One body stat beside the hero.
+static func _stat_tile(st: Dictionary) -> Control:
+	var id = str(st.id)
+	var col = stat_color(id)
+	var raw = float(st.get("raw", 1.0))
+	var t = Kit.row(open_stat.bind(st), col, col, 6, 2)
+	t.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	t.set_meta("hero_stat", id)
+	t.set_meta("anchor_id", "hero_stat:" + id)
+	var head = Kit.hbox(4)
+	head.add_child(Kit.vcenter(Icons.rect(str(RpgDefs.STAT_ICONS.get(id, "star")), 16)))
+	head.add_child(Kit.vcenter(Kit.clip(str(st.get("name", id.capitalize())), 12, null, true)))
+	t.add(head)
+	var val = Kit.label(one(raw), 22, col, true)
+	val.set_meta("hero_value", raw)
+	t.add(val)
+	var gain = _gain(st)
+	if gain >= 0.05:
+		var up = Kit.clip("+%s this week" % TTUtil.to_fixed1(gain), 11, Pal.GOOD, true)
+		up.set_meta("hero_gain", id)
+		t.add(up)
+	else:
+		t.add(Kit.clip("steady this week", 11, Pal.MUTED))
+	t.add(_next_bar(raw, col, 6))
+	Kit.passthrough(t.box)
+	return t
+
+
+# ---------------------------------------------------------------------------
+# TRAITS
+# ---------------------------------------------------------------------------
+
+static func _traits(sheet: Dictionary) -> Control:
+	var sec = Kit.section("realm_traits", "TRAITS", "star", RpgUi.color("realm"), null, Callable(), 6, 10)
+	for id in sheet.get("traits", RpgDefs.TRAITS):
+		var st = sheet.get("stats", {}).get(id)
+		if st != null:
+			sec.add(_trait_row(st))
+	sec.add(Kit.muted_para("Built by running, climbing, reading, physical therapy and showing up.", 12))
+	return sec
+
+
+static func _trait_row(st: Dictionary) -> Control:
+	var id = str(st.id)
+	var col = stat_color(id)
+	var raw = float(st.get("raw", 1.0))
+	var r = Kit.row(open_stat.bind(st), col, col, 8, 4)
+	r.set_meta("hero_stat", id)
+	r.set_meta("anchor_id", "hero_stat:" + id)
+	var top = Kit.hbox(8)
+	top.add_child(Kit.vcenter(Icons.rect(str(RpgDefs.STAT_ICONS.get(id, "star")), 16)))
+	top.add_child(Kit.vcenter(Kit.clip(str(st.get("name", id.capitalize())), 15, null, true)))
+	var gain = _gain(st)
+	if gain >= 0.05:
+		var up = Kit.tag("+%s this week" % TTUtil.to_fixed1(gain), Pal.GOOD, true, 10)
+		up.set_meta("hero_gain", id)
+		top.add_child(up)
+	var val = Kit.label(one(raw), 20, col, true)
+	val.custom_minimum_size = Vector2(50, 0)
+	val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	val.set_meta("hero_value", raw)
+	top.add_child(Kit.vcenter(val))
+	r.add(top)
+	r.add(_next_bar(raw, col, 8))
+	r.add(Kit.clip(str(RpgDefs.STAT_DOES.get(id, "")), 12, Pal.MUTED))
+	Kit.passthrough(r.box)
+	return r
+
+
+# ---------------------------------------------------------------------------
+# A stat in full
+# ---------------------------------------------------------------------------
+
+## The stat's sheet: what it does, what it is made of, what raises it, and the
+## skill tiers it has reached.
+static func open_stat(st: Dictionary) -> void:
+	var id = str(st.id)
+	var col = stat_color(id)
+	var raw = float(st.get("raw", 1.0))
+	var stat_name = str(st.get("name", id.capitalize()))
+	var sh = Kit.sheet("%s %s" % [stat_name, one(raw)])
+	sh.box.set_meta("hero_stat_sheet", id)
+	var prog = Kit.hbox(8)
+	prog.add_child(_next_bar(raw, col, 12))
+	var to_go = Kit.label("%d%% to %d" % [int(floor((raw - floor(raw)) * 100.0)), int(floor(raw)) + 1], 12, Pal.MUTED, true)
+	prog.add_child(Kit.vcenter(to_go))
+	sh.box.add_child(prog)
+	var gain = _gain(st)
+	if gain >= 0.05:
+		sh.box.add_child(Kit.tag("+%s this week" % TTUtil.to_fixed1(gain), Pal.GOOD, true, 11))
+	var does = Kit.row(Callable(), col, col, 8, 2)
+	does.add(Kit.label("IN A FIGHT", 11, Pal.MUTED, true))
+	does.add(Kit.para("%s." % str(RpgDefs.STAT_DOES.get(id, "")), 14, Pal.TEXT, true))
+	sh.box.add_child(does)
+	sh.box.add_child(Kit.sub_head("MADE OF", col))
+	var lines = st.get("lines", [])
+	if lines.is_empty():
+		sh.box.add_child(RpgUi.page_note("stat_lines", "Nothing in your log feeds it yet."))
+	for line in lines:
+		sh.box.add_child(Kit.para(str(line), 13, Pal.TEXT))
+	var next = str(st.get("next", ""))
+	if next != "":
+		sh.box.add_child(Kit.sub_head("WHAT RAISES IT", col))
+		sh.box.add_child(Kit.para(next, 13, Pal.TEXT))
+	sh.box.add_child(Kit.sub_head("SKILL TIERS", col))
+	var tiers = _tiers_asking(id)
+	if tiers.is_empty():
+		sh.box.add_child(RpgUi.page_note("stat_tiers", "No skill asks for %s. It works in every fight instead." % stat_name))
+	var v = int(floor(raw))
+	for tier in tiers:
+		var need = int(RpgDefs.REQ[tier])
+		var met = v >= need
+		var row = Kit.hbox(8)
+		row.set_meta("stat_tier", tier)
+		row.set_meta("stat_tier_met", met)
+		row.add_child(Kit.tick_box(met, 20))
+		row.add_child(Kit.vcenter(Kit.clip("Tier %d skills open at %d" % [tier, need], 13, Pal.TEXT if met else Pal.MUTED, met)))
+		row.add_child(Kit.vcenter(Kit.label("reached" if met else "%d to go" % (need - v), 12, Pal.GOOD if met else Pal.ACCENT2, true)))
+		sh.box.add_child(row)
+	sh.box.add_child(RpgUi.page_key("Close", "ghost", sh.close, "stat_close", "lg"))
+	sh.open()
+
+
+## The board tiers that have a skill asking for this stat, lowest first.
+static func _tiers_asking(stat_id: String) -> Array:
+	var out = []
+	for n in RpgSkills.all():
+		if str(n.get("stat", "")) == stat_id and not out.has(int(n.tier)):
+			out.append(int(n.tier))
+	out.sort()
+	return out
+
+
+# ---------------------------------------------------------------------------
+# IN A FIGHT
+# ---------------------------------------------------------------------------
+
+static func _pct(x: float) -> String:
+	return "%d%%" % int(round(x * 100.0))
+
+
+static func _fight() -> Control:
+	var n = RpgHero.numbers(RpgUi.hero())
+	var sec = Kit.section("realm_fight", "IN A FIGHT", "sword", RpgUi.color("realm"), null, Callable(), 6, 10)
+	sec.add(_num_tile("power", "Power", "power", Pal.ACCENT, Xp.fmt_int(int(round(float(n.get("power", 0.0))))),
+		"Everything below in one number. Compare it with the power a stage recommends."))
+	var grid = Kit.grid(2, 6)
+	grid.add_child(_num_tile("hp", "HP", "heart", Pal.DANGER, Xp.fmt_int(int(n.get("hp", 1))),
+		"Endurance, legs and core, and %d more a fighter level." % int(RpgDefs.HP_LEVEL)))
+	grid.add_child(_num_tile("def", "Defence", "shield", RpgUi.color("legs"), one(float(n.get("def", 0.0))),
+		"Takes %s off every hit. Core, might and armor." % _pct(float(n.get("blocks", 0.0)))))
+	grid.add_child(_num_tile("spd", "Speed", "sch_speed", RpgUi.color("speed"), one(float(n.get("spd", 0.0))),
+		"Who acts first and how often. The Speed stat and your boots."))
+	grid.add_child(_num_tile("crit", "Crit", "target", RpgUi.color("grip"), _pct(float(n.get("crit", 0.0))),
+		"The chance of a hit for %s%%. Grip and gear." % TTUtil.num_str(RpgDefs.CRIT_MULT * 100.0)))
+	grid.add_child(_num_tile("dodge", "Dodge", "wind", RpgUi.color("flow"), _pct(float(n.get("dodge", 0.0))),
+		"The chance a hit misses you. Flow, from physical therapy."))
+	grid.add_child(_num_tile("energy", "Energy", "energy", RpgUi.color("grit"), str(int(n.get("en_max", 0))),
+		"Moves cost it. A fight starts with %d. Endurance makes the pool bigger." % int(n.get("en_start", 0))))
+	sec.add(grid)
+	return sec
+
+
+static func _num_tile(id: String, title: String, icon: String, col: Color, value: String, from: String) -> Control:
+	var t = Kit.row(Callable(), col, col, 8, 2)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.set_meta("fight_num", id)
+	var head = Kit.hbox(6)
+	head.add_child(Kit.vcenter(Icons.rect(icon, 16)))
+	head.add_child(Kit.vcenter(Kit.clip(title, 12, Pal.MUTED, true)))
+	var val = Kit.label(value, 22, col, true)
+	val.set_meta("fight_value", value)
+	head.add_child(Kit.vcenter(val))
+	t.add(head)
+	t.add(Kit.muted_para(from, 11))
+	return t
+
+
+# ---------------------------------------------------------------------------
+# BOOSTS
+# ---------------------------------------------------------------------------
+
+static func _boosts() -> Control:
+	var boosts = RpgUi.boosts()
+	var count = Kit.label("%d in force" % boosts.size(), 12, Pal.TEXT, true) if not boosts.is_empty() else null
+	var sec = Kit.section("realm_boosts", "BOOSTS", "bolt", Pal.ACCENT, count, Callable(), 6, 10)
+	if boosts.is_empty():
+		sec.add(RpgUi.page_note("boosts_none", "None right now. What you train today boosts the hero today and tomorrow: a pump from lifting, a second wind from a run, chalked hands from a climb, a sharp mind from 10 pages. A rest day earns one too."))
+		return sec
+	var today = RpgUi.today()
+	for b in boosts:
+		var school = str(b.get("school", ""))
+		var col = RpgUi.color(school if school != "" else "realm")
+		var row = Kit.row(Callable(), col, col, 8, 4)
+		row.set_meta("hero_boost", str(b.get("id", "")))
+		var top = Kit.hbox(8)
+		var icon_name = str(b.get("icon", "bolt"))
+		top.add_child(Kit.vcenter(Icons.rect(icon_name if Icons.has_icon(icon_name) else "bolt", 16)))
+		top.add_child(Kit.vcenter(Kit.clip(str(b.get("name", "")), 15, null, true)))
+		var until = str(b.get("until", ""))
+		top.add_child(Kit.tag("until tomorrow" if until > today else "ends today", col, true, 10))
+		row.add(top)
+		row.add(Kit.para(str(b.get("text", "")), 13, Pal.TEXT))
+		var why = str(b.get("why", ""))
+		if why != "":
+			row.add(Kit.muted_para(why, 12))
+		sec.add(row)
+	sec.add(Kit.muted_para("A boost is always a bonus on top. It ends after the day it says.", 12))
+	return sec

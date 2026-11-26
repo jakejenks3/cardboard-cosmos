@@ -1588,34 +1588,57 @@ is the Windows handoff.
   small ones with their quick picks. Tab order: distance, elevation, h, m, s. A run / ride / walk with no
   time says so in its sheet with an "Add total time" key that opens it for editing (`SessionView.open`,
   metas `add_time`, `add_time_key`). Walkthroughs: splits, log.
-- THE REALM, a turn-based RPG in a sixth tab (started 2026-11-25; "use this hero in an RPG style game...
+- THE REALM, a turn-based RPG in a sixth tab (2026-11-25 to 27; "use this hero in an RPG style game...
   lifts and running and reading etc to raise player stats... turn based combat... really expansive...
   Do not touch main game besides taking out the campaign for now"). THE CONTRACT IS `RPG_PLAN.md` in the
-  project root: read it before touching anything under `game/rpg/`, `ui/rpg/`, `avatar/foe_*`. Where it
-  stands (2026-11-26; a big parallel build was cut off by the usage limit, so much is written and not yet
-  reviewed):
-  - Done and tested: `RpgDefs` (every id, constant, formula), `RpgSave` (empty / parse / first_open),
-    `RpgStats` (the twelve stats from the log; `tests/rpg_stats_test.gd`), `RpgBoosts` (boosts of today
-    and yesterday, training chests; `tests/rpg_boosts_test.gd`), `tools/rpg_sheet.gd` (prints the sheet of
-    a save given in RPG_SHEET_SAVE / RPG_SHEET_TODAY: for calibrating on a log kept OUTSIDE the project),
-    the shell (`tests/rpg_shell_test.gd`): `Campaign.ON_SCREEN = false` (the 24-boss campaign is off every
-    screen; the rules still run, so parity and everything earned are untouched; set it true and it is
-    all back; Adventure's first sub-tab keeps the id "campaign" and is labelled "Bounty"), the sixth tab
-    (`main.TAB_STRETCH`: the Log key did not move), `Pal.PUSH / PULL / LEGS / GRIT / REALM`, `App.rpg()` /
-    `set_rpg()` / `signal rpg_changed` (never `changed`), `saved.rpg` kept by `parse_saved`.
-  - The tab today (`ui/rpg/realm.gd`, walkthrough `tests/shots/realm.gd`): a first page: the twelve stats
-    (a tap opens what a stat is made of and what raises it) and the day's boosts. `RealmScreen.hub_ready`
-    (false) holds back the tab's "a chest waits" dot until the hub can open one.
-  - Written, NOT reviewed, not wired to any screen: the battle engine (`rpg_battle.gd`, `rpg_ai.gd`,
-    `rpg_hero.gd`, first catalog rows in `rpg_moves / passives / foes / pets / items`);
-    `tests/rpg_battle_test.gd` is HALF WRITTEN (it calls test functions that do not exist yet: finish it
-    first). Foe art (`avatar/foe_sprites.gd`, `foe_view.gd`, `realm_scenes.gd`; `tests/rpg_art_test.gd`
-    passes, nobody has looked at the sprites critically). 87 icons and five hero poses (strike, kick,
-    guard, cast, hurt; `tests/rpg_icons_test.gd`, figure_test pass; same: not looked at).
-  - Not started: the full catalogs (moves, skills, gear stats, relics, pets, foes), the world, loot, save
-    transitions, balance, every screen but the first page. A ready brief for the content step is in the
-    plan's section 14.
+  project root, and the head comment of `game/rpg/rpg_battle.gd` is the last word on the vocabulary
+  (moves, effects, passives, foe rows): read both before touching `game/rpg/`, `ui/rpg/`, `avatar/foe_*`.
+  - It only READS the log. Its own progress is `saved.rpg` (`RpgSave`: `empty` / `parse` and every change
+    as a pure function returning {"ok", "why", "rpg"}); `App.rpg()` / `set_rpg()` emit `rpg_changed`, never
+    `changed`, and nothing replays. A battle half way is the draft "battle" (`RpgUi.kept_battle`).
+  - The main game changed only by: `Campaign.ON_SCREEN = false` (the 24-boss campaign is off every
+    screen; the rules still run, so parity and everything earned are untouched; true brings it all back;
+    Adventure's first sub-tab keeps the id "campaign" and is labelled "Bounty"), the sixth tab
+    (`main.TAB_STRETCH`: the Log key did not move; a dot while a training chest waits), `Pal.PUSH / PULL /
+    LEGS / GRIT / REALM`, the App plumbing above, 87 icons (`RpgDefs.ICONS`), five hero poses (strike,
+    kick, guard, cast, hurt; the game's look only).
+  - Pure logic, `game/rpg/`: `RpgDefs` (every id, constant and formula: tune numbers THERE), `RpgStats`
+    (twelve stats from the log, never falling), `RpgBoosts` (boosts of today and yesterday, training
+    chests), `RpgBattle` (the engine: one JSON-safe dictionary B, deterministic, resumable), `RpgAi`
+    (foe intents; hero policies heuristic / random / loop for the simulator), `RpgHero` (`build`,
+    `reference_hero(t, archetype)`, `power`), `RpgMoves` (90: 8 starters, 58 on boards, 8 ultimates, 16
+    scrolls), `RpgPassives` (24), `RpgSkills` (eight boards, `can_learn`, `points`), `RpgGear` (battle
+    stats for the game's 124 items by id, 30 uniques, 7 sets, runes), `RpgRelics` (24), `RpgItems` (8),
+    `RpgPets` (16 kits), `RpgFoes` (56 foes, 162 foe moves), `RpgWorld` (8 regions x 10 stages, stars,
+    hunt, rival = the week's bounty monster read only, Spire, echo regions, `setup`), `RpgLoot`.
+  - Screens, `ui/rpg/`: `RpgUi` (look helpers and THE ONLY code that touches App: `sheet`, `boosts`,
+    `hero`, `save`, `apply(result)`, `fight(what)`, `finish` (pays once), `resume`), `RealmScreen` (first
+    visit, banner, notices, boosts, sub-tabs), `RealmMap`, `RealmHero`, `RealmMoves`, `RealmSkills`,
+    `RealmGear` (each `static fill(box, screen)`), `BattleView` (a full-column overlay on
+    `Kit.overlay_root`; nothing scrolls or moves between turns), `BattleWidgets`, `BattleResult`.
+    Art: `avatar/foe_sprites.gd`, `foe_view.gd`, `realm_scenes.gd`.
+  - Tests (headless): rpg_shell, rpg_stats, rpg_boosts, rpg_battle (562), rpg_moves, rpg_gear, rpg_foes,
+    rpg_world, rpg_save, rpg_content (cross-catalog), rpg_sim (balance bands; `tests/rpg_sim.gd` is the
+    simulator, `tools/rpg_balance.gd` the full sweep), rpg_art, rpg_icons, rpg_battle_ui, rpg_hub,
+    rpg_pages. Walkthroughs: `realm` (first visit, hub, chest, pages, map, prep, cache), `battle`.
+    `tools/rpg_sheet.gd` prints the sheet of a save given in RPG_SHEET_SAVE (a log kept OUTSIDE the project).
   - The user's real log is short (it started mid November 2026): calibrate on it, not on the demo year.
+  - Known gaps: engine wishes the builders listed (a "first move of a wave is free" passive, companion
+    charge rate, a foe trigger on break / recover, quicken reset by a slow); gear uniques `negative_split`
+    and `rally` share ids with moves and foe move `grind` with a starter (different catalogs, harmless);
+    the hub's sub-tabs sit under the boosts, so a page starts a scroll down; nothing was tried on a real
+    iPhone.
+- Reading: the page of an EARLIER day (2026-11-27, "Allow me to go back to previous day to put what page I
+  ended on... I can add pages but then game gets confused about the following day"). `Books.set_page_on(b,
+  page, day)`: the day starts where the last logged day before it ended, and the next logged day after it
+  now starts on this page (deltas per day); `App.set_book_page(id, page, on = "")` moves each affected
+  day's reading. The Hero tab's reading card has a Today / Yesterday / weekday track under the page box
+  (`BookView.day_row`, meta `book_day`; `BookView.days_back` goes back to today after a save).
+- The Hero tab's level tiles open a sheet (2026-11-27, "click on the main boxes (reading, running etc) on
+  hero page to go deeper"): `ui/screens/discipline_sheet.gd` (no class_name; `open(d)` for lift / climb /
+  run): level and XP bar, four headline tiles, the same card Journey -> Stats shows (`JourneyScreen.lift_card`
+  / `run_card` are static now), week bars, the last five sessions, "Log one" and "All stats". The tiles
+  used to open the log form; `Parts.stat_tile(d, level, tap)`. Test: `tests/discipline_sheet_test.gd`.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -1796,6 +1819,8 @@ godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
 godot --headless --path . --script res://tests/rpg_art_test.gd
 godot --headless --path . --script res://tests/rpg_icons_test.gd
+(and rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
+ rpg_content_test, rpg_sim_test, rpg_battle_ui_test, rpg_hub_test, rpg_pages_test, discipline_sheet_test)
 ```
 
 After adding a script with a `class_name`, run the `--import` line first: until then other
@@ -1832,7 +1857,8 @@ filed (how a new exercise typed in the Log tab will be filed: the note at the se
 update (the phone app's "new version ready" card and its Settings row, pretended on the PC; year data),
 books (books pasted in, the page box on the reading card doing the page math, finishing one, the bookshelf; year data),
 bands (a band instead of a weight in the Log tab, the band picker, the PT key on an exercise card, the band words on the lift page; year data),
-realm (the Realm tab's first page: the twelve stats, a stat's sheet, the boosts; year data),
+realm (the Realm: first visit, hub, training chest, the five pages, map, prep sheet, cache; year data),
+battle (a fight played by its keys to the result, a pack, the first boss; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

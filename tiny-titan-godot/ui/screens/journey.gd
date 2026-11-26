@@ -172,7 +172,7 @@ static func disc_head(d: String) -> Control:
 	return h
 
 
-func _tiles(items: Array, cols: int = 3) -> GridContainer:
+static func _tiles(items: Array, cols: int = 3) -> GridContainer:
 	var g = Kit.grid(cols, 8)
 	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for it in items:
@@ -430,22 +430,11 @@ func _build_stats() -> void:
 	# --- one card per discipline ------------------------------------------------------
 	var by = t.byDiscipline
 	if int(by.lift) > 0:
-		_lift_section(s, sessions, App.weight_unit())
+		add_child(lift_card(s, sessions, App.weight_unit(), _exercise, _pick_exercise))
 	if int(by.climb) > 0:
 		add_child(ClimbCard.build(s, sessions))
 	if int(by.run) > 0:
-		var pace = s.prs.bestPaceSecPerKm
-		var best = []
-		if pace != null and float(pace) > 0.0:
-			best.append(value_chip("Best pace", Fmt.fmt_pace(pace, du), Pal.RUN))
-		# The best time over each distance: a run of that distance, or a best
-		# split typed for a longer one (game/run_splits.gd).
-		var split_bests = RunSplits.bests(sessions)
-		for dist in RunSplits.DISTS:
-			var sb = split_bests.get(str(dist.id))
-			if sb != null:
-				best.append(value_chip(str(dist.best), RunSplits.fmt_time(int(sb.sec)), Pal.RUN, "%s · %s" % [Dates.format_date(str(sb.date), {"month": "short", "day": "numeric", "year": "numeric"}), Fmt.fmt_pace(RunSplits.pace(str(dist.id), float(sb.sec)), du)]))
-		add_child(_distance_card("run", t.runDistanceM, t.runElevationM, s.prs.longestRunM, du, best))
+		add_child(run_card(s, sessions, du))
 	# Reading (game/reading.gd), once any page was logged.
 	if Reading.pages(s) > 0:
 		add_child(_reading_card(s))
@@ -622,7 +611,26 @@ func _reading_card(s: Dictionary) -> Card:
 	return c
 
 
-func _distance_card(d: String, dist: float, elev: float, longest: float, du: String, best: Array) -> Card:
+## The running card: distance in all, climbed, the longest run, then the best
+## pace and the best time over each distance as chips. Static: the Hero tab's
+## discipline sheet shows the same card (ui/screens/discipline_sheet.gd).
+static func run_card(s: Dictionary, sessions: Array, du: String) -> Card:
+	var t = s.totals
+	var pace = s.prs.bestPaceSecPerKm
+	var best = []
+	if pace != null and float(pace) > 0.0:
+		best.append(value_chip("Best pace", Fmt.fmt_pace(pace, du), Pal.RUN))
+	# The best time over each distance: a run of that distance, or a best
+	# split typed for a longer one (game/run_splits.gd).
+	var split_bests = RunSplits.bests(sessions)
+	for dist in RunSplits.DISTS:
+		var sb = split_bests.get(str(dist.id))
+		if sb != null:
+			best.append(value_chip(str(dist.best), RunSplits.fmt_time(int(sb.sec)), Pal.RUN, "%s · %s" % [Dates.format_date(str(sb.date), {"month": "short", "day": "numeric", "year": "numeric"}), Fmt.fmt_pace(RunSplits.pace(str(dist.id), float(sb.sec)), du)]))
+	return _distance_card("run", t.runDistanceM, t.runElevationM, s.prs.longestRunM, du, best)
+
+
+static func _distance_card(d: String, dist: float, elev: float, longest: float, du: String, best: Array) -> Card:
 	var c = Kit.card(10)
 	c.accent(Pal.disc(d))
 	c.add(disc_head(d))
@@ -640,7 +648,12 @@ func _distance_card(d: String, dist: float, elev: float, longest: float, du: Str
 	return c
 
 
-func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
+## The lifting card: weight, reps and sets in all, the heaviest set of each
+## session of one exercise as a line (`exercise`: the one picked, null = the
+## one done most; a chip calls `pick` with another), the four strongest lifts.
+## Static: the Hero tab's discipline sheet shows the same card
+## (ui/screens/discipline_sheet.gd).
+static func lift_card(s: Dictionary, sessions: Array, wu: String, exercise, pick: Callable) -> Card:
 	var t = s.totals
 	var card = Kit.card(10)
 	card.accent(Pal.LIFT)
@@ -669,15 +682,15 @@ func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 	top = top.slice(0, 6)
 	var selected = null
 	for e in top:
-		if e.name == _exercise:
-			selected = _exercise
+		if exercise != null and e.name == str(exercise):
+			selected = str(exercise)
 	if selected == null and not top.is_empty():
 		selected = top[0].name
 
 	if not top.is_empty():
 		var chips = Kit.flow(6)
 		for e in top:
-			chips.add_child(Kit.chip(title_case(e.name), e.name == selected, _pick_exercise.bind(e.name), Pal.LIFT))
+			chips.add_child(Kit.chip(title_case(e.name), e.name == selected, pick.bind(e.name), Pal.LIFT))
 		card.add(chips)
 		var series = []
 		for x in lift_sessions:
@@ -711,7 +724,7 @@ func _lift_section(s: Dictionary, sessions: Array, wu: String) -> void:
 		for l in lifts:
 			g.add_child(value_chip(title_case(l.name), "%s × %d" % [Fmt.fmt_weight(l.pr.weightKg, wu), int(l.pr.reps)], Pal.LIFT, "≈ %s one-rep max" % Fmt.fmt_weight(l.pr.e1rm, wu, 0)))
 		card.add(g)
-	add_child(card)
+	return card
 
 
 # ---------------------------------------------------------------------------

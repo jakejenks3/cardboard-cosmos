@@ -16,6 +16,8 @@ extends UiScreen
 ##   streak, this week's numbers); ALMOST THERE; RECENT.
 
 const SETTINGS = "res://ui/screens/settings.gd"
+## A level tile of YOUR WEEK opens it (no class_name: loaded by path).
+const DISCIPLINE_SHEET = "res://ui/screens/discipline_sheet.gd"
 ## Between two sections (inside one: 6 to 8).
 const SECTION_GAP = 22
 
@@ -268,12 +270,18 @@ func _boss_row(boss: Dictionary, hp_left) -> Control:
 
 
 ## YOUR WEEK: the three level tiles (Misc.MAIN: cycling is kept in the
-## Miscellaneous area), the week streak, and this week against last.
+## Miscellaneous area; a tap opens the discipline's sheet), the week streak,
+## and this week against last.
 func _week_section(s: Dictionary) -> Control:
 	var sec = Kit.section("week", "YOUR WEEK", "calendar", Pal.tab("journey"), null, Callable(), 8, 10)
 	var tiles = Kit.grid(Misc.MAIN.size(), 8)
 	for d in Misc.MAIN:
-		tiles.add_child(Parts.stat_tile(d, s.levels[d]))
+		# A tap goes deeper: the discipline's own sheet (level, numbers, the
+		# Journey card, recent sessions), with "Log one" in it.
+		var tile = Parts.stat_tile(d, s.levels[d], func(): load(DISCIPLINE_SHEET).open(str(d)))
+		tile.tooltip_text += "
+Tap for your %s numbers" % str(TT.DISCIPLINE_META[d].name).to_lower()
+		tiles.add_child(tile)
 	sec.add(tiles)
 	var streak = s.streak
 	var on = int(streak.current) > 0

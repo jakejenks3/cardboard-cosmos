@@ -2,7 +2,8 @@ extends RefCounted
 ## Walkthrough: the Hero tab (and onboarding when started with the "fresh" data).
 ## Since 2026-11-24 it also checks the page's sections (Kit.section, meta
 ## "section"): their order, the gap between them, and that nothing in MISSIONS
-## repeats a Today done box.
+## repeats a Today done box. Since 2026-11-26: a level tile of YOUR WEEK opens
+## the discipline's sheet (ui/screens/discipline_sheet.gd), not the log form.
 
 var fails = 0
 
@@ -46,8 +47,64 @@ func run(main: Node, tree: SceneTree) -> void:
 	await ShotHelper.snap(tree, "home_5")
 	ShotHelper.scroll_main(main, 99999)
 	await ShotHelper.snap(tree, "home_6")
+	await _tiles(main, tree)
 	print("level ", App.state.levels.hero.level, " sessions ", App.sessions().size(), " bounty ", Bounty.monster(Bounty.of(App.state).current.monster).name, " (campaign boss, %s: " % ("shown" if Campaign.ON_SCREEN else "not shown"), Campaign.boss_at(App.state.campaign.index).name, ")")
 	print("home checks failed: ", fails)
+
+
+## The discipline sheets that are open (not on their way out).
+func _disc_sheets() -> Array:
+	return Kit.overlay_root.get_children().filter(func(c): return c.has_meta("disc_sheet") and not c._closing)
+
+
+func _with_meta(n: Node, key: String) -> Array:
+	return ShotHelper.walk(n).filter(func(c): return c.has_meta(key))
+
+
+## The level tiles of YOUR WEEK: a tap opens the discipline's sheet with its
+## level, headline tiles, the Journey card, five weeks, the last sessions and
+## the two keys; "Log one" opens that discipline's log form.
+func _tiles(main: Node, tree: SceneTree) -> void:
+	for d in Misc.MAIN:
+		App.go("home")
+		await ShotHelper.frames(tree, 4)
+		var tile = _with_meta(main, "stat_tile").filter(func(t): return str(t.get_meta("stat_tile")) == d)
+		check(tile.size() == 1, "%s: its level tile is on the Hero tab" % d)
+		if tile.size() != 1:
+			continue
+		ShotHelper.reveal(tile[0])
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.click(tree, tile[0])
+		await ShotHelper.wait(tree, 0.5)
+		var open = _disc_sheets()
+		check(open.size() == 1 and str(open[0].get_meta("disc_sheet")) == d and App.tab == "home", "%s: a tap on the tile opens its sheet, not the log form" % d)
+		if open.size() != 1:
+			continue
+		var sh = open[0]
+		var n = App.sessions().filter(func(x): return str(x.discipline) == d).size()
+		var level = _with_meta(sh, "disc_level")
+		check(level.size() == 1 and int(level[0].get_meta("disc_level")) == int(App.state.levels[d].level), "%s: the sheet shows the level" % d)
+		if n == 0:
+			check(_with_meta(sh, "disc_empty").size() == 1 and _with_meta(sh, "disc_log").size() == 1, "%s: nothing logged: it says so and offers \"Log one\"" % d)
+		else:
+			check(_with_meta(sh, "disc_tile").size() == 4, "%s: four headline tiles" % d)
+			check(_with_meta(sh, "disc_card").size() == 1 and _with_meta(sh, "disc_card")[0].get_child_count() == 1, "%s: the Journey card" % d)
+			check(_with_meta(sh, "disc_weeks").size() == 1, "%s: this week and the last four" % d)
+			check(_with_meta(sh, "disc_recent").filter(func(r): return r.get_meta("disc_recent") is String).size() == mini(5, n), "%s: its last %d sessions" % [d, mini(5, n)])
+			check(_with_meta(sh, "disc_log").size() == 1 and _with_meta(sh, "disc_all").size() == 1, "%s: the keys \"Log one\" and \"All stats\"" % d)
+		check(sh.box.get_combined_minimum_size().x <= sh._scroll.size.x + 0.5, "%s: nothing in the sheet is wider than it (%d of %d)" % [d, int(sh.box.get_combined_minimum_size().x), int(sh._scroll.size.x)])
+		await ShotHelper.snap(tree, "home_sheet_%s" % d)
+		sh._scroll.scroll_vertical = 99999
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.snap(tree, "home_sheet_%s_end" % d)
+		var key = _with_meta(sh, "disc_log")
+		if key.size() == 1:
+			ShotHelper.press(key[0])
+			await ShotHelper.wait(tree, 0.5)
+			check(App.tab == "log" and str(App.log_discipline) == d and _disc_sheets().is_empty(), "%s: \"Log one\" closes the sheet and opens the %s log form" % [d, d])
+	App.open_log(null)
+	App.go("home")
+	await ShotHelper.frames(tree, 4)
 
 
 ## The sections of the Hero tab, in the order they are on screen.
