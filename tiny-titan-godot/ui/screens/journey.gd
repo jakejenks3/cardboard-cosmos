@@ -8,6 +8,9 @@ extends UiScreen
 const LEVEL_ONE = {"hero": 1, "lift": 1, "climb": 1, "run": 1, "ride": 1}
 const THEN_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
 
+## The Story page's chips. The "boss" chip is "Bosses" (campaign bosses and
+## bounties) while the campaign is on the screens and "Bounties" (the weekly
+## bounty wins alone) while it is not: `chronicle_filters()` is what the page uses.
 const CHRONICLE_FILTERS = [
 	{"id": "all", "label": "Everything", "kinds": null},
 	{"id": "level", "label": "Levels", "kinds": ["start", "level", "stage", "rank"]},
@@ -408,8 +411,10 @@ func _build_stats() -> void:
 	add_child(hcard)
 
 	# --- in perspective: one tile per fact -----------------------------------------
-	# (Not the distance ridden: cycling is kept in the Miscellaneous area.)
-	var facts = FunFacts.fun_facts(s).filter(func(f): return not str(f.detail).contains("ridden"))
+	# (Not the distance ridden: cycling is kept in the Miscellaneous area. Not the
+	# damage dealt to bosses while the campaign is off the screens: FunFacts is a
+	# ported rule, so the fact is left out here.)
+	var facts = FunFacts.fun_facts(s).filter(func(f): return not str(f.detail).contains("ridden") and (Campaign.ON_SCREEN or not str(f.detail).contains("bosses")))
 	if not facts.is_empty():
 		add_child(Kit.section_title("In perspective"))
 		var nums = []
@@ -718,6 +723,29 @@ func _set_chron_filter(id: String) -> void:
 	rebuild()
 
 
+## The Story page's chips as they are shown: CHRONICLE_FILTERS, with the "boss"
+## chip turned into "Bounties" (kind bounty only) while the campaign is off the
+## screens (Campaign.ON_SCREEN).
+static func chronicle_filters() -> Array:
+	if Campaign.ON_SCREEN:
+		return CHRONICLE_FILTERS
+	var out = []
+	for f in CHRONICLE_FILTERS:
+		out.append({"id": "boss", "label": "Bounties", "kinds": ["bounty"]} if f.id == "boss" else f)
+	return out
+
+
+## The moments of the Story page, oldest first: the rules' chronicle with the
+## weekly bounty wins joined in (they are kept apart from the ported
+## chronicle). A campaign boss going down is no moment while the campaign is
+## off the screens; the trophies and gear it brought stay, in their own words.
+static func story(s: Dictionary) -> Array:
+	var chron = s.chronicle + Bounty.chronicle(s)
+	if Campaign.ON_SCREEN:
+		return chron
+	return chron.filter(func(e): return str(e.kind) != "boss")
+
+
 static func _month_label(key: String) -> String:
 	var d = Dates.parse_date_key(key)
 	return "%s %d" % [Dates.MONTHS_LONG[int(d.month) - 1], int(d.year)]
@@ -746,13 +774,13 @@ static func _moment_color(kind: String) -> Color:
 
 func _build_chronicle() -> void:
 	var s = App.state
-	# The weekly bounty wins are kept apart from the ported chronicle: join them here.
-	var chron = s.chronicle + Bounty.chronicle(s)
+	var chron = JourneyScreen.story(s)
 	if chron.is_empty():
-		add_child(Kit.empty("book", "An empty page", "Levels, bosses, trophies and records land here."))
+		add_child(Kit.empty("book", "An empty page", "Levels, %s, trophies and records land here." % ("bosses" if Campaign.ON_SCREEN else "bounties")))
 		return
+	var filters = JourneyScreen.chronicle_filters()
 	var kinds = null
-	for f in CHRONICLE_FILTERS:
+	for f in filters:
 		if f.id == _chron_filter:
 			kinds = f.kinds
 	var events = []
@@ -777,7 +805,7 @@ func _build_chronicle() -> void:
 	add_child(head)
 
 	var chips = Kit.flow(6)
-	for f in CHRONICLE_FILTERS:
+	for f in filters:
 		chips.add_child(Kit.chip(f.label, f.id == _chron_filter, _set_chron_filter.bind(f.id)))
 	add_child(chips)
 

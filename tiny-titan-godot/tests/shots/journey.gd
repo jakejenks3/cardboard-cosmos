@@ -185,9 +185,17 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.snap(tree, "j_story_%d" % i)
 	print("STORY moments ", App.state.chronicle.size(), " first ", App.state.chronicle[0].date, " last ", App.state.chronicle[App.state.chronicle.size() - 1].date)
 	ShotHelper.scroll_main(main, 0)
-	ShotHelper.press(ShotHelper.find_button(main, "Bosses"))
+	# The chip for boss moments: "Bosses" while the campaign is on the screens,
+	# "Bounties" (the weekly bounty wins alone) while it is not (Campaign.ON_SCREEN).
+	var chip_name = "Bosses" if Campaign.ON_SCREEN else "Bounties"
+	var boss_chip = ShotHelper.find_button(main, chip_name)
+	print("CHECK %s  the Story page has its %s chip" % ["ok  " if boss_chip != null else "FAIL", chip_name])
+	if not Campaign.ON_SCREEN:
+		var story_ok = ShotHelper.find_button(main, "Bosses") == null and not ShotHelper.all_text(main).contains("Defeated ")
+		print("CHECK %s  the Story has no Bosses chip and no moment that begins Defeated" % ("ok  " if story_ok else "FAIL"))
+	ShotHelper.press(boss_chip)
 	await ShotHelper.frames(tree, 4)
-	await ShotHelper.snap(tree, "j_story_bosses")
+	await ShotHelper.snap(tree, "j_story_bosses" if Campaign.ON_SCREEN else "j_story_bounties")
 
 	# --- History ------------------------------------------------------------
 	App.go("journey", "history")

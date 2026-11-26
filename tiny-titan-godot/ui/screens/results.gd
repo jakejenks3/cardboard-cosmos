@@ -10,6 +10,9 @@ extends Control
 ## "Continue". A click anywhere, Space or Enter skips to the end; `finished`
 ## is emitted once when the player closes it.
 ##
+## While the campaign is off the screens (Campaign.ON_SCREEN false) a "boss"
+## event gets no card: `setup` leaves it out of `_cards`, nothing else changes.
+##
 ## Every pause is a Tween bound to this node, so when the overlay is freed
 ## mid-sequence the paused coroutine is simply dropped (a SceneTree timer would
 ## try to resume it on a freed instance). Each step also checks `_gen`, which
@@ -75,6 +78,11 @@ func setup(result: Dictionary) -> void:
 					_body_ev = e
 			"levelup":
 				_leveled = true
+		if e.type == "boss" and not Campaign.ON_SCREEN:
+			# The campaign is off the screens: its fight is no card of the reel. The
+			# event itself stays in `_events` (the rules made it, and App orders the
+			# bounty card by it); only the card is left out.
+			continue
 		if not HEADER_TYPES.has(e.type):
 			_cards.append(e)
 	if _xp_ev != null:
@@ -654,7 +662,7 @@ func _build_card(ev: Dictionary, animate: bool):
 			h.add_child(Kit.vcenter(Kit.label("for the shop", 14, null, true)))
 			c.main.add_child(h)
 			c.main.add_child(_sub("%s in your purse" % Xp.fmt_int(ev.balance)))
-			c.panel.tooltip_text = "1 coin per 10 XP, plus bounties, bosses, trophies and missions. Spend them in Armory, Shop."
+			c.panel.tooltip_text = "1 coin per 10 XP, plus %s, trophies and missions. Spend them in Armory, Shop." % ("bounties, bosses" if Campaign.ON_SCREEN else "bounties")
 			return _finish(c, _icon_cell("coin", Pal.ACCENT))
 		"rank":
 			var rank = Xp.RANKS[int(ev.to)]

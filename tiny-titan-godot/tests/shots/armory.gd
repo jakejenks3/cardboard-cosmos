@@ -182,7 +182,9 @@ func run(main: Node, tree: SceneTree) -> void:
 		var before = App.loadout().duplicate()
 		scr._equip_now(locked.slot, locked.id)
 		ArmoryDetail._toggle_item(locked, null)
-		var lt = _tile_of(scr, Items.unlock_hint(locked))
+		# (The hint as the Armory says it: boss gear reads "A campaign reward ..."
+		# while the campaign is off the screens, ArmoryDetail.item_hint.)
+		var lt = _tile_of(scr, ArmoryDetail.item_hint(locked))
 		if lt != null:
 			ShotHelper.reveal(lt)
 			await ShotHelper.frames(tree, 2)

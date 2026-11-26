@@ -13,6 +13,22 @@ extends RefCounted
 
 const WEAK_MULT = 1.5
 
+## Is the campaign SHOWN? False since 2026-11-25 (RPG_PLAN.md 11.6, the user:
+## "taking out the campaign for now"; the Realm tab is the new adventure).
+## The RULES are untouched and still run (Derive, Diff, Wallet, the trophies,
+## the boss gear, Pebble), so nothing earned is lost and parity does not move:
+## only the SCREENS ask this, and each of them draws the campaign again as it
+## was when this is set back to true.
+const ON_SCREEN = false
+## The trophies that are the campaign's own (the bounty trophies share their
+## group, "campaign", and are not among them).
+const GOAL_TROPHIES = ["boss_first", "zone_1", "zone_2", "zone_3", "zone_4", "zone_5", "zone_6", "damage_100k"]
+## The companion that comes from the campaign.
+const GOAL_PETS = ["golemling"]
+## What an unearned campaign reward says of itself while the campaign is off
+## the screens (its own words name a boss nobody can see).
+const RESTING = "A campaign reward (the campaign is resting)"
+
 const ZONES = [
 	{"name": "The Couch Kingdom", "blurb": "Where every journey starts: the gravitational pull of soft furniture.", "color": "#b98a5a"},
 	{"name": "Iron Foothills", "blurb": "Rusty racks, heavy things, and people who never re-rack them.", "color": "#d95926"},
@@ -120,6 +136,38 @@ static func boss_at(index) -> Dictionary:
 
 static func is_echo(index) -> bool:
 	return index >= bosses().size()
+
+
+## Is this goal one only the campaign gives? `key` is a goal key as NextUp
+## writes them: "a:<trophy id>" (the eight of GOAL_TROPHIES), "i:<item id>"
+## (the six pieces of boss gear, read from the bosses' `rewardItem`) or
+## "p:golemling". The screens use it to leave such a goal out of "Almost
+## there" and to word its hint while the campaign is off the screens.
+static func is_goal_key(key) -> bool:
+	if not (key is String) or key.length() < 3 or key.substr(1, 1) != ":":
+		return false
+	var id: String = key.substr(2)
+	match key.substr(0, 1):
+		"a":
+			return GOAL_TROPHIES.has(id)
+		"p":
+			return GOAL_PETS.has(id)
+		"i":
+			for boss in bosses():
+				if boss.get("rewardItem") == id:
+					return true
+	return false
+
+
+## The hint of a reward NOT earned yet, as a screen may show it: `text` (how to
+## get it, in the rules' words) unless it is a campaign reward (`key`, see
+## `is_goal_key`) and the campaign is off the screens, where "Defeat Iron
+## Golem" would point at a boss that is nowhere to be seen. An earned reward
+## keeps its own words: do not pass it through here.
+static func hint_on_screen(text, key) -> String:
+	if ON_SCREEN or not is_goal_key(key):
+		return str(text)
+	return RESTING
 
 
 ## The story bosses of one zone: [{boss, index}] (index = campaign position).

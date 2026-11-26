@@ -221,6 +221,22 @@ static func open(session: Dictionary) -> void:
 			box.add_child(bits)
 		else:
 			bits.queue_free()
+		# A run, a ride or a walk logged without its time: say so, with the
+		# key that opens it for editing (the user, 2026-11-26: "that I can
+		# edit my previous runs to add that time").
+		if d != "climb" and int(TTUtil.get_or(session, "durationSec", 0)) <= 0:
+			var nt = Kit.row(Callable(), Pal.disc(d))
+			nt.set_meta("add_time", true)
+			var nr = Kit.hbox(8)
+			nr.add_child(Kit.vcenter(Icons.rect("stopwatch", 16)))
+			var nl = Kit.clip("No total time yet", 13, Pal.MUTED)
+			nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			nr.add_child(Kit.vcenter(nl))
+			var nb = Kit.button("Add total time", "secondary", SessionView._edit.bind(sheet, session), "sm")
+			nb.set_meta("add_time_key", true)
+			nr.add_child(Kit.vcenter(nb))
+			nt.add(nr)
+			box.add_child(nt)
 		# A run's best splits (game/run_splits.gd).
 		var split_list = RunSplits.rows(session)
 		if not split_list.is_empty():

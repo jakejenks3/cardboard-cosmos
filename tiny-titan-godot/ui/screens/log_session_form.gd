@@ -24,6 +24,8 @@ var du: String = "km"
 
 var date: String = ""
 var dh: String = ""
+## A run's, ride's or walk's "Total time" boxes (h, min, sec), placed in its card.
+var _time_row: HBoxContainer = null
 var dm: String = ""
 var ds: String = ""
 var title: String = ""
@@ -339,27 +341,45 @@ func build(parent: Control) -> void:
 		rc.set_meta("draft_banner", true)
 		parent.add_child(rc)
 
-	# Date + duration on one compact row.
+	# Date + duration on one compact row. A run, a ride or a walk has its
+	# time as a labelled "Total time" row in its own card instead (the user,
+	# 2026-11-26: "add a total time to runs, that got deleted somehow": the
+	# three small unlabelled boxes up here read as a clock, not as a field).
+	var cardio = discipline != "lift" and discipline != "climb"
 	var top = Kit.hbox(6)
 	top.add_child(LogWidgets.date_field(date, _set_date))
-	top.add_child(Kit.spacer())
-	var dur_col = Kit.vbox(2)
-	var dur_row = Kit.hbox(2)
-	dur_row.tooltip_text = "Duration h : m : s"
-	dur_row.add_child(Kit.vcenter(Icons.rect("stopwatch", 20)))
-	dur_row.add_child(Kit.gap(0))
-	var eh = LogWidgets.num_input(dh, "0", "dur.h", 34)
-	var em = LogWidgets.num_input(dm, "45", "dur.m", 38)
-	var es = LogWidgets.num_input(ds, "00", "dur.s", 38)
+	var eh: LineEdit
+	var em: LineEdit
+	var es: LineEdit
+	if cardio:
+		eh = LogWidgets.big_input(dh, "0", "dur.h", 54, 20)
+		em = LogWidgets.big_input(dm, "00", "dur.m", 54, 20)
+		es = LogWidgets.big_input(ds, "00", "dur.s", 54, 20)
+	else:
+		eh = LogWidgets.num_input(dh, "0", "dur.h", 34)
+		em = LogWidgets.num_input(dm, "45", "dur.m", 38)
+		es = LogWidgets.num_input(ds, "00", "dur.s", 38)
 	eh.tooltip_text = "Hours"
 	em.tooltip_text = "Minutes"
 	es.tooltip_text = "Seconds"
 	eh.text_changed.connect(func(t): _set_dur("h", t))
 	em.text_changed.connect(func(t): _set_dur("m", t))
 	es.text_changed.connect(func(t): _set_dur("s", t))
-	Kit.add(dur_row, [eh, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), em, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), es])
-	dur_col.add_child(dur_row)
-	top.add_child(dur_col)
+	_time_row = null
+	if cardio:
+		_time_row = Kit.hbox(4)
+		_time_row.set_meta("time_row", true)
+		Kit.add(_time_row, [eh, LogWidgets.unit_chip("h"), Kit.gap(2), em, LogWidgets.unit_chip("min"), Kit.gap(2), es, LogWidgets.unit_chip("sec")])
+	else:
+		top.add_child(Kit.spacer())
+		var dur_col = Kit.vbox(2)
+		var dur_row = Kit.hbox(2)
+		dur_row.tooltip_text = "Duration h : m : s"
+		dur_row.add_child(Kit.vcenter(Icons.rect("stopwatch", 20)))
+		dur_row.add_child(Kit.gap(0))
+		Kit.add(dur_row, [eh, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), em, Kit.vcenter(Kit.label(":", 13, Pal.MUTED)), es])
+		dur_col.add_child(dur_row)
+		top.add_child(dur_col)
 	parent.add_child(top)
 
 	_pace_slot = null
@@ -954,6 +974,15 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	ev.add_child(erow)
 	row.add_child(ev)
 	c.add(row)
+	# Total time, said in words, under the distance (build() made the boxes).
+	if is_instance_valid(_time_row):
+		var tv = Kit.vbox(4)
+		var th = Kit.hbox(6)
+		th.add_child(Kit.vcenter(Icons.rect("stopwatch", 16)))
+		th.add_child(Kit.label("Total time", 12, Pal.MUTED, true))
+		tv.add_child(th)
+		tv.add_child(_time_row)
+		c.add(tv)
 	# The weight carried (the vest of a vest walk), with one-tap picks.
 	if discipline == TT.MISC and Misc.has_field(kind, "load"):
 		c.add(_load_row(col))
@@ -990,10 +1019,11 @@ func _build_cardio(parent: Control, first_dur: LineEdit, last_dur: LineEdit) -> 
 	var link_focus = func():
 		if not (is_instance_valid(de) and de.is_inside_tree()):
 			return
-		de.focus_next = de.get_path_to(first_dur)
-		first_dur.focus_previous = first_dur.get_path_to(de)
-		last_dur.focus_next = last_dur.get_path_to(ee)
-		ee.focus_previous = ee.get_path_to(last_dur)
+		# Keyboard order, as the boxes lie: distance, elevation, h, m, s.
+		de.focus_next = de.get_path_to(ee)
+		ee.focus_previous = ee.get_path_to(de)
+		ee.focus_next = ee.get_path_to(first_dur)
+		first_dur.focus_previous = first_dur.get_path_to(ee)
 		if editing == null and distance == "" and de.get_viewport().gui_get_focus_owner() == null:
 			de.grab_focus()
 	link_focus.call_deferred()

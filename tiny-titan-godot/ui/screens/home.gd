@@ -10,9 +10,10 @@ extends UiScreen
 ##   the workout); COMING UP; TO DO; READING (its page box is filled daily);
 ##   MISSIONS (ready ones with their Claim key, the rest as small tiles; the
 ##   perfect day is the Today card's chest, not listed twice); the hero in the
-##   gym with the level and the companion's line; ADVENTURE (the campaign boss
-##   and the weekly bounty); PT THIS WEEK; PROJECTS; YOUR WEEK (the level
-##   tiles, the streak, this week's numbers); ALMOST THERE; RECENT.
+##   gym with the level and the companion's line; ADVENTURE (the weekly bounty;
+##   the campaign boss above it only while Campaign.ON_SCREEN, which is off
+##   since 2026-11-25); PT THIS WEEK; PROJECTS; YOUR WEEK (the level tiles, the
+##   streak, this week's numbers); ALMOST THERE; RECENT.
 
 const SETTINGS = "res://ui/screens/settings.gd"
 ## Between two sections (inside one: 6 to 8).
@@ -64,12 +65,21 @@ func build() -> void:
 	var boss = Campaign.boss_at(s.campaign.index)
 	var hp_left = boss.hp - s.campaign.damage
 	var goals = App.next_goals(3)
-	add_child(_hero_card(s, profile, boss, hp_left, goals))
+	if Campaign.ON_SCREEN:
+		add_child(_hero_card(s, profile, boss, hp_left, goals))
+	else:
+		# The campaign is off the screens (Campaign.ON_SCREEN): the companion is
+		# told of a stand-in boss, whole and with no weakness, so none of its
+		# lines names a boss nobody can see (Chatter itself is a ported rule).
+		add_child(_hero_card(s, profile, {"name": "", "hp": 1, "weak": null}, 1, goals))
 
-	# --- adventure: the campaign boss and this week's bounty ------------------
+	# --- adventure: this week's bounty (and the campaign boss when it is shown) --
+	# The link goes to the Adventure tab's first page: the Bounty page (the
+	# campaign, when that is shown).
 	var adv_col = Pal.tab("adventure")
 	var adv = Kit.section("adventure", "ADVENTURE", "sword", adv_col, Kit.link("All →", App.go.bind("adventure", "campaign"), 13, adv_col.lightened(0.5)), Callable(), 6, 10)
-	adv.add(_boss_row(boss, hp_left))
+	if Campaign.ON_SCREEN:
+		adv.add(_boss_row(boss, hp_left))
 	adv.add(BountyView.card(false))
 	add_child(adv)
 	# Physical therapy (game/pt.gd): only when a lift is marked.
@@ -217,7 +227,8 @@ func _hero_card(s: Dictionary, profile, boss: Dictionary, hp_left, goals: Array)
 
 
 ## The campaign boss as a row of the Adventure section: a strong red, so it is
-## never confused with the violet bounty under it.
+## never confused with the violet bounty under it. Only drawn while the campaign
+## is on the screens (Campaign.ON_SCREEN).
 func _boss_row(boss: Dictionary, hp_left) -> Control:
 	var c = Kit.row(App.go.bind("adventure", "campaign"), Pal.HP, Pal.HP, 8, 4, 0.4)
 	var brow = Kit.hbox(10)

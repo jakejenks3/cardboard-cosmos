@@ -1,6 +1,7 @@
 extends RefCounted
 ## The weekly bounty and the recaps on screen: the bounty card on the Hero and
-## Adventure tabs, its sheet, the reel after a session that beats the monster
+## Adventure tabs (the Adventure tab's first page is the bounty's own while the
+## campaign is off the screens), its sheet, the reel after a session that beats the monster
 ## (bounty card, coins card), the Story page, the week and month recap posters
 ## and saving one as a picture. Run with "year" data.
 
@@ -63,11 +64,19 @@ func run(m: Node, t: SceneTree) -> void:
 	await ShotHelper.snap(tree, "bounty_01b_home_top")
 
 	# --- Adventure tab and the sheet ------------------------------------------------------
+	# The Adventure tab's first page (its id is still "campaign"). While the
+	# campaign is off the screens (Campaign.ON_SCREEN false) that page IS the
+	# bounty: the big card at the top, the record and the past weeks under it.
 	App.go("adventure", "campaign")
 	await ShotHelper.wait(tree, 0.8)
 	var ac = card_of(main, mon.name)
 	check(ac != null, "the Adventure tab shows it too")
-	ShotHelper.scroll_main(main, 330)
+	if Campaign.ON_SCREEN:
+		ShotHelper.scroll_main(main, 330)
+	else:
+		check(ShotHelper.find_button(main, "Bounty") != null and ShotHelper.find_text(main, "IN A ROW") != null, "on its own page, Bounty, with the record under it")
+		check(ShotHelper.walk(main).filter(func(n): return n.has_meta("bounty_past")).size() == 1, "and the past weeks")
+		check(ShotHelper.walk(main).filter(func(n): return n is BossView and not str(n._boss_id).begins_with("wk_")).is_empty(), "no campaign boss is drawn there")
 	await ShotHelper.snap(tree, "bounty_02_adventure")
 	ShotHelper.scroll_main(main, 0)
 	BountyView.open()
@@ -94,6 +103,7 @@ func run(m: Node, t: SceneTree) -> void:
 	if res != null:
 		var types = res._events.map(func(e): return e.type)
 		check(types.has("coins"), "the reel has a coins card (%s)" % str(types))
+		check(Campaign.ON_SCREEN or res._cards.filter(func(e): return str(e.type) == "boss").is_empty(), "and no boss card while the campaign is off the screens")
 		check(types.has("bounty") == (not cur.defeated or (after.crushed and not cur.crushed)), "and a bounty card when the monster was still up")
 		await ShotHelper.wait(tree, 1.2)
 		res._skip()

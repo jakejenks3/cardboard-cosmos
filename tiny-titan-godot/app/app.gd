@@ -10,6 +10,9 @@ extends Node
 signal changed
 ## The current tab / sub-tab / thing being edited changed.
 signal nav_changed
+## The Realm's own progress (`saved.rpg`) changed: `set_rpg`. Nothing was
+## replayed and `changed` is NOT emitted, so no screen of the main game wakes.
+signal rpg_changed
 ## Something was logged: `result` = {"key", "title", "events"} for the results reel.
 signal result_ready(result)
 signal toast_requested(text, kind, icon)
@@ -29,6 +32,8 @@ const BACKUP_EVERY_DAYS = 7
 const DEFAULT_LOADOUT = {"body": "tee_grey", "legs": "shorts_navy", "feet": "trainers_worn"}
 
 ## Source of truth: {profile, settings, sessions, claims, body, purchases, reading, loadout, activePet, strava, updatedAt}
+## (and inbox, pt, projects, todos, books; `rpg` is the Realm's stored progress,
+## game/rpg/rpg_save.gd, which no rule of the main game reads)
 var saved: Dictionary = {}
 ## Derived PlayerState (see game/player_state.gd).
 var state: Dictionary = {}
@@ -38,8 +43,8 @@ var perks: Dictionary = {}
 var today: String = ""
 
 # --- navigation -------------------------------------------------------------
-var tab: String = "home"  # home | adventure | log | journey | armory
-var adventure_tab: String = "campaign"  # campaign | quests | trophies
+var tab: String = "home"  # home | adventure | log | journey | armory | realm
+var adventure_tab: String = "campaign"  # campaign (shown as "Bounty" while Campaign.ON_SCREEN is false) | quests | trophies
 var journey_tab: String = "stats"  # stats | body | chronicle | history
 ## Set by `open_shop`: the Armory shows its Shop tab the next time it is shown.
 var armory_tab_request: String = ""
@@ -620,6 +625,29 @@ func reading() -> Array:
 	return r if r is Array else []
 
 
+## The Realm's stored progress (game/rpg/rpg_save.gd, RPG_PLAN.md 11.2): fighter
+## XP, ore, skills, builds, stages won. The Realm only READS the log; this is
+## the one thing it stores. Read it, change a copy (RpgSave), hand it to `set_rpg`.
+func rpg() -> Dictionary:
+	var v = saved.get("rpg")
+	if not (v is Dictionary):
+		v = RpgSave.empty()
+		saved["rpg"] = v
+	return v
+
+
+## Store the Realm's progress. Saved at once; the hero of the main game is NOT
+## worked out again (no rule reads `saved.rpg`: Derive.derive is given its
+## input field by field) and `changed` is not emitted, so the plan, the
+## missions and every screen of the main game stay as they are. Only
+## `rpg_changed` goes out, for the Realm's screens and the tab's dot.
+func set_rpg(d: Dictionary) -> void:
+	saved["rpg"] = d
+	saved.updatedAt = now_ms()
+	_write()
+	rpg_changed.emit()
+
+
 ## Coins to spend (see Wallet).
 func coins() -> int:
 	return Wallet.balance(state)
@@ -711,9 +739,15 @@ func next_goals(limit: int = 4) -> Array:
 	# Not the goals of a discipline kept in the Miscellaneous area (cycling,
 	# Misc.SIDE): it is done now and then and is nothing to chase. The ported
 	# NextUp is left as it is (the parity tests compare it).
+	# Not the campaign's own goals (its trophies, the boss gear, Pebble) while
+	# the campaign is off the screens (Campaign.ON_SCREEN): they still unlock
+	# from training, but "Defeat Iron Golem" is nothing to chase without a boss
+	# to look at.
 	var out = []
 	for g in NextUp.next_goals(state, 100000):
 		if g.get("discipline") != null and Misc.SIDE.has(str(g.discipline)):
+			continue
+		if not Campaign.ON_SCREEN and Campaign.is_goal_key(g.get("key")):
 			continue
 		out.append(g)
 		if out.size() >= limit:
@@ -1109,7 +1143,8 @@ func photos_arrived() -> void:
 
 ## Wipe everything (Settings → reset). Photos are deleted too.
 func reset_all() -> void:
-	for d in ["lift", "climb"]:
+	# The kept drafts go too ("battle": a fight of the Realm left half way).
+	for d in ["lift", "climb", "battle"]:
 		draft_store(d, null)
 	saved = empty_saved()
 	_commit()
@@ -1442,7 +1477,7 @@ func apply_backup(backup: Dictionary) -> int:
 		if _store_photo_text(str(id), str(photos[id])):
 			n += 1
 	_photo_cache.clear()
-	for d in ["lift", "climb"]:
+	for d in ["lift", "climb", "battle"]:
 		draft_store(d, null)
 	saved = backup.data
 	_commit()
@@ -1478,6 +1513,7 @@ static func empty_saved() -> Dictionary:
 		"projects": [],
 		"todos": [],
 		"books": [],
+		"rpg": RpgSave.empty(),
 	}
 
 
@@ -1510,6 +1546,7 @@ static func parse_saved(raw):
 	out.projects = Projects.parse(o.get("projects"))
 	out.todos = Todos.parse(o.get("todos"))
 	out.books = Books.parse(o.get("books"))
+	out.rpg = RpgSave.parse(o.get("rpg"))
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)
 	if o.get("activePet") is String:

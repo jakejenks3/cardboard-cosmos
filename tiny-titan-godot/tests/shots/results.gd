@@ -4,6 +4,8 @@ extends RefCounted
 ##   week – a big lift session watched to the end, then a run skipped with a click,
 ##          then a body check-in closed with the keyboard
 ##   year – a huge session (several bosses, many trophies): long-reel layout
+## While the campaign is off the screens (Campaign.ON_SCREEN false) every reel
+## is also checked to have no boss card (the boss events are still sent).
 
 var _done = {"n": 0}
 
@@ -37,6 +39,11 @@ func _attach(main: Node, tree: SceneTree):
 	for e in ov._events:
 		types.append(e.type)
 	print("REEL events: ", ", ".join(PackedStringArray(types)))
+	# While the campaign is off the screens (Campaign.ON_SCREEN false) the rules
+	# still send the boss fight, but the reel makes no card of it.
+	if not Campaign.ON_SCREEN:
+		var boss_cards = ov._cards.filter(func(e): return str(e.type) == "boss").size()
+		print("CHECK %s  the reel has no boss card (%d boss events, %d boss cards)" % ["ok  " if boss_cards == 0 else "FAIL", types.count("boss"), boss_cards])
 	return ov
 
 
@@ -82,7 +89,7 @@ func _week(main: Node, tree: SceneTree) -> void:
 	await ShotHelper.wait(tree, 1.0)
 	await ShotHelper.snap(tree, "res_week_3_herobar")
 	await ShotHelper.wait(tree, 1.6)
-	await ShotHelper.snap(tree, "res_week_4_boss")
+	await ShotHelper.snap(tree, "res_week_4_boss" if Campaign.ON_SCREEN else "res_week_4_first_cards")
 	await ShotHelper.wait(tree, 2.0)
 	await ShotHelper.snap(tree, "res_week_5_cards")
 	await _wait_done(ov, tree)

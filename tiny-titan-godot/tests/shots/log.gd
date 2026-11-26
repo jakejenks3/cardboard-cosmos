@@ -316,14 +316,16 @@ func _year() -> void:
 	await shot("log_11a_run_empty")
 	var fo = main.get_viewport().gui_get_focus_owner()
 	check(fo != null and fo.get_meta("fkey", "") == "distance", "distance has focus on open")
+	# Keyboard order, as the boxes lie: distance, elevation, then the total
+	# time's hours, minutes, seconds.
 	await type_keys("5,2")
+	await key(KEY_TAB)
+	await type_keys("45")
 	await key(KEY_TAB)
 	await key(KEY_TAB)
 	await type_keys("27")
 	await key(KEY_TAB)
 	await type_keys("30")
-	await key(KEY_TAB)
-	await type_keys("45")
 	await ShotHelper.frames(tree, 2)
 	await shot("log_11_run")
 	ShotHelper.press(ShotHelper.find_button(main, "Finish session"))

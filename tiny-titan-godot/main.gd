@@ -6,12 +6,15 @@ const NAV_H = 64.0
 const MAX_W = 520.0
 ## How far down the sky shows through the top of the column.
 const SKY_H = 260.0
+## The tabs, left to right. The sixth, Realm (the turn-based RPG, RPG_PLAN.md),
+## came 2026-11-25 and is LAST, so the first five are where they always were.
 const TABS = [
 	{"id": "home", "label": "Hero", "icon": "home"},
 	{"id": "adventure", "label": "Adventure", "icon": "adventure"},
 	{"id": "log", "label": "Log", "icon": "plus"},
 	{"id": "journey", "label": "Journey", "icon": "journey"},
 	{"id": "armory", "label": "Armory", "icon": "armory"},
+	{"id": "realm", "label": "Realm", "icon": "realm"},
 ]
 const SCREENS = {
 	"home": "res://ui/screens/home.gd",
@@ -19,7 +22,17 @@ const SCREENS = {
 	"log": "res://ui/screens/log.gd",
 	"journey": "res://ui/screens/journey.gd",
 	"armory": "res://ui/screens/armory.gd",
+	"realm": "res://ui/rpg/realm.gd",
 }
+## How the tab bar's width is shared out (size_flags_stretch_ratio). With five
+## equal tabs each had a fifth; with six, the first three keep exactly that
+## fifth (3 of 15) and the last three share the rest (2 of 15 each), so the Log
+## key, the one tapped most, did not move by a pixel when the Realm tab came:
+## 86.4, 86.4, 86.4, 57.6, 57.6, 57.6 of the bar's 432 on a phone.
+const TAB_STRETCH = {"home": 3, "adventure": 3, "log": 3, "journey": 2, "armory": 2, "realm": 2}
+## A tab's least width: the wide ones, and the narrow ones on the right.
+const TAB_MIN_W = 56.0
+const TAB_MIN_W_NARROW = 48.0
 const ONBOARDING = "res://ui/screens/onboarding.gd"
 const RESULTS = "res://ui/screens/results.gd"
 
@@ -38,6 +51,10 @@ var _results = null
 var _result_queue = []
 ## The tab whose icon bounces the next time the bar is built (the one just tapped).
 var _bounce_tab = ""
+## Whether the Realm tab shows its dot (a training chest waits): what the bar
+## was last built with, so a change of the Realm's save rebuilds the bar only
+## when the dot turns on or off.
+var _realm_dot = false
 ## On a phone, the room the status bar (top) and the home bar (bottom) take, in
 ## screen units (web build: web/tt.js ttSafe). The column fits between them.
 var _inset_top = 0.0
@@ -68,6 +85,7 @@ func _ready() -> void:
 		_debug_bridge()
 	App.nav_changed.connect(_refresh)
 	App.changed.connect(_on_changed)
+	App.rpg_changed.connect(_on_rpg_changed)
 	App.result_ready.connect(_on_result)
 	App.toast_requested.connect(_on_toast)
 	_refresh()
@@ -490,17 +508,56 @@ func _make(path: String, what: String) -> Control:
 func _build_nav() -> void:
 	Kit.clear(_nav_row)
 	var claimable = App.claimable_quests() if App.has_profile() else 0
+	_realm_dot = _chest_waiting()
 	for t in TABS:
-		_nav_row.add_child(_nav_button(t, t.id == App.tab, claimable if t.id == "adventure" else 0))
+		_nav_row.add_child(_nav_button(t, t.id == App.tab, claimable if t.id == "adventure" else 0, _realm_dot and t.id == "realm"))
 
 
-func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
+## Is a training chest of the Realm waiting to be opened (today's or
+## yesterday's)? A cheap check (RpgBoosts.chest_waiting): it runs every time
+## the bar is built.
+func _chest_waiting() -> bool:
+	# (Not before the Realm's hub can open one: RealmScreen.hub_ready.)
+	return RealmScreen.hub_ready and App.has_profile() and RpgBoosts.chest_waiting(App.state, App.reading(), App.rpg(), App.today)
+
+
+## The Realm's own save changed (App.set_rpg: a chest opened, a fight won).
+## Nothing of the main game depends on it but the Realm tab's dot.
+func _on_rpg_changed() -> void:
+	if _nav_row != null and _chest_waiting() != _realm_dot:
+		_build_nav()
+
+
+## A small round pixel dot (5 x 5 art pixels, dark edge): "something waits in
+## this tab", without a number.
+func _tab_dot(color: Color) -> Control:
+	var dot = Control.new()
+	dot.custom_minimum_size = Vector2(10, 10)
+	dot.size = Vector2(10, 10)
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for r in [[Rect2(2, 0, 6, 10), Pal.OUTLINE], [Rect2(0, 2, 10, 6), Pal.OUTLINE], [Rect2(2, 2, 6, 6), color], [Rect2(2, 2, 4, 2), color.lightened(0.35)]]:
+		var px = ColorRect.new()
+		px.color = r[1]
+		px.position = r[0].position
+		px.size = r[0].size
+		px.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.add_child(px)
+	return dot
+
+
+## One key of the tab bar. `badge` is a count shown on the icon (0 = none);
+## `dot` a small gold dot without a number (the Realm: a chest waits).
+func _nav_button(t: Dictionary, active: bool, badge: int, dot: bool = false) -> Button:
 	var b = Button.new()
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.custom_minimum_size = Vector2(56, NAV_H)
+	# The bar's width by shares (TAB_STRETCH): the Log key stays where it was.
+	var share = int(TAB_STRETCH.get(t.id, 3))
+	b.size_flags_stretch_ratio = float(share)
+	b.custom_minimum_size = Vector2(TAB_MIN_W if share >= 3 else TAB_MIN_W_NARROW, NAV_H)
+	b.set_meta("tab", str(t.id))
 	b.tooltip_text = t.label
 	var empty = StyleBoxEmpty.new()
 	for s in ["normal", "hover", "pressed", "focus", "disabled"]:
@@ -551,9 +608,15 @@ func _nav_button(t: Dictionary, active: bool, badge: int) -> Button:
 			var tw = ic.create_tween()
 			tw.tween_property(ic, "position:y", 0.0, 0.32).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 		if badge > 0:
-			var dot = Kit.tag(str(badge), Pal.DANGER, false, 10)
-			dot.position = Vector2(20, -6)
-			holder.add_child(dot)
+			var count = Kit.tag(str(badge), Pal.DANGER, false, 10)
+			count.position = Vector2(20, -6)
+			holder.add_child(count)
+		elif dot:
+			# Gold: what waits is a reward (the Realm's training chest).
+			var pip = _tab_dot(Pal.ACCENT)
+			pip.position = Vector2(24, -4)
+			pip.set_meta("tab_dot", str(t.id))
+			holder.add_child(pip)
 		v.add_child(holder)
 	var l = Kit.label(t.label, 11, col, true)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

@@ -46,7 +46,7 @@ func run(main: Node, tree: SceneTree) -> void:
 	await ShotHelper.snap(tree, "home_5")
 	ShotHelper.scroll_main(main, 99999)
 	await ShotHelper.snap(tree, "home_6")
-	print("level ", App.state.levels.hero.level, " sessions ", App.sessions().size(), " boss ", Campaign.boss_at(App.state.campaign.index).name)
+	print("level ", App.state.levels.hero.level, " sessions ", App.sessions().size(), " bounty ", Bounty.monster(Bounty.of(App.state).current.monster).name, " (campaign boss, %s: " % ("shown" if Campaign.ON_SCREEN else "not shown"), Campaign.boss_at(App.state.campaign.index).name, ")")
 	print("home checks failed: ", fails)
 
 
@@ -86,3 +86,17 @@ func _sections(main: Node) -> void:
 	if nodes.has("missions") and not perfect.is_empty():
 		check(ShotHelper.find_text(nodes.missions, str(perfect[0].title)) == null, "MISSIONS does not list the perfect day (it is the Today card's chest)")
 	check(ShotHelper.find_text(main, "Feeling") == null, "the Feeling question is gone")
+	# ADVENTURE: the weekly bounty; the campaign boss above it only while the
+	# campaign is on the screens (Campaign.ON_SCREEN, off since 2026-11-25).
+	if nodes.has("adventure"):
+		var adv = nodes.adventure
+		var views = ShotHelper.walk(adv).filter(func(n): return n is BossView)
+		var boss_row = ShotHelper.find_text(adv, "CAMPAIGN BOSS") != null
+		check(boss_row == Campaign.ON_SCREEN, "the Adventure section %s the campaign boss" % ("shows" if Campaign.ON_SCREEN else "does not show"))
+		check(views.filter(func(v): return str(v._boss_id).begins_with("wk_")).size() == 1 and views.size() == (2 if Campaign.ON_SCREEN else 1), "it shows this week's bounty monster (%d monsters drawn)" % views.size())
+		if not Campaign.ON_SCREEN:
+			var words = ShotHelper.all_text(screen)
+			var named = Campaign.bosses().filter(func(b): return words.contains(str(b.name))).map(func(b): return str(b.name))
+			check(named.is_empty() and not words.to_lower().contains("boss"), "no word of the Hero tab names a campaign boss %s" % str(named))
+			var goal_keys = App.next_goals(3).map(func(g): return str(g.key))
+			check(goal_keys.filter(func(k): return Campaign.is_goal_key(k)).is_empty(), "Almost there has no campaign goal (%s)" % ", ".join(PackedStringArray(goal_keys)))

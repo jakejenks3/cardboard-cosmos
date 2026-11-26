@@ -24,6 +24,24 @@ extends RefCounted
 ## pixel maps). `draw_body(p, m)` paints the skin, `draw_face(p, m, i)` and
 ## `draw_hair(p, m, i, covered)` the head. HeroBody.draw_hero puts them
 ## together with the gear.
+##
+## Poses (`i.pose`): "idle", "flex", and the workout replay's "press", "pull",
+## "squat", "curl". The Realm's battles add five (REALM_POSES): "strike" (a
+## punch thrown straight out at the foe, the other fist cocked at the chest),
+## "kick" (a leg driven out to the side, the arms out for balance), "guard"
+## (both fists up under the chin, the feet braced), "cast" (both arms thrown
+## wide and up, the hands open) and "hurt" (a flinch: elbows out, forearms
+## dangling, knees giving, eyes screwed shut). Only the arms and the legs
+## move (the body rides a little lower when the hips sink), both feet stay
+## on the floor line and every wrist within 16 px of its shoulder, so each
+## pose fits the canvas at every level; the lunge and the recoil are the
+## view's to tween. The foe is taken to stand on the hero's right (LEAD).
+## The original look (Pix.classic) knows none of them and draws them as idle.
+##
+## The gear asks one thing of a pose: are the fists up ("flex") or do the
+## hands hang (anything else)? So `m.pose` and `m.g.pose` say "flex" for a
+## pose with its hands raised (HANDS_UP); the pose that was asked for is
+## `m.act` / `m.g.act`.
 
 const W = 64
 const H = 70
@@ -35,6 +53,19 @@ const LIGHT_Z = 0.49
 
 ## The shorts the hero wears when nothing is on the legs.
 const PLAIN_SHORTS = "#4a5068"
+
+## The poses the Realm's battles add (see the top of the file).
+const REALM_POSES = ["strike", "kick", "guard", "cast", "hurt"]
+## Of those, the ones with the hands raised: the gear draws them as it draws
+## a flexing hero's fists (knuckles on top, a glove's cuff underneath).
+const HANDS_UP = ["strike", "guard", "cast"]
+## The side the foe is on (the hero's right on screen): the arm that punches,
+## the leg that kicks, the side a blow comes from.
+const LEAD = 1
+## How far the hips sink in a kick, in a flinch and in a braced guard (pixels).
+const KICK_SINK = 5
+const HURT_SINK = 2
+const GUARD_SINK = 1
 
 ## Ramp steps: 0 deepest shadow .. 4 highlight.
 const DEEP = 0
@@ -139,8 +170,10 @@ static func metrics(i: Dictionary) -> Dictionary:
 	# --- heights, from the floor up --------------------------------------------
 	var base: int = H - 2
 	var foot_h: int = 2
-	# A squat (the workout replay): the hips sink, the knees go out.
-	var leg_len: int = 23 + TTUtil.jsround(b * 2.0) - (6 if pose == "squat" else 0)
+	# A squat (the workout replay): the hips sink, the knees go out. A kick, a
+	# flinch and a braced guard (the Realm) sink a little too.
+	var sink: int = 6 if pose == "squat" else (KICK_SINK if pose == "kick" else (HURT_SINK if pose == "hurt" else (GUARD_SINK if pose == "guard" else 0)))
+	var leg_len: int = 23 + TTUtil.jsround(b * 2.0) - sink
 	var torso_len: int = 19 + TTUtil.jsround(b * 2.0)
 	var ankle_y: float = base - foot_h - 0.5
 	var hip_y: float = ankle_y - leg_len
@@ -179,6 +212,10 @@ static func metrics(i: Dictionary) -> Dictionary:
 		var sh = Vector2(ax + side * sh_jx, shoulder_y + delt_r * 0.9 + 0.4 + (1.0 - lift) * 0.8)
 		var elbow: Vector2
 		var wrist: Vector2
+		# The Realm's poses draw a hand past the wrist, the way the forearm
+		# points: "fist", "punch" (a fist drawn a size bigger) or "open" (the
+		# older poses keep their own hands).
+		var hand: String = ""
 		if pose == "flex":
 			elbow = Vector2(sh.x + side * ua_len * 0.95, sh.y - 1.0)
 			wrist = Vector2(elbow.x - side * 1.0, elbow.y - fa_len + 0.5)
@@ -199,12 +236,52 @@ static func metrics(i: Dictionary) -> Dictionary:
 			var cs: float = 1.0 + lift * 1.4 + b * 0.6
 			elbow = Vector2(sh.x + side * cs, sh.y + ua_len)
 			wrist = Vector2(elbow.x + side * 0.6, elbow.y - fa_len * 0.8)
+		elif pose == "guard" or (pose == "strike" and side != LEAD):
+			# a fist up under the chin, its elbow tucked in at the ribs (both
+			# arms in a guard; the arm that does not punch in a strike)
+			elbow = Vector2(sh.x + side * (0.8 + lift * 0.8 + b * 0.3), sh.y + ua_len * 0.78)
+			wrist = Vector2(elbow.x - side * (2.6 + lift * 1.2 + b * 0.5), elbow.y - fa_len * 0.9)
+			hand = "fist"
+		elif pose == "strike":
+			# the punch: thrown straight out at the foe, a little upwards (no
+			# further: the fist of the biggest hero must stay on the canvas)
+			elbow = Vector2(sh.x + side * ua_len * 0.7, sh.y - ua_len * 0.2)
+			wrist = Vector2(elbow.x + side * fa_len * 0.7, elbow.y - fa_len * 0.24)
+			hand = "punch"
+		elif pose == "cast":
+			# both arms thrown wide and up, the hands open
+			elbow = Vector2(sh.x + side * ua_len * 0.76, sh.y - ua_len * 0.26)
+			wrist = Vector2(elbow.x + side * fa_len * 0.6, elbow.y - fa_len * 0.52)
+			hand = "open"
+		elif pose == "kick":
+			# arms out for balance, in a line with the kicking leg: the near one
+			# down along it, the far one out and a little up
+			if side == LEAD:
+				elbow = Vector2(sh.x + side * ua_len * 0.62, sh.y + ua_len * 0.5)
+				wrist = Vector2(elbow.x + side * fa_len * 0.6, elbow.y + fa_len * 0.45)
+			else:
+				elbow = Vector2(sh.x + side * ua_len * 0.76, sh.y - ua_len * 0.08)
+				wrist = Vector2(elbow.x + side * fa_len * 0.62, elbow.y - fa_len * 0.12)
+			hand = "fist"
+		elif pose == "hurt":
+			# a flinch: the elbows thrown out, the forearms left dangling, the
+			# arm away from the blow thrown higher
+			if side == LEAD:
+				elbow = Vector2(sh.x + side * ua_len * 0.6, sh.y + ua_len * 0.45)
+				wrist = Vector2(elbow.x + side * fa_len * 0.3, elbow.y + fa_len * 0.85)
+			else:
+				elbow = Vector2(sh.x + side * ua_len * 0.76, sh.y + ua_len * 0.18)
+				wrist = Vector2(elbow.x + side * fa_len * 0.3, elbow.y + fa_len * 0.88)
+			hand = "open"
 		else:
 			# Hanging just off the lats: the arm may overlap their edge (it is in front).
 			var spread: float = 1.0 + lift * 1.4 + b * 0.6
 			elbow = Vector2(sh.x + side * spread, sh.y + ua_len)
 			wrist = Vector2(elbow.x + side * (0.3 + lift * 0.4), elbow.y + fa_len)
-		arms.append({"side": side, "sh": sh, "elbow": elbow, "wrist": wrist})
+		var arm = {"side": side, "sh": sh, "elbow": elbow, "wrist": wrist}
+		if hand != "":
+			arm["hand"] = hand
+		arms.append(arm)
 
 	# --- legs ----------------------------------------------------------------------
 	var th_r: float = 2.4 + ride * 0.9 + b * 0.6 + run * 0.2
@@ -218,15 +295,38 @@ static func metrics(i: Dictionary) -> Dictionary:
 	var low_jx: float = maxf(hip_jx - 0.3, ca_r + 0.8)
 	var legs = []
 	for side in [-1, 1]:
-		legs.append({"side": side, "hip": Vector2(ax + side * hip_jx, hip_y), "knee": Vector2(ax + side * (low_jx + (2.5 if pose == "squat" else 0.0)), knee_y),
-			"ankle": Vector2(ax + side * (low_jx - 0.3), ankle_y)})
+		var hip = Vector2(ax + side * hip_jx, hip_y)
+		var knee = Vector2(ax + side * (low_jx + (2.5 if pose == "squat" else 0.0)), knee_y)
+		var ankle = Vector2(ax + side * (low_jx - 0.3), ankle_y)
+		if pose == "kick":
+			if side == LEAD:
+				# the kicking leg: driven straight out to the side at its full
+				# length, the foot still on the floor line (the gear that reads
+				# the feet expects them there)
+				var full: float = float(leg_len + sink)
+				ankle.x = hip.x + side * sqrt(maxf(1.0, full * full - float(leg_len) * float(leg_len)))
+				knee = hip.lerp(ankle, 0.52) + Vector2(side * 0.3, -0.3)
+			else:
+				# the standing leg bends under the sunk hips
+				knee.x = ax + side * (low_jx + 2.0)
+		elif pose == "hurt":
+			# the knees give and knock in (not so far that they cross), the
+			# feet a little apart
+			knee.x = ax + side * (low_jx - 0.5)
+			ankle.x = ax + side * (low_jx + 1.3)
+		elif pose == "guard":
+			# braced: the feet apart, the knees a little bent
+			knee.x = ax + side * (low_jx + 1.6)
+			ankle.x = ax + side * (low_jx + 0.9)
+		legs.append({"side": side, "hip": hip, "knee": knee, "ankle": ankle})
 
 	var g = {"b": b, "lift": lift, "climb": climb, "run": run, "ride": ride, "ax": ax, "base": base, "foot_h": foot_h,
 		"shoulder_y": shoulder_y, "crotch_y": crotch_y, "hip_y": hip_y, "neck_top": neck_top, "head_top": head_top, "chin_y": chin_y,
 		"delt_r": delt_r, "sh_jx": sh_jx, "top_hw": top_hw, "lat_hw": lat_hw, "waist_hw": waist_hw, "hip_hw": hip_hw,
 		"neck_hw": neck_hw, "trap_h": trap_h, "armpit_y": armpit_y, "waist_y": waist_y, "hips_y": hips_y,
 		"bi_r": bi_r, "el_r": el_r, "fo_r": fo_r, "wr_r": wr_r, "ua_len": ua_len, "fa_len": fa_len, "arms": arms,
-		"th_r": th_r, "th_bulge": th_bulge, "kn_r": kn_r, "ca_r": ca_r, "an_r": an_r, "legs": legs, "pose": pose,
+		"th_r": th_r, "th_bulge": th_bulge, "kn_r": kn_r, "ca_r": ca_r, "an_r": an_r, "legs": legs,
+		"pose": "flex" if HANDS_UP.has(pose) else pose, "act": pose,
 		"head_w": head_w, "head_h": head_h}
 	var fig = _rasterize(g)
 	return _gear_metrics(g, fig, i, stage, bob)
@@ -288,14 +388,32 @@ static func _parts(g: Dictionary) -> Array:
 	for arm in g.arms:
 		var s: String = "L" if arm.side < 0 else "R"
 		parts.append(_part_cap("upper" + s, 5, arm.sh, arm.elbow, g.delt_r * 0.8, g.bi_r, g.el_r, 0.5))
-		if g.pose == "flex":
+		if g.act == "flex":
 			# the biceps peak, on top of the bent arm
 			var mid: Vector2 = arm.sh.lerp(arm.elbow, 0.58)
 			parts.append(_part_ell("peak" + s, 6, mid + Vector2(0, -g.bi_r * 0.55), g.ua_len * 0.26 + g.lift * 0.6, g.bi_r * 0.85))
-		var fore_boost: float = 0.4 if g.pose == "flex" else 0.0
+		var fore_boost: float = 0.4 if g.act == "flex" else 0.0
 		parts.append(_part_cap("fore" + s, 6, arm.elbow, arm.wrist, g.el_r + 0.2 + fore_boost, g.fo_r + fore_boost, g.wr_r + fore_boost * 0.5, 0.28))
 		var hand_c: Vector2
-		if g.pose == "flex":
+		var grip: String = str(arm.get("hand", ""))
+		if grip != "":
+			# the Realm's poses: the hand past the wrist, the way the forearm points
+			var dir: Vector2 = (arm.wrist - arm.elbow).normalized()
+			if grip == "fist" or grip == "punch":
+				var big: float = 0.5 if grip == "punch" else 0.0
+				hand_c = arm.wrist + dir * (2.0 + big * 0.6)
+				parts.append(_part_ell("hand" + s, 7, hand_c, 2.2 + g.climb * 0.5 + g.b * 0.2 + big, 2.3 + big * 0.8))
+			else:
+				# open: a palm that runs on into the fingers, and the thumb
+				# standing off it on the side that faces up or in
+				hand_c = arm.wrist + dir * 2.4
+				var palm_r: float = 1.7 + g.climb * 0.4 + g.b * 0.15
+				parts.append(_part_cap("hand" + s, 7, arm.wrist + dir * 0.9, arm.wrist + dir * 4.3, palm_r - 0.2, palm_r + 0.3, palm_r - 0.5, 0.4))
+				var across = Vector2(dir.y, -dir.x)
+				if across.x * -arm.side - across.y < 0.0:
+					across = -across
+				parts.append(_part_ell("hand" + s, 7, arm.wrist + dir * 1.6 + across * (palm_r + 0.9), 1.0, 1.0))
+		elif g.act == "flex":
 			hand_c = arm.wrist + Vector2(0, -2.0)
 			parts.append(_part_ell("hand" + s, 7, hand_c, 2.2 + g.climb * 0.5 + g.b * 0.2, 2.3))
 		else:
@@ -460,7 +578,8 @@ static func _mood_skin(skin: String, mood: String) -> String:
 
 
 ## Eyes, brows, nose and mouth on the painted head. i: blink, happy, look,
-## mood ("tired": heavy lids and a drop of sweat; "pumped": a grin).
+## mood ("tired": heavy lids and a drop of sweat; "pumped": a grin), pose
+## ("hurt": a wince, the eyes screwed shut and the mouth open).
 static func draw_face(p: Pix, m: Dictionary, i: Dictionary) -> void:
 	var g: Dictionary = m.g
 	var ht: int = g.head_top
@@ -483,7 +602,16 @@ static func draw_face(p: Pix, m: Dictionary, i: Dictionary) -> void:
 		p.hline(c - 5, ey - 2, 3, brow)
 		p.hline(c + 2, ey - 2, 3, brow)
 	var mood: String = str(i.get("mood", ""))
-	if bool(i.get("blink", false)):
+	var hurt: bool = str(i.get("pose", "")) == "hurt"
+	if hurt:
+		# screwed shut: > <
+		p.set_px(c - 4, ey, lid)
+		p.set_px(c - 3, ey + 1, lid)
+		p.set_px(c - 4, ey + 2, lid)
+		p.set_px(c + 3, ey, lid)
+		p.set_px(c + 2, ey + 1, lid)
+		p.set_px(c + 3, ey + 2, lid)
+	elif bool(i.get("blink", false)):
 		p.hline(c - 4, ey + 1, 2, lid)
 		p.hline(c + 2, ey + 1, 2, lid)
 	elif mood == "tired":
@@ -517,18 +645,25 @@ static func draw_face(p: Pix, m: Dictionary, i: Dictionary) -> void:
 	var lip: String = Pix.mix(rp[0], "#8a2a3a", 0.25)
 	var my: int = ht + 9
 	var facial: int = int(i.get("facialHair", 0)) % HeroBody.FACIAL_HAIR.size()
-	var grin: bool = bool(i.get("happy", false)) or mood == "pumped"
+	var grin: bool = (bool(i.get("happy", false)) or mood == "pumped") and not hurt
+	# a gasp: the mouth open and dark
+	var gape: String = Pix.mix(rp[0], "#2a1018", 0.7)
 	if facial >= 2:
 		_facial_hair(p, m, facial)
 		# under a mustache only the lower lip shows
-		p.hline(c - 1, my + 1, 2, lip)
+		p.hline(c - 1, my + 1, 2, gape if hurt else lip)
 		if grin:
 			p.set_px(c - 2, my + 1, lip)
 			p.set_px(c + 1, my + 1, lip)
 		return
 	if facial == 1:
 		_facial_hair(p, m, facial)
-	if grin:
+	if hurt:
+		p.hline(c - 1, my, 2, gape)
+		p.hline(c - 1, my + 1, 2, gape)
+		p.set_px(c - 2, my, rp[1])
+		p.set_px(c + 1, my, rp[1])
+	elif grin:
 		p.set_px(c - 2, my - 1, lip)
 		p.set_px(c + 1, my - 1, lip)
 		p.hline(c - 1, my, 2, lip)
@@ -973,6 +1108,7 @@ static func _gear_metrics(g: Dictionary, fig: Dictionary, i: Dictionary, stage: 
 		"footL": {"x": int(g.legs[0].ankle.x) - 3, "w": 5},
 		"footR": {"x": int(g.legs[1].ankle.x) - 1, "w": 5},
 		"pose": g.pose,
+		"act": g.act,
 		"skin": _mood_skin(HeroBody.SKIN_TONES[int(i.skin) % HeroBody.SKIN_TONES.size()], str(i.get("mood", ""))),
 		"hair": HeroBody.HAIR_COLORS[int(i.hairColor) % HeroBody.HAIR_COLORS.size()],
 		"g": g,

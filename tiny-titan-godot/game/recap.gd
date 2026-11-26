@@ -144,7 +144,9 @@ static func _headline(r: Dictionary) -> String:
 	var week: bool = r.kind == "week"
 	if r.sessions == 0:
 		return "A rest week" if week else "A quiet month"
-	if not r.bosses.is_empty():
+	# What the poster SAYS only: `r.bosses` and the boss coins are counted as
+	# ever, but a boss is no headline while the campaign is off the screens.
+	if Campaign.ON_SCREEN and not r.bosses.is_empty():
 		return "Boss slayer"
 	if r.prs.size() >= 3:
 		return "Record breaker"

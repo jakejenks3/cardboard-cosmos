@@ -6,10 +6,19 @@ extends UiScreen
 ## Built to be looked at: the current boss is the star, the zones are grids of
 ## boss portraits, trophies are a grid of tiles. Explanations live in tooltips
 ## and details in a sheet opened by tapping a tile.
+##
+## Since 2026-11-25 the campaign is off the screens (Campaign.ON_SCREEN false;
+## its rules still run): the first sub-tab keeps its id, "campaign", so every
+## link to it still lands, but it is labelled "Bounty" and shows the weekly
+## bounty and its record (`_bounty`); a campaign trophy not earned yet says it
+## is a campaign reward instead of naming a boss (`trophy_words`). With
+## ON_SCREEN true the page is the campaign again (`_campaign`).
 
 const TIER_ICON = {"bronze": "medal", "silver": "medal", "gold": "medal", "platinum": "gem"}
 const TROPHY_COLS = 3
 const BOSS_COLS = 4
+## How many past weeks the Bounty page lists (the newest first).
+const BOUNTY_WEEKS = 12
 
 ## Trophy group filter: "all" or the id of one of Achievements.groups().
 var _filter: String = "all"
@@ -26,7 +35,7 @@ func build() -> void:
 	add_child(Kit.h1("Adventure"))
 	var quests_label = "Missions" if claimable == 0 else "Missions (%d)" % claimable
 	var tabs = Kit.sub_tabs([
-		{"value": "campaign", "label": "Campaign"},
+		{"value": "campaign", "label": "Campaign" if Campaign.ON_SCREEN else "Bounty"},
 		{"value": "quests", "label": quests_label},
 		{"value": "trophies", "label": "Trophies"},
 	], App.adventure_tab, App.set_adventure_tab)
@@ -38,7 +47,10 @@ func build() -> void:
 		"trophies":
 			_trophies(state)
 		_:
-			_campaign(state)
+			if Campaign.ON_SCREEN:
+				_campaign(state)
+			else:
+				_bounty(state)
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +70,44 @@ static func reward_pills(boss: Dictionary) -> Array:
 		if it != null:
 			out.append(Kit.pill("gift", it.name, Pal.rarity(it.rarity), "Drops unique gear: %s" % it.name, null, 12))
 	return out
+
+
+# ---------------------------------------------------------------------------
+# Bounty (the first page while the campaign is off the screens)
+# ---------------------------------------------------------------------------
+
+## This week's bounty as the big card (a tap opens its sheet: BountyView), how
+## it works in words (a phone shows no tooltip), the record so far and the
+## weeks behind it, newest first.
+func _bounty(state: Dictionary) -> void:
+	var w = Bounty.of(state)
+	if w == null:
+		# (Derive always settles the week, so this is only a state that was never
+		# derived: the page still says something.)
+		add_child(Kit.empty("skull", "No bounty yet", "A new monster shows up every Monday."))
+		return
+	add_child(BountyView.card(true))
+	var how = Kit.muted_para("A new monster every Monday, sized from your last four weeks. Every XP you log that week is a point of damage: beat it by Sunday night for coins.", 13)
+	how.set_meta("bounty_how", true)
+	add_child(how)
+	var tiles = Kit.grid(3, 8)
+	tiles.set_meta("bounty_record", true)
+	tiles.add_child(_stat_tile(str(int(w.wins)), "WINS", Pal.TEXT, "skull"))
+	tiles.add_child(_stat_tile(str(int(w.streak)), "IN A ROW", Pal.ACCENT2, "flame"))
+	tiles.add_child(_stat_tile(Xp.fmt_int(w.coins), "COINS", Pal.ACCENT, "coin"))
+	add_child(tiles)
+	var past = []
+	for r in w.history:
+		if r.week != w.current.week:
+			past.append(r)
+	if past.is_empty():
+		return
+	add_child(Kit.section_title("Past weeks"))
+	var g = Kit.grid(BOSS_COLS, 6)
+	g.set_meta("bounty_past", true)
+	for i in range(past.size() - 1, maxi(-1, past.size() - 1 - BOUNTY_WEEKS), -1):
+		g.add_child(BountyView._past_tile(past[i]))
+	add_child(g)
 
 
 # ---------------------------------------------------------------------------
@@ -504,12 +554,21 @@ func _trophy_tile(r: Dictionary) -> Control:
 			tile.add(Kit.bar(r.ratio, col, 5))
 		else:
 			tile.add(Kit.bar(0.0, Pal.ACCENT, 5))
-	var tip = "Keep playing to discover it." if hidden else Units.text(Icons.strip_emoji(a.desc), App.settings())
+	var tip = "Keep playing to discover it." if hidden else AdventureScreen.trophy_words(a, u != null)
 	if p != null and not hidden:
 		tip += "\n" + Fmt.fmt_progress(p, App.settings())
 	tile.tooltip_text = tip
 	Kit.passthrough(tile.box)
 	return tile
+
+
+## What a trophy asks for, in the player's units. One of the campaign's own
+## that is not earned yet says it is a campaign reward while the campaign is
+## off the screens (Campaign.hint_on_screen: "Defeat your first boss" would
+## point at nothing); an earned one keeps its words.
+static func trophy_words(a: Dictionary, earned: bool) -> String:
+	var words = str(a.desc) if earned else Campaign.hint_on_screen(a.desc, "a:%s" % str(a.id))
+	return Units.text(Icons.strip_emoji(words), App.settings())
 
 
 ## The detail sheet of one trophy.
@@ -521,7 +580,7 @@ static func open_trophy(r: Dictionary) -> void:
 	var hidden = u == null and a.get("secret", false)
 	var s = Kit.sheet("Secret trophy" if hidden else Icons.strip_emoji(a.name))
 	s.box.add_child(AdventureScreen.trophy_plate(r, 88))
-	var d = Kit.muted_para("Keep playing to discover it." if hidden else Units.text(Icons.strip_emoji(a.desc), App.settings()), 15)
+	var d = Kit.muted_para("Keep playing to discover it." if hidden else AdventureScreen.trophy_words(a, u != null), 15)
 	d.set_meta("trophy_desc", str(a.id))
 	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	s.box.add_child(d)

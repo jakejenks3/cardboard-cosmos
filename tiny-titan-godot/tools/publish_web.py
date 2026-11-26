@@ -55,7 +55,7 @@ def main():
     if git(repo, "status", "--porcelain") == "":
         print("nothing changed")
         return
-    git(repo, "commit", "-m", "Tiny Titan web build %s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" % build)
+    git(repo, "commit", "-m", "Tiny Titan web build %s\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>" % build)
     print("committed build", build)
     if push:
         git(repo, "push", "origin", "HEAD")

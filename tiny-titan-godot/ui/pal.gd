@@ -87,6 +87,29 @@ static var HP = Color("ff4d6d")
 ## The weekly bounty: violet, so it never reads as the campaign boss.
 static var BOUNTY = Color("a66bff")
 
+# The Realm (the RPG tab, RPG_PLAN.md): its own colour and one per school of
+# moves that has none yet. The other schools borrow what their training
+# already has (speed RUN, grip CLIMB, mind READ, flow PT: RpgUi.color). The same
+# in every theme, like PT and BOUNTY. Picked 2026-11-25 so that each is at
+# least 3:1 against PANEL and PANEL2 of all four themes (the lowest: GRIT 3.03
+# and PULL 3.08 on Forest's PANEL2) and far from each other and from the fixed
+# colours above (CIEDE2000; the nearest pairs: GRIT-MISC 11.2, PUSH-LIFT 12.0,
+# LEGS-PT 13.7, PULL-RUN 13.8, REALM-CLIMB 23.6; the old ones are 14 or more
+# apart). A change here should be checked the same way.
+## Push moves (chest, shoulders, arms): a light coral, between LIFT's orange
+## and the pink-red of HP / DANGER, lighter than both.
+static var PUSH = Color("ff8e7c")
+## Pull moves (back, arms): periwinkle, between RUN's blue and BOUNTY's violet.
+static var PULL = Color("939bff")
+## Legs moves: lemon yellow, greener and paler than RIDE's amber and the gold
+## of a reward (ACCENT), yellower than PT.
+static var LEGS = Color("f0e63c")
+## Grit (showing up): magenta, apart from MISC's pink and BOUNTY's violet.
+static var GRIT = Color("ff60f6")
+## The Realm itself (its tab, its sections, ore): cyan, between CLIMB's teal
+## and RUN's blue. TAB_ACCENT.realm is the same value.
+static var REALM = Color("36d6f2")
+
 ## What a colour means on the Hero tab (2026-11-24, "things blend together"):
 ## gold (ACCENT) is a reward (XP, coins, the level, the chest, Claim) and the one
 ## main action (Start workout), never a target or a frame for everything. A
@@ -96,13 +119,15 @@ static var BOUNTY = Color("a66bff")
 ## inside them Kit.row (a Pal.slot fill with a stripe).
 
 ## Each tab has its own accent, used for its headings, sub-tabs and tab-bar label,
-## so the five areas of the game do not all look the same.
+## so the six areas of the game do not all look the same ("realm" is Pal.REALM;
+## a const cannot name a static var, so the value is written again).
 const TAB_ACCENT = {
 	"home": Color("ffd23f"),
 	"adventure": Color("ff6b7a"),
 	"log": Color("58e07a"),
 	"journey": Color("5ab6ff"),
 	"armory": Color("d59bff"),
+	"realm": Color("36d6f2"),
 }
 ## The tab being shown (set by the app shell).
 static var current_tab: String = "home"

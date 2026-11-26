@@ -185,7 +185,10 @@ static func poster(r: Dictionary) -> Control:
 
 	# --- the hero and the XP ------------------------------------------------------
 	var hero_row = Kit.hbox(12)
-	var hero = PixelRect.make(Art.hero_texture(s, App.profile(), App.loadout(), "flex" if not r.bosses.is_empty() or r.prs.size() >= 3 else "idle", 0, true), 3.0)
+	# The hero flexes after a big stretch: three records or more (or a boss down,
+	# while the campaign is on the screens).
+	var flexes = r.prs.size() >= 3 or (Campaign.ON_SCREEN and not r.bosses.is_empty())
+	var hero = PixelRect.make(Art.hero_texture(s, App.profile(), App.loadout(), "flex" if flexes else "idle", 0, true), 3.0)
 	hero_row.add_child(_well(hero, Pal.tab("journey")))
 	var xcol = Kit.vbox(6)
 	xcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -253,7 +256,8 @@ static func poster(r: Dictionary) -> Control:
 
 	# --- highlights ---------------------------------------------------------------------
 	var lines = Kit.vbox(7)
-	for id in r.bosses:
+	# (No "Defeated ..." lines while the campaign is off the screens.)
+	for id in (r.bosses if Campaign.ON_SCREEN else []):
 		var boss = Campaign.boss_by_id(id)
 		lines.add_child(_line("skull", Pal.HP, "Defeated %s" % (boss.name if boss != null else "an Echo of Doubt"), boss.epithet if boss != null else ""))
 	if not r.bounties.weeks.is_empty():
