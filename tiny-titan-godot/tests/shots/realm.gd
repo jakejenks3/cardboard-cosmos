@@ -157,6 +157,15 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await _click(_one("realm_tab", page))
 		check(str(RpgUi.page) == page and _one("section", "realm_" + page) != null, "the %s page opens" % page.capitalize())
 		await ShotHelper.snap(tree, "realm_8_page_%s" % page)
+		if page == "hero":
+			var jr = _one("section", "realm_journey")
+			check(jr != null and _all("journey_num", jr).size() == 6, "the Hero page ends in the journey so far: six counts")
+			if jr != null:
+				ShotHelper.reveal(jr)
+				await ShotHelper.frames(tree, 4)
+				await ShotHelper.snap(tree, "realm_8b_journey")
+				ShotHelper.scroll_main(main, 0)
+				await ShotHelper.frames(tree, 3)
 	await _click(_one("realm_tab", "map"))
 
 	# --- the Map --------------------------------------------------------------------------------

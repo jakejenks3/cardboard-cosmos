@@ -36,7 +36,7 @@ var current = ""
 var dirty = false
 
 const SECTIONS = {
-	"hero": ["realm_body", "realm_traits", "realm_fight", "realm_boosts"],
+	"hero": ["realm_body", "realm_traits", "realm_fight", "realm_boosts", "realm_journey"],
 	"moves": ["moves_build", "moves_all"],
 	"skills": ["skills_head", "skills_board"],
 	"gear": ["gear_worn", "gear_relics", "gear_pet", "gear_belt", "gear_runes", "gear_shop"],

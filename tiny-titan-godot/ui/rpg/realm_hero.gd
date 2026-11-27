@@ -27,6 +27,7 @@ static func fill(box: VBoxContainer, _screen) -> void:
 	box.add_child(_traits(sheet))
 	box.add_child(_fight())
 	box.add_child(_boosts())
+	box.add_child(_journey())
 
 
 ## The colour of a stat: its school's (Endurance: the Realm's own).
@@ -282,6 +283,69 @@ static func _num_tile(id: String, title: String, icon: String, col: Color, value
 	t.add(head)
 	t.add(Kit.muted_para(from, 11))
 	return t
+
+
+# ---------------------------------------------------------------------------
+# THE JOURNEY SO FAR: how much of the Realm has been won, counted from the save
+# ---------------------------------------------------------------------------
+
+## {"stars", "stars_of", "stages", "stages_of", "bosses", "bosses_of", "foes", "foes_of", "relics", "relics_of", "spire"}.
+static func journey(rpg: Dictionary) -> Dictionary:
+	var out = {"stars": 0, "stars_of": 0, "stages": 0, "stages_of": 0, "bosses": 0, "bosses_of": 0}
+	for st in RpgWorld.all_stages():
+		if bool(st.get("echo", false)):
+			continue
+		var boss = str(st.get("kind", "")) == "boss"
+		out.stages_of += 1
+		if boss:
+			out.bosses_of += 1
+		if RpgWorld.done(rpg, str(st.id)):
+			out.stages += 1
+			if boss:
+				out.bosses += 1
+	for reg in RpgWorld.regions():
+		out.stars += RpgWorld.star_count(rpg, str(reg.id))
+		out.stars_of += RealmMap.STARS_MAX
+	out["foes"] = RealmBestiary.met(rpg).size()
+	out["foes_of"] = RealmBestiary.total()
+	var have = rpg.get("relics", {})
+	out["relics"] = have.size() if have is Dictionary else 0
+	out["relics_of"] = RpgRelics.all().size()
+	var sp = rpg.get("spire", {})
+	out["spire"] = int(sp.get("best", 0)) if sp is Dictionary else 0
+	return out
+
+
+static func _journey() -> Control:
+	var j = journey(RpgUi.save())
+	var sec = Kit.section("realm_journey", "THE JOURNEY SO FAR", "map", RpgUi.color("realm"), null, Callable(), 6, 10)
+	var grid = Kit.grid(2, 6)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var rows = [
+		["stars", "Stars", "star_on", Pal.ACCENT, "%d / %d" % [int(j.stars), int(j.stars_of)], float(j.stars) / float(maxi(1, int(j.stars_of)))],
+		["stages", "Stages won", "map", RpgUi.color("realm"), "%d / %d" % [int(j.stages), int(j.stages_of)], float(j.stages) / float(maxi(1, int(j.stages_of)))],
+		["bosses", "Bosses felled", "crown", Pal.DANGER, "%d / %d" % [int(j.bosses), int(j.bosses_of)], float(j.bosses) / float(maxi(1, int(j.bosses_of)))],
+		["foes", "Foes met", "skull", Pal.BOUNTY, "%d / %d" % [int(j.foes), int(j.foes_of)], float(j.foes) / float(maxi(1, int(j.foes_of)))],
+		["relics", "Relics found", "relic", RpgUi.color("grit"), "%d / %d" % [int(j.relics), int(j.relics_of)], float(j.relics) / float(maxi(1, int(j.relics_of)))],
+		["spire", "The Spire", "spire", Pal.SECOND, ("Floor %d" % int(j.spire)) if int(j.spire) > 0 else "Not climbed", -1.0],
+	]
+	for r in rows:
+		var t = Kit.row(Callable(), r[3], r[3], 8, 2)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		t.set_meta("journey_num", str(r[0]))
+		var head = Kit.hbox(6)
+		head.add_child(Kit.vcenter(Icons.rect(str(r[2]) if Icons.has_icon(str(r[2])) else "star", 16)))
+		head.add_child(Kit.vcenter(Kit.clip(str(r[1]), 12, Pal.MUTED, true)))
+		t.add(head)
+		var val = Kit.label(str(r[4]), 18, r[3], true)
+		val.set_meta("journey_value", str(r[4]))
+		t.add(val)
+		if float(r[5]) >= 0.0:
+			t.add(Kit.bar(float(r[5]), r[3], 6))
+		grid.add_child(t)
+	sec.add(grid)
+	sec.add(Kit.muted_para("Eight regions, a boss at the end of each, then their echoes and the Spire.", 11))
+	return sec
 
 
 # ---------------------------------------------------------------------------

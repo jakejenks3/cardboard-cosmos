@@ -166,6 +166,9 @@ var _hit_counts: Dictionary = {}
 var _word_counts: Dictionary = {}
 ## Foes whose fall was already shown with the blow that felled them.
 var _ko_done: Dictionary = {}
+## What the line has said in this fight (the last LOG_MAX entries): a tap on the line opens them.
+var _log: Array = []
+const LOG_MAX = 60
 ## The looping effects of lasting statuses: "unit|status" -> the effect.
 var _status_nodes: Dictionary = {}
 var _gauge_full: bool = false
@@ -273,7 +276,11 @@ func _build() -> void:
 	add_child(_hero_plate)
 	_line_box = PanelContainer.new()
 	_line_box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_line_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# A tap on the line opens everything that was said in this fight (the log).
+	_line_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	_line_box.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_line_box.gui_input.connect(_on_line_input)
+	_line_box.set_meta("bv_log_key", true)
 	_line_box.add_theme_stylebox_override("panel", PixBox.well(8, 2))
 	_line = Kit.clip("", 12, Pal.TEXT, true)
 	_line.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1218,6 +1225,38 @@ func _kill_moving() -> void:
 func _say(text: String) -> void:
 	if _line != null:
 		_line.text = text
+	if text != "" and (_log.is_empty() or str(_log[_log.size() - 1]) != text):
+		# (A line that grows as its hits land, "Stomp: 12 damage." then "Stomp: 24 damage.", is one entry.)
+		var head = text.split(":")[0]
+		if not _log.is_empty() and text.contains(":") and str(_log[_log.size() - 1]).begins_with(head + ":"):
+			_log[_log.size() - 1] = text
+		else:
+			_log.append(text)
+		if _log.size() > LOG_MAX:
+			_log.remove_at(0)
+
+
+func _on_line_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_line_box.accept_event()
+		if _tap_guard():
+			return
+		_open_log()
+
+
+## Everything that was said in this fight, the newest first.
+func _open_log() -> void:
+	Sfx.tap()
+	var s = Kit.sheet("What happened")
+	s.set_meta("bv_sheet", "log")
+	if _log.is_empty():
+		s.box.add_child(Kit.muted_para("Nothing yet.", 13))
+	for i in range(_log.size() - 1, -1, -1):
+		var l = Kit.para(str(_log[i]), 13, Pal.TEXT if i == _log.size() - 1 else Pal.MUTED, i == _log.size() - 1)
+		l.set_meta("bv_log_line", i)
+		s.box.add_child(l)
+	s.box.add_child(Kit.button("Close", "ghost", s.close, "lg"))
+	_sheet_up(s)
 
 
 func _name(id: String) -> String:
@@ -1930,7 +1969,14 @@ func _show_dmg(e: Dictionary) -> float:
 		RpgSfx.buzz(3)
 		if not instant:
 			BattleFx.flash(_arena, Color(1, 1, 1), 0.6, 0.3)
-		wait = 0.5
+			# An ultimate lands as a storm, not as one blow: bursts all round the foe, a wide ring in gold.
+			var at2 = _mid(dst)
+			var spots = [Vector2(-26, -18), Vector2(24, -10), Vector2(-14, 16), Vector2(20, 20), Vector2(0, -28)]
+			for i in range(spots.size()):
+				_fx("impact", at2 + spots[i], Pal.ACCENT if i % 2 == 0 else RpgUi.color(fx_school), 0.3, {"delay": 0.05 + 0.06 * float(i), "n": 10})
+			_fx("ring", at2, Pal.ACCENT, 0.5, {"u": 5.0, "half": 14.0})
+			_fx("sparkle", at2, Color(1, 1, 1), 0.8, {"n": 14, "half": 26.0, "delay": 0.1})
+		wait = 0.62
 	else:
 		if not instant:
 			RpgSfx.hit(fx_school, crit, weak, resist)

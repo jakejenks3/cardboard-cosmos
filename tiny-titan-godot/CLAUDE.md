@@ -1696,6 +1696,18 @@ is the Windows handoff.
       `map_bestiary`; `open()` the sheet: every foe by region, the ones met as they are with the weaknesses
       learned, the rest as dark shapes "???"). Nothing new is stored: met = a weakness learned
       (`saved.rpg.seen`) or standing in a stage that was won (`RealmBestiary.met`).
+    - A PHONE'S SPEAKER plays next to nothing under about 250 Hz, and the phone is where this is heard: a
+      thud is never only a low sine. Every hit, block, break and drum of `RpgSfx.SOUNDS` has a knock in the
+      middle (a sine falling through 300 to 700 Hz), and the sound test fails a sound with less than 30% of
+      its energy above 250 Hz. (The music was measured the same way: 56 to 82% above 250 Hz. It plays at
+      `RpgSfx.MUSIC_VOLUME` 1.0: peaks about -18 dBFS.)
+    - A tap on the fight's message line opens the log (`BattleView._open_log`, sheet meta `bv_sheet` "log",
+      the last `LOG_MAX` 60 things said, newest first). An ultimate's first hit lands as a storm of bursts.
+    - The Hero page ends in THE JOURNEY SO FAR (`RealmHero.journey(rpg)`, section `realm_journey`, six tiles
+      `journey_num`): stars, stages won, bosses felled, foes met, relics found, the Spire. Counted from the
+      save; nothing new is stored.
+    - `ShotHelper.snap` also fails a label that is on screen with words and shows none of them (5 px high or
+      no visible line): every walkthrough is a check for text that cannot be seen.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

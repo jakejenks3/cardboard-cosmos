@@ -19,6 +19,11 @@ extends RefCounted
 ##
 ## The autoload is reached through the tree, never by its name, so this file
 ## compiles in a headless --script test.
+##
+## A PHONE'S SPEAKER plays next to nothing under about 250 Hz, and the phone is
+## where this is played. So a thud is never only a low sine: every hit, block,
+## break and drum also has a knock in the middle (a sine falling through 300 to
+## 700 Hz), which is what is heard there; the low part is for headphones.
 
 ## How far a sound's pitch strays each time it is played (a hit never sounds
 ## twice the same).
@@ -29,23 +34,23 @@ const SOUNDS = {
 	# The swing before a hit lands.
 	"swing": [[0, 0.0, 0.13, "noise", 0.08, {"lp": 650, "attack": 0.05}], [320, 0.0, 0.12, "sine", 0.012, {"to": 760, "glide": 0.1, "attack": 0.03}]],
 	# Push: a short heavy thud.
-	"hit_push": [[150, 0.0, 0.16, "sine", 0.11, {"to": 58, "glide": 0.09, "attack": 0.002}], [0, 0.0, 0.06, "noise", 0.07, {"lp": 900, "attack": 0.001}], [300, 0.0, 0.05, "triangle", 0.03, {"to": 150, "glide": 0.04, "attack": 0.002}]],
+	"hit_push": [[150, 0.0, 0.16, "sine", 0.07, {"to": 58, "glide": 0.09, "attack": 0.002}], [0, 0.0, 0.06, "noise", 0.07, {"lp": 900, "attack": 0.001}], [300, 0.0, 0.05, "triangle", 0.03, {"to": 150, "glide": 0.04, "attack": 0.002}], [460, 0.0, 0.1, "sine", 0.09, {"to": 200, "glide": 0.07, "attack": 0.002}]],
 	# Pull: a slash, bright air falling.
-	"hit_pull": [[0, 0.0, 0.1, "noise", 0.065, {"lp": 2600, "attack": 0.004}], [980, 0.0, 0.11, "sine", 0.035, {"to": 300, "glide": 0.09, "attack": 0.003}], [140, 0.02, 0.1, "sine", 0.05, {"to": 80, "glide": 0.08}]],
+	"hit_pull": [[0, 0.0, 0.1, "noise", 0.065, {"lp": 2600, "attack": 0.004}], [980, 0.0, 0.11, "sine", 0.035, {"to": 300, "glide": 0.09, "attack": 0.003}], [140, 0.02, 0.1, "sine", 0.05, {"to": 80, "glide": 0.08}], [560, 0.01, 0.08, "sine", 0.05, {"to": 260, "glide": 0.06, "attack": 0.002}]],
 	# Legs: a stomp, lower and longer, the ground answering.
-	"hit_legs": [[112, 0.0, 0.26, "sine", 0.12, {"to": 40, "glide": 0.17, "attack": 0.002}], [0, 0.0, 0.14, "noise", 0.08, {"lp": 480, "attack": 0.002}], [62, 0.06, 0.24, "sine", 0.045, {"attack": 0.03}]],
+	"hit_legs": [[112, 0.0, 0.26, "sine", 0.075, {"to": 40, "glide": 0.17, "attack": 0.002}], [0, 0.0, 0.14, "noise", 0.08, {"lp": 600, "attack": 0.002}], [62, 0.06, 0.24, "sine", 0.025, {"attack": 0.03}], [400, 0.0, 0.14, "sine", 0.095, {"to": 170, "glide": 0.1, "attack": 0.002}], [320, 0.07, 0.12, "triangle", 0.04, {"to": 210, "glide": 0.1}]],
 	# Speed: two quick zips.
-	"hit_speed": [[1250, 0.0, 0.05, "sine", 0.034, {"to": 2100, "glide": 0.04, "attack": 0.002}], [1500, 0.055, 0.06, "sine", 0.034, {"to": 2400, "glide": 0.045, "attack": 0.002}], [0, 0.0, 0.09, "noise", 0.03, {"lp": 2600, "attack": 0.01}], [170, 0.05, 0.08, "sine", 0.05, {"to": 90, "glide": 0.06}]],
+	"hit_speed": [[1250, 0.0, 0.05, "sine", 0.034, {"to": 2100, "glide": 0.04, "attack": 0.002}], [1500, 0.055, 0.06, "sine", 0.034, {"to": 2400, "glide": 0.045, "attack": 0.002}], [0, 0.0, 0.09, "noise", 0.03, {"lp": 2600, "attack": 0.01}], [170, 0.05, 0.08, "sine", 0.05, {"to": 90, "glide": 0.06}], [520, 0.05, 0.07, "sine", 0.05, {"to": 260, "glide": 0.05, "attack": 0.002}]],
 	# Grip: a crunch, two bites.
-	"hit_grip": [[0, 0.0, 0.045, "noise", 0.075, {"lp": 1300, "attack": 0.001}], [0, 0.06, 0.07, "noise", 0.075, {"lp": 850, "attack": 0.001}], [230, 0.0, 0.13, "triangle", 0.05, {"to": 120, "glide": 0.11, "attack": 0.002}]],
+	"hit_grip": [[0, 0.0, 0.045, "noise", 0.075, {"lp": 1300, "attack": 0.001}], [0, 0.06, 0.07, "noise", 0.075, {"lp": 850, "attack": 0.001}], [230, 0.0, 0.13, "triangle", 0.05, {"to": 120, "glide": 0.11, "attack": 0.002}], [480, 0.0, 0.05, "sine", 0.05, {"to": 300, "glide": 0.04, "attack": 0.002}], [420, 0.06, 0.07, "sine", 0.05, {"to": 230, "glide": 0.05, "attack": 0.002}]],
 	# Mind: a bell.
 	"hit_mind": [[1047, 0.0, 0.3, "sine", 0.045, {"attack": 0.003}], [1568, 0.03, 0.32, "sine", 0.03, {"attack": 0.003}], [2093, 0.06, 0.26, "sine", 0.014, {"attack": 0.003}], [523, 0.0, 0.14, "sine", 0.035, {"attack": 0.004}]],
 	# A plain strike.
-	"hit_plain": [[250, 0.0, 0.09, "sine", 0.085, {"to": 120, "glide": 0.06, "attack": 0.002}], [0, 0.0, 0.045, "noise", 0.045, {"lp": 1300, "attack": 0.001}]],
+	"hit_plain": [[250, 0.0, 0.09, "sine", 0.085, {"to": 120, "glide": 0.06, "attack": 0.002}], [0, 0.0, 0.045, "noise", 0.045, {"lp": 1300, "attack": 0.001}], [520, 0.0, 0.07, "sine", 0.06, {"to": 230, "glide": 0.05, "attack": 0.002}]],
 	# On top of a hit.
 	"crit": [[1319, 0.0, 0.14, "sine", 0.04, {"attack": 0.002}], [1976, 0.05, 0.3, "sine", 0.04, {"attack": 0.002}], [2637, 0.1, 0.22, "sine", 0.012, {"attack": 0.002}]],
 	"weak": [[880, 0.0, 0.08, "triangle", 0.04, {"attack": 0.003}], [1175, 0.07, 0.2, "triangle", 0.045, {"attack": 0.003}]],
-	"resist": [[196, 0.0, 0.11, "triangle", 0.06, {"attack": 0.003}], [147, 0.045, 0.16, "triangle", 0.05, {"attack": 0.003}]],
+	"resist": [[392, 0.0, 0.11, "triangle", 0.05, {"attack": 0.003}], [294, 0.045, 0.16, "triangle", 0.045, {"attack": 0.003}]],
 	"miss": [[0, 0.0, 0.18, "noise", 0.05, {"lp": 1000, "attack": 0.07}], [620, 0.0, 0.16, "sine", 0.012, {"to": 300, "glide": 0.14, "attack": 0.03}]],
 	# The shield took it all.
 	"absorb": [[740, 0.0, 0.2, "sine", 0.035, {"attack": 0.002}], [1110, 0.0, 0.22, "sine", 0.02, {"attack": 0.002}], [0, 0.0, 0.03, "noise", 0.03, {"lp": 1500, "attack": 0.001}]],
@@ -55,21 +60,21 @@ const SOUNDS = {
 	"buff": [[440, 0.0, 0.14, "triangle", 0.04, {"to": 660, "glide": 0.11}], [880, 0.09, 0.24, "sine", 0.03, {"to": 1320, "glide": 0.12}]],
 	"debuff": [[520, 0.0, 0.2, "triangle", 0.04, {"to": 300, "glide": 0.16}], [300, 0.1, 0.24, "sine", 0.03, {"to": 180, "glide": 0.18}]],
 	"shield": [[660, 0.0, 0.32, "sine", 0.035, {"attack": 0.02}], [990, 0.0, 0.32, "sine", 0.02, {"attack": 0.02}], [1320, 0.05, 0.28, "sine", 0.014, {"attack": 0.02}]],
-	"guard": [[210, 0.0, 0.12, "triangle", 0.06, {"to": 150, "glide": 0.09, "attack": 0.003}], [0, 0.0, 0.05, "noise", 0.04, {"lp": 700, "attack": 0.002}], [520, 0.0, 0.07, "sine", 0.02, {"attack": 0.003}]],
+	"guard": [[210, 0.0, 0.12, "triangle", 0.06, {"to": 150, "glide": 0.09, "attack": 0.003}], [0, 0.0, 0.05, "noise", 0.04, {"lp": 700, "attack": 0.002}], [520, 0.0, 0.07, "sine", 0.02, {"attack": 0.003}], [430, 0.0, 0.1, "sine", 0.045, {"to": 300, "glide": 0.08, "attack": 0.003}]],
 	# A hit that lands on a raised guard.
-	"block": [[300, 0.0, 0.07, "triangle", 0.06, {"attack": 0.002}], [1200, 0.0, 0.07, "sine", 0.022, {"attack": 0.002}], [0, 0.0, 0.035, "noise", 0.045, {"lp": 1500, "attack": 0.001}]],
+	"block": [[300, 0.0, 0.07, "triangle", 0.06, {"attack": 0.002}], [1200, 0.0, 0.07, "sine", 0.022, {"attack": 0.002}], [0, 0.0, 0.035, "noise", 0.045, {"lp": 1500, "attack": 0.001}], [620, 0.0, 0.06, "sine", 0.04, {"to": 400, "glide": 0.05, "attack": 0.002}]],
 	# A guard pip knocked off.
 	"chip": [[1480, 0.0, 0.06, "sine", 0.026, {"to": 1100, "glide": 0.05, "attack": 0.002}], [0, 0.0, 0.025, "noise", 0.02, {"lp": 2400, "attack": 0.001}]],
 	# The guard breaks: glass falling, a low drop under it.
-	"break": [[0, 0.0, 0.2, "noise", 0.06, {"lp": 3200, "attack": 0.002}], [1760, 0.0, 0.14, "sine", 0.035, {"attack": 0.002}], [1397, 0.045, 0.14, "sine", 0.035, {"attack": 0.002}], [1047, 0.09, 0.14, "sine", 0.035, {"attack": 0.002}], [784, 0.135, 0.2, "sine", 0.035, {"attack": 0.002}], [125, 0.0, 0.24, "sine", 0.08, {"to": 50, "glide": 0.18, "attack": 0.002}]],
+	"break": [[0, 0.0, 0.2, "noise", 0.06, {"lp": 3200, "attack": 0.002}], [1760, 0.0, 0.14, "sine", 0.035, {"attack": 0.002}], [1397, 0.045, 0.14, "sine", 0.035, {"attack": 0.002}], [1047, 0.09, 0.14, "sine", 0.035, {"attack": 0.002}], [784, 0.135, 0.2, "sine", 0.035, {"attack": 0.002}], [125, 0.0, 0.24, "sine", 0.08, {"to": 50, "glide": 0.18, "attack": 0.002}], [420, 0.0, 0.16, "sine", 0.06, {"to": 160, "glide": 0.12, "attack": 0.002}]],
 	"recover": [[392, 0.0, 0.1, "triangle", 0.03, {"to": 523, "glide": 0.08}]],
 	# A foe goes down: a fall and a puff.
-	"ko": [[520, 0.0, 0.34, "sine", 0.06, {"to": 80, "glide": 0.26, "attack": 0.004}], [0, 0.13, 0.24, "noise", 0.045, {"lp": 900, "attack": 0.04}]],
+	"ko": [[520, 0.0, 0.34, "sine", 0.06, {"to": 80, "glide": 0.26, "attack": 0.004}], [0, 0.13, 0.24, "noise", 0.045, {"lp": 900, "attack": 0.04}], [0, 0.0, 0.03, "noise", 0.03, {"lp": 1500, "attack": 0.001}]],
 	# The hero is hit.
-	"hurt": [[135, 0.0, 0.18, "sine", 0.11, {"to": 55, "glide": 0.12, "attack": 0.002}], [0, 0.0, 0.08, "noise", 0.07, {"lp": 700, "attack": 0.001}], [92, 0.02, 0.12, "triangle", 0.04]],
-	"hurt_big": [[120, 0.0, 0.3, "sine", 0.13, {"to": 40, "glide": 0.2, "attack": 0.002}], [0, 0.0, 0.16, "noise", 0.09, {"lp": 800, "attack": 0.001}], [84, 0.03, 0.22, "triangle", 0.05], [330, 0.0, 0.12, "sine", 0.03, {"to": 165, "glide": 0.1}]],
+	"hurt": [[135, 0.0, 0.18, "sine", 0.07, {"to": 55, "glide": 0.12, "attack": 0.002}], [0, 0.0, 0.08, "noise", 0.07, {"lp": 800, "attack": 0.001}], [92, 0.02, 0.12, "triangle", 0.025], [430, 0.0, 0.11, "sine", 0.09, {"to": 190, "glide": 0.08, "attack": 0.002}]],
+	"hurt_big": [[120, 0.0, 0.3, "sine", 0.13, {"to": 40, "glide": 0.2, "attack": 0.002}], [0, 0.0, 0.16, "noise", 0.09, {"lp": 800, "attack": 0.001}], [84, 0.03, 0.22, "triangle", 0.05], [330, 0.0, 0.12, "sine", 0.03, {"to": 165, "glide": 0.1}], [440, 0.0, 0.16, "sine", 0.085, {"to": 150, "glide": 0.11, "attack": 0.002}], [300, 0.04, 0.14, "triangle", 0.04, {"to": 180, "glide": 0.12}]],
 	# The hero goes down.
-	"down": [[392, 0.0, 0.26, "triangle", 0.05], [311, 0.2, 0.26, "triangle", 0.05], [233, 0.4, 0.5, "triangle", 0.055], [58, 0.42, 0.5, "sine", 0.06, {"attack": 0.03}]],
+	"down": [[392, 0.0, 0.26, "triangle", 0.05], [311, 0.2, 0.26, "triangle", 0.05], [233, 0.4, 0.5, "triangle", 0.05], [58, 0.42, 0.5, "sine", 0.025, {"attack": 0.03}], [784, 0.0, 0.2, "sine", 0.012], [622, 0.2, 0.2, "sine", 0.012], [466, 0.4, 0.45, "sine", 0.03]],
 	"survive": [[330, 0.0, 0.1, "triangle", 0.05], [494, 0.09, 0.1, "triangle", 0.05], [659, 0.18, 0.3, "triangle", 0.055], [1319, 0.2, 0.3, "sine", 0.015]],
 	"burn": [[0, 0.0, 0.1, "noise", 0.04, {"lp": 2600, "attack": 0.02}], [420, 0.0, 0.1, "sine", 0.03, {"to": 620, "glide": 0.08}]],
 	"bleed": [[330, 0.0, 0.1, "sine", 0.04, {"to": 190, "glide": 0.08, "attack": 0.003}], [0, 0.0, 0.03, "noise", 0.02, {"lp": 1100, "attack": 0.001}]],
@@ -77,12 +82,12 @@ const SOUNDS = {
 	"interrupt": [[700, 0.0, 0.07, "triangle", 0.045, {"to": 350, "glide": 0.06, "attack": 0.002}], [0, 0.0, 0.04, "noise", 0.04, {"lp": 1600, "attack": 0.001}]],
 
 	# ---- the foes ---------------------------------------------------------
-	"foe_act": [[170, 0.0, 0.11, "triangle", 0.04, {"to": 235, "glide": 0.09}]],
+	"foe_act": [[340, 0.0, 0.11, "triangle", 0.04, {"to": 470, "glide": 0.09}]],
 	"foe_cast": [[294, 0.0, 0.2, "sine", 0.035, {"to": 392, "glide": 0.16, "attack": 0.03}], [588, 0.04, 0.2, "sine", 0.016, {"to": 784, "glide": 0.16, "attack": 0.03}]],
-	"charge": [[110, 0.0, 0.55, "sine", 0.045, {"to": 330, "glide": 0.5, "attack": 0.3}], [220, 0.0, 0.55, "triangle", 0.02, {"to": 660, "glide": 0.5, "attack": 0.32}]],
+	"charge": [[220, 0.0, 0.55, "sine", 0.045, {"to": 660, "glide": 0.5, "attack": 0.3}], [440, 0.0, 0.55, "triangle", 0.02, {"to": 1320, "glide": 0.5, "attack": 0.32}]],
 	"count": [[660, 0.0, 0.07, "sine", 0.035], [660, 0.16, 0.07, "sine", 0.035]],
-	"summon": [[147, 0.0, 0.28, "triangle", 0.05, {"to": 220, "glide": 0.24, "attack": 0.1}], [0, 0.0, 0.24, "noise", 0.035, {"lp": 600, "attack": 0.08}]],
-	"phase": [[110, 0.0, 0.7, "sine", 0.07, {"attack": 0.03}], [104, 0.0, 0.7, "sine", 0.06, {"attack": 0.03}], [220, 0.0, 0.55, "triangle", 0.04, {"to": 110, "glide": 0.45}], [0, 0.0, 0.45, "noise", 0.045, {"lp": 500, "attack": 0.02}]],
+	"summon": [[294, 0.0, 0.28, "triangle", 0.05, {"to": 440, "glide": 0.24, "attack": 0.1}], [0, 0.0, 0.24, "noise", 0.03, {"lp": 900, "attack": 0.08}]],
+	"phase": [[110, 0.0, 0.7, "sine", 0.03, {"attack": 0.03}], [104, 0.0, 0.7, "sine", 0.025, {"attack": 0.03}], [440, 0.0, 0.55, "triangle", 0.045, {"to": 220, "glide": 0.45}], [0, 0.0, 0.45, "noise", 0.04, {"lp": 700, "attack": 0.02}], [330, 0.0, 0.7, "sine", 0.06, {"attack": 0.03}], [311, 0.0, 0.7, "sine", 0.055, {"attack": 0.03}]],
 	"adapt": [[523, 0.0, 0.09, "triangle", 0.035], [415, 0.08, 0.09, "triangle", 0.035], [311, 0.16, 0.2, "triangle", 0.04]],
 
 	# ---- the flow of a fight -------------------------------------------------
@@ -93,19 +98,19 @@ const SOUNDS = {
 	"pet": [[1400, 0.0, 0.06, "sine", 0.03, {"to": 1900, "glide": 0.05}], [1600, 0.08, 0.08, "sine", 0.03, {"to": 2200, "glide": 0.06}]],
 	"learn_weak": [[784, 0.0, 0.08, "sine", 0.035], [1047, 0.07, 0.08, "sine", 0.035], [1568, 0.14, 0.26, "sine", 0.035]],
 	"ult_start": [[196, 0.0, 0.5, "sine", 0.05, {"to": 1568, "glide": 0.46, "attack": 0.22}], [0, 0.0, 0.5, "noise", 0.03, {"lp": 2400, "attack": 0.34}], [98, 0.0, 0.5, "triangle", 0.035, {"attack": 0.1}]],
-	"ult_hit": [[92, 0.0, 0.55, "sine", 0.13, {"to": 34, "glide": 0.4, "attack": 0.002}], [0, 0.0, 0.32, "noise", 0.085, {"lp": 1400, "attack": 0.002}], [523, 0.0, 0.5, "sine", 0.028], [784, 0.0, 0.5, "sine", 0.028], [1047, 0.0, 0.5, "sine", 0.026], [1568, 0.02, 0.5, "sine", 0.014]],
+	"ult_hit": [[92, 0.0, 0.55, "sine", 0.13, {"to": 34, "glide": 0.4, "attack": 0.002}], [0, 0.0, 0.32, "noise", 0.085, {"lp": 1400, "attack": 0.002}], [523, 0.0, 0.5, "sine", 0.028], [784, 0.0, 0.5, "sine", 0.028], [1047, 0.0, 0.5, "sine", 0.026], [1568, 0.02, 0.5, "sine", 0.014], [480, 0.0, 0.3, "sine", 0.085, {"to": 130, "glide": 0.2, "attack": 0.002}], [330, 0.05, 0.3, "triangle", 0.04, {"to": 165, "glide": 0.24}]],
 	"wave": [[392, 0.0, 0.11, "triangle", 0.04], [523, 0.1, 0.11, "triangle", 0.04], [659, 0.2, 0.24, "triangle", 0.045]],
 	# The fight opens: a drum and a rising call.
-	"enter": [[82, 0.0, 0.22, "sine", 0.1, {"to": 48, "glide": 0.16, "attack": 0.002}], [0, 0.0, 0.3, "noise", 0.04, {"lp": 800, "attack": 0.12}], [196, 0.06, 0.13, "triangle", 0.045], [262, 0.17, 0.13, "triangle", 0.045], [392, 0.28, 0.3, "triangle", 0.055], [784, 0.3, 0.3, "sine", 0.014]],
+	"enter": [[82, 0.0, 0.22, "sine", 0.06, {"to": 48, "glide": 0.16, "attack": 0.002}], [0, 0.0, 0.3, "noise", 0.04, {"lp": 800, "attack": 0.12}], [196, 0.06, 0.13, "triangle", 0.045], [262, 0.17, 0.13, "triangle", 0.045], [392, 0.28, 0.3, "triangle", 0.055], [784, 0.3, 0.3, "sine", 0.014], [380, 0.0, 0.13, "sine", 0.085, {"to": 180, "glide": 0.09, "attack": 0.002}]],
 	# A boss steps out: two low drums and a dark hum that beats.
-	"boss": [[73, 0.0, 1.0, "sine", 0.09, {"attack": 0.02}], [77.8, 0.0, 1.0, "sine", 0.055, {"attack": 0.02}], [147, 0.25, 0.75, "triangle", 0.04, {"to": 139, "glide": 0.6, "attack": 0.05}], [0, 0.0, 0.3, "noise", 0.06, {"lp": 320, "attack": 0.002}], [0, 0.5, 0.34, "noise", 0.07, {"lp": 320, "attack": 0.002}], [60, 0.5, 0.3, "sine", 0.1, {"to": 38, "glide": 0.2, "attack": 0.002}]],
+	"boss": [[73, 0.0, 1.0, "sine", 0.035, {"attack": 0.02}], [77.8, 0.0, 1.0, "sine", 0.025, {"attack": 0.02}], [440, 0.25, 0.75, "triangle", 0.04, {"to": 415, "glide": 0.6, "attack": 0.05}], [0, 0.0, 0.3, "noise", 0.05, {"lp": 500, "attack": 0.002}], [0, 0.5, 0.34, "noise", 0.06, {"lp": 500, "attack": 0.002}], [60, 0.5, 0.3, "sine", 0.05, {"to": 38, "glide": 0.2, "attack": 0.002}], [294, 0.0, 0.9, "sine", 0.07, {"attack": 0.03}], [311, 0.0, 0.9, "sine", 0.06, {"attack": 0.03}], [340, 0.0, 0.14, "sine", 0.08, {"to": 160, "glide": 0.1, "attack": 0.002}], [320, 0.5, 0.16, "sine", 0.09, {"to": 150, "glide": 0.11, "attack": 0.002}]],
 	"flee": [[700, 0.0, 0.07, "sine", 0.035, {"to": 520, "glide": 0.06}], [560, 0.08, 0.07, "sine", 0.035, {"to": 400, "glide": 0.06}], [430, 0.16, 0.14, "sine", 0.035, {"to": 280, "glide": 0.1}]],
 	"victory": [[392, 0.0, 0.13, "triangle", 0.055], [523, 0.11, 0.13, "triangle", 0.055], [659, 0.22, 0.13, "triangle", 0.055], [784, 0.33, 0.2, "triangle", 0.06], [659, 0.56, 0.12, "triangle", 0.05], [1047, 0.68, 0.6, "triangle", 0.065], [131, 0.0, 0.5, "sine", 0.05, {"attack": 0.01}], [196, 0.33, 0.4, "sine", 0.04, {"attack": 0.01}], [262, 0.68, 0.6, "sine", 0.05, {"attack": 0.01}], [1568, 0.7, 0.55, "sine", 0.018], [2093, 0.72, 0.5, "sine", 0.01]],
-	"defeat": [[392, 0.0, 0.3, "triangle", 0.05], [349, 0.26, 0.3, "triangle", 0.05], [311, 0.52, 0.3, "triangle", 0.05], [262, 0.78, 0.7, "triangle", 0.055], [65, 0.78, 0.7, "sine", 0.06, {"attack": 0.04}]],
+	"defeat": [[392, 0.0, 0.3, "triangle", 0.05], [349, 0.26, 0.3, "triangle", 0.05], [311, 0.52, 0.3, "triangle", 0.05], [262, 0.78, 0.7, "triangle", 0.055], [65, 0.78, 0.7, "sine", 0.06, {"attack": 0.04}], [262, 0.78, 0.6, "sine", 0.03]],
 
 	# ---- the result ---------------------------------------------------------
-	"star": [[1047, 0.0, 0.24, "sine", 0.045, {"attack": 0.002}], [1568, 0.02, 0.24, "sine", 0.02, {"attack": 0.002}], [0, 0.0, 0.03, "noise", 0.03, {"lp": 2000, "attack": 0.001}], [262, 0.0, 0.08, "sine", 0.04, {"to": 160, "glide": 0.06}]],
-	"star_miss": [[220, 0.0, 0.1, "triangle", 0.025, {"to": 180, "glide": 0.08}]],
+	"star": [[1047, 0.0, 0.24, "sine", 0.045, {"attack": 0.002}], [1568, 0.02, 0.24, "sine", 0.02, {"attack": 0.002}], [0, 0.0, 0.03, "noise", 0.03, {"lp": 2000, "attack": 0.001}], [262, 0.0, 0.08, "sine", 0.04, {"to": 160, "glide": 0.06}], [523, 0.0, 0.07, "sine", 0.04, {"to": 330, "glide": 0.05, "attack": 0.002}]],
+	"star_miss": [[440, 0.0, 0.1, "triangle", 0.025, {"to": 360, "glide": 0.08}]],
 	"ore": [[1319, 0.0, 0.07, "sine", 0.03], [1760, 0.05, 0.16, "sine", 0.03]],
 	"count_up": [[880, 0.0, 0.035, "sine", 0.012]],
 	"loot": [[523, 0.0, 0.1, "sine", 0.04, {"to": 660, "glide": 0.07}], [784, 0.08, 0.2, "sine", 0.035]],
@@ -113,7 +118,7 @@ const SOUNDS = {
 	"first_clear": [[523, 0.0, 0.1, "triangle", 0.05], [659, 0.09, 0.1, "triangle", 0.05], [784, 0.18, 0.1, "triangle", 0.05], [1047, 0.27, 0.36, "triangle", 0.055], [1319, 0.3, 0.36, "sine", 0.02]],
 
 	# ---- the pages ---------------------------------------------------------
-	"chest": [[0, 0.0, 0.26, "noise", 0.035, {"lp": 520, "attack": 0.1}], [220, 0.0, 0.24, "triangle", 0.03, {"to": 330, "glide": 0.2, "attack": 0.05}], [784, 0.26, 0.1, "sine", 0.035], [1047, 0.32, 0.1, "sine", 0.035], [1319, 0.38, 0.1, "sine", 0.035], [1568, 0.44, 0.34, "sine", 0.04]],
+	"chest": [[0, 0.0, 0.26, "noise", 0.035, {"lp": 520, "attack": 0.1}], [220, 0.0, 0.24, "triangle", 0.03, {"to": 330, "glide": 0.2, "attack": 0.05}], [784, 0.26, 0.1, "sine", 0.035], [1047, 0.32, 0.1, "sine", 0.035], [1319, 0.38, 0.1, "sine", 0.035], [1568, 0.44, 0.34, "sine", 0.04], [330, 0.0, 0.05, "sine", 0.04, {"to": 220, "glide": 0.04, "attack": 0.002}]],
 	"learn": [[523, 0.0, 0.22, "sine", 0.04, {"to": 1047, "glide": 0.16}], [784, 0.15, 0.28, "triangle", 0.04], [1568, 0.2, 0.32, "sine", 0.02]],
 	"upgrade": [[660, 0.0, 0.06, "triangle", 0.05, {"attack": 0.002}], [0, 0.0, 0.035, "noise", 0.04, {"lp": 2800, "attack": 0.001}], [740, 0.13, 0.06, "triangle", 0.05, {"attack": 0.002}], [0, 0.13, 0.035, "noise", 0.04, {"lp": 2800, "attack": 0.001}], [1320, 0.26, 0.34, "sine", 0.035], [1980, 0.28, 0.3, "sine", 0.012]],
 	"equip": [[0, 0.0, 0.05, "noise", 0.04, {"lp": 1400, "attack": 0.002}], [500, 0.0, 0.09, "sine", 0.03, {"to": 720, "glide": 0.07}]],
@@ -130,7 +135,7 @@ const SOUNDS = {
 const HITS = {"push": "hit_push", "pull": "hit_pull", "legs": "hit_legs", "speed": "hit_speed", "grip": "hit_grip", "mind": "hit_mind", "plain": "hit_plain"}
 
 ## The music's level (RealmMusic.volume): under the sound effects.
-const MUSIC_VOLUME = 0.7
+const MUSIC_VOLUME = 1.0
 ## In a browser every tune played stays in its memory (about 9 MB each, and the engine cannot hand it back),
 ## so a visit to the page plays at most this many different ones; after that the nearest one already there.
 const WEB_TUNES = 5

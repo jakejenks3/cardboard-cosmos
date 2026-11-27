@@ -106,6 +106,13 @@ func _run() -> void:
 	ok(quiet.is_empty(), "none is too quiet to hear", quiet)
 	ok(long.is_empty(), "none runs longer than 1.6 seconds", long)
 	ok(harsh.is_empty(), "little in the harsh high end (worst %.1f%% over 4 kHz)" % (worst * 100.0), harsh)
+	# A phone's speaker plays next to nothing under about 250 Hz: every sound has a good part of itself above that.
+	var low = []
+	for k in R.SOUNDS:
+		var body = share_above(samples(S._render(R.SOUNDS[k])), 250.0)
+		if body < 0.3:
+			low.append("%s %.0f%%" % [k, body * 100.0])
+	ok(low.is_empty(), "every sound can be heard on a phone's speaker (30% or more of it above 250 Hz)", low)
 	# The same notes give the same sound (the noise is its own generator, not randf).
 	var a = S._render(R.SOUNDS["hit_push"]).data
 	var b = S._render(R.SOUNDS["hit_push"]).data

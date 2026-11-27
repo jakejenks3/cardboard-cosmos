@@ -36,6 +36,11 @@ static func snap(tree: SceneTree, shot_name: String) -> String:
 			for c in n.get_children():
 				if c is Control and not (c is ScrollBar) and c.get_combined_minimum_size().x > n.size.x + 0.5:
 					print("CHECK FAIL  %s: the content is wider than its column (%d > %d)" % [shot_name, int(c.get_combined_minimum_size().x), int(n.size.x)])
+	# And a label with words must SHOW them: one that wraps and clips asks for a single pixel of height when
+	# it is left to shrink, and then draws nothing (the fight's message line was blank like that for days).
+	for n in walk(tree.root):
+		if n is Label and n.is_visible_in_tree() and str(n.text).strip_edges() != "" and n.modulate.a > 0.05 and n.size.x > 8.0 and (n.size.y < 5.0 or n.get_visible_line_count() == 0):
+			print("CHECK FAIL  %s: a label shows none of its words (%s high): \"%s\" %s" % [shot_name, str(n.size.y), str(n.text).left(40), str(n.get_path()).right(60)])
 	return path
 
 
