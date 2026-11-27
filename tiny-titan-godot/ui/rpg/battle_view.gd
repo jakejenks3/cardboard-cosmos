@@ -44,6 +44,12 @@ signal speed_changed(speed)
 const ARENA_H = 240.0
 ## The arena grows by up to this much when the column is taller than the screen needs.
 const ARENA_MORE = 80.0
+## Of the room the arena has over ARENA_H, this share (FLOOR_MAX at most, nothing under FLOOR_MIN) is ground
+## in front of the fighters, not sky over them: on a phone's tall screen they stand in the picture, not at
+## the foot of a tall empty sky.
+const FLOOR_SHARE = 0.42
+const FLOOR_MAX = 136.0
+const FLOOR_MIN = 16.0
 const GAP = 4.0
 const PAD = 8.0
 const KEY_GAP = 6.0
@@ -572,6 +578,12 @@ func _layout() -> void:
 	y += _top_h + GAP
 	_kill(_shake_tw)
 	_rect(_arena, 0, y, w, arena_h)
+	var kk = float(_arena.k())
+	var floor_h = floor(minf((arena_h - ARENA_H) * FLOOR_SHARE, FLOOR_MAX) / kk) * kk
+	if floor_h < FLOOR_MIN:
+		floor_h = 0.0
+	_arena.floor_h = floor_h
+	_arena.queue_redraw()
 	_arena_home = _arena.position
 	_arena_size = _arena.size
 	y += arena_h + GAP
@@ -594,12 +606,12 @@ func _layout() -> void:
 	if _tip != null:
 		_rect(_tip, 6, arena_h - 40.0, w - 12.0, 38)
 	# Banners stay over the fighters, however much sky is above them.
-	_rect(_fx_layer, 0, arena_h - ARENA_H, w, ARENA_H)
+	_rect(_fx_layer, 0, arena_h - floor_h - ARENA_H, w, ARENA_H)
 	if _ambient != null:
 		_rect(_ambient, 0, 0, w, arena_h)
 	if _sky_fx != null:
 		# The band of plain sky over the picture (none when the arena is as low as the picture).
-		var band = arena_h - float(RealmScenes.H * _arena.k())
+		var band = arena_h - floor_h - float(RealmScenes.H * _arena.k())
 		_sky_fx.visible = band >= 24.0 and not BattleFx.light
 		_rect(_sky_fx, 0, 0, w, maxf(0.0, band))
 	_rect(_vignette, 0, 0, w, arena_h)

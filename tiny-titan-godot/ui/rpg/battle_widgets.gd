@@ -65,6 +65,13 @@ static func _styles(b: Button, looks: Dictionary) -> void:
 
 
 ## Big pixel words in the middle of `over` for a moment. They free themselves.
+## A number from 0 to 1 that is the same every time for the same two whole numbers.
+static func _hash(a: int, b: int) -> float:
+	var n = (a * 73856093) ^ (b * 19349663)
+	n = (n ^ (n >> 13)) * 1274126177
+	return float(absi(n) % 10007) / 10007.0
+
+
 static func banner(over: Control, text: String, color: Color, hold: float = 0.7, px_scale: int = 3) -> void:
 	if not is_instance_valid(over) or not over.is_inside_tree():
 		return
@@ -841,8 +848,12 @@ class Arena extends Control:
 	var scene_id: String = ""
 	## Shadows on the ground (Rect2), under what stands in the arena without one of its own: the hero.
 	var shadows: Array = []
+	## Ground drawn UNDER the picture, in screen pixels (a whole number of the picture's pixels): in a tall
+	## arena the fighters then stand higher, with floor in front of them, and less empty sky over them.
+	var floor_h: float = 0.0
 	var _tex: Texture2D = null
 	var _sky: Color = Color.BLACK
+	var _floor: Color = Color.BLACK
 
 	func _init(id: String) -> void:
 		scene_id = id
@@ -855,6 +866,37 @@ class Arena extends Control:
 			var img = _tex.get_image()
 			if img != null and img.get_width() > 0:
 				_sky = img.get_pixel(int(img.get_width() / 2.0), 0)
+				# (the floor in front is the colour of the picture's lowest row, all of it taken together)
+				var r = 0.0
+				var g = 0.0
+				var b = 0.0
+				for x in range(img.get_width()):
+					var c = img.get_pixel(x, img.get_height() - 1)
+					r += c.r
+					g += c.g
+					b += c.b
+				var n = float(img.get_width())
+				_floor = Color(r / n, g / n, b / n)
+
+	## The ground in front of the picture: its colour, speckled like it (the specks wider the nearer they
+	## are), darker towards the bottom edge.
+	func _draw_floor(y0: float, kk: float) -> void:
+		draw_rect(Rect2(0, y0, size.x, floor_h), _floor)
+		var dark = _floor.darkened(0.2)
+		var pale = _floor.lightened(0.14)
+		var rows = int(ceil(floor_h / kk))
+		var cols = int(ceil(size.x / kk))
+		for r in range(rows):
+			var near = float(r) / float(maxi(1, rows))
+			var wide = 1 + int(near * 3.0)
+			for c in range(cols):
+				var h1 = BattleWidgets._hash(c * 7 + 3, r * 13 + 5)
+				if h1 < 0.07:
+					var col = pale if BattleWidgets._hash(c + 31, r + 17) < 0.35 else dark
+					draw_rect(Rect2(float(c) * kk, y0 + float(r) * kk, kk * float(wide), kk), col)
+		for i in range(3):
+			var top = floor(floor_h * (0.4 + 0.2 * float(i)) / kk) * kk
+			draw_rect(Rect2(0, y0 + top, size.x, floor_h - top), Color(0, 0, 0, 0.07))
 
 	## Screen pixels per art pixel.
 	func k() -> int:
@@ -863,16 +905,18 @@ class Arena extends Control:
 	## The y of the ground line the fighters stand on.
 	## (round(): a shake moves the arena by parts of a pixel, and Godot then keeps its height a hair off whole.)
 	func ground() -> float:
-		return round(size.y) - float((RealmScenes.H - RealmScenes.ground_y(scene_id)) * k())
+		return round(size.y) - floor_h - float((RealmScenes.H - RealmScenes.ground_y(scene_id)) * k())
 
 	func _draw() -> void:
 		var kk = float(k())
 		var w = float(RealmScenes.W) * kk
 		var h = float(RealmScenes.H) * kk
-		var y = size.y - h
+		var y = round(size.y) - floor_h - h
 		if y > 0.0:
 			draw_rect(Rect2(0, 0, size.x, y), _sky)
 		if _tex != null:
 			draw_texture_rect(_tex, Rect2(floor((size.x - w) / 2.0), y, w, h), false)
+		if floor_h > 0.0:
+			_draw_floor(y + h, kk)
 		for r in shadows:
 			draw_rect(r, Pal.with_alpha(Pal.OUTLINE, 0.3))

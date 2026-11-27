@@ -1806,6 +1806,11 @@ is the Windows handoff.
       one action rings a little higher (`RpgSfx.hit(..., step)`, `_act_hits`), a move that goes for every foe
       sends a wave along the ground under them (`BattleFx` kind "sweep"), and a finisher that fells its foe
       says "FINISHED!".
+    - A tall arena (a phone's) is not all sky: `BattleView.FLOOR_SHARE` 0.42 of the room over `ARENA_H`
+      (`FLOOR_MAX` 136 at most) is ground IN FRONT of the fighters (`BattleWidgets.Arena.floor_h`,
+      `_draw_floor`: the colour of the picture's lowest row, speckled, darker towards the edge), so they
+      stand in the middle of the arena. `Arena.ground()` and the effects' layer go up with it. Before,
+      more than half of a phone's arena was empty sky with the fight at its foot.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
