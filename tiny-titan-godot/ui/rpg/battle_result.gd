@@ -37,6 +37,9 @@ signal chosen(what: String)
 const KIND_LINE = "Nothing is lost. Train, tune the build, try again."
 const KEY_H = 46
 const TABLEAU_H = 156.0
+## On a screen taller than the page needs (a phone's) the picture takes the room, up to this much more:
+## no hole between the last block and the keys.
+const TABLEAU_MORE = 110.0
 const HERO_SCALE = 2
 
 var summary: Dictionary = {}
@@ -78,6 +81,10 @@ func setup(summary_in: Dictionary, info_in: Dictionary) -> void:
 # Layout
 # ---------------------------------------------------------------------------
 
+var _scroll: ScrollContainer = null
+var _body: Control = null
+
+
 func _build() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -114,7 +121,9 @@ func _build() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	col.add_child(scroll)
+	_scroll = scroll
 	var body = Kit.vbox(10)
+	_body = body
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll.add_child(body)
@@ -174,6 +183,31 @@ func _build() -> void:
 		body.add_child(lb)
 
 	col.add_child(_keys())
+	if _tab != null:
+		resized.connect(_fit_tableau)
+		_fit_soon()
+
+
+## (two frames on: the page's wrapped lines have their heights then)
+func _fit_soon() -> void:
+	for i in range(2):
+		if not is_inside_tree():
+			return
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
+		_fit_tableau()
+
+
+## The picture takes the room the page under it does not need, and gives it back when the page needs it.
+func _fit_tableau() -> void:
+	if _tab == null or _scroll == null or _body == null or not is_inside_tree():
+		return
+	var cur = _tab.custom_minimum_size.y
+	var spare = _scroll.size.y - _body.get_combined_minimum_size().y - 6.0
+	var want = clampf(floor(cur + spare), TABLEAU_H, TABLEAU_H + TABLEAU_MORE)
+	if absf(want - cur) >= 1.0:
+		_tab.custom_minimum_size.y = want
 
 
 ## The head as a picture: the backdrop of the fight, the hero on its ground, the words in its sky.

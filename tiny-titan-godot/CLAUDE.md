@@ -1816,6 +1816,8 @@ is the Windows handoff.
       (the WHOLE game's clock; sound is not touched) `STOP_LEAD` ms after the blow, and `_process` sets it
       back by the REAL clock (`_stop_end`, also in `_exit_tree`). Never in an instant playback or with
       light effects. Nothing else in the game may set `Engine.time_scale`.
+    - The result's picture grows into the room its page does not need (`BattleResult._fit_tableau`,
+      `TABLEAU_MORE` 110): on a phone the whole scene shows, and there is less of a hole over the keys.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
