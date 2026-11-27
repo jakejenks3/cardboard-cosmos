@@ -330,6 +330,7 @@ static func _feats(screen) -> Control:
 			key.set_meta("anchor_id", "feat_claim:" + str(r.id))
 			key.pressed.connect(RealmHero._claim_feat.bind(str(r.id), key))
 			slot.add_child(key)
+			Fx.shine(key, 3.2, 0.6, 0.5)
 		elif not done:
 			var pay = RpgUi.ore_pill(int(r.ore))
 			pay.modulate.a = 0.6

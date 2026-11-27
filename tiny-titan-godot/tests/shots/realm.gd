@@ -129,6 +129,12 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(_all("realm_boost").size() >= 1, "today's boosts (%d)" % _all("realm_boost").size())
 	check(_all("tab_dot").size() == 1, "the tab has its dot: a chest waits")
 	await ShotHelper.snap(tree, "realm_4_hub")
+	var onward = _one("realm_next")
+	check(onward != null and str(onward.get_meta("realm_next")) == "r1s1" and _one("realm_next_go") != null, "the front page names the next place of the road, with a key to it")
+	if _one("realm_next_go") != null:
+		await _click(_one("realm_next_go"))
+		check(_sheet() != null and ShotHelper.all_text(_sheet()).contains("The Back Door"), "its key opens that stage's prep sheet")
+		await _close_sheets()
 	var grew = _one("realm_gains")
 	check(grew != null and _all("realm_gain", grew).size() >= 1, "the day's training shows as what it raised (%s: %d stats)" % [str(grew.get_meta("realm_gains")) if grew != null else "none", _all("realm_gain", grew).size() if grew != null else 0])
 	var open_key = _one("realm_chest_open", App.today)

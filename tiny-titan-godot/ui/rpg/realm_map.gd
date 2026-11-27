@@ -57,6 +57,21 @@ static func furthest(rpg: Dictionary) -> Dictionary:
 	return out
 
 
+## The place on the road to go to next: the first open stage of the furthest region that is not won yet
+## (a cache not taken counts), or null when the whole road is done.
+static func next_place(rpg: Dictionary):
+	var reg = furthest(rpg)
+	for st in stages_of(reg, false):
+		if RpgWorld.is_open(rpg, str(st.id)) and not RpgWorld.done(rpg, str(st.id)):
+			return {"stage": st, "region": reg}
+	return null
+
+
+## Go to a place of the road as a tap on it would (its prep sheet, or the cache's three finds).
+static func go_to(stage_id: String) -> void:
+	_tap_node(stage_id, "")
+
+
 ## How many regions were open the last time the map was drawn (-1: not yet in this visit).
 static var _open_seen = -1
 
@@ -480,6 +495,8 @@ static func _region_card(reg: Dictionary, rpg: Dictionary, stars: int) -> Contro
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.set_meta("star_chest", key_id)
 		b.set_meta("star_chest_state", state)
+		if state == "ready":
+			Fx.shine(b, 3.2, 0.6, 0.5)
 		b.set_meta("anchor_id", "star_chest:" + key_id)
 		if state != "ready":
 			b.modulate.a = 0.7

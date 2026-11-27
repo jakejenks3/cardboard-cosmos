@@ -256,6 +256,9 @@ func _build_hub(rpg: Dictionary) -> void:
 	if str(RpgUi.page) == "map":
 		# The Map is the Realm's front page: the banner, what waits, today's boosts.
 		add_child(_banner(rpg))
+		var onward = _next_row(rpg)
+		if onward != null:
+			add_child(onward)
 		var grew = _gains_row()
 		if grew != null:
 			add_child(grew)
@@ -461,6 +464,38 @@ func _note_stats() -> void:
 	LootPop.open("Stronger", "muscle", lines, Pal.GOOD, "level")
 
 
+## The way on, one tap from the top of the Realm: the next place of the road and a key to it (the road
+## itself is a scroll further down). null when a fight waits to be continued or the whole road is won.
+func _next_row(rpg: Dictionary):
+	if RpgUi.kept_battle() != null:
+		return null
+	var nx = RealmMap.next_place(rpg)
+	if nx == null:
+		return null
+	var st = nx.stage
+	var kind = str(st.get("kind", "battle"))
+	var col = Pal.DANGER if kind == "boss" else (Pal.BOUNTY if kind == "elite" else Pal.ACCENT)
+	var row = Kit.row(Callable(), col, col, 8, 0, 0.14)
+	row.set_meta("realm_next", str(st.id))
+	var h = Kit.hbox(10)
+	var icon_name = str(RealmMap.KIND_ICONS.get(kind, "sword"))
+	h.add_child(Kit.vcenter(Icons.rect(icon_name if Icons.has_icon(icon_name) else "sword", 24)))
+	var v = Kit.vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	v.add_child(Kit.clip("Next on the road" if kind != "boss" else "The boss waits", 11, Pal.MUTED, true))
+	v.add_child(Kit.clip(str(st.get("name", "")), 15, null, true))
+	v.add_child(Kit.clip("%s · stage %d of 10" % [str(nx.region.name), int(st.get("s", 0))], 11, Pal.MUTED))
+	h.add_child(v)
+	var go = Kit.button("Open" if kind == "cache" else "Go", "primary", RealmMap.go_to.bind(str(st.id)), "sm")
+	go.custom_minimum_size = Vector2(72, 40 if Kit.fingers else 34)
+	go.set_meta("realm_next_go", str(st.id))
+	go.set_meta("anchor_id", "realm_next_go")
+	h.add_child(Kit.vcenter(go))
+	row.add(h)
+	return row
+
+
 ## A feat's step can be claimed: say so, and go to where it is (the Hero page). null when none can.
 func _feat_row(rpg: Dictionary):
 	var n = RpgFeats.ready(rpg, RpgUi.sheet())
@@ -475,9 +510,8 @@ func _feat_row(rpg: Dictionary):
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(Kit.vcenter(Icons.rect("trophy" if Icons.has_icon("trophy") else "star", 16)))
 	h.add_child(Kit.vcenter(Kit.clip("%d feat%s done: claim the ore" % [n, "" if n == 1 else "s"], 14, null, true)))
-	var go = Kit.clip("Hero", 12, Pal.MUTED)
-	go.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	h.add_child(Kit.vcenter(go))
+	# (a plain label: a second clipped one would take half the row and cut the words short)
+	h.add_child(Kit.vcenter(Kit.label("Hero page", 12, Pal.MUTED)))
 	row.add(h)
 	return row
 
@@ -574,6 +608,8 @@ func _chest_row(rpg: Dictionary, date: String, today: String):
 			sub = "+%s ore: the day grew since you opened it" % Xp.fmt_int(int(pay.ore))
 		action = Kit.button("Open", "primary", Callable(), "sm")
 		action.set_meta("realm_chest_open", date)
+		# Something waits to be taken: a glint runs over its key now and then.
+		Fx.shine(action, 3.2, 0.6, 0.5)
 		action.set_meta("anchor_id", "realm_chest:" + date)
 		finger(action)
 	var row = Kit.notice(str(RpgBoosts.CHEST_ICONS.get(tier, "chest_wood")), title, sub, Pal.ACCENT, action)

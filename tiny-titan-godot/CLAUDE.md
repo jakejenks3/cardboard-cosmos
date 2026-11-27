@@ -1753,6 +1753,11 @@ is the Windows handoff.
     - What is learned on the Skills page goes straight into the build when a slot of its kind is EMPTY
       (`RealmSkills._into_empty_slot`: the first ultimate, a passive once a slot is open, a move when one
       stands free); nothing is ever pushed out for it (a full build keeps the tile's "Equip it now").
+    - The front page's first row under the banner is the way on (`RealmScreen._next_row`, metas
+      `realm_next`, `realm_next_go`): the next place of the road (`RealmMap.next_place`: the first open stage
+      of the furthest region that is not won, a cache included) and a key that goes there
+      (`RealmMap.go_to`); not shown while a fight waits to be continued. Keys that hand something out
+      (the training chest, a ready star chest, a feat to claim) have `Fx.shine`.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
