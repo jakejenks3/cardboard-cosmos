@@ -196,6 +196,9 @@ var _act_kind: String = ""
 var _act_who: String = ""
 var _act_first: bool = true
 var _act_heavy: bool = false
+## The tags of the hero's move being shown ("multi", "all", "finisher"...), and how many of its hits have landed.
+var _act_tags: Array = []
+var _act_hits: int = 0
 var _hit_counts: Dictionary = {}
 var _word_counts: Dictionary = {}
 ## Foes whose fall was already shown with the blow that felled them.
@@ -1880,6 +1883,8 @@ func _show_act(e: Dictionary) -> float:
 	_act_who = who
 	_act_first = true
 	_act_heavy = false
+	_act_tags = []
+	_act_hits = 0
 	_hit_counts = {}
 	_word_counts = {}
 	if who == "hero":
@@ -1916,6 +1921,7 @@ func _show_act(e: Dictionary) -> float:
 				return 0.5
 		var school = str(e.get("school", "plain"))
 		var row = RpgBattle.move_row(B, str(e.get("id", ""))) if kind != "strike" else null
+		_act_tags = row.get("tags", []) if row != null else []
 		# A move that costs three energy or more, or is slow and heavy by its rank, lands like one.
 		_act_heavy = row != null and (int(row.get("cost", 0)) >= 3 or float(row.get("rank", 1.0)) >= 1.35)
 		var aim = "foe" if row == null else str(row.get("target", "foe"))
@@ -1935,6 +1941,10 @@ func _show_act(e: Dictionary) -> float:
 			_pose(str(RpgDefs.SCHOOL_POSE.get(school, "strike")), 0.5 + 0.3 * float(maxi(0, hits - 1)))
 			_hero_attack(school, hits, thrown)
 			_snd("swing", 1.0, 0.07)
+			if (aim == "all" or _act_tags.has("all")) and not instant:
+				# It goes for all of them: a wave runs along the ground under the foes.
+				var gx = _fx_layer.size.x
+				BattleFx.at(_fx_layer, "sweep", Vector2(FOE_X0 + (gx - FOE_X0) / 2.0, _feet("hero").y - 2.0), color, 0.34, {"half": (gx - FOE_X0) / 2.0 / BattleFx.U, "delay": 0.12})
 			if thrown and not instant:
 				var from = _mid("hero") + Vector2(22, -12)
 				for id in _foes:
@@ -2137,7 +2147,9 @@ func _show_dmg(e: Dictionary) -> float:
 		wait = 0.62
 	else:
 		if not instant:
-			RpgSfx.hit(fx_school, crit, weak, resist)
+			RpgSfx.hit(fx_school, crit, weak, resist, _act_hits if src == "hero" else 0)
+		if src == "hero":
+			_act_hits += 1
 		if crit:
 			_shake(0.9)
 			RpgSfx.buzz(1)
@@ -2153,6 +2165,8 @@ func _show_dmg(e: Dictionary) -> float:
 	# The blow that fells a foe fells it NOW, not a beat later after whatever else the blow set off.
 	if int(e.get("hp", 1)) <= 0 and _ko_ahead(dst):
 		_ko_done[dst] = true
+		if src == "hero" and _act_tags.has("finisher"):
+			_word(dst, "FINISHED!", Pal.ACCENT, 2, 0.1)
 		var line = _line.text if _line != null else ""
 		wait = maxf(wait, _show_ko(dst))
 		_say("%s %s is down." % [line, _name(dst)])

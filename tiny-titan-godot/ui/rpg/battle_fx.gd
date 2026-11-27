@@ -21,7 +21,7 @@ extends RefCounted
 ## Screen pixels per effect pixel.
 const U = 3.0
 const KINDS = ["impact", "slash", "stomp", "streaks", "claw", "ring", "spark", "heal", "up", "down", "shield", "shards",
-	"poof", "flame", "drops", "gather", "rays", "block", "stars", "dust", "sparkle", "orb", "bite", "notes", "aura"]
+	"poof", "flame", "drops", "gather", "rays", "block", "stars", "dust", "sparkle", "orb", "bite", "notes", "aura", "sweep"]
 ## What a school's hit looks like where it lands.
 const SCHOOL_FX = {"push": "impact", "pull": "slash", "legs": "stomp", "speed": "streaks", "grip": "claw", "mind": "ring",
 	"flow": "spark", "grit": "impact", "plain": "spark"}
@@ -629,6 +629,26 @@ class Spr extends Control:
 					var a11 = sin(ph7 * PI)
 					_p(x11, y11, color, a11, 2.0, 2.0)
 					_line(x11 + 1.0, y11, x11 + 1.0, y11 - 4.0, light, a11)
+			"sweep":
+				# A wave running along the ground from left to right (a move that hits every foe): a crest that
+				# leans forward, a tail that sinks behind it, dust kicked up where it has passed.
+				var half_u = size.x / 2.0 / u
+				var x14 = lerpf(-half_u, half_u, e)
+				var shape14 = [3.0, 6.0, 8.0, 7.0, 5.0, 4.0, 3.0, 2.0, 2.0, 1.0, 1.0, 1.0]
+				for j in range(shape14.size()):
+					var tall14 = float(shape14[j])
+					var a14 = fade * (1.0 - float(j) / float(shape14.size()) * 0.7)
+					for k in range(int(tall14)):
+						var top14 = k >= int(tall14) - 1
+						_p(x14 - float(j), -float(k), white if (top14 and j < 4) else (light if (top14 or j < 2) else color), a14)
+				# (the crest's lip, a step ahead of it)
+				_p(x14 + 1.0, -6.0, white, fade)
+				_p(x14 + 2.0, -4.0, light, fade * 0.8)
+				for j in range(5):
+					var back14 = 14.0 + float(j) * 7.0
+					if x14 - back14 > -half_u:
+						_p(x14 - back14, -2.0 - fmod(e * 30.0 + float(j) * 3.0, 6.0), light, fade * 0.5)
+				_line(x14 - 22.0, 1, x14, 1, dark, fade * 0.7)
 			"aura":
 				# Light rising round a fighter (the effect is centred on its feet).
 				var live = sin(minf(1.0, t) * PI)

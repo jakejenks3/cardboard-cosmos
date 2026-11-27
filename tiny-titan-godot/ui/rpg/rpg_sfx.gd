@@ -181,8 +181,10 @@ static func play(name: String, pitch: float = 1.0, drift: float = 0.0) -> void:
 
 
 ## A hit of that school lands on a foe.
-static func hit(school: String, crit: bool = false, weak: bool = false, resist: bool = false) -> void:
-	play(str(HITS.get(school, "hit_plain")), 0.86 if resist else 1.0, DRIFT)
+## `step`: which hit of one action this is (0 the first): each one rings a little higher, so a move that
+## hits three times is heard climbing.
+static func hit(school: String, crit: bool = false, weak: bool = false, resist: bool = false, step: int = 0) -> void:
+	play(str(HITS.get(school, "hit_plain")), (0.86 if resist else 1.0) * (1.0 + 0.07 * float(clampi(step, 0, 6))), DRIFT)
 	if crit:
 		play("crit")
 	elif weak:

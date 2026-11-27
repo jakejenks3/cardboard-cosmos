@@ -1802,6 +1802,10 @@ is the Windows handoff.
       the whole screen: it drops in, rattles, opens in light, its lines come one at a time; a tap shows all,
       the next closes. It takes every tap while it is up: a walkthrough that makes real clicks calls
       `LootPop.close_all()` first (`_pops_off` in realm.gd). What was won is in the save before it opens.
+    - A move shows what kind it is (`BattleView._act_tags`, the move's tags from `RpgMoves`): each hit of
+      one action rings a little higher (`RpgSfx.hit(..., step)`, `_act_hits`), a move that goes for every foe
+      sends a wave along the ground under them (`BattleFx` kind "sweep"), and a finisher that fells its foe
+      says "FINISHED!".
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
