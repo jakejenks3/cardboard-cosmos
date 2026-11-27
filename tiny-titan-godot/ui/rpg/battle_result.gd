@@ -137,6 +137,19 @@ func _build() -> void:
 	if win and info.get("stars") is Array:
 		body.add_child(_stars_block(info.stars, info.get("objectives") if info.get("objectives") is Array else []))
 	body.add_child(_facts())
+	if info.get("top_move") is Dictionary:
+		# The move that carried the fight.
+		var tm = info.top_move
+		var tcol = RpgUi.color(str(tm.get("school", "plain")))
+		var trow = Kit.row(Callable(), tcol, null, 6, 0)
+		trow.set_meta("br_top_move", str(tm.get("id", "")))
+		var th = Kit.hbox(8)
+		th.add_child(Kit.vcenter(Kit.tag("TOP MOVE", tcol)))
+		var tl = Kit.clip("%s · %s damage (%d%%)" % [str(tm.get("name", "")), Xp.fmt_int(int(tm.get("dmg", 0))), int(round(100.0 * float(tm.get("share", 0.0))))], 13, Pal.TEXT, true)
+		tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		th.add_child(Kit.vcenter(tl))
+		trow.add(th)
+		body.add_child(trow)
 	if win and info.get("level_before") is Dictionary and info.get("level_after") is Dictionary:
 		_xp = XpBarAnim.new()
 		_xp.setup(_level_info(info.level_before), _level_info(info.level_after), RpgUi.color("realm"), "Fighter", "realm" if Icons.has_icon("realm") else "star")

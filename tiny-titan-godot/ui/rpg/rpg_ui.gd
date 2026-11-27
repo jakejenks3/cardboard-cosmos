@@ -521,6 +521,21 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 				grown.append({"id": str(mid), "name": str(mrow.name), "school": str(mrow.get("school", "plain")), "lvl": l1,
 					"rank": str(RpgDefs.MASTERY_NAMES[l1]), "words": RpgMoves.mastery_words(str(mid), l1)})
 	info["mastery"] = grown
+	# The move that did the most damage in this fight, when more than one did some.
+	var by_move = summary.get("by_move", {})
+	if by_move is Dictionary and by_move.size() >= 2:
+		var top_id = ""
+		var top_dmg = 0
+		var all_dmg = 0
+		for mk in by_move:
+			all_dmg += int(by_move[mk])
+			if int(by_move[mk]) > top_dmg:
+				top_dmg = int(by_move[mk])
+				top_id = str(mk)
+		var top_row = RpgBattle.move_row(B, top_id) if top_id != "strike" else null
+		if top_dmg > 0 and all_dmg > 0:
+			info["top_move"] = {"id": top_id, "name": str(top_row.name) if top_row != null else "Strike", "school": str(top_row.get("school", "plain")) if top_row != null else "plain",
+				"dmg": top_dmg, "share": float(top_dmg) / float(all_dmg)}
 	# The hardest single hit ever, beaten in this fight (not the very first one: that is no record yet).
 	var hit_now = int(save().get("tally", {}).get("best_hit", 0)) if save().get("tally") is Dictionary else 0
 	if hit_before > 0 and hit_now > hit_before:

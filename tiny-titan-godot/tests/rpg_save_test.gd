@@ -148,6 +148,13 @@ func _run() -> void:
 	var b2 = RpgSave.finish(b1.rpg, {"kind": "stage", "id": "r1s1"}, bst, {}, {"win": false, "best_hit": 25}, "2026-01-05")
 	var b3 = RpgSave.finish(b2.rpg, {"kind": "stage", "id": "r1s1"}, bst, {}, {"win": false, "best_hit": 90}, "2026-01-05")
 	ok(int(b1.rpg.tally.best_hit) == 40 and int(b2.rpg.tally.best_hit) == 40 and int(b3.rpg.tally.best_hit) == 90 and int(RpgSave.parse(b3.rpg).tally.best_hit) == 90, "the hardest hit ever is kept as the most, never added up", [b1.rpg.tally, b2.rpg.tally, b3.rpg.tally])
+	# --- an ultimate's uses are not counted for mastery ------------------------------------------------
+	var ult_id = ""
+	for um in RpgMoves.all():
+		if bool(um.get("ult", false)) and ult_id == "":
+			ult_id = str(um.id)
+	var u1 = RpgSave.finish(RpgSave.first_open(RpgSave.empty(), {}, ""), {"kind": "stage", "id": "r1s1"}, RpgWorld.stage("r1s1"), {}, {"win": false, "moves": {ult_id: 4, "stomp": 2}}, "2026-01-05")
+	ok(ult_id != "" and u1.rpg.mastery == {"stomp": 2}, "an ultimate has no mastery: only the moves are counted", u1.rpg.get("mastery"))
 	print("RPG SAVE: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

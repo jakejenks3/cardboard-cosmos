@@ -441,7 +441,9 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 	if uses is Dictionary:
 		for k in uses:
 			var n = clampi(_int(uses[k]), 0, 99)
-			if n > 0 and RpgMoves.by_id(str(k)) != null:
+			var used_row = RpgMoves.by_id(str(k))
+			# (an ultimate has no mastery: its uses are not counted)
+			if n > 0 and used_row != null and not bool(used_row.get("ult", false)):
 				out.mastery[str(k)] = mini(_int(out.mastery.get(str(k))) + n, MASTERY_MOST)
 	if not bool(summary.get("win", false)):
 		return _yes(out)

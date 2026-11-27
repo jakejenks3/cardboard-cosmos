@@ -1905,6 +1905,10 @@ is the Windows handoff.
       `RpgSave.finish` keeps the most ever in `saved.rpg.tally.best_hit` (`TALLY_BEST`: a record, not a sum).
       Beaten, the result has a line (`info.record_hit` {now, was}, meta `br_record`; not for the very first
       one). The Hero page's journey has ten tiles now: + hardest hit, perfect guards, dares won, mastery stars.
+    - TOP MOVE (2026-11-27): the engine adds up what each move (and Strike) dealt (`summary.by_move`); when
+      two or more dealt something, the result names the one that did the most with its share (`info.top_move`,
+      row meta `br_top_move`, under the three numbers). An ultimate's uses are NOT counted for mastery
+      (`RpgSave.finish` skips them).
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

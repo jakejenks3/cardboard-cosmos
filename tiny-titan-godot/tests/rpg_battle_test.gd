@@ -891,6 +891,8 @@ func _intents() -> void:
 	var pf = first(ev, "perfect")
 	ok(not pf.is_empty() and pf.get("src") == "f0" and int(pf.get("chip", 0)) == RpgDefs.PERFECT_CHIP and int(f.guard) == 3 - RpgDefs.PERFECT_CHIP and int(RpgBattle.summary(B).perfect) == 1
 		and float(B.hero.gauge) >= g_before + RpgDefs.GAUGE_PERFECT - 0.01 and at_of(ev, "perfect") > at_of(ev, "dmg", "dst", "hero"), "a Guard that takes a charged blow is a perfect guard: a pip goes and the gauge fills", [pf, f.guard, g_before, B.hero.gauge])
+	ok(int(RpgBattle.summary(B).by_move.get("strike", 0)) > 0 and int(RpgBattle.summary(B).best_hit) > 0 and int(RpgBattle.summary(B).by_move.strike) >= int(RpgBattle.summary(B).best_hit),
+		"the summary keeps what each move dealt, and the hardest single hit", [RpgBattle.summary(B).by_move, RpgBattle.summary(B).best_hit])
 	ok(stacks_of(B.hero, "focus") == RpgDefs.PERFECT_FOCUS and not first(ev, "status", "id", "focus").is_empty(), "and the hero has Focus: his next hit is a sure crit", [stacks_of(B.hero, "focus")])
 	var rip = RpgBattle.act(B, STRIKE)
 	ok(bool(first(rip, "dmg", "dst", "f0").get("crit", false)) and stacks_of(B.hero, "focus") == 0, "the riposte is a crit, and uses the Focus up", first(rip, "dmg", "dst", "f0"))

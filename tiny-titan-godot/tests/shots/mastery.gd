@@ -133,6 +133,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		var rec = _one("br_record", null, bv.result())
 		check(rec != null and int(rec.get_meta("br_record")) == int(App.rpg().tally.best_hit) and int(App.rpg().tally.best_hit) > 1 and ShotHelper.all_text(bv.result()).contains("Your hardest hit ever"),
 			"the result says the hardest hit ever was beaten (%d)" % int(App.rpg().tally.get("best_hit", 0)))
+		var top = _one("br_top_move", null, bv.result())
+		check(top != null and ShotHelper.all_text(top).contains("TOP MOVE") and ShotHelper.all_text(top).contains("damage"), "the result names the move that did the most (%s)" % (str(top.get_meta("br_top_move")) if top != null else "?"))
 		await ShotHelper.snap(tree, "mastery_2_result")
 		var back = _one("br_key", "back", bv.result())
 		if back != null:
