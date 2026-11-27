@@ -35,7 +35,7 @@ extends RefCounted
 ## A cache and a star chest hold the same finds every time they are looked at.
 const CACHE_SEED = 1
 const CHEST_SEED = 1
-const KIND_ICONS = {"battle": "sword", "elite": "skull", "cache": "chest_wood", "boss": "crown", "hunt": "hunt", "rival": "rival", "spire": "spire"}
+const KIND_ICONS = {"battle": "sword", "elite": "skull", "cache": "chest_wood", "boss": "crown", "hunt": "hunt", "rival": "rival", "spire": "spire", "dare": "flame"}
 const STAR_CHEST_ICONS = ["chest_wood", "chest_iron", "chest_gold"]
 ## The strip of a region's backdrop on its card: this part of the 110 x 60 picture, x4.
 const STRIP = Rect2(6, 22, 98, 22)
@@ -591,6 +591,39 @@ static func _spire(rpg: Dictionary) -> Control:
 	return sec
 
 
+## The dare of a won stage, as a row of its prep sheet: its rule, how strong its foes are, what the first win
+## pays (or that it is won). A tap opens the dare's own sheet.
+static func _dare_row(dr: Dictionary, rpg: Dictionary, sh) -> Control:
+	var of = str(dr.get("of", ""))
+	var won = RpgWorld.dared(rpg, of)
+	var rule = RpgWorld.RULES.get(str(dr.get("rule", "")), {})
+	var row = Kit.row(_open_dare.bind(of, sh), Pal.ACCENT2, Pal.ACCENT2, 8, 2, 0.12)
+	row.set_meta("prep_dare", of)
+	row.set_meta("prep_dare_won", won)
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect("flame", 24)))
+	var v = Kit.vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(Kit.clip("Dare: %s" % str(rule.get("name", "")), 14, null, true))
+	v.add_child(Kit.clip(str(rule.get("text", "")), 12, Pal.TEXT))
+	v.add_child(Kit.clip("Foes at your level · recommended power %s" % Xp.fmt_int(int(round(float(dr.get("rec", 0.0))))), 11, Pal.MUTED))
+	h.add_child(v)
+	if won:
+		h.add_child(Kit.vcenter(Kit.tag("WON", Pal.GOOD)))
+	else:
+		h.add_child(Kit.vcenter(RpgUi.ore_pill(int(dr.get("first", {}).get("ore", 0)))))
+	row.add(h)
+	return row
+
+
+static func _open_dare(stage_id: String, sh) -> void:
+	if sh != null and is_instance_valid(sh):
+		sh.close()
+	open_prep.call_deferred({"kind": "dare", "id": "dare:" + stage_id})
+
+
 static func _fight(what: Dictionary, sh) -> void:
 	if sh != null and is_instance_valid(sh):
 		sh.close()
@@ -832,6 +865,12 @@ static func open_prep(what: Dictionary) -> void:
 			sh.box.add_child(chips)
 		else:
 			chips.free()
+
+	# A stage that is won can be dared: the same place at the player's own level, with a rule.
+	if str(what.get("kind", "stage")) == "stage":
+		var dr = RpgWorld.dare(id, rpg)
+		if dr is Dictionary:
+			sh.box.add_child(_dare_row(dr, rpg, sh))
 
 	var names = []
 	for mid in RpgSave.build_of(rpg).get("moves", []):

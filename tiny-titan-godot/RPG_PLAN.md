@@ -712,6 +712,11 @@ push, marsh mind and grip, stormspine and titans_rest spread evenly); at most on
 - **The Spire** (opens after region 2): floor f has `n = 10 + 2 f` up to floor 35, then +0.5 a
   floor; a fixed pack seeded by the floor, an elite every fifth floor, a boss every tenth; no
   end. Floors are climbed in order; each pays once; `saved.rpg.spire.best`.
+- **Dares** (added 2026-11-27; `RpgWorld.dare(stage_id, rpg) -> stage or null`): a road stage that is
+  won, again: its own foes at `max(its n, best n + DARE_OVER)` with one rule (by its place, as an
+  echo's). Stage id `dare:r3s5`, kind "dare", no stars. A win adds to `saved.rpg.stages[id].dares`;
+  the first pays `first` (ore `60 * 1.15^(n/10)`; an elite's or a boss's also a rune) and puts a flame
+  on the stage.
 - **Echo regions** (after region 8): each region again at `n = 80 + 3 (r - 1) + 0.3 (s - 1)` with
   one rule from `RULES`; stage ids `e3s5`.
 

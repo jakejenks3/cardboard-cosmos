@@ -48,6 +48,29 @@ func _init() -> void:
 		ok(kind_m != "power" or absf(got_p - base_p * (1.0 + 2.0 * RpgDefs.MASTERY_PCT)) < 0.0001, "and the battle plays it at its level (%s: %s against %s)" % [mid, str(got_p), str(base_p)])
 		RpgBattle.act(Bm, {"t": "move", "id": mid, "target": str(RpgBattle.foes(Bm)[0].id)})
 		ok(int(RpgBattle.summary(Bm).moves.get(mid, 0)) == 1, "the summary of a fight says how often each move was used", RpgBattle.summary(Bm).moves)
+	# --- a dare: a won stage again, at the reach of the player, with a rule -----------------------------
+	var drpg = RpgSave.first_open(RpgSave.empty(), {}, "")
+	ok(RpgWorld.dare("r1s1", drpg) == null and RpgWorld.stage_of({"kind": "dare", "id": "dare:r1s1"}, drpg) == null and not RpgWorld.is_open(drpg, "dare:r1s1"), "a stage not won has no dare")
+	for ds in ["r1s1", "r1s2", "r1s3", "r1s4", "r1s5"]:
+		drpg.stages[ds] = {"stars": [true, false, false], "wins": 1, "best": 3}
+	drpg.caches["r1s6"] = true
+	var d1 = RpgWorld.dare("r1s1", drpg)
+	var src1 = RpgWorld.stage("r1s1")
+	ok(d1 is Dictionary and d1.id == "dare:r1s1" and d1.kind == "dare" and d1.of == "r1s1" and absf(float(d1.n) - (RpgWorld.best_n(drpg) + RpgWorld.DARE_OVER)) < 0.001 and float(d1.n) > float(src1.n)
+		and d1.rules.size() == 1 and RpgWorld.RULES.has(d1.rules[0]) and d1.stars.is_empty() and int(d1.first.ore) > 0 and d1.waves.size() == src1.waves.size() and float(d1.waves[0][0].n) == float(d1.n)
+		and str(d1.waves[0][0].foe) == str(src1.waves[0][0].foe), "a dare is the stage's own foes at the highest index won + DARE_OVER, with one rule and a first prize", [d1.n if d1 is Dictionary else null, RpgWorld.best_n(drpg)])
+	ok(RpgWorld.dare("r1s6", drpg) == null and RpgWorld.dare("e1s1", drpg) == null and RpgWorld.dare("nope", drpg) == null and RpgWorld.is_open(drpg, "dare:r1s1")
+		and RpgWorld.stage_of({"kind": "dare", "id": "dare:r1s5"}, drpg).of_kind == "elite" and bool(RpgWorld.stage_of({"kind": "dare", "id": "dare:r1s5"}, drpg).first.rune), "no dare for a cache, an echo or nothing; an elite's dare also pays a rune")
+	var dset = RpgWorld.setup({"kind": "dare", "id": "dare:r1s1"}, drpg, RpgHero.reference_hero(2.0), null, 9, "2026-01-05")
+	ok(not dset.is_empty() and dset.what == {"kind": "dare", "id": "dare:r1s1"} and dset.rules == d1.rules, "it goes to the engine like any stage", dset.get("what"))
+	ok(RpgLoot.is_first(d1, drpg) and not RpgWorld.dared(drpg, "r1s1") and RpgWorld.dare_count(drpg) == 0, "its first win is still to come")
+	var dwin = RpgSave.finish(drpg, {"kind": "dare", "id": "dare:r1s1"}, d1, RpgLoot.rewards(d1, {"win": true, "turns": 4}, drpg, 1, [], 3), {"win": true, "turns": 4}, "2026-01-05")
+	ok(bool(dwin.ok) and RpgWorld.dared(dwin.rpg, "r1s1") and RpgWorld.dare_count(dwin.rpg) == 1 and int(dwin.rpg.ore) >= int(drpg.ore) + int(d1.first.ore) and not RpgLoot.is_first(RpgWorld.dare("r1s1", dwin.rpg), dwin.rpg)
+		and int(dwin.rpg.stages.r1s1.wins) == 1 and dwin.rpg.stages.r1s1.stars == [true, false, false], "a dare won is a seal on its stage and pays its prize once; the stage's own record is not touched", dwin.rpg.stages.get("r1s1"))
+	var again = RpgSave.finish(dwin.rpg, {"kind": "stage", "id": "r1s1"}, src1, {}, {"win": true, "turns": 2}, "2026-01-05")
+	ok(bool(again.ok) and RpgWorld.dared(again.rpg, "r1s1") and int(again.rpg.stages.r1s1.wins) == 2 and RpgWorld.dared(RpgSave.parse(again.rpg), "r1s1"), "the seal stays when the stage is won again, and in the save file")
+	ok(not bool(RpgSave.finish(RpgSave.first_open(RpgSave.empty(), {}, ""), {"kind": "dare", "id": "dare:r1s1"}, d1, {}, {"win": true, "turns": 4}, "2026-01-05").ok), "a dare of a stage not won cannot be paid")
+	ok(int(RpgFeats.counts(dwin.rpg).dares) == 1, "the feats count the dares won")
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

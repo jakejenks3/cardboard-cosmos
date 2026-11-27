@@ -474,6 +474,8 @@ static func done(rpg: Dictionary, stage_id: String) -> bool:
 static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 	if stage_id.begins_with("hunt:") or stage_id.begins_with("rival:"):
 		return true
+	if stage_id.begins_with("dare:"):
+		return dare(stage_id.substr(5), rpg) != null
 	if stage_id.begins_with("spire:"):
 		var f = int(stage_id.substr(6))
 		return f >= 1 and spire_open(rpg) and f <= int(rpg.get("spire", {}).get("best", 0)) + 1
@@ -482,6 +484,52 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 		return false
 	var before = _prev(st)
 	return before == "" or done(rpg, before)
+
+
+## A DARE (RPG_PLAN.md 8.4, added 2026-11-27): a road stage that is already won, fought again with its foes
+## raised to the player's own reach (the highest index won + DARE_OVER, never under the stage's own) and one
+## rule of RULES (the stage's own, by its place: the echo's). Null for a stage not won, a cache, an echo.
+## Its id is "dare:<stage id>", its kind "dare", "of" the stage. No stars. The first win pays `first` and
+## leaves a seal on the stage (saved.rpg.stages[id].dares counts the wins).
+const DARE_OVER = 2.0
+
+static func dare(stage_id: String, rpg: Dictionary) -> Variant:
+	var src = stage(stage_id)
+	if not (src is Dictionary) or not stage_id.begins_with("r") or str(src.kind) == "cache" or not done(rpg, stage_id):
+		return null
+	var r = int(src.r)
+	var s = int(src.s)
+	var n = maxf(float(src.n), best_n(rpg) + DARE_OVER)
+	var lists = []
+	for wave in src.waves:
+		lists.append(wave.map(func(en): return str(en.foe)))
+	var waves = _waves(lists, n)
+	var rule = _echo_rule(r, s, waves)
+	var first = _no_first()
+	first["ore"] = int(round(60.0 * pow(1.15, n / 10.0)))
+	if str(src.kind) != "battle":
+		first["rune"] = true
+	return {"id": "dare:" + stage_id, "of": stage_id, "region": str(src.region), "r": r, "s": s, "n": n,
+		"name": "%s: Dare" % str(src.name), "text": "A dare: the same place with foes at your own level. %s" % str(RULES[rule].text),
+		"kind": "dare", "of_kind": str(src.kind), "dare": true, "scene": str(src.scene),
+		"waves": waves, "rules": [rule], "rule": rule, "stars": [], "par": 0, "first": first, "rec": rec_of(n)}
+
+
+## Has the dare of a road stage been won?
+static func dared(rpg: Dictionary, stage_id: String) -> bool:
+	var rec = rpg.get("stages", {}).get(stage_id)
+	return rec is Dictionary and int(rec.get("dares", 0)) > 0
+
+
+## How many stages have their dare won.
+static func dare_count(rpg: Dictionary) -> int:
+	var n = 0
+	var won = rpg.get("stages", {})
+	if won is Dictionary:
+		for id in won:
+			if won[id] is Dictionary and int(won[id].get("dares", 0)) > 0:
+				n += 1
+	return n
 
 
 ## The highest difficulty index won so far on the road or in the echoes (0 before any win).
@@ -774,6 +822,8 @@ static func stage_of(what: Dictionary, rpg: Dictionary) -> Variant:
 		"stage", "echo":
 			var st = stage(id)
 			return st if (st is Dictionary and (id.begins_with("r") or id.begins_with("e"))) else null
+		"dare":
+			return dare(id.substr(5), rpg) if id.begins_with("dare:") else null
 		"spire":
 			var f = int(id.substr(6)) if id.begins_with("spire:") else int(what.get("floor", 0))
 			return spire(f) if f >= 1 else null

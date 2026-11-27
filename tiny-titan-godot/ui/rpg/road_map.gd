@@ -93,6 +93,9 @@ func setup(stages: Array, rpg: Dictionary, tap: Callable, scene_id: String) -> v
 		b.kind = kind
 		b.stars = stars
 		b.boss = kind == "boss"
+		b.dared = RpgWorld.dared(rpg, id)
+		if b.dared:
+			b.set_meta("map_stage_dare", true)
 		b.set_meta("map_stage", id)
 		b.set_meta("map_state", state)
 		b.set_meta("anchor_id", "map_stage:" + id)
@@ -315,6 +318,8 @@ class Place extends Button:
 	var kind: String = "battle"
 	var stars: int = 0
 	var boss: bool = false
+	## Its dare is won: a flame at the medal's shoulder.
+	var dared: bool = false
 	## Where its medal's middle is, in the road's own pixels.
 	var center: Vector2 = Vector2.ZERO
 	## 0..1: the place to fight next beats.
@@ -380,6 +385,8 @@ class Place extends Button:
 			var tw = float(t.get_width()) * k
 			var th = float(t.get_height()) * k
 			draw_texture_rect(t, Rect2(floor(cx - tw / 2.0), floor(top + m / 2.0 - th / 2.0), tw, th), false)
+		if dared and Icons.has_icon("flame"):
+			draw_texture(Icons.tex("flame", null, 1), Vector2(cx + m / 2.0 - 10.0, top - 2.0))
 		# Its stars (a cache has none).
 		if kind != "cache" and state != "locked":
 			var on = Icons.tex("star_on", null, 1)

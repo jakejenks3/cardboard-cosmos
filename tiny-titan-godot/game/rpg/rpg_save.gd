@@ -171,6 +171,8 @@ static func parse(raw) -> Dictionary:
 			for i in range(3):
 				three.append(bool(stars[i]) if (stars is Array and i < stars.size() and stars[i] is bool) else false)
 			out.stages[str(k)] = {"stars": three, "wins": maxi(0, _int(s.get("wins"))), "best": maxi(0, _int(s.get("best")))}
+			if _int(s.get("dares")) > 0:
+				out.stages[str(k)]["dares"] = _int(s.get("dares"))
 	out.starChests = _flags(raw.get("starChests"))
 	out.caches = _flags(raw.get("caches"))
 	var seen = raw.get("seen")
@@ -442,6 +444,14 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 			var turns = maxi(1, _int(summary.get("turns")))
 			var best = _int(rec.get("best"))
 			out.stages[id] = {"stars": kept, "wins": _int(rec.get("wins")) + 1, "best": turns if best <= 0 else mini(best, turns)}
+			if _int(rec.get("dares")) > 0:
+				out.stages[id]["dares"] = _int(rec.get("dares"))
+		"dare":
+			# a dare won: counted on the stage it is a dare of (RpgWorld.dared)
+			var of = str(stage.get("of", ""))
+			if not RpgWorld.done(rpg, of) or not (out.stages.get(of) is Dictionary):
+				return _no(rpg, "A dare is for a stage already won.")
+			out.stages[of]["dares"] = _int(out.stages[of].get("dares")) + 1
 		"hunt":
 			var date = str(stage.get("date", today))
 			out.hunt = {"date": date, "won": true}

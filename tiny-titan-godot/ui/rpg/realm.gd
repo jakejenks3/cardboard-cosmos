@@ -506,6 +506,7 @@ const NEWS_ID = "news_2"
 const NEWS = [
 	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks and your gauge fills."],
 	["star_on", "Mastery: a move you use a lot earns up to three stars and hits harder. See the Moves page."],
+	["flame", "Dares: tap a stage you have won to fight it again at your own level, for extra ore."],
 	["music", "Music, and a sound for every move. The note key (here and in a fight) switches the music off."],
 	["sword", "AUTO in a fight: the hero plays by himself until you tap it again."],
 	["book", "Tap the message line in a fight: what happened, how fights work, and Effects: Light if a fight stutters."],

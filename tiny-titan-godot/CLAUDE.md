@@ -1838,6 +1838,18 @@ is the Windows handoff.
       the next; metas `move_mastery`, `move_mastery_of`; the Power tag is the power it is played at), the
       result (`info.mastery` from `RpgUi.finish`, rows `br_mastery`), the help sheet, the news card.
       Walkthrough `tests/shots/mastery.gd` (year data).
+    - DARES (2026-11-27, gameplay; RPG_PLAN.md 8.4): a road stage that is WON can be fought again as a dare:
+      its own foes raised to the player's reach (`RpgWorld.best_n` + `DARE_OVER` 2, never under the stage's own
+      index) and one rule of `RULES` (by the stage's place, `_echo_rule`). `RpgWorld.dare(stage_id, rpg)` makes
+      the stage ({"id": "dare:<id>", "kind": "dare", "of", "of_kind", "rule", "first": ore, and a rune for an
+      elite's or a boss's}); `stage_of` / `is_open` know "dare:"; `RpgLoot.is_first` and `RpgSave.finish` have
+      a "dare" branch: a win adds 1 to `saved.rpg.stages[of].dares` (kept by `parse` and by a later win of
+      the stage itself), the first pays `first`. No stars, no next stage. `RpgWorld.dared`, `dare_count`; the
+      feat Daredevil (15 ladders). Screens: a row on a won stage's prep sheet (`RealmMap._dare_row`, metas
+      `prep_dare`, `prep_dare_won`) opens the dare's own prep sheet; a flame on the stage's medal
+      (`RoadMap.Place.dared`, meta `map_stage_dare`). Walkthrough `tests/shots/dares.gd` (year data). Why:
+      the player's real stats make the first regions a turn or two a fight; a dare gives a won stage a
+      second life at his own level.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

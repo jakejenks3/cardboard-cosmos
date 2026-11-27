@@ -27,6 +27,7 @@ const LADDERS = [
 	["plus", "Tinkerer", "power", "Upgrade gear %d times in all", [[5, 60], [20, 200], [50, 400]]],
 	["relics", "Treasure Hunter", "relic", "Find %d relics", [[1, 50], [5, 150], [12, 300], [24, 600]]],
 	["spire", "Climber", "spire", "Reach floor %d of the Spire", [[5, 100], [10, 200], [20, 400]]],
+	["dares", "Daredevil", "flame", "Win the dare of %d stages", [[1, 40], [10, 150], [30, 400], [72, 900]]],
 	["perfect", "Stone Wall", "guard", "Land %d perfect guards", [[1, 30], [10, 100], [40, 250], [100, 500]]],
 	["breaks", "Breaker", "fx_broken", "Break %d guards", [[5, 30], [25, 100], [100, 250], [300, 500]]],
 	["days", "Regular", "bolt", "Train on %d days", [[10, 50], [30, 100], [60, 200], [100, 300], [200, 500]]],
@@ -106,6 +107,7 @@ static func counts(rpg: Dictionary, sheet = null) -> Dictionary:
 	out.relics = relics.size() if relics is Dictionary else 0
 	var spire = rpg.get("spire", {})
 	out.spire = int(spire.get("best", 0)) if spire is Dictionary else 0
+	out.dares = RpgWorld.dare_count(rpg)
 	var tally = rpg.get("tally", {})
 	if tally is Dictionary:
 		out.perfect = int(tally.get("perfect", 0))
