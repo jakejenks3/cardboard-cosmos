@@ -2361,6 +2361,17 @@ func _show_new_wave(e: Dictionary) -> float:
 		RpgSfx.buzz(2)
 		_say("%s stands in your way." % _name(boss))
 		return 1.35
+	# An elite, and the week's rival, are named as they come (shorter than a boss, and without the dark).
+	var special = ""
+	var what_kind = str(B.get("what", {}).get("kind", "")) if B.get("what") is Dictionary else ""
+	for id in _foes:
+		if special == "" and (bool(_foes[id].unit.get("elite", false)) or what_kind == "rival"):
+			special = str(id)
+	if special != "" and not instant:
+		BattleFx.cutin(_fx_layer, _name(special).to_upper(), Pal.BOUNTY, 0.55, "RIVAL" if what_kind == "rival" else "ELITE")
+		_snd("boss", 1.35)
+		_say("%s blocks the way." % _name(special))
+		return 1.0
 	_snd("wave" if n > 1 else "enter")
 	if not instant:
 		BattleWidgets.banner(_fx_layer, "FIGHT!" if of <= 1 else "WAVE %d/%d" % [n, of], Pal.TEXT, 0.4 / float(speed))

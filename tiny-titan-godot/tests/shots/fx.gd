@@ -322,6 +322,16 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(is_instance_valid(bv) and not bv.busy(), "after the boss has stepped out the keys are the player's")
 	bv.close()
 	await ShotHelper.wait(tree, 0.4)
+	# --- an elite is named as it comes ----------------------------------------------------------
+	bv = _open("r1s5", 6, first)
+	await ShotHelper.wait(tree, 0.75)
+	await _cut(bv, "ELITE 1")
+	check(_all("bv_cutin", bv).size() == 1, "an elite gets its name across the arena")
+	await ShotHelper.wait(tree, 0.5)
+	await _cut(bv, "ELITE 2")
+	await _wait_idle(bv)
+	bv.close()
+	await ShotHelper.wait(tree, 0.4)
 	_flush()
 	# --- the result of a win, as it plays --------------------------------------------------
 	var r = BattleResult.new()

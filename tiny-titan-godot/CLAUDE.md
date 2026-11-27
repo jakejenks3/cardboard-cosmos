@@ -1660,7 +1660,7 @@ is the Windows handoff.
       after it), `_hero_attack` (a step in of `STEP_IN` 26 px, never under a foe's plate: a hop for legs, a
       blur for speed, a thrown orb for mind; self moves get an aura), foes lunge or cast by their move's
       kind, `_show_dmg` (the school's effect, knockback, a number, WEAK / CRIT / BLOCK words, shake and flash
-      by size), a foe goes down WITH the blow that fells it (`_ko_ahead`, `_ko_done`), a boss gets a cut-in
+      by size), a foe goes down WITH the blow that fells it (`_ko_ahead`, `_ko_done`), a boss gets a cut-in (an elite and the week's rival a shorter one, tagged ELITE / RIVAL)
       and its own sound, the keys dim while something plays (`_dim_keys`) and a chime says it is the
       player's turn, the gauge announces itself when full. The fighters' HP bars leave a pale trail where
       the bar was (`Bar.ghost`, off for every other bar). A shake moves the arena by parts of a pixel, so
