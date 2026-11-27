@@ -432,6 +432,101 @@ static func catalog() -> Array:
 	return out
 
 
+# ---------------------------------------------------------------------------
+# Searching for an exercise by what is typed (the Log tab's "Add exercise")
+# ---------------------------------------------------------------------------
+
+## Every movement with every variation of it, as names to search: [{"name", "key", "words"}]. The words are
+## the movement's, the variation's and the movement's other names.
+static var _search_index = null
+
+static func _swords(text: String) -> Array:
+	var t = text.to_lower()
+	for ch in ["-", "(", ")", ",", "/", ".", "'"]:
+		t = t.replace(ch, " ")
+	return Array(t.split(" ", false))
+
+
+static func search_index() -> Array:
+	if _search_index == null:
+		var out = []
+		for e in catalog():
+			var extra = []
+			for n in e.names:
+				extra.append_array(_swords(str(n)))
+			var vs = e.vars if not (e.vars as Array).is_empty() else [""]
+			for v in vs:
+				var full = LiftNames.join(str(e.name), str(v))
+				out.append({"name": full, "key": Xp.normalize_exercise(full), "words": _swords(str(e.name)) + _swords(str(v)) + extra})
+		_search_index = out
+	return _search_index
+
+
+## How a typed word meets a name's words: 3 = a whole word, 2 = the start of one, 1 = inside one or one typo
+## away (a typed word of five letters or more), 0 = nowhere.
+static func word_hit(q: String, words: Array) -> int:
+	var best = 0
+	for w in words:
+		var ws = str(w)
+		if ws == q:
+			return 3
+		if ws.begins_with(q):
+			best = maxi(best, 2)
+		elif q.length() >= 3 and ws.contains(q):
+			best = maxi(best, 1)
+		elif q.length() >= 5 and ws.length() >= 4 and (LiftMatch.typo(q, ws) <= 1 or LiftMatch.typo(q, ws.substr(0, q.length())) <= 1):
+			best = maxi(best, 1)
+	return best
+
+
+## How well `query` finds a name with these words: 0 when a typed word is found nowhere, else the sum.
+static func search_score(query: String, words: Array) -> int:
+	var qs = _swords(query)
+	if qs.is_empty():
+		return 0
+	var total = 0
+	for q in qs:
+		var h = word_hit(str(q), words)
+		if h == 0:
+			return 0
+		total += h
+	return total
+
+
+## Names for what is typed, best first: the player's own (`mine`, in its order: the most used first) before
+## the library's movements and variations; at most `limit`; none twice.
+static func search(query: String, mine: Array, limit: int = 12) -> Array:
+	var seen = {}
+	var own = []
+	for i in range(mine.size()):
+		var n = str(mine[i])
+		var k = Xp.normalize_exercise(n)
+		if seen.has(k):
+			continue
+		var sc = search_score(query, _swords(n))
+		if sc > 0:
+			seen[k] = true
+			own.append([sc, i, n])
+	own.sort_custom(func(a, b): return int(a[0]) > int(b[0]) or (int(a[0]) == int(b[0]) and int(a[1]) < int(b[1])))
+	var lib = []
+	var idx = search_index()
+	for i in range(idx.size()):
+		var r = idx[i]
+		if seen.has(r.key):
+			continue
+		var sc2 = search_score(query, r.words)
+		if sc2 > 0:
+			seen[r.key] = true
+			lib.append([sc2, i, str(r.name)])
+	lib.sort_custom(func(a, b): return int(a[0]) > int(b[0]) or (int(a[0]) == int(b[0]) and int(a[1]) < int(b[1])))
+	var out = []
+	for x in own + lib:
+		if out.size() >= limit:
+			break
+		out.append(str(x[2]))
+	return out
+
+
 ## What the player has logged, per normalized exercise name (movement and
 ## variation together: "shrug - barbell").
 static func stats(sessions: Array) -> Dictionary:

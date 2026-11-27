@@ -26,6 +26,10 @@ var guard_shifts: bool = false
 ## Presses are dropped until this moment (Time.get_ticks_msec).
 static var quiet_until: int = 0
 var _queued: bool = false
+## The anchor_id of a control the next rebuild keeps where it is, whatever was tapped (set before the change
+## that rebuilds; used once). For a tap whose key is gone after the rebuild: an exercise added from the
+## Log tab's list keeps the search box in place.
+var hold_anchor_id: String = ""
 var _settle_gen: int = 0
 ## The ScrollContainer's follow_focus setting while a rebuild has it switched off.
 var _follow = null
@@ -77,6 +81,11 @@ func rebuild_now() -> void:
 		return
 	var keep = scroll.scroll_vertical
 	var anchor = _anchor_under_mouse()
+	if hold_anchor_id != "":
+		var held = _anchor_by_id(hold_anchor_id)
+		hold_anchor_id = ""
+		if held != null:
+			anchor = held
 	# While the children are swapped: do not let the scroll range collapse, and do
 	# not let a focus change drag the view around.
 	if _follow == null:
@@ -151,13 +160,13 @@ static func _anchor_label(c: Node) -> String:
 	return ""
 
 
-func _collect_anchors(node: Node, cls: String, label: String, out: Array) -> void:
+func _collect_anchors(node: Node, cls: String, label: String, out: Array, any_cls: bool = false) -> void:
 	for c in node.get_children():
 		if c is CanvasItem and not c.visible:
 			continue
-		if _is_anchor(c) and c.get_class() == cls and _anchor_label(c) == label:
+		if _is_anchor(c) and (any_cls or c.get_class() == cls) and _anchor_label(c) == label:
 			out.append(c)
-		_collect_anchors(c, cls, label, out)
+		_collect_anchors(c, cls, label, out, any_cls)
 
 
 ## What is under the mouse right now: {cls, label, nth, rel} or null.
@@ -172,6 +181,16 @@ func _anchor_under_mouse():
 	var same = []
 	_collect_anchors(self, cls, label, same)
 	return {"cls": cls, "label": label, "nth": same.find(h), "count": same.size(), "rel": h.global_position.y - global_position.y}
+
+
+## The anchor of the control with this anchor_id, as _anchor_under_mouse gives one, or null.
+func _anchor_by_id(id: String):
+	var same = []
+	_collect_anchors(self, "", "id:" + id, same, true)
+	if same.is_empty():
+		return null
+	var h = same[0]
+	return {"cls": h.get_class(), "label": "id:" + id, "nth": 0, "count": 1, "rel": h.global_position.y - global_position.y}
 
 
 func _find_anchor(anchor: Dictionary):

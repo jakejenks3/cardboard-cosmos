@@ -112,5 +112,23 @@ func _init() -> void:
 			order.append(e.part)
 	ok(order.size() == 13 and order[0] == "chest" and order[11] == "mobility" and order[12] == "full", "body-part sort keeps each part together, in catalog order", order)
 	ok(LiftLibrary.query(rows, {"q": "zzzz"}).is_empty(), "no match is an empty list")
+	# --- searching by what is typed -----------------------------------------------------------------------
+	var sx_found = LiftLibrary.search("bayesian", [], 12)
+	ok(sx_found.has("Bicep Curl - Bayesian cable"), "the library is searched: 'bayesian' finds the Bayesian cable curl", sx_found)
+	ok(LiftLibrary.search("baysian", [], 12).has("Bicep Curl - Bayesian cable") and LiftLibrary.search("bay curl", [], 12).has("Bicep Curl - Bayesian cable"),
+		"one typo in a long word, and the start of words, find it too", [LiftLibrary.search("baysian", [], 12), LiftLibrary.search("bay curl", [], 12)])
+	var sx_mine_s = ["Bicep Curl - Reclined", "Bench Press - Barbell"]
+	var sx_curls = LiftLibrary.search("curl", sx_mine_s, 12)
+	ok(sx_curls.size() > 1 and sx_curls[0] == "Bicep Curl - Reclined" and not sx_curls.has("Bench Press - Barbell") and sx_curls.size() <= 12, "your own lifts come first; a name without the typed word is not offered", sx_curls.slice(0, 4))
+	ok(LiftLibrary.search("zzqx", sx_mine_s, 12).is_empty() and LiftLibrary.search("", sx_mine_s, 12).is_empty(), "nothing for words sx_found nowhere, or for nothing typed")
+	var search_twice = LiftLibrary.search("bench", ["Bench Press - Barbell"], 30)
+	var sx_keys_s = {}
+	var sx_dup = false
+	for sx_n_s in search_twice:
+		var sx_k_s = Xp.normalize_exercise(sx_n_s)
+		if sx_keys_s.has(sx_k_s):
+			sx_dup = true
+		sx_keys_s[sx_k_s] = true
+	ok(not sx_dup and search_twice[0] == "Bench Press - Barbell", "no name twice", search_twice.slice(0, 3))
 	print("LIFTLIB: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

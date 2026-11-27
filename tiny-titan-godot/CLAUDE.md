@@ -2002,6 +2002,35 @@ is the Windows handoff.
     each (meta `variation_row`, `variation_here`): name, "3 times · Nov 20", "Last: 3×10 @ 11 kg"; a tap
     opens that variation's page; then "NOT TRIED" chips (a few, "+N more").
   - Walkthrough `tests/shots/curls.gd` (`new` data, also `--fingers`): the user's case, end to end.
+- Searching for and naming exercises on the phone, and a page that keeps its place (2026-11-27; the user: "the
+  keyboard gets in the way of what you're trying to see come up if you're searching"; "when I change/edit/remove
+  a set and exercise the log page jumps around in a weird way and you have to rescroll a bunch").
+  - THE SEARCH FINDS THE WHOLE LIBRARY: `LiftLibrary.search(query, mine, limit)`: the player's own lifts first
+    (in their order), then every movement and variation of the library (`search_index`: the movement's,
+    the variation's and the other names' words); every typed word must meet a word of the name
+    (`word_hit`: whole 3, start 2, inside or one typo in a word of five letters or more 1). The Log tab's
+    "Add exercise" (`LogLiftEditor._fill_chips`) uses it when something is typed. Before, only the
+    player's lifts and a short default list could be found: a Bayesian curl never done could not.
+  - THE KEYBOARD: `WebKeys._reveal(c)` (after `_hold`, and again `SETTLE_SEC` 0.45 later) moves the page so
+    the box being typed in can be seen: a box with meta `type_top` (the exercise search, an exercise's name)
+    right under the typing bar, so its matches show between it and the keyboard; any other box only when the
+    keyboard would cover it. `WebKeys.room()` = [top, bottom] of what is left to see, from `ttKb.room()`
+    (web/tt.js: the typing bar's bottom, `visualViewport`), else `KEYBOARD_SHARE` 0.42 of the screen. A page
+    too short to scroll that far gets a spacer (meta `kb_spacer`) until the typing ends.
+  - KEEPING THE PLACE: an exercise added from the list keeps the SEARCH BOX where it was
+    (`UiScreen.hold_anchor_id`, set by `LogLiftEditor.add_exercise`; the search box's `anchor_id`
+    "log_search"): the chip tapped is gone after the rebuild, so the page had nothing to hold and the new
+    card pushed the search (and, with the keyboard up, its list) down out of sight. The picker's head says
+    "Add exercise · N in this workout" (meta `picker_count`), since the new card is above, out of view.
+  - A BUG FOUND ON THE WAY: a text box that already had the game's focus (left by a redraw) opened no keyboard
+    when tapped (a tap brought no focus change, and WebKeys only listened for one). `WebKeys.finger_on` now
+    holds such a box at once.
+  - Tried in the phone build at phone size (2026-11-27): the search, tapped half way down the page, went to
+    just under the typing bar; "curl" showed 11 curl variations under it, above the keyboard's share;
+    tapping one added its card and closed the keyboard.
+  - The jumping itself was NOT reproduced: set taps, a set's cross, a weight's +, an exercise's cross all
+    keep their place with finger events on the PC (`tests/shots/logjump.gd`) and in the phone build in a
+    phone-size browser. The search-and-add path above is the one found that moved the page.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2240,6 +2269,7 @@ dares (a won stage's dare, the region's dares row and its dare chest; year data)
 mole (the Ore Mole: left alone it digs away, felled it pays; year data),
 yard (the practice yard: a perfect guard, and nothing kept; year data),
 prep (a stage's sheet: the build's moves against known weaknesses; year data),
+logjump (a workout edited with finger events: + Set, a set's cross, a weight's +, an exercise's cross, a search and an add keep their place; year data, --fingers),
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.

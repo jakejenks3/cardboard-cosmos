@@ -25,6 +25,14 @@ const FINGER_MS = 800
 ## How long a box may be without the focus before the typing ends (a rebuild
 ## frees the box and gives the focus to its successor a frame or two later).
 const GRACE_SEC = 0.3
+## While typing, the box being typed in is moved into the part of the screen the keyboard leaves (2026-11-27:
+## "the keyboard gets in the way of what you're trying to see come up if you're searching"). A box with meta
+## "type_top" (the exercise search, an exercise's name) goes right under the typing bar, so what comes up
+## under it is seen; any other box only when the keyboard would cover it. The keyboard is taken to cover this
+## share of the screen when the phone does not say.
+const KEYBOARD_SHARE = 0.42
+## How long after the field shows the keyboard is fully up (the box is placed again then).
+const SETTLE_SEC = 0.45
 
 static var instance = null
 ## When a finger last landed on a text box (Time.get_ticks_msec).
@@ -52,6 +60,10 @@ static func finger_on(c: Control) -> void:
 	finger_msec = Time.get_ticks_msec()
 	if instance != null and instance._field == c and instance._kb != null:
 		instance._kb.arm()
+	elif instance != null and instance._kb != null and is_instance_valid(c) and c.has_focus():
+		# The box had the focus already (left by a redraw, not let go of): a tap brings no focus change,
+		# so the keyboard never came. It is held now, as if the tap had given it the focus.
+		instance._hold(c, false)
 
 
 ## A tap or a press on something that is not the box being typed in: typing is over.
@@ -115,6 +127,87 @@ func _hold(c: Control, keep: bool) -> void:
 	if c is LineEdit and (c.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_NUMBER or c.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_NUMBER_DECIMAL):
 		kind = "number"
 	_kb.want(str(c.text), kind, str(c.placeholder_text), keep)
+	_reveal.call_deferred(c)
+	get_tree().create_timer(SETTLE_SEC).timeout.connect(_reveal.bind(c))
+
+
+## The part of the screen left to see while typing, in the game's own pixels: [top, bottom].
+func room() -> Array:
+	var vp_h = get_viewport().get_visible_rect().size.y
+	var top = 70.0
+	var bottom = vp_h * (1.0 - KEYBOARD_SHARE)
+	var raw = _kb.room() if _kb != null else null
+	var d = JSON.parse_string(str(raw)) if raw != null else null
+	if d is Dictionary and float(d.get("h", 0.0)) > 0.0:
+		var k = vp_h / float(d.h)
+		if float(d.get("bar", 0.0)) > 0.0:
+			top = float(d.bar) * k
+		# (the phone saying where the keyboard begins; else the usual share)
+		if float(d.get("vis", d.h)) < float(d.h) - 40.0:
+			bottom = float(d.vis) * k
+	return [top + 6.0, bottom - 6.0]
+
+
+## Move the page so `c` is where it can be seen while typing (see KEYBOARD_SHARE).
+func _reveal(c) -> void:
+	if c == null or not is_instance_valid(c) or c != _field or not c.is_inside_tree():
+		return
+	var sc = _scroller_of(c)
+	if sc == null:
+		return
+	var r = room()
+	var rect = c.get_global_rect()
+	var target = -1.0
+	if c.has_meta("type_top"):
+		target = float(r[0])
+	elif rect.end.y > float(r[1]) or rect.position.y < float(r[0]):
+		target = float(r[0]) + (float(r[1]) - float(r[0])) * 0.3
+	if target < 0.0 or absf(rect.position.y - target) < 2.0:
+		return
+	var want = sc.scroll_vertical + int(round(rect.position.y - target))
+	var most = int(sc.get_v_scroll_bar().max_value - sc.size.y)
+	if want > most:
+		# The page ends too soon for the box to go that high: room is made under it while typing.
+		_spacer(c, want - most + 40)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if not is_instance_valid(sc) or not is_instance_valid(c):
+			return
+		want = sc.scroll_vertical + int(round(c.get_global_rect().position.y - target))
+	sc.scroll_vertical = maxi(0, want)
+
+
+func _scroller_of(c: Node):
+	var p = c.get_parent()
+	while p != null:
+		if p is ScrollContainer:
+			return p
+		p = p.get_parent()
+	return null
+
+
+## Room under the page while typing (taken away when the typing ends, or by the page's next redraw).
+func _spacer(c: Node, h: int) -> void:
+	var screen = c.get_parent()
+	while screen != null and not (screen is UiScreen):
+		screen = screen.get_parent()
+	if screen == null:
+		return
+	for n in screen.get_children():
+		if n.has_meta("kb_spacer"):
+			n.custom_minimum_size.y = maxf(n.custom_minimum_size.y, float(h))
+			return
+	var sp = Control.new()
+	sp.set_meta("kb_spacer", true)
+	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sp.custom_minimum_size = Vector2(0, h)
+	screen.add_child(sp)
+
+
+func _drop_spacers() -> void:
+	for n in get_tree().root.find_children("*", "Control", true, false):
+		if n.has_meta("kb_spacer") and not n.is_queued_for_deletion():
+			n.queue_free()
 
 
 func _unhook() -> void:
@@ -125,6 +218,7 @@ func _unhook() -> void:
 func _let_go() -> void:
 	_unhook()
 	_field = null
+	_drop_spacers()
 	_gone = -1.0
 	set_process(false)
 	if _kb != null:

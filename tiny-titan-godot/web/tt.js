@@ -276,6 +276,15 @@
 
   kb.focused = function () { return !!input && document.activeElement === input; };
 
+  // The screen left to see while typing, in page pixels: where the typing bar ends (bar), the page's
+  // height (h) and where the visible part ends (vis: above the keyboard, when the phone says so).
+  kb.room = function () {
+    setup();
+    const vv = window.visualViewport;
+    const b = bar && bar.classList.contains('on') ? bar.getBoundingClientRect().bottom : 0;
+    return JSON.stringify({ bar: b, h: window.innerHeight, vis: vv ? vv.height + vv.offsetTop : window.innerHeight });
+  };
+
   // On the window, as the event bubbles up: after the game's own listener on the
   // canvas, so the field keeps the focus (still inside the finger's event).
   let downAt = null;

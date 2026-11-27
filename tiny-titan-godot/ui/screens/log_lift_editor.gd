@@ -333,6 +333,7 @@ func _exercise_card(i: int) -> Card:
 	var head = Kit.hbox(4)
 	var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
 	name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
+	name_edit.set_meta("type_top", true)
 	name_edit.text_changed.connect(_on_name_typed.bind(i))
 	name_edit.focus_exited.connect(_on_name_done.bind(i))
 	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
@@ -768,7 +769,11 @@ func _picker_card() -> Card:
 	var c = Kit.card(6, Callable(), 10)
 	var head = Kit.hbox(6)
 	head.add_child(Kit.vcenter(Icons.rect("plus", 16)))
-	head.add_child(Kit.vcenter(Kit.clip("Add exercise", 14, null, true)))
+	# (how many are in the workout: an exercise added goes in above, out of sight, and this count says so)
+	var in_count = exercises.size()
+	var ht = Kit.clip("Add exercise" + (" · %d in this workout" % in_count if in_count > 0 else ""), 14, null, true)
+	ht.set_meta("picker_count", in_count)
+	head.add_child(Kit.vcenter(ht))
 	var step_chip = LogWidgets.mini_chip("± %s %s" % [TTUtil.num_str(_step()), wu], false, cycle_step)
 	step_chip.tooltip_text = "Weight step: how much one tap of + or − changes a weight (tap to change)"
 	head.add_child(step_chip)
@@ -777,6 +782,10 @@ func _picker_card() -> Card:
 	var row = Kit.hbox(6)
 	var search = Kit.input(query, "Search or new exercise")
 	search.set_meta(LogWidgets.FKEY, "search")
+	# (typed in on a phone: right under the typing bar, with what it finds under it; and the box the page
+	# keeps in place when an exercise is added from it)
+	search.set_meta("type_top", true)
+	search.set_meta("anchor_id", "log_search")
 	search.select_all_on_focus = false
 	search.custom_minimum_size = Vector2(48, LogWidgets.ROW_H)
 	search.tooltip_text = "Your exercises come first. Tapping one brings back everything you did last time."
@@ -813,20 +822,33 @@ func _fill_chips() -> void:
 	for e in exercises:
 		in_form[Xp.normalize_exercise(e.name)] = true
 	var q = Xp.normalize_exercise(query)
-	# Every typed word somewhere in the name: "barbell bench" finds Bench Press - Barbell.
-	var q_words = q.replace("-", " ").split(" ", false)
 	var shown = []
 	var limit = 12 if q != "" or show_all_chips else CHIPS_COLLAPSED
 	var more_left = false
-	for s in _suggestions:
-		if in_form.has(s.key):
-			continue
-		if q != "" and not str(s.key).contains(q) and not Array(q_words).all(func(w): return str(s.key).contains(w)):
-			continue
-		if shown.size() >= limit:
-			more_left = true
-			break
-		shown.append(s)
+	if q != "":
+		# Every typed word in the name, at the start of a word, inside one or one typo away: "bay curl",
+		# "baysian". Your own lifts first, then every movement and variation of the lift library
+		# (2026-11-27: a lift never done, a Bayesian curl, could not be found by its name).
+		var by_key = {}
+		var mine = []
+		for s in _suggestions:
+			if not in_form.has(s.key):
+				by_key[s.key] = s
+				if s.get("last") != null or int(s.get("count", 0)) > 0:
+					mine.append(str(s.name))
+		for nm in LiftLibrary.search(query, mine, limit + in_form.size()):
+			var k = Xp.normalize_exercise(nm)
+			if in_form.has(k) or shown.size() >= limit:
+				continue
+			shown.append(by_key.get(k, {"key": k, "name": nm, "count": 0}))
+	else:
+		for s in _suggestions:
+			if in_form.has(s.key):
+				continue
+			if shown.size() >= limit:
+				more_left = true
+				break
+			shown.append(s)
 	for s in shown:
 		_chips.add_child(_ex_chip(s))
 	if q == "" and (more_left or show_all_chips):
@@ -916,6 +938,11 @@ func add_exercise(ex_name: String, from_search: bool = false) -> void:
 		_set_focus_after("ex%d.s0.reps" % i)
 	elif from_search:
 		_set_focus_after("search")
+	# The new card goes in above the search: the search (and its list) stays where it was, so the next one is
+	# picked without looking for it again (the key that was tapped is gone, and the page had nothing to hold).
+	var f = _form()
+	if f != null and is_instance_valid(f.screen):
+		f.screen.hold_anchor_id = "log_search"
 	_changed(true)
 
 
