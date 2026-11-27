@@ -253,6 +253,33 @@ func _init() -> void:
 	var yard_rw = RpgLoot.rewards(yard, {"win": true, "turns": 3, "treasure": 1}, yard_rpg, 1, [], 2)
 	var yard_fin = RpgSave.finish(yard_rpg, {"kind": "practice", "id": RpgWorld.PRACTICE_ID}, yard, yard_rw, {"win": true, "turns": 3, "perfect": 5, "moves": {"stomp": 9}}, "2026-01-05")
 	ok(int(yard_rw.xp) == 0 and int(yard_rw.ore) == 0 and yard_rw.items.is_empty() and not bool(yard_fin.ok) and yard_fin.rpg == yard_rpg, "it pays nothing and nothing of it is kept", [yard_rw, yard_fin.get("why")])
+	# --- the weekly gauntlet ------------------------------------------------------------------------------
+	var g0 = RpgSave.first_open(RpgSave.empty(), {}, "")
+	ok(RpgWorld.gauntlet("2026-W02", g0) == null and not RpgWorld.is_open(g0, "gauntlet:2026-W02"), "before the first boss falls there is no gauntlet")
+	var g1 = g0.duplicate(true)
+	for gs in range(1, 11):
+		var gid = "r1s%d" % gs
+		if str(RpgWorld.stage(gid).kind) == "cache":
+			g1.caches[gid] = true
+		else:
+			g1.stages[gid] = {"stars": [true, false, false], "wins": 1, "best": 3}
+	var gt = RpgWorld.gauntlet("2026-W02", g1)
+	ok(gt is Dictionary and gt.kind == "gauntlet" and gt.waves.size() == 3 and gt.waves[0].size() == 2 and gt.waves[1].size() == 3 and gt.waves[2].size() == 2 and str(gt.waves[2][0].foe) == str(gt.elite)
+		and bool(RpgFoes.by_id(str(gt.elite)).elite) and absf(float(gt.n) - (RpgWorld.best_n(g1) + RpgWorld.GAUNTLET_AHEAD)) < 0.001 and int(gt.first.ore) > 0 and bool(gt.first.rune) and gt.first.items.size() == 1
+		and RpgWorld.is_open(g1, str(gt.id)), "the gauntlet: a pack of two, a pack of three, an elite with a helper, at the reach of the road + GAUNTLET_AHEAD, with its prize", [gt.n if gt is Dictionary else null])
+	ok(RpgWorld.gauntlet("2026-W02", g1) == gt and RpgWorld.gauntlet("2026-W03", g1) != gt and RpgWorld.gauntlet("", g1) == null, "the same week, the same gauntlet; another week, another")
+	var strong_g = RpgWorld.rec_of(40.0) + 0.5
+	var gp = RpgWorld.stage_of({"kind": "gauntlet", "id": "gauntlet:2026-W02", "power": strong_g}, g1)
+	ok(gp is Dictionary and float(gp.n) >= 40.0 and RpgWorld.rec_of(float(gp.n)) <= strong_g and float(gp.waves[0][0].n) == float(gp.n), "it stands at the strength of the hero when he is ahead of the road", gp.n if gp is Dictionary else null)
+	var gset = RpgWorld.setup({"kind": "gauntlet", "id": str(gt.id)}, g1, RpgHero.reference_hero(2.0), null, 5, "2026-01-08")
+	ok(not gset.is_empty() and gset.waves.size() == 3 and gset.what == {"kind": "gauntlet", "id": str(gt.id)}, "it goes to the engine as three waves")
+	ok(RpgLoot.is_first(gt, g1), "its prize is still to win")
+	var grw = RpgLoot.rewards(gt, {"win": true, "turns": 12}, g1, 3, [], 4)
+	var gwin = RpgSave.finish(g1, {"kind": "gauntlet", "id": str(gt.id)}, gt, grw, {"win": true, "turns": 12}, "2026-01-08")
+	ok(bool(grw.first) and grw.runes.size() >= 1 and bool(gwin.ok) and gwin.rpg.gauntlet == {"week": "2026-W02", "won": true} and int(gwin.rpg.ore) >= int(g1.ore) + int(gt.first.ore)
+		and not RpgLoot.is_first(gt, gwin.rpg) and RpgLoot.is_first(RpgWorld.gauntlet("2026-W03", gwin.rpg), gwin.rpg) and RpgSave.parse(gwin.rpg).gauntlet == gwin.rpg.gauntlet,
+		"the week's first win pays the prize once; next week's is open again; the save file keeps it", [grw.get("first"), gwin.rpg.get("gauntlet")])
+	ok(not bool(RpgSave.finish(g0, {"kind": "gauntlet", "id": str(gt.id)}, gt, grw, {"win": true, "turns": 12}, "2026-01-08").ok), "it cannot be paid before it is open")
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

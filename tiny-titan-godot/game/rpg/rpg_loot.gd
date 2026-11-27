@@ -136,6 +136,9 @@ static func is_first(stage: Dictionary, rpg: Dictionary) -> bool:
 			return int(stage.get("floor", 0)) > int(rpg.get("spire", {}).get("best", 0))
 		"dare":
 			return not RpgWorld.dared(rpg, str(stage.get("of", "")))
+		"gauntlet":
+			var gt = rpg.get("gauntlet", {})
+			return not (gt is Dictionary and str(gt.get("week", "")) == str(stage.get("week", "")) and bool(gt.get("won", false)))
 	var rec = rpg.get("stages", {}).get(str(stage.get("id", "")))
 	return not (rec is Dictionary and int(rec.get("wins", 0)) > 0)
 

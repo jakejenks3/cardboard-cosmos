@@ -66,6 +66,7 @@ static func empty() -> Dictionary:
 		"tally": {},
 		"mastery": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
+		"gauntlet": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
 
@@ -226,6 +227,9 @@ static func parse(raw) -> Dictionary:
 	var rival = raw.get("rival")
 	if rival is Dictionary:
 		out.rival = {"week": str(rival.get("week", "")) if rival.get("week") is String else "", "won": rival.get("won") is bool and rival.won}
+	var gauntlet = raw.get("gauntlet")
+	if gauntlet is Dictionary:
+		out.gauntlet = {"week": str(gauntlet.get("week", "")) if gauntlet.get("week") is String else "", "won": gauntlet.get("won") is bool and gauntlet.won}
 	var spire = raw.get("spire")
 	if spire is Dictionary:
 		out.spire = {"best": maxi(0, _int(spire.get("best")))}
@@ -479,6 +483,10 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 					_mark_hunt_prize(out, date)
 		"rival":
 			out.rival = {"week": str(stage.get("week", "")), "won": true}
+		"gauntlet":
+			if not RpgWorld.gauntlet_open(rpg):
+				return _no(rpg, "The gauntlet is not open yet.")
+			out["gauntlet"] = {"week": str(stage.get("week", "")), "won": true}
 		"spire":
 			var f = _int(stage.get("floor"))
 			var top = _int(out.spire.get("best"))

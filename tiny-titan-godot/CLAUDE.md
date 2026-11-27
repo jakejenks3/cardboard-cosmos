@@ -1909,6 +1909,14 @@ is the Windows handoff.
       two or more dealt something, the result names the one that did the most with its share (`info.top_move`,
       row meta `br_top_move`, under the three numbers). An ultimate's uses are NOT counted for mastery
       (`RpgSave.finish` skips them).
+    - THE WEEKLY GAUNTLET (2026-11-27, gameplay; RPG_PLAN.md 8.4): `RpgWorld.gauntlet(week, rpg, power)`, kind
+      "gauntlet", id "gauntlet:<Monday of the week>": three waves in one battle (a pack of two, a pack of
+      three, the elite of the furthest region reached with a helper), at the hero's own strength (the reach
+      of the road + `GAUNTLET_AHEAD` 3, or `n_for_power`). Open once r1s10 is won. The week's first win pays
+      `first` (ore, a rune, two belt items); `saved.rpg.gauntlet` = {week, won}. For the reference hero the
+      simulator wins it 95 to 100% of the time in 13 to 23 turns with a quarter to four fifths of his HP
+      left. Row in the HUNTS section (`RealmMap._gauntlet_row`, metas `map_gauntlet`, `map_gauntlet_state`).
+      The events walkthrough covers it.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

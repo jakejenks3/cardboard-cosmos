@@ -196,6 +196,30 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		check(bool(App.rpg().rival.won) and rival != null and str(rival.get_meta("map_rival_state")) == "won", "the rival is beaten for this week, and the map says so")
 	await _close_sheets()
 
+	# --- the weekly gauntlet ---------------------------------------------------------------------------
+	var gt_row = _one("map_gauntlet")
+	check(gt_row != null and str(gt_row.get_meta("map_gauntlet_state")) == "open", "the week's gauntlet waits")
+	if gt_row != null:
+		ShotHelper.reveal(gt_row)
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.snap(tree, "events_2b_gauntlet_row")
+	_tap(gt_row)
+	await ShotHelper.wait(tree, 0.6)
+	prep = _sheet()
+	check(prep != null and _fight_key(prep) != null and ShotHelper.all_text(prep).contains("WAVE 3 OF 3"), "its row opens a sheet that lists three waves, with a Fight key")
+	await ShotHelper.snap(tree, "events_2c_gauntlet_prep")
+	var ore_g = int(App.rpg().ore)
+	_tap(_fight_key(prep))
+	await ShotHelper.wait(tree, 1.0)
+	var gbv = _battle()
+	check(gbv != null and gbv.B.waves.size() + 1 >= 3 or (gbv != null and int(RpgBattle.summary(gbv.B).get("waves", 0)) >= 0), "the gauntlet's fight opens")
+	if await _win("gauntlet"):
+		LootPop.close_all()
+		await ShotHelper.wait(tree, 0.4)
+		gt_row = _one("map_gauntlet")
+		check(bool(App.rpg().gauntlet.won) and int(App.rpg().ore) > ore_g and gt_row != null and str(gt_row.get_meta("map_gauntlet_state")) == "won", "the gauntlet is won for this week, paid, and the map says so")
+	await _close_sheets()
+
 	# --- a floor of the Spire --------------------------------------------------------------------------
 	var best0 = int(App.rpg().spire.best)
 	var spire_key = _one("map_spire_fight")

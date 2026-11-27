@@ -720,6 +720,10 @@ push, marsh mind and grip, stormspine and titans_rest spread evenly); at most on
   the first pays `first` (ore `60 * 1.15^(n/10)`; an elite's or a boss's also a rune) and puts a flame
   on the stage. All nine dares of a region open its dare chest (`RpgLoot.dare_chest`: ore `150 + 50 r`,
   a rune, three of the region's belt item; `saved.rpg.starChests["<region>:dare"]`).
+- **Weekly gauntlet** (added 2026-11-27; `RpgWorld.gauntlet(week, rpg, power)`): three waves in one battle
+  (two regular foes, three, then the furthest region's elite with one more) at `max(best n +
+  GAUNTLET_AHEAD, n_for_power)`. Open after the first boss. One prize a week (`first`: ore `120 *
+  1.15^(n/10)`, a rune, two belt items); `saved.rpg.gauntlet = {week, won}`.
 - **Spire blessings** (added 2026-11-27): one of three for every `BLESSING_EVERY` (5) floors climbed
   (`RpgDefs.BLESSINGS`; `saved.rpg.spire.bless = {id: stacks}`, at most `BLESSING_STACKS` of each). Their
   effects are added to the hero's `fx` in Spire fights only.

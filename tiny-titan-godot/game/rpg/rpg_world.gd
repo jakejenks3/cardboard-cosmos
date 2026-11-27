@@ -478,6 +478,8 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 		return dare(stage_id.substr(5), rpg) != null
 	if stage_id == PRACTICE_ID:
 		return true
+	if stage_id.begins_with("gauntlet:"):
+		return gauntlet_open(rpg)
 	if stage_id.begins_with("spire:"):
 		var f = int(stage_id.substr(6))
 		return f >= 1 and spire_open(rpg) and f <= int(rpg.get("spire", {}).get("best", 0)) + 1
@@ -486,6 +488,53 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 		return false
 	var before = _prev(st)
 	return before == "" or done(rpg, before)
+
+
+## THE WEEKLY GAUNTLET (RPG_PLAN.md 8.4, added 2026-11-27): three waves back to back, once a week: a pack of
+## two, a pack of three, then the elite of the furthest region reached with a helper. The hero's HP carries
+## over (the engine's own heal between waves is all he gets). Its foes stand at the hero's own strength, as
+## a dare's do (the highest of the reach of the road + GAUNTLET_AHEAD and `n_for_power`). Open once the first
+## region's boss has fallen. The week's first win pays `first`: ore, a rune and two of the region's belt
+## item. saved.rpg.gauntlet = {"week", "won"}. The same week and progress give the same gauntlet.
+const GAUNTLET_AHEAD = 3.0
+
+static func gauntlet_open(rpg: Dictionary) -> bool:
+	return done(rpg, "r1s10")
+
+
+static func gauntlet(week: String, rpg: Dictionary, power: float = 0.0) -> Variant:
+	if week == "" or not gauntlet_open(rpg):
+		return null
+	var st = Rng.make_rng("gauntlet:" + week)
+	var best = best_n(rpg)
+	var n = best + GAUNTLET_AHEAD
+	if power > 0.0:
+		n = maxf(n, n_for_power(power, 1.0))
+	n = minf(n, DARE_TOP)
+	var reach = clampi(int(floor((best + 1.0) / 10.0)) + 1, 1, RpgDefs.REGIONS.size())
+	var pool = _pool(reach)
+	var reg = regions()[reach - 1]
+	var waves = []
+	for size in [2, 3]:
+		var wave = []
+		for id in _pack(pool, st, size):
+			wave.append({"foe": id, "n": n})
+		waves.append(wave)
+	var last = [{"foe": str(reg.elite), "n": n}]
+	for id in _pack(pool, st, 1):
+		last.append({"foe": id, "n": n})
+	waves.append(last)
+	var first = _no_first()
+	first["ore"] = int(round(120.0 * pow(1.15, n / 10.0)))
+	first["rune"] = true
+	first["items"] = [{"id": str(REGION_ITEMS[reach - 1]), "n": 2}]
+	var elite = RpgFoes.by_id(str(reg.elite))
+	var out = {"id": "gauntlet:" + week, "region": "", "r": 0, "s": 0, "n": n, "name": "Weekly Gauntlet",
+		"text": "Three waves, back to back: two packs, then %s. Your HP carries over from wave to wave. One prize a week." % (str(elite.name) if elite != null else "an elite"),
+		"kind": "gauntlet", "echo": false, "scene": str(reg.scene), "waves": waves, "rules": [], "stars": [], "par": 0,
+		"first": first, "rec": rec_of(n), "week": week, "elite": str(reg.elite)}
+	out["par"] = par_of(out)
+	return out
 
 
 ## THE PRACTICE YARD (added 2026-11-27): a fight for nothing, against a sparring post that jabs and then winds
@@ -1004,6 +1053,8 @@ static func stage_of(what: Dictionary, rpg: Dictionary) -> Variant:
 			return dare(id.substr(5), rpg, float(what.get("power", 0.0))) if id.begins_with("dare:") else null
 		"practice":
 			return practice(rpg)
+		"gauntlet":
+			return gauntlet(id.substr(9), rpg, float(what.get("power", 0.0))) if id.begins_with("gauntlet:") else null
 		"spire":
 			var f = int(id.substr(6)) if id.begins_with("spire:") else int(what.get("floor", 0))
 			return spire(f) if f >= 1 else null

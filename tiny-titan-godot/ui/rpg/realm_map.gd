@@ -35,7 +35,7 @@ extends RefCounted
 ## A cache and a star chest hold the same finds every time they are looked at.
 const CACHE_SEED = 1
 const CHEST_SEED = 1
-const KIND_ICONS = {"battle": "sword", "elite": "skull", "cache": "chest_wood", "boss": "crown", "hunt": "hunt", "rival": "rival", "spire": "spire", "dare": "flame"}
+const KIND_ICONS = {"gauntlet": "skull", "practice": "guard", "battle": "sword", "elite": "skull", "cache": "chest_wood", "boss": "crown", "hunt": "hunt", "rival": "rival", "spire": "spire", "dare": "flame"}
 const STAR_CHEST_ICONS = ["chest_wood", "chest_iron", "chest_gold"]
 ## The strip of a region's backdrop on its card: this part of the 110 x 60 picture, x4.
 const STRIP = Rect2(6, 22, 98, 22)
@@ -248,7 +248,43 @@ static func _hunts(rpg: Dictionary) -> Control:
 	var rival = RpgUi.stage_of({"kind": "rival", "id": ""})
 	if rival is Dictionary:
 		sec.add(_rival_row(rival, rpg))
+	var gauntlet = RpgUi.stage_of({"kind": "gauntlet", "id": "gauntlet:" + Dates.week_key(today)})
+	if gauntlet is Dictionary:
+		sec.add(_gauntlet_row(gauntlet, rpg))
 	return sec
+
+
+## The weekly gauntlet: its last wave's elite, three waves, the week's prize or WON.
+static func _gauntlet_row(gt: Dictionary, rpg: Dictionary) -> Control:
+	var rec = rpg.get("gauntlet", {})
+	var won = rec is Dictionary and str(rec.get("week", "")) == str(gt.get("week", "")) and bool(rec.get("won", false))
+	var what = {"kind": "gauntlet", "id": str(gt.id)}
+	var row = Kit.row(open_prep.bind(what), Pal.ACCENT2, Pal.ACCENT2, 8, 2, 0.12)
+	row.set_meta("map_gauntlet", str(gt.get("week", "")))
+	row.set_meta("map_gauntlet_state", "won" if won else "open")
+	row.set_meta("anchor_id", "map_gauntlet")
+	row.custom_minimum_size.y = 56
+	var h = Kit.hbox(8)
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var fv = FoeView.new()
+	fv.setup(str(gt.get("elite", "")), 40.0, true)
+	fv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(fv)
+	var mid = Kit.vbox(2)
+	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top = Kit.hbox(6)
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(Kit.tag("GAUNTLET", Pal.ACCENT2))
+	top.add_child(Kit.vcenter(Kit.clip("Three waves in a row", 14, null, true)))
+	mid.add_child(top)
+	mid.add_child(Kit.clip("Your HP carries over · one prize a week", 12, Pal.MUTED))
+	h.add_child(mid)
+	h.add_child(Kit.vcenter(_end_slot(Kit.tag("WON", Pal.GOOD) if won else Kit.tag("FIGHT", Pal.ACCENT2))))
+	row.add(h)
+	return row
 
 
 static func _hunt_row(hunt: Dictionary, rpg: Dictionary, today: String) -> Control:

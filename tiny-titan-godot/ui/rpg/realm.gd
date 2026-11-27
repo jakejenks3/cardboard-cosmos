@@ -509,7 +509,7 @@ const NEWS = [
 	["flame", "Dares: fight a stage you have won again, with foes as strong as you. Nine dares open a region's dare chest."],
 	["ore", "A golden Ore Mole sometimes stands with a pack. Fell it before it digs away: bonus ore."],
 	["spire", "The Spire: every 5 floors climbed, pick a blessing that holds there for good."],
-	["hunt", "Win the daily hunt on days in a row: the streak pays more ore each day."],
+	["hunt", "Hunts: a streak for winning the daily hunt on days in a row, and a weekly gauntlet of three waves."],
 	["music", "Also: music and sounds (the note key), AUTO, and Effects: Light in a fight's log."],
 ]
 
