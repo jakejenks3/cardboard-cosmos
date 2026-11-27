@@ -152,12 +152,22 @@ static func word(layer: Control, pos: Vector2, text: String, color: Color, px: i
 	tw.tween_callback(r.queue_free)
 
 
-## The whole of `over` lit in one colour for a blink.
+## The whole of `over` lit in one colour for a blink. Never often and never glaring: at most one flash in
+## FLASH_GAP_MS (a move that hits five times at double speed must not strobe; flashing light several times a
+## second is unpleasant for anyone and unsafe for some), and never brighter than FLASH_MAX.
+const FLASH_GAP_MS = 450
+const FLASH_MAX = 0.45
+static var _flash_at: int = -100000
+
 static func flash(over: Control, color: Color, peak: float = 0.5, secs: float = 0.2) -> void:
 	if over == null or not is_instance_valid(over) or not over.is_inside_tree():
 		return
+	var now = Time.get_ticks_msec()
+	if now - _flash_at < FLASH_GAP_MS:
+		return
+	_flash_at = now
 	var c = ColorRect.new()
-	c.color = Color(color.r, color.g, color.b, clampf(peak, 0.0, 1.0))
+	c.color = Color(color.r, color.g, color.b, clampf(peak, 0.0, FLASH_MAX))
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	over.add_child(c)
 	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
