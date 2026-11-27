@@ -255,6 +255,27 @@ func _init() -> void:
 	for nd in RpgSkills.all():
 		all_in.nodes[str(nd.id)] = true
 	ok(RpgSkills.next_unlocks(all_in, flat12).is_empty(), "with every skill learned nothing is left to open")
+	# --- a skill to suggest ---------------------------------------------------------------------------------
+	var sg_sheet = {"stats": {}}
+	for sid2 in RpgDefs.STATS:
+		sg_sheet.stats[sid2] = {"v": 5.0, "raw": 5.0, "name": str(RpgDefs.STAT_NAMES.get(sid2, sid2))}
+	sg_sheet.stats["back"]["v"] = 39.0
+	sg_sheet.stats["legs"]["v"] = 30.0
+	var sg_rpg = RpgSave.first_open(RpgSave.empty(), {}, "")
+	var sg1 = RpgSkills.suggested(sg_rpg, sg_sheet, 1, 20)
+	ok(not sg1.is_empty() and str(sg1.node.board) == "pull" and str(sg1.stat) == "back" and bool(sg1.first) and bool(RpgSkills.can_learn(sg_rpg, str(sg1.id), sg_sheet, 1, 20).ok), "the skill suggested first is of the board of the strongest stat, and can be learned", sg1.get("id"))
+	var sg_next = RpgSave.learn(sg_rpg, str(sg1.id), sg_sheet, 20)
+	var sg2 = RpgSkills.suggested(sg_next.rpg, sg_sheet, 1, 20)
+	ok(bool(sg_next.ok) and not sg2.is_empty() and str(sg2.id) != str(sg1.id) and bool(RpgSkills.can_learn(sg_next.rpg, str(sg2.id), sg_sheet, 1, 20).ok), "once it is learned another is suggested", sg2.get("id"))
+	var spend = sg_rpg.duplicate(true)
+	var taken = 0
+	while taken < 60 and not RpgSkills.suggested(spend, sg_sheet, 1, 0).is_empty():
+		var one_more = RpgSave.learn(spend, str(RpgSkills.suggested(spend, sg_sheet, 1, 0).id), sg_sheet, 0)
+		if not bool(one_more.ok):
+			break
+		spend = one_more.rpg
+		taken += 1
+	ok(taken >= 1 and taken < 60 and RpgSkills.suggested(spend, sg_sheet, 1, 0).is_empty() and RpgSkills.learnable(spend, sg_sheet, 1, 0).is_empty(), "following the suggestions spends the points, and then nothing is suggested (%d learned)" % taken)
 	print("RPG MOVES: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

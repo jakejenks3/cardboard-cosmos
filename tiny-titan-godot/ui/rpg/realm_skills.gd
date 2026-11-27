@@ -40,6 +40,10 @@ const FOOT_H = 36
 const FOOT_H_FINGERS = 46
 
 
+## The skill the page suggests now ("" = none): its tile wears a mark.
+static var suggest_id: String = ""
+
+
 static func fill(box: VBoxContainer, screen) -> void:
 	var rpg = RpgUi.save()
 	var sheet = RpgUi.sheet()
@@ -117,6 +121,21 @@ static func _head(rpg: Dictionary) -> Control:
 	reset.disabled = spent == 0
 	foot.add_child(reset)
 	sec.add(foot)
+	# A skill to suggest (with points to spend): the one that suits the hero's real stats best, a tap away.
+	# It keeps its place under the foot row: what was just learned is said BELOW it, so its key does not move.
+	var sug = RpgSkills.suggested(rpg, RpgUi.sheet(), RpgSkills.level_of(rpg), RpgUi.days()) if left > 0 else {}
+	suggest_id = str(sug.get("id", ""))
+	if suggest_id != "":
+		var sn = sug.node
+		var scol = RpgUi.color(str(sn.board))
+		var skey = RpgUi.page_key("Learn · %d" % int(sn.cost), "primary", Callable(), "suggest_learn")
+		skey.set_meta("suggest_learn", suggest_id)
+		skey.pressed.connect(_learn_suggested.bind(suggest_id, skey))
+		var kind_word = "ultimate" if str(sn.kind) == "ult" else str(sn.kind)
+		var snote = Kit.notice("sp", "Suggested: %s" % _ref_name(sn), "%s %s · your %s is %d" % [str(RpgDefs.SCHOOL_NAMES.get(str(sn.board), str(sn.board))), kind_word,
+			str(RpgDefs.STAT_NAMES.get(str(sug.stat), str(sug.stat))), int(floor(float(sug.v)))], scol, skey, open_node.bind(suggest_id))
+		snote.set_meta("skill_suggest", suggest_id)
+		sec.add(snote)
 	if fresh != "" and RpgSkills.has_node(rpg, fresh):
 		var node = RpgSkills.by_id(fresh)
 		if node != null:
@@ -126,6 +145,15 @@ static func _head(rpg: Dictionary) -> Control:
 			note.set_meta("skills_fresh", fresh)
 			sec.add(note)
 	return sec
+
+
+## The suggested skill is learned from its row; the page then shows the board it is on.
+static func _learn_suggested(id: String, at) -> void:
+	var node = RpgSkills.by_id(id)
+	if node == null:
+		return
+	board = str(node.board)
+	_learn(id, at)
 
 
 static func _equip_fresh(ref: String) -> void:
@@ -280,6 +308,7 @@ static func _node_tile(node: Dictionary, rpg: Dictionary, sheet: Dictionary, lev
 	t.custom_minimum_size = Vector2(0, TILE_H_FINGERS if Kit.fingers else TILE_H)
 	t.set_meta("node", id)
 	t.set_meta("node_state", state)
+	t.set_meta("node_suggested", id == suggest_id)
 	t.set_meta("anchor_id", "node:" + id)
 
 	var head = Kit.hbox(4)
@@ -295,6 +324,9 @@ static func _node_tile(node: Dictionary, rpg: Dictionary, sheet: Dictionary, lev
 		kind_word = "Passive"
 	head.add_child(Kit.vcenter(Icons.rect(icon_name, 16)))
 	head.add_child(Kit.vcenter(Kit.clip(kind_word, 10, Pal.ACCENT if gold else Pal.MUTED, true)))
+	if id == suggest_id and state == "can":
+		# (the one the head of the page suggests wears the points' own mark)
+		head.add_child(Kit.vcenter(Icons.rect("sp", 16)))
 	if state == "learned":
 		head.add_child(Kit.vcenter(Icons.rect("check", 16, Pal.GOOD)))
 	else:

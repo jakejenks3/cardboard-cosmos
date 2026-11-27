@@ -182,6 +182,29 @@ static func can_learn(rpg: Dictionary, node_id: String, sheet: Dictionary, level
 	return {"ok": true, "why": ""}
 
 
+## A SKILL TO SUGGEST: of the skills that can be learned right now, the one that suits the hero best: his
+## stronger stats first (a move hits with its stat), a higher tier a little more (it is the stronger skill),
+## and a board he has already put points in a little less (a second school finds more weaknesses).
+## {"id", "node", "stat", "v" (the stat's value), "first" (nothing learned on its board yet)}, or {} when
+## nothing can be learned.
+static func suggested(rpg: Dictionary, sheet: Dictionary, level: int, active_days: int) -> Dictionary:
+	var learned_on = {}
+	for n in all():
+		if has_node(rpg, str(n.id)):
+			learned_on[str(n.board)] = int(learned_on.get(str(n.board), 0)) + 1
+	var best = {}
+	var top = -1e9
+	for id in learnable(rpg, sheet, level, active_days):
+		var n = by_id(str(id))
+		var st = sheet.get("stats", {}).get(str(n.stat))
+		var v = float(st.get("v", 0.0)) if st is Dictionary else 0.0
+		var score = v + 3.0 * float(int(n.tier)) - 6.0 * float(int(learned_on.get(str(n.board), 0))) - (0.5 if str(n.kind) == "passive" else 0.0)
+		if score > top + 0.000001:
+			top = score
+			best = {"id": str(id), "node": n, "stat": str(n.stat), "v": v, "first": int(learned_on.get(str(n.board), 0)) == 0}
+	return best
+
+
 ## WHAT TRAINING OPENS NEXT: for every real stat a skill asks for, the nearest mark (RpgDefs.REQ) the stat has
 ## not reached, and the skills not yet learned that wait behind it. The nearest first:
 ## [{"stat", "name", "have", "need", "gap", "tier", "nodes": [node], "names": [the skills' names]}].

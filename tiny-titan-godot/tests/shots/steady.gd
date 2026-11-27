@@ -115,6 +115,34 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 			"the feats row goes to the Hero page with the feats in view (at %s)" % (str(feats.get_global_rect().position.y) if feats != null else "?"))
 		await ShotHelper.snap(tree, "steady_0_feats_in_view")
 
+	# --- the suggested skill: its key learns it and stays where it is --------------------------------
+	await _page("skills")
+	var sug = _one("skill_suggest")
+	var skey = _one("suggest_learn")
+	check(sug != null and skey != null and str(skey.get_meta("suggest_learn")) == str(RpgSkills.suggested(App.rpg(), RpgUi.sheet(), RpgSkills.level_of(App.rpg()), RpgUi.days()).get("id", "")),
+		"the Skills page suggests a skill, with a key to learn it")
+	if skey != null:
+		var want_id = str(skey.get_meta("suggest_learn"))
+		var at_s = skey.get_global_rect().get_center()
+		var marked = 0
+		for n in _all("node_suggested"):
+			if bool(n.get_meta("node_suggested")):
+				marked += 1
+		check(marked <= 1, "at most one tile is marked as the suggestion (%d)" % marked)
+		await ShotHelper.snap(tree, "steady_0b_suggested")
+		var had = App.rpg().nodes.size()
+		await _click_at(at_s)
+		LootPop.close_all()
+		await ShotHelper.wait(tree, 0.5)
+		var skey2 = _one("suggest_learn")
+		check(RpgSkills.has_node(App.rpg(), want_id) and App.rpg().nodes.size() == had + 1, "a tap learns exactly the suggested skill")
+		check(skey2 != null and skey2.get_global_rect().get_center().distance_to(at_s) < 3.0 and str(skey2.get_meta("suggest_learn")) != want_id,
+			"its key has not moved, and now offers the next one (%s)" % (str(skey2.get_global_rect().get_center().distance_to(at_s)) if skey2 != null else "gone"))
+		for c in Kit.overlay_root.get_children():
+			if c is Sheet and not c._closing:
+				c.close()
+		await ShotHelper.wait(tree, 0.5)
+
 	# --- Learn, three times at one point -----------------------------------------------------------
 	await _page("skills")
 	var key = _one("node_learn")

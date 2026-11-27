@@ -1932,6 +1932,13 @@ is the Windows handoff.
       `realm_unlocks`, rows `unlock_row`): "Chest 39 · at 46: <skill> and 2 more", a bar, how far, and what
       raises the stat in real life (`RealmHero.STAT_FROM`). A tap opens the stat's sheet. It ties what to
       train to what the Realm gives.
+    - A SUGGESTED SKILL (2026-11-27): `RpgSkills.suggested(rpg, sheet, level, days)`: of the skills that can be
+      learned now, the one that suits the hero's real stats best (score = the stat's value + 3 a tier - 6 for
+      every skill already learned on that board). With points to spend the Skills page's head has a row
+      "Suggested: <skill> · <school> move · your Back is 39" with a Learn key (`RealmSkills._head`, metas
+      `skill_suggest`, `suggest_learn`; the key shows the page the skill's board), and the tile wears the
+      points' mark (meta `node_suggested`). The row sits ABOVE the "Learned ..." notice so its key does
+      not move when it is used. The steady walkthrough covers it.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
