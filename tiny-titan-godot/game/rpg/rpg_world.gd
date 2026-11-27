@@ -486,6 +486,64 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 	return before == "" or done(rpg, before)
 
 
+## SPIRE BLESSINGS. Held: saved.rpg.spire.bless = {id: stacks}.
+static func blessings_held(rpg: Dictionary) -> Dictionary:
+	var out = {}
+	var b = rpg.get("spire", {}).get("bless", {}) if rpg.get("spire") is Dictionary else {}
+	if b is Dictionary:
+		for id in RpgDefs.BLESSING_IDS:
+			var n = clampi(int(b.get(id, 0)), 0, RpgDefs.BLESSING_STACKS)
+			if n > 0:
+				out[id] = n
+	return out
+
+
+static func blessings_total(rpg: Dictionary) -> int:
+	var n = 0
+	var held = blessings_held(rpg)
+	for id in held:
+		n += int(held[id])
+	return n
+
+
+## How many blessings wait to be picked: one for every BLESSING_EVERY floors climbed, less the ones held
+## (and none once every blessing is at its most).
+static func blessings_owed(rpg: Dictionary) -> int:
+	var best = int(rpg.get("spire", {}).get("best", 0)) if rpg.get("spire") is Dictionary else 0
+	var room = RpgDefs.BLESSING_IDS.size() * RpgDefs.BLESSING_STACKS - blessings_total(rpg)
+	return clampi(int(best / float(RpgDefs.BLESSING_EVERY)) - blessings_total(rpg), 0, maxi(0, room))
+
+
+## The three to pick from now (fewer when few are left): by how many are held, so they do not change until
+## one is taken. [] when none is owed.
+static func blessing_options(rpg: Dictionary) -> Array:
+	if blessings_owed(rpg) <= 0:
+		return []
+	var held = blessings_held(rpg)
+	var pool = []
+	for id in RpgDefs.BLESSING_IDS:
+		if int(held.get(id, 0)) < RpgDefs.BLESSING_STACKS:
+			pool.append(id)
+	var rng = Rng.make_rng("bless:%d" % blessings_total(rpg))
+	var out = []
+	while out.size() < 3 and not pool.is_empty():
+		var at = rng.next_int(pool.size())
+		out.append(pool[at])
+		pool.remove_at(at)
+	return out
+
+
+## The passive effects of the blessings held, a copy for every stack (for the hero's fx in a Spire fight).
+static func blessing_fx(rpg: Dictionary) -> Array:
+	var out = []
+	var held = blessings_held(rpg)
+	for id in RpgDefs.BLESSING_IDS:
+		for i in range(int(held.get(id, 0))):
+			for e in RpgDefs.BLESSINGS[id].fx:
+				out.append(e.duplicate(true))
+	return out
+
+
 ## THE ORE MOLE: the rows a battle needs for it ({"foes": {id: row}, "foe_moves": {id: row}}).
 static func treasure_rows() -> Dictionary:
 	var mv = {"name": "Dig Away", "kind": "buff", "power": 0.0, "count": RpgDefs.TREASURE_TURNS, "target": "self", "rank": 1.0,
@@ -961,6 +1019,14 @@ static func setup(what: Dictionary, rpg: Dictionary, hero_unit: Dictionary, pet_
 				custom["moves"] = {}
 			if not custom.moves.has(str(id)):
 				custom.moves[str(id)] = RpgMoves.mastered(str(id), lvl)
+	# In the Spire the hero carries his blessings (effects the engine reads from his fx).
+	if kind == "spire":
+		var bless = blessing_fx(rpg)
+		if not bless.is_empty():
+			hero_unit = hero_unit.duplicate(true)
+			if not (hero_unit.get("fx") is Array):
+				hero_unit["fx"] = []
+			hero_unit.fx.append_array(bless)
 	# Now and then an Ore Mole stands with the pack (its rows come along with the battle).
 	var waves = st.waves.duplicate(true)
 	var mole = treasure_entry(st, kind, battle_seed)

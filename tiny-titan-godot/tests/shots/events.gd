@@ -213,5 +213,48 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 			var row = _one("map_spire")
 			check(row != null and int(row.get_meta("map_spire")) == best0 + 2, "and the Spire offers the next one")
 	LootPop.close_all()
+	await ShotHelper.wait(tree, 0.4)
+
+	# --- the Spire's blessings: five floors climbed, one of three to pick ------------------------------
+	var up = App.rpg().duplicate(true)
+	up.spire["best"] = 5
+	App.set_rpg(up)
+	await ShotHelper.wait(tree, 0.8)
+	LootPop.close_all()
+	await ShotHelper.wait(tree, 0.4)
+	var brow = _one("map_bless")
+	var pick = _one("bless_pick")
+	check(brow != null and int(brow.get_meta("map_bless")) == 0 and int(brow.get_meta("map_bless_owed")) == 1 and pick != null, "five floors of the Spire climbed: a blessing is owed, and its key is there")
+	if pick != null:
+		ShotHelper.reveal(pick)
+		await ShotHelper.frames(tree, 3)
+		await ShotHelper.snap(tree, "events_4_blessing_owed")
+		_tap(pick)
+		await ShotHelper.wait(tree, 0.7)
+		var bs = _sheet()
+		var opts = _all("bless_option", bs) if bs != null else []
+		check(bs != null and opts.size() == 3, "its key opens three blessings to pick from (%d)" % opts.size())
+		await ShotHelper.snap(tree, "events_5_blessings")
+		if not opts.is_empty():
+			var took = str(opts[0].get_meta("bless_option"))
+			_tap(opts[0])
+			await ShotHelper.wait(tree, 1.0)
+			check(_one("loot_pop", null, Kit.overlay_root) != null, "taking one is a moment of its own")
+			LootPop.close_all()
+			await ShotHelper.wait(tree, 0.6)
+			brow = _one("map_bless")
+			check(RpgWorld.blessings_held(App.rpg()) == {took: 1} and brow != null and int(brow.get_meta("map_bless")) == 1 and int(brow.get_meta("map_bless_owed")) == 0 and _one("bless_pick") == null
+				and _one("bless_held", took) != null, "it is held, shown on the Spire's card, and none is owed now (%s)" % took)
+			spire_key = _one("map_spire_fight")
+			if spire_key != null:
+				_tap(spire_key)
+				await ShotHelper.wait(tree, 1.2)
+				var bv2 = _battle()
+				var carried = bv2 != null and bv2.B.hero.fx.size() == RpgUi.hero().fx.size() + RpgDefs.BLESSINGS[took].fx.size()
+				check(carried, "the next Spire fight carries it")
+				if bv2 != null:
+					bv2.close()
+				await ShotHelper.wait(tree, 0.6)
+	LootPop.close_all()
 	BattleView.auto_kept = false
 	print("EVENTS %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

@@ -643,7 +643,90 @@ static func _spire(rpg: Dictionary) -> Control:
 	h.add_child(Kit.vcenter(_finger(key)))
 	row.add(h)
 	sec.add(row)
+	sec.add(_blessings_row(rpg))
 	return sec
+
+
+## The Spire's blessings: the ones held as tags, how far the next one is, and a key to pick one that is owed.
+static func _blessings_row(rpg: Dictionary) -> Control:
+	var held = RpgWorld.blessings_held(rpg)
+	var owed = RpgWorld.blessings_owed(rpg)
+	var best = int(rpg.get("spire", {}).get("best", 0))
+	var v = Kit.vbox(4)
+	v.set_meta("map_bless", RpgWorld.blessings_total(rpg))
+	v.set_meta("map_bless_owed", owed)
+	var top = Kit.hbox(6)
+	top.add_child(Kit.vcenter(Icons.rect("sparkle" if Icons.has_icon("sparkle") else "star", 16)))
+	top.add_child(Kit.vcenter(Kit.clip("Blessings", 13, Pal.TEXT, true)))
+	var to_next = RpgDefs.BLESSING_EVERY - (best % RpgDefs.BLESSING_EVERY)
+	var tail = Kit.clip("one is yours to pick" if owed == 1 else ("%d are yours to pick" % owed if owed > 1 else "the next in %d floor%s" % [to_next, "" if to_next == 1 else "s"]), 11, Pal.ACCENT if owed > 0 else Pal.MUTED)
+	tail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(Kit.vcenter(tail))
+	if owed > 0:
+		var b = Kit.button("Pick one", "primary", open_blessings, "sm", "sparkle" if Icons.has_icon("sparkle") else "star")
+		b.set_meta("bless_pick", owed)
+		b.set_meta("anchor_id", "bless_pick")
+		Fx.shine(b, 3.2, 0.6, 0.5)
+		top.add_child(_finger(b))
+	v.add_child(top)
+	if held.is_empty():
+		v.add_child(Kit.muted_para("Every %d floors climbed, pick one of three bonuses that hold in the Spire for good." % RpgDefs.BLESSING_EVERY, 11))
+	else:
+		var flow = Kit.flow(6)
+		for id in RpgDefs.BLESSING_IDS:
+			if not held.has(id):
+				continue
+			var row = RpgDefs.BLESSINGS[id]
+			var tag = Kit.tag("%s%s" % [str(row.name), " x%d" % int(held[id]) if int(held[id]) > 1 else ""], Pal.SECOND)
+			tag.set_meta("bless_held", id)
+			tag.tooltip_text = str(row.text)
+			flow.add_child(tag)
+		v.add_child(flow)
+	return v
+
+
+## The three blessings on offer: one to take.
+static func open_blessings() -> void:
+	var rpg = RpgUi.save()
+	var options = RpgWorld.blessing_options(rpg)
+	if options.is_empty():
+		_say("No blessing to pick yet")
+		return
+	var held = RpgWorld.blessings_held(rpg)
+	var sh = Kit.sheet("A blessing of the Spire")
+	sh.box.set_meta("bless_sheet", true)
+	sh.box.add_child(Kit.para("It holds in the Spire for good. The same one can be taken up to %d times." % RpgDefs.BLESSING_STACKS, 13, Pal.TEXT))
+	sh.box.add_child(Kit.sub_head("PICK ONE OF THREE", Pal.ACCENT))
+	for id in options:
+		var row = RpgDefs.BLESSINGS[id]
+		var card = Kit.row(Callable(), Pal.SECOND, Pal.SECOND, 10, 2, 0.16)
+		card.custom_minimum_size = Vector2(0, 60)
+		card.set_meta("bless_option", id)
+		var h = Kit.hbox(10)
+		h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		h.add_child(Kit.vcenter(Icons.rect(str(row.icon) if Icons.has_icon(str(row.icon)) else "spire", 32)))
+		var v = Kit.vbox(1)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(Kit.clip(str(row.name), 15, null, true))
+		v.add_child(Kit.para(str(row.text) + (" (you hold %d)" % int(held.get(id, 0)) if int(held.get(id, 0)) > 0 else ""), 12, Pal.MUTED))
+		h.add_child(v)
+		card.add(h)
+		card.on_tap(_take_blessing.bind(str(id), card, sh))
+		sh.box.add_child(card)
+	sh.open()
+
+
+static func _take_blessing(id: String, card: Control, sh) -> void:
+	var res = RpgSave.take_blessing(RpgUi.save(), id)
+	if bool(res.get("ok", false)):
+		var row = RpgDefs.BLESSINGS[id]
+		loot_fx(card, card, ["%s: %s" % [str(row.name), str(row.text)]], "Blessing", "spire")
+		if sh != null and is_instance_valid(sh):
+			sh.close()
+	RpgUi.apply(res)
 
 
 ## The build's moves against the foes of a stage: a chip a move, lit and marked WEAK when a foe here is KNOWN

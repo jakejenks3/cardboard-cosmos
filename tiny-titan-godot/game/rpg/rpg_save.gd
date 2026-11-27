@@ -229,6 +229,9 @@ static func parse(raw) -> Dictionary:
 	var spire = raw.get("spire")
 	if spire is Dictionary:
 		out.spire = {"best": maxi(0, _int(spire.get("best")))}
+		var held = RpgWorld.blessings_held({"spire": spire})
+		if not held.is_empty():
+			out.spire["bless"] = held
 	return out
 
 
@@ -475,7 +478,10 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 				return _no(rpg, "The Spire is not open yet.")
 			if f < 1 or f > top + 1:
 				return _no(rpg, "The Spire is climbed one floor at a time.")
+			var kept_bless = RpgWorld.blessings_held(rpg)
 			out.spire = {"best": maxi(top, f)}
+			if not kept_bless.is_empty():
+				out.spire["bless"] = kept_bless
 		_:
 			return _no(rpg, "There was no battle here.")
 	_give(out, rewards)
@@ -522,6 +528,21 @@ static func open_star_chest(rpg: Dictionary, region_id: String, threshold: int, 
 	var out = copy(rpg)
 	_give(out, contents)
 	out.starChests[key] = true
+	return _yes(out)
+
+
+## A blessing of the Spire is taken: one of the three on offer (RpgWorld.blessing_options), while one is owed.
+static func take_blessing(rpg: Dictionary, id: String) -> Dictionary:
+	if not RpgDefs.BLESSINGS.has(id):
+		return _no(rpg, "There is no such blessing.")
+	if RpgWorld.blessings_owed(rpg) <= 0:
+		return _no(rpg, "Climb %d more floors of the Spire for the next blessing." % RpgDefs.BLESSING_EVERY)
+	if not RpgWorld.blessing_options(rpg).has(id):
+		return _no(rpg, "That one is not on offer now.")
+	var out = copy(rpg)
+	var held = RpgWorld.blessings_held(rpg)
+	held[id] = int(held.get(id, 0)) + 1
+	out.spire["bless"] = held
 	return _yes(out)
 
 

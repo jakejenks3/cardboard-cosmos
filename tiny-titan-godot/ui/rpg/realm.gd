@@ -502,16 +502,15 @@ func _note_stats() -> void:
 
 ## What is new since the Realm was first shown, said once: a card with a "Got it" key (kept among the hints
 ## as NEWS_ID, so it never comes back). A new batch of news gets a new id.
-const NEWS_ID = "news_2"
+const NEWS_ID = "news_3"
 const NEWS = [
-	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks, and your next hit is a sure crit."],
-	["star_on", "Mastery: a move you use a lot earns up to three stars and hits harder. See the Moves page."],
-	["flame", "Dares: tap a stage you have won to fight it again with foes as strong as you, for extra ore."],
-	["ore", "Now and then a golden Ore Mole stands with a pack. Fell it before it digs away: bonus ore."],
-	["music", "Music, and a sound for every move. The note key (here and in a fight) switches the music off."],
-	["sword", "AUTO in a fight: the hero plays by himself until you tap it again."],
-	["book", "Tap the message line in a fight: what happened, how fights work, and Effects: Light if a fight stutters."],
-	["trophy", "Feats on the Hero page pay ore. The Bestiary is at the foot of the Map."],
+	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks and your next hit is a sure crit."],
+	["star_on", "Mastery: a move you use a lot earns stars and hits harder. See the Moves page."],
+	["flame", "Dares: fight a stage you have won again, with foes as strong as you. Nine dares open a region's dare chest."],
+	["ore", "A golden Ore Mole sometimes stands with a pack. Fell it before it digs away: bonus ore."],
+	["spire", "The Spire: every 5 floors climbed, pick a blessing that holds there for good."],
+	["hunt", "Win the daily hunt on days in a row: the streak pays more ore each day."],
+	["music", "Also: music and sounds (the note key), AUTO, and Effects: Light in a fight's log."],
 ]
 
 func _news_card(rpg: Dictionary):

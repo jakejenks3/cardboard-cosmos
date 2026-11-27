@@ -450,6 +450,24 @@ static func level_of(xp: int) -> Dictionary:
 
 
 ## The tier a fighter level belongs to (the over-level rule and the pet's speed).
+## SPIRE BLESSINGS (RPG_PLAN.md 8.4, added 2026-11-27): for every BLESSING_EVERY floors of the Spire climbed, one
+## of three blessings is picked. A blessing holds IN THE SPIRE only, for good; the same one can be taken up to
+## BLESSING_STACKS times. Their effects are of the kinds the engine reads from a unit's fx (never a baked one).
+const BLESSING_EVERY = 5
+const BLESSING_STACKS = 3
+const BLESSING_IDS = ["edge", "spark", "ember", "bulwark", "mend", "leech", "ward", "purse"]
+const BLESSINGS = {
+	"edge": {"name": "Whetstone", "icon": "sword", "text": "All damage +6%", "fx": [{"p": "school_pct", "school": "all", "pct": 0.06}]},
+	"spark": {"name": "Running Start", "icon": "bolt", "text": "Start every fight with 1 more energy", "fx": [{"p": "en_start", "n": 1}]},
+	"ember": {"name": "Banked Fire", "icon": "gauge", "text": "The ultimate gauge starts 20 higher", "fx": [{"p": "gauge_start", "n": 20}]},
+	"bulwark": {"name": "Bulwark", "icon": "guard", "text": "Guard blocks 8% more", "fx": [{"p": "guard_pct", "v": 0.08}]},
+	"mend": {"name": "Field Dressing", "icon": "fx_regen", "text": "Healing +15%", "fx": [{"p": "heal_pct", "pct": 0.15}]},
+	"leech": {"name": "Second Helping", "icon": "in_drain", "text": "Heal 4% of the damage you deal", "fx": [{"p": "lifesteal", "pct": 0.04}]},
+	"ward": {"name": "Ward", "icon": "in_shield", "text": "Every wave starts with a shield of 8% of max HP", "fx": [{"p": "start_shield", "pct": 0.08}]},
+	"purse": {"name": "Deep Pockets", "icon": "ore", "text": "Ore from the Spire +20%", "fx": [{"p": "reward", "what": "ore", "pct": 0.2}]},
+}
+
+
 ## THE ORE MOLE (RPG_PLAN.md 8.4, added 2026-11-27): a treasure foe that sometimes stands with a pack. It does
 ## no harm; it digs for TREASURE_TURNS of its turns and is gone. Felled first, the win pays `treasure_ore`.
 ## It is not a foe of the catalog: RpgWorld.setup brings its rows along (custom), by the battle's seed.

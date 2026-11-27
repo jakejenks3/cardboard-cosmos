@@ -186,6 +186,49 @@ func _init() -> void:
 	var mole_rw = RpgLoot.rewards(RpgWorld.stage("r1s2"), sum3, mole_rpg, 1, [], 9)
 	ok(RpgBattle.won(Bm3) and int(sum3.treasure) == 1 and int(mole_rw.treasure) == RpgDefs.treasure_ore(float(RpgWorld.stage("r1s2").n)) and int(mole_rw.ore) == int(plain_rw.ore) + int(mole_rw.treasure) and not plain_rw.has("treasure"),
 		"felled before it is gone, the win pays the mole's ore on top", [sum3.treasure, mole_rw.ore, plain_rw.ore])
+	# --- the blessings of the Spire ---------------------------------------------------------------------
+	var good_fx = true
+	for bid in RpgDefs.BLESSING_IDS:
+		var brow = RpgDefs.BLESSINGS.get(bid)
+		if brow == null or str(brow.name) == "" or str(brow.text) == "" or RpgBattle.aggregate(brow.fx).is_empty():
+			good_fx = false
+	ok(good_fx and RpgDefs.BLESSINGS.size() == RpgDefs.BLESSING_IDS.size(), "every blessing has a name, its words and an effect the engine adds up")
+	var sp = RpgSave.first_open(RpgSave.empty(), {}, "")
+	sp["spire"] = {"best": 4}
+	ok(RpgWorld.blessings_owed(sp) == 0 and RpgWorld.blessing_options(sp).is_empty() and RpgWorld.blessing_fx(sp).is_empty() and not bool(RpgSave.take_blessing(sp, "edge").ok), "under five floors: none owed, none to pick")
+	sp["spire"] = {"best": 11}
+	var opts1 = RpgWorld.blessing_options(sp)
+	ok(RpgWorld.blessings_owed(sp) == 2 and opts1.size() == 3 and opts1 == RpgWorld.blessing_options(sp) and opts1[0] != opts1[1] and opts1[1] != opts1[2] and opts1[0] != opts1[2], "eleven floors: two owed; three different ones on offer, the same three until one is taken", opts1)
+	var not_on = ""
+	for bid in RpgDefs.BLESSING_IDS:
+		if not opts1.has(bid) and not_on == "":
+			not_on = bid
+	var tk = RpgSave.take_blessing(sp, str(opts1[0]))
+	ok(bool(tk.ok) and tk.rpg.spire.bless == {str(opts1[0]): 1} and int(tk.rpg.spire.best) == 11 and RpgWorld.blessings_owed(tk.rpg) == 1 and not bool(RpgSave.take_blessing(sp, not_on).ok) and not bool(RpgSave.take_blessing(sp, "nope").ok),
+		"one of the three is taken; one not on offer, or none at all, is not", tk.rpg.get("spire"))
+	var tk2 = RpgSave.take_blessing(tk.rpg, str(RpgWorld.blessing_options(tk.rpg)[0]))
+	ok(bool(tk2.ok) and RpgWorld.blessings_total(tk2.rpg) == 2 and RpgWorld.blessings_owed(tk2.rpg) == 0 and not bool(RpgSave.take_blessing(tk2.rpg, str(opts1[0])).ok), "the second is taken, and then none is owed until five more floors", tk2.rpg.get("spire"))
+	var held2 = RpgWorld.blessings_held(tk2.rpg)
+	var want_fx = 0
+	for bid in held2:
+		want_fx += int(held2[bid]) * RpgDefs.BLESSINGS[bid].fx.size()
+	ok(RpgWorld.blessing_fx(tk2.rpg).size() == want_fx and RpgSave.parse(tk2.rpg).spire == tk2.rpg.spire and RpgWorld.blessings_held({"spire": {"best": 3, "bless": {"edge": 9, "nope": 2}}}) == {"edge": RpgDefs.BLESSING_STACKS},
+		"their effects are counted a stack each; the save file keeps them, and only real ones, three stacks at most")
+	var sp_hero = RpgHero.reference_hero(3.0)
+	var sp_set = RpgWorld.setup({"kind": "spire", "id": "spire:12"}, tk2.rpg, sp_hero, null, 3, "2026-01-05")
+	var rd_set = RpgWorld.setup({"kind": "stage", "id": "r1s2"}, tk2.rpg, sp_hero, null, 3, "2026-01-05")
+	ok(not sp_set.is_empty() and sp_set.hero.fx.size() == sp_hero.fx.size() + want_fx and rd_set.hero.fx.size() == sp_hero.fx.size(), "a Spire fight carries the blessings; a fight of the road does not, and the hero himself is not changed", [sp_hero.fx.size(), sp_set.hero.fx.size() if not sp_set.is_empty() else -1])
+	var spf = RpgWorld.spire(12)
+	var sp_open = tk2.rpg.duplicate(true)
+	for sr in [1, 2]:
+		for ss in range(1, 11):
+			var sid2 = "r%ds%d" % [sr, ss]
+			if str(RpgWorld.stage(sid2).kind) == "cache":
+				sp_open.caches[sid2] = true
+			else:
+				sp_open.stages[sid2] = {"stars": [true, false, false], "wins": 1, "best": 3}
+	var climbed = RpgSave.finish(sp_open, {"kind": "spire", "id": str(spf.id)}, spf, {}, {"win": true, "turns": 3}, "2026-01-05")
+	ok(bool(climbed.ok) and int(climbed.rpg.spire.best) == 12 and climbed.rpg.spire.bless == tk2.rpg.spire.bless, "a floor climbed keeps the blessings", climbed.get("why", climbed.rpg.get("spire")))
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

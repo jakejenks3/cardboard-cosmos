@@ -1882,6 +1882,17 @@ is the Windows handoff.
       look is `FoeSprites.EXTRA_LOOKS` (the rat's shape in gold). The fight: `BattleView._is_mole`, the hint
       "treasure", "ORE!" when it is caught, "digs away, ore and all" when it is not. The simulator's fights
       have none. Walkthrough `tests/shots/mole.gd` (year data).
+    - SPIRE BLESSINGS (2026-11-27, gameplay; RPG_PLAN.md 8.4): for every `RpgDefs.BLESSING_EVERY` (5) floors of
+      the Spire climbed, one of three blessings is picked (`RpgDefs.BLESSINGS`, 8 of them: damage, starting
+      energy, starting gauge, guard, healing, lifesteal, a wave shield, ore; up to `BLESSING_STACKS` 3 of each).
+      They hold IN THE SPIRE only: `RpgWorld.setup` adds `blessing_fx(rpg)` to a COPY of the hero's `fx` for
+      kind "spire" (only kinds the engine reads from fx, never a baked one). `saved.rpg.spire.bless` = {id:
+      stacks} (`RpgSave.take_blessing`; `parse` and a floor's win keep it). `RpgWorld.blessings_held`,
+      `blessings_owed`, `blessing_options` (three, by how many are held: the same until one is taken).
+      Screens: the Spire's section (`RealmMap._blessings_row`: tags of the ones held, the floors to the next,
+      a "Pick one" key; metas `map_bless`, `map_bless_owed`, `bless_pick`, `bless_held`), the sheet
+      `open_blessings` (meta `bless_option`). The events walkthrough covers it. The news card is `NEWS_ID`
+      "news_3".
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
