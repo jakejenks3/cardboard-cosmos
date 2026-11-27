@@ -149,7 +149,7 @@ func run(m: Node, t: SceneTree) -> void:
 	ShotHelper.press(sw[0])
 	await ShotHelper.frames(tree, 5)
 	# PT is counted in sets: 3 days a week x Pt.SETS_A_DAY (3) = 9 sets.
-	check(Pt.is_pt(App.pt(), lift_name) and ShotHelper.find_text(page, "of 9 sets this week") != null and ShotHelper.find_text(page, "days a week · 3 sets a day") != null and _by_tip("One day more").size() == 1, "switched on: it is a PT lift, aiming for 3 days a week, 9 sets")
+	check(Pt.is_pt(App.pt(), lift_name) and ShotHelper.find_text(page, "of 9 sets this week") != null and ShotHelper.find_text(page, PtView.aim_words(3)) != null and _by_tip("One day more").size() == 1, "switched on: it is a PT lift, aiming for 3 days a week, 9 sets")
 	var plus = _by_tip("One day more")[0]
 	var plus_at = plus.get_global_rect().position
 	ShotHelper.press(plus)
@@ -178,7 +178,7 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.click(tree, card[0])
 		await ShotHelper.wait(tree, 0.7)
 	var pts = _sheet()
-	check(pts != null and ShotHelper.find_text(pts, lift_name) != null and ShotHelper.find_text(pts, "sets done this week") != null and ShotHelper.find_text(pts, "of 9 sets this week") != null and ShotHelper.find_text(pts, "days a week · 3 sets a day") != null and _count(WeekBars) == 1, "the card opens the sheet: the week in sets, and eight weeks of bars")
+	check(pts != null and ShotHelper.find_text(pts, lift_name) != null and ShotHelper.find_text(pts, "sets done this week") != null and ShotHelper.find_text(pts, "of 9 sets this week") != null and ShotHelper.find_text(pts, PtView.aim_words(3)) != null and _count(WeekBars) == 1, "the card opens the sheet: the week in sets, and eight weeks of bars")
 	var more = _by_tip("One day more")
 	var more_at = more[0].get_global_rect().position if not more.is_empty() else Vector2.ZERO
 	for i in range(3):

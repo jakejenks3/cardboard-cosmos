@@ -142,10 +142,12 @@ static func _fill(sheet: Sheet) -> void:
 	box.add_child(Kit.muted_para("To add one: write (PT) in front of an exercise in your phone note, or switch it on on a lift's page.", 12))
 
 
-## "days a week · 3 sets a day": the words after the Aim for stepper (the goal
+## "days · 3 sets a day": the words after the Aim for stepper (the goal
 ## is kept in days; each day is Pt.SETS_A_DAY sets).
 static func aim_words(per_week: int) -> String:
-	return "day%s a week · %d sets a day" % ["" if per_week == 1 else "s", Pt.SETS_A_DAY]
+	# ("days a week · 3 sets a day" was cut off beside its stepper, at finger sizes and on a hold's page: the
+	# week is said by the line above it, "N of M sets this week")
+	return "day%s · %d sets a day" % ["" if per_week == 1 else "s", Pt.SETS_A_DAY]
 
 
 ## One PT lift: this week's sets (a square a day, filled by its share of
