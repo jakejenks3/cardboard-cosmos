@@ -220,6 +220,20 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(prep != null and _all("prep_star", prep).all(func(s): return bool(s.get_meta("prep_star_on"))), "a won stage's prep sheet shows its stars earned and what was learned of its foes")
 	await ShotHelper.snap(tree, "realm_16_prep_won")
 	await _close_sheets()
+	# --- the bestiary ------------------------------------------------------------------------
+	var beast = _one("map_bestiary")
+	check(beast != null and int(beast.get_meta("map_bestiary")) >= 3, "the Map ends in the bestiary: the foes met so far (%s)" % (str(beast.get_meta("map_bestiary")) if beast != null else "none"))
+	if beast != null:
+		ShotHelper.reveal(beast)
+		await ShotHelper.frames(tree, 3)
+		RealmBestiary.open()
+		await ShotHelper.wait(tree, 0.6)
+		var bs = _sheet()
+		var tiles = _all("bestiary_foe", bs) if bs != null else []
+		check(bs != null and tiles.size() == RpgFoes.all().size() and tiles.any(func(t): return bool(t.get_meta("bestiary_met"))) and tiles.any(func(t): return not bool(t.get_meta("bestiary_met"))),
+			"its sheet has a tile for every foe: the ones met as they are, the rest as dark shapes (%d)" % tiles.size())
+		await ShotHelper.snap(tree, "realm_18_bestiary")
+		await _close_sheets()
 	if hunt != null and is_instance_valid(_one("map_hunt")):
 		await _click(_one("map_hunt"))
 		check(_sheet() != null and _one("prep_rule", null, _sheet()) != null, "the hunt's prep sheet names the day's rule")

@@ -449,7 +449,7 @@ func _run() -> void:
 	# The Map
 	# =================================================================================================
 	rpg = app.rpg()
-	ok(_metas(realm, "section").filter(func(s): return s.begins_with("map_")) == ["map_hunts", "map_road", "map_spire"], "the Map: hunts, the road, the Spire", _metas(realm, "section"))
+	ok(_metas(realm, "section").filter(func(s): return s.begins_with("map_")) == ["map_hunts", "map_road", "map_spire", "map_bestiary"], "the Map: hunts, the road, the Spire, the bestiary", _metas(realm, "section"))
 	var regions = _with(realm, "map_region")
 	ok(regions.map(func(r): return str(r.get_meta("map_region"))) == RpgDefs.REGIONS and regions.map(func(r): return str(r.get_meta("map_region_state"))) == ["chosen", "locked", "locked", "locked", "locked", "locked", "locked", "locked"], "eight regions, only the first open", regions.map(func(r): return str(r.get_meta("map_region_state"))))
 	var nodes = _with(realm, "map_stage")

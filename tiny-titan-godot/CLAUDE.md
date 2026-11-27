@@ -1683,6 +1683,19 @@ is the Windows handoff.
       test checks it). Under them the Map page has the banner, the notices and the boosts; the other pages
       have one slim line (`RealmScreen._slim`, section `realm_slim`: level, its bar, points, ore), so a page
       starts at the top of the screen, not a screen down.
+    - THE LINE THAT SAYS WHAT HAPPENED WAS BLANK on every tall screen (a phone's among them) until
+      2026-11-26: in the two-line box its label wraps and clips, such a label asks for one pixel of height,
+      and it was left to shrink. `_line.size_flags_vertical = SIZE_FILL` now; the battle test checks the
+      label's height and its visible lines (`_layout_wrong`). A label that wraps AND clips must be given its
+      height (fill, or a minimum size): it will not ask for one.
+    - AUTO (`bv_key` "auto", top bar, lit gold while on; `BattleView.auto`, static `auto_kept` for the next
+      fight of the visit): the hero plays `RpgAi.hero_action(B, "heuristic")` a breath after each playback,
+      waits while a sheet is open, never in the taught first fight; a tap on AUTO takes over again, Flee
+      turns it off. The battle walkthrough wins a pack with it.
+    - The bestiary: `ui/rpg/realm_bestiary.gd` (`RealmBestiary.card(rpg)` at the foot of the Map, section
+      `map_bestiary`; `open()` the sheet: every foe by region, the ones met as they are with the weaknesses
+      learned, the rest as dark shapes "???"). Nothing new is stored: met = a weakness learned
+      (`saved.rpg.seen`) or standing in a stage that was won (`RealmBestiary.met`).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

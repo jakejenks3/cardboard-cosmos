@@ -111,6 +111,12 @@ var _act_h0: float = 48.0
 var _slots: int = 4
 
 var _top: HBoxContainer
+## AUTO: the hero plays by himself (RpgAi's heuristic) until the key is tapped again. It is kept from one
+## fight to the next while the game is open (a stage run again, the next hunt).
+static var auto_kept: bool = false
+var auto: bool = false
+var _auto_key: Button = null
+var _auto_tw: Tween = null
 var _wave_label: Label
 var _turn_label: Label
 var _speed_key: Button
@@ -206,6 +212,7 @@ func _ready() -> void:
 		return
 	_say("Your move." if _resumed else "The fight begins.")
 	BattleFx.speed = float(speed)
+	_set_auto(auto_kept and not instant)
 	if not instant:
 		_held = true
 		RpgSfx.hold(1, true)
@@ -270,6 +277,9 @@ func _build() -> void:
 	_line_box.add_theme_stylebox_override("panel", PixBox.well(8, 2))
 	_line = Kit.clip("", 12, Pal.TEXT, true)
 	_line.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# It fills its box. (Left to shrink, a label that wraps and clips asks for one pixel of height and showed
+	# NOTHING: in every column tall enough for the two-line box, a phone's among them, the line was blank.)
+	_line.size_flags_vertical = Control.SIZE_FILL
 	_line.set_meta("bv_line", true)
 	_line_box.add_child(_line)
 	add_child(_line_box)
@@ -304,6 +314,12 @@ func _build_top() -> void:
 	_turn_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_turn_label.set_meta("bv_turn", 0)
 	_top.add_child(_turn_label)
+	_auto_key = Kit.button("AUTO", "ghost", _on_auto, "sm")
+	_auto_key.custom_minimum_size = Vector2(58, 40 if Kit.fingers else 0)
+	_auto_key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_auto_key.set_meta("bv_key", "auto")
+	_auto_key.set_meta("anchor_id", "bv_key:auto")
+	_top.add_child(_auto_key)
 	_speed_key = Kit.button("x%d" % speed, "ghost", _on_speed, "sm")
 	_speed_key.custom_minimum_size = Vector2(46, 40 if Kit.fingers else 0)
 	_speed_key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -960,6 +976,52 @@ func _on_act(what: String) -> void:
 				_do({"t": "ult", "target": target})
 
 
+## AUTO on or off. It does not skip what is playing: the hero's next move is simply his own, or the player's.
+func _on_auto() -> void:
+	if _closed or _result != null:
+		return
+	_set_auto(not auto)
+	auto_kept = auto
+	Sfx.tap()
+	_say("Auto: the hero fights by himself. Tap AUTO again to take over." if auto else "Your move.")
+	if auto and not _busy:
+		_auto_soon()
+
+
+func _set_auto(on: bool) -> void:
+	auto = on and not bool(_opts.get("tutorial", false))
+	_kill(_auto_tw)
+	if _auto_key != null:
+		_auto_key.set_meta("bv_auto", auto)
+		# (Its word never changes: lit gold while it is on.)
+		_auto_key.modulate = Color(1.5, 1.3, 0.45) if auto else Color.WHITE
+
+
+## The hero's own move, a breath after the last thing was shown.
+func _auto_soon() -> void:
+	_kill(_auto_tw)
+	if not auto or _closed or RpgBattle.over(B) or instant:
+		return
+	_auto_tw = create_tween()
+	_auto_tw.tween_interval(0.32 / float(speed))
+	_auto_tw.tween_callback(_auto_step)
+
+
+func _auto_step() -> void:
+	if not auto or _busy or _closed or _result != null or RpgBattle.over(B) or not bool(B.get("wait", false)):
+		return
+	if _sheet != null and is_instance_valid(_sheet):
+		# Something is open (a fighter's sheet, the belt): the hero waits for it to be put away.
+		_auto_soon()
+		return
+	var a = RpgAi.hero_action(B, "heuristic")
+	var aim = str(a.get("target", ""))
+	if aim != "" and aim != target and _foes.has(aim):
+		target = aim
+		_mark()
+	_do(a)
+
+
 func _on_speed() -> void:
 	speed = 1 if speed >= 2 else 2
 	BattleFx.speed = float(speed)
@@ -970,6 +1032,7 @@ func _on_speed() -> void:
 func _on_flee() -> void:
 	if _tap_guard():
 		return
+	_set_auto(false)
 	Kit.confirm("Flee the battle?", "Nothing is lost. You can try again any time.", "Flee", func():
 		if not _closed and _result == null and not RpgBattle.over(B):
 			_do({"t": "flee"}))
@@ -1122,7 +1185,10 @@ func _end_playback() -> void:
 	if RpgBattle.over(B):
 		_battle_over()
 	elif bool(B.get("wait", false)):
-		_snd("turn")
+		if auto:
+			_auto_soon()
+		else:
+			_snd("turn")
 
 
 func _battle_over() -> void:
@@ -1807,7 +1873,7 @@ func _show_dmg(e: Dictionary) -> float:
 		else:
 			_pose("hurt", 0.36)
 			_knock("hero", -12.0 if big else -7.0)
-			_tint("hero", Color(1.7, 0.55, 0.55))
+			_tint("hero", Color(1.45, 0.72, 0.72))
 			_snd("hurt_big" if big else "hurt", 1.0, 0.05)
 		if not instant:
 			Kit.pop(_hero_plate, 1.03, 0.18)

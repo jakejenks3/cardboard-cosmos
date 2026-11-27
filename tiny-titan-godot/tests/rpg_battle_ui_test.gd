@@ -259,6 +259,10 @@ func _layout_wrong(v) -> Array:
 			bad.append("%s is not on the ground line (home %s, size %s, feet %s, ground %s, arena %s)" % [str(id), str(v._foes[id].home), str(fv.size), str(fv.feet_y()), str(arena.ground()), str(arena.size)])
 	if v._hero_plate.get_global_rect().position.y < v._timeline.get_global_rect().end.y - 0.5 or v._timeline.global_position.y < arena_box.end.y - 0.5:
 		bad.append("the slots under the arena overlap")
+	# The line that says what happened can be READ: its label has the height of its words (it once asked for
+	# one pixel in the two-line box and showed nothing on any tall screen).
+	if v._line.size.y < 12.0 or v._line.get_visible_line_count() < (1 if v._line.text != "" else 0):
+		bad.append("the line's label is %s high and shows %d lines of \"%s\"" % [str(v._line.size.y), v._line.get_visible_line_count(), v._line.text])
 	return bad
 
 
@@ -421,8 +425,8 @@ func _run() -> void:
 	ok(not v.busy() and JSON.stringify(v.B) == b0, "a tap during a playback only skips it")
 	var hint = _one(v, "bv_hint")
 	ok(hint != null and hint.text.begins_with("Try each school") and _one(v, "bv_line") != null, "the tutorial's first hint, and the line", hint.text if hint != null else "-")
-	ok(_with(v, "bv_move").size() == 4 and _with(v, "bv_key").size() == 7 and _with(v, "bv_foe").size() == 1 and _one(v, "bv_plate", "hero") != null and _one(v, "bv_plate", "f0") != null
-		and str(_one(v, "bv_wave").get_meta("bv_wave")) == "1/1", "four move keys, five action keys, flee and speed, a foe with a plate and a tap area", [_with(v, "bv_move").size(), _with(v, "bv_key").size()])
+	ok(_with(v, "bv_move").size() == 4 and _with(v, "bv_key").size() == 8 and _with(v, "bv_foe").size() == 1 and _one(v, "bv_plate", "hero") != null and _one(v, "bv_plate", "f0") != null
+		and str(_one(v, "bv_wave").get_meta("bv_wave")) == "1/1", "four move keys, five action keys, flee, auto and speed, a foe with a plate and a tap area", [_with(v, "bv_move").size(), _with(v, "bv_key").size()])
 	var plate0 = _one(v, "bv_plate", "f0")
 	ok(plate0.wide and plate0.weak_shown() == "?,?" and plate0.intent_shown().begins_with("attack:") and plate0.intent_shown().split(":")[1].is_valid_int(), "one foe: a wide plate, its weaknesses unknown, its intent with the damage", [plate0.weak_shown(), plate0.intent_shown()])
 	var pv = RpgBattle.preview(v.B, {"t": "move", "id": "shove", "target": "f0"})

@@ -107,4 +107,30 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	if is_instance_valid(bv):
 		bv.close()
 	await ShotHelper.wait(tree, 0.5)
+	# --- AUTO: the hero fights a pack by himself ---------------------------------------------
+	bv = _open("r1s3", 11)
+	await ShotHelper.wait(tree, 1.0)
+	await _wait_idle(bv)
+	var auto_key = null
+	for k in _all("bv_key", bv):
+		if str(k.get_meta("bv_key")) == "auto":
+			auto_key = k
+	check(auto_key != null and not bv.auto, "the AUTO key is there, and off")
+	if auto_key != null:
+		auto_key.pressed.emit()
+		await ShotHelper.wait(tree, 1.4)
+		check(bv.auto and bool(auto_key.get_meta("bv_auto", false)), "a tap turns it on")
+		await ShotHelper.snap(tree, "battle_7_auto")
+		var t0 = Time.get_ticks_msec()
+		while is_instance_valid(bv) and not RpgBattle.over(bv.B) and Time.get_ticks_msec() - t0 < 60000:
+			await ShotHelper.wait(tree, 0.2)
+		check(is_instance_valid(bv) and RpgBattle.over(bv.B) and RpgBattle.won(bv.B), "on AUTO the hero wins the pack by himself (%d turns)" % int(bv.B.sum.turns))
+		t0 = Time.get_ticks_msec()
+		while is_instance_valid(bv) and bv.result() == null and Time.get_ticks_msec() - t0 < 10000:
+			await ShotHelper.wait(tree, 0.2)
+		check(is_instance_valid(bv) and bv.result() != null, "and the result comes up")
+	BattleView.auto_kept = false
+	if is_instance_valid(bv):
+		bv.close()
+	await ShotHelper.wait(tree, 0.5)
 	print("BATTLE %s" % ("ok" if fails == 0 else "%d FAILED" % fails))
