@@ -111,6 +111,7 @@ func build() -> void:
 		return
 	set_process(false)
 	_build_hub(rpg)
+	_note_stats.call_deferred()
 	if RpgSfx.battles == 0:
 		RpgSfx.tune("hub")
 
@@ -255,6 +256,9 @@ func _build_hub(rpg: Dictionary) -> void:
 	if str(RpgUi.page) == "map":
 		# The Map is the Realm's front page: the banner, what waits, today's boosts.
 		add_child(_banner(rpg))
+		var grew = _gains_row()
+		if grew != null:
+			add_child(grew)
 		var notices = _notices(rpg, can_learn)
 		if notices != null:
 			add_child(notices)
@@ -377,6 +381,61 @@ func _banner(rpg: Dictionary) -> Control:
 	h.add_child(side)
 	sec.add(h)
 	return sec
+
+
+## What the day's training made of the hero, in the Realm's words: a chip for every stat it raised. null on
+## a day (and a day after one) with nothing to say. A tap goes to the Hero page.
+func _gains_row():
+	var g = RpgUi.gains()
+	if str(g.day) == "" or g.gains.is_empty():
+		return null
+	var row = Kit.row(go_page.bind("hero"), Pal.GOOD, Pal.GOOD, 8, 4, 0.14)
+	row.set_meta("realm_gains", str(g.day))
+	row.set_meta("anchor_id", "realm_gains")
+	var head = Kit.hbox(8)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	head.add_child(Kit.vcenter(Icons.rect("muscle", 16)))
+	head.add_child(Kit.vcenter(Kit.clip("%s training made you stronger" % ("Today's" if str(g.day) == "today" else "Yesterday's"), 14, null, true)))
+	row.add(head)
+	var flow = Kit.flow(6)
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in range(mini(6, g.gains.size())):
+		var e = g.gains[i]
+		var col = color_of(str(RpgDefs.STAT_SCHOOL.get(str(e.id), "")))
+		var chip = Kit.tag("+%s %s" % [RealmHero.one(float(e.add)), str(e.name)], col, true, 11)
+		chip.set_meta("realm_gain", str(e.id))
+		flow.add_child(chip)
+	if g.gains.size() > 6:
+		flow.add_child(Kit.tag("+%d more" % (g.gains.size() - 6), Pal.MUTED, false, 11))
+	row.add(flow)
+	return row
+
+
+## A stat that has reached a new whole point since the Realm was last looked at gets its moment (the training
+## did that), and what the Realm remembers of the stats is brought up to date, quietly.
+func _note_stats() -> void:
+	if not is_inside_tree() or RpgSfx.battles > 0:
+		return
+	var rpg = RpgUi.save()
+	if not bool(rpg.get("opened", false)):
+		return
+	var sheet = RpgUi.sheet()
+	var values = {}
+	for id in RpgDefs.STATS:
+		var st = sheet.stats.get(id)
+		if st != null:
+			values[id] = int(st.v)
+	var res = RpgSave.note_stats(rpg, values)
+	if not bool(res.changed):
+		return
+	RpgUi.commit_quiet(res.rpg)
+	if res.rose.is_empty():
+		return
+	var lines = []
+	for r in res.rose:
+		lines.append("%s %d   (+%d)" % [str(RpgDefs.STAT_NAMES[str(r.id)]), int(r.to), int(r.to) - int(r.from)])
+	lines.append("Your training did that. Higher stats hit harder and open higher skill tiers.")
+	LootPop.open("Stronger", "muscle", lines, Pal.GOOD, "level")
 
 
 ## The banner in one line, over the pages that are not the Map: the level and its bar, the ore.

@@ -1708,6 +1708,14 @@ is the Windows handoff.
       save; nothing new is stored.
     - `ShotHelper.snap` also fails a label that is on screen with words and shows none of them (5 px high or
       no visible line): every walkthrough is a check for text that cannot be seen.
+    - Training shows in the Realm the day it is done: `RpgUi.gains()` (today's training, else yesterday's:
+      the stats it raised by `GAIN_MIN` 0.1 or more, from `RpgStats.scan_pair` / `raws_of`) is a green row
+      under the hub's banner ("Today's training made you stronger", a chip a stat, metas `realm_gains`,
+      `realm_gain`). And `saved.rpg.statsSeen` = {stat: whole points as the Realm last showed them}
+      (`RpgSave.note_stats(rpg, values)` -> {rpg, changed, rose}; kept by `RpgSave.parse`; stored with
+      `RpgUi.commit_quiet` = `App.set_rpg(d, true)`, which emits nothing): a stat that has reached a new whole
+      point since the last visit gets a "Stronger" LootPop when the hub is drawn (`RealmScreen._note_stats`,
+      deferred; never the first time, never during a battle).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

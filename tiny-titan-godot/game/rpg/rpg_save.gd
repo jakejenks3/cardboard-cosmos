@@ -59,6 +59,7 @@ static func empty() -> Dictionary:
 		"relics": {}, "scrolls": {}, "items": {},
 		"stages": {}, "starChests": {}, "caches": {},
 		"seen": {},
+		"statsSeen": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
@@ -176,6 +177,11 @@ static func parse(raw) -> Dictionary:
 					if sc is String and RpgDefs.ATTACK_SCHOOLS.has(sc) and not schools.has(sc):
 						schools.append(sc)
 				out.seen[str(k)] = schools
+	var stats_seen = raw.get("statsSeen")
+	if stats_seen is Dictionary:
+		for k in stats_seen:
+			if RpgDefs.STATS.has(str(k)) and _int(stats_seen[k]) > 0:
+				out.statsSeen[str(k)] = clampi(_int(stats_seen[k]), 1, 99)
 	var chests = raw.get("chests")
 	if chests is Dictionary:
 		for k in chests:
@@ -223,6 +229,30 @@ static func first_open(rpg: Dictionary, loadout: Dictionary, active_pet) -> Dict
 # =============================================================================
 # The transitions
 # =============================================================================
+
+## The stats as the Realm last showed them (whole points: saved.rpg.statsSeen), brought up to `values`
+## ({stat id: whole points}). Returns {"ok", "why", "rpg", "changed": bool, "rose": [{"id", "from", "to"}]}:
+## `rose` names the stats that have reached a new whole point since then, and is empty the first time (there
+## is nothing to compare with yet). A stat never falls, and neither does what is remembered of it.
+static func note_stats(rpg: Dictionary, values: Dictionary) -> Dictionary:
+	var out = copy(rpg)
+	if not (out.get("statsSeen") is Dictionary):
+		out["statsSeen"] = {}
+	var first = out.statsSeen.is_empty()
+	var rose = []
+	var changed = false
+	for id in RpgDefs.STATS:
+		if not values.has(id):
+			continue
+		var v = clampi(int(values[id]), 1, 99)
+		var was = int(out.statsSeen.get(id, 0))
+		if v > was:
+			if not first and was > 0:
+				rose.append({"id": str(id), "from": was, "to": v})
+			out.statsSeen[id] = v
+			changed = true
+	return {"ok": true, "why": "", "rpg": out, "changed": changed, "rose": rose}
+
 
 ## The most of one belt item a save holds.
 const ITEM_CAP = 999

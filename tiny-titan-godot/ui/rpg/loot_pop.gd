@@ -119,7 +119,7 @@ func _run() -> void:
 	_gen += 1
 	var gen = _gen
 	var tw = create_tween()
-	tw.tween_property(_dim, "color:a", 0.78, 0.18)
+	tw.tween_property(_dim, "color:a", 0.86, 0.18)
 	# It drops in, rattles, and opens in light.
 	_icon.scale = Vector2(0.3, 0.3)
 	_icon.modulate.a = 0.0
@@ -171,7 +171,7 @@ func _end() -> void:
 	_icon.scale = Vector2.ONE
 	_icon.rotation = 0.0
 	_icon.modulate.a = 1.0
-	_dim.color.a = 0.78
+	_dim.color.a = 0.86
 	if _rays == null and is_inside_tree():
 		_open_fx()
 	_hint.modulate.a = 1.0

@@ -129,6 +129,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(_all("realm_boost").size() >= 1, "today's boosts (%d)" % _all("realm_boost").size())
 	check(_all("tab_dot").size() == 1, "the tab has its dot: a chest waits")
 	await ShotHelper.snap(tree, "realm_4_hub")
+	var grew = _one("realm_gains")
+	check(grew != null and _all("realm_gain", grew).size() >= 1, "the day's training shows as what it raised (%s: %d stats)" % [str(grew.get_meta("realm_gains")) if grew != null else "none", _all("realm_gain", grew).size() if grew != null else 0])
 	var open_key = _one("realm_chest_open", App.today)
 	var ore0 = int(App.rpg().ore)
 	check(open_key != null, "a training chest for today with an Open key")
@@ -145,6 +147,18 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		check(int(App.rpg().ore) > ore0 and row != null and str(row.get_meta("realm_chest_state")) == "opened", "opening it pays ore; its row stays and says what came out")
 		check(row != null and absf(row.get_global_rect().get_center().y - mid_y) < 12.0, "and its row is where the key was: nothing jumped")
 	await ShotHelper.snap(tree, "realm_6_chest_opened")
+	# --- a stat reaches a new whole point between two visits ---------------------------------------
+	var seen_rpg = App.rpg().duplicate(true)
+	check(seen_rpg.get("statsSeen") is Dictionary and seen_rpg.statsSeen.size() == 12, "the Realm remembers the stats as it last showed them (%d)" % seen_rpg.get("statsSeen", {}).size())
+	if seen_rpg.get("statsSeen") is Dictionary and int(seen_rpg.statsSeen.get("back", 0)) > 1:
+		seen_rpg.statsSeen["back"] = int(seen_rpg.statsSeen.back) - 1
+		App.set_rpg(seen_rpg)
+		await ShotHelper.wait(tree, 1.6)
+		var strong = _one("loot_pop", "Stronger")
+		check(strong != null and _all("loot_line", strong).size() >= 2, "a stat that grew a point since the last visit gets its moment")
+		await ShotHelper.snap(tree, "realm_6b_stronger")
+		await _pops_off()
+		check(int(App.rpg().statsSeen.back) == int(RpgUi.sheet().stats.back.v), "and is remembered at its new value")
 	var boost = _all("realm_boost")
 	if not boost.is_empty():
 		await _click(boost[0])

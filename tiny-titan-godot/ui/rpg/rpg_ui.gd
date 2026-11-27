@@ -222,6 +222,39 @@ static func sheet() -> Dictionary:
 	return _cache.sheet
 
 
+## What a day's training added to the stats: today's, or when today added nothing yet, yesterday's.
+## {"day": "today" | "yesterday" | "", "gains": [{"id", "name", "add", "raw"}] the biggest first}. A gain under
+## GAIN_MIN is not worth a line.
+const GAIN_MIN = 0.1
+
+static func gains() -> Dictionary:
+	sheet()
+	if not _cache.has("gains"):
+		var inp = input()
+		var today = str(App.today)
+		var y = Dates.add_days(today, -1)
+		var pair = RpgStats.scan_pair(inp, y, today)
+		var before = RpgStats.raws_of(pair[0])
+		var list = gains_between(before, RpgStats.raws_of(pair[1]))
+		var day = "today"
+		if list.is_empty():
+			var older = RpgStats.raws_of(RpgStats.scan(inp, Dates.add_days(today, -2)))
+			list = gains_between(older, before)
+			day = "yesterday"
+		_cache["gains"] = {"day": day if not list.is_empty() else "", "gains": list}
+	return _cache.gains
+
+
+static func gains_between(a: Dictionary, b: Dictionary) -> Array:
+	var out = []
+	for id in RpgDefs.STATS:
+		var add = float(b.get(id, 0.0)) - float(a.get(id, 0.0))
+		if add >= GAIN_MIN:
+			out.append({"id": str(id), "name": str(RpgDefs.STAT_NAMES[id]), "add": add, "raw": float(b.get(id, 0.0))})
+	out.sort_custom(func(p, q): return float(p.add) > float(q.add))
+	return out
+
+
 static func boosts() -> Array:
 	sheet()
 	if not _cache.has("boosts"):
@@ -240,6 +273,11 @@ static func save() -> Dictionary:
 
 static func commit(rpg: Dictionary) -> void:
 	App.set_rpg(rpg)
+
+
+## Store a note of the Realm's own that changes no screen (nothing is redrawn).
+static func commit_quiet(rpg: Dictionary) -> void:
+	App.set_rpg(rpg, true)
 
 
 ## Take the result of an RpgSave change ({"ok", "why", "rpg"}): store it when it

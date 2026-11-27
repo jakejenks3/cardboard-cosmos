@@ -654,11 +654,13 @@ func rpg() -> Dictionary:
 ## input field by field) and `changed` is not emitted, so the plan, the
 ## missions and every screen of the main game stay as they are. Only
 ## `rpg_changed` goes out, for the Realm's screens and the tab's dot.
-func set_rpg(d: Dictionary) -> void:
+## `quiet`: it is stored and nothing is told (a note the Realm keeps for itself, which changes no screen).
+func set_rpg(d: Dictionary, quiet: bool = false) -> void:
 	saved["rpg"] = d
 	saved.updatedAt = now_ms()
 	_write()
-	rpg_changed.emit()
+	if not quiet:
+		rpg_changed.emit()
 
 
 ## Coins to spend (see Wallet).
