@@ -1511,7 +1511,8 @@ is the Windows handoff.
     3 sets today. The mission "Do 9 sets today, up to 3 of each exercise: ...", the Today row "4 of 9
     sets" with "Up to 3 sets of each count. Any of: ...", morning "PT: 9 sets, up to 3 of each: ...",
     evening "PT: 5 more sets, any of ...". The PT sheet, the Hero's PT section, the lift page's PT card
-    ("N of M sets this week", `PtView.aim_words`: "days a week · 3 sets a day") and the Logbook's PT
+    ("N of M sets this week", `PtView.aim_words`: "days · 3 sets a day"; the longer "days a week · 3 sets a day"
+    was cut off beside its stepper, 2026-11-27) and the Logbook's PT
     bars all count sets.
 - Resistance bands instead of a weight (2026-11-25, "can we add a way to add bands to exs, instead of
   weight for resistances"). `game/bands.gd` (`Bands`, pure): the ladder light to heavy yellow, orange,
@@ -1925,6 +1926,12 @@ is the Windows handoff.
       a tag, and the fight's title squeezed by the wave counter (a multi-wave fight now says its turn as
       "T4"; a stage may carry a short `title` for the fight's top bar: a dare's is its stage's name, the
       gauntlet's "Gauntlet"). Run it after adding a tag or a key to a row that has a title.
+    - TRAINING OPENS NEXT (2026-11-27): `RpgSkills.next_unlocks(rpg, sheet)`: for every real stat a skill asks
+      for, the nearest mark of `RpgDefs.REQ` it has not reached and the unlearned skills behind it, the
+      nearest first. The Hero page shows the first `RealmHero.UNLOCK_ROWS` (3) under BODY (section
+      `realm_unlocks`, rows `unlock_row`): "Chest 39 · at 46: <skill> and 2 more", a bar, how far, and what
+      raises the stat in real life (`RealmHero.STAT_FROM`). A tap opens the stat's sheet. It ties what to
+      train to what the Realm gives.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

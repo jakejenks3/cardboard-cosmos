@@ -182,6 +182,41 @@ static func can_learn(rpg: Dictionary, node_id: String, sheet: Dictionary, level
 	return {"ok": true, "why": ""}
 
 
+## WHAT TRAINING OPENS NEXT: for every real stat a skill asks for, the nearest mark (RpgDefs.REQ) the stat has
+## not reached, and the skills not yet learned that wait behind it. The nearest first:
+## [{"stat", "name", "have", "need", "gap", "tier", "nodes": [node], "names": [the skills' names]}].
+## A stat with nothing left to open is left out. (Only the stat is looked at: a skill may ask for a fighter
+## level, points and the tier under it too.)
+static func next_unlocks(rpg: Dictionary, sheet: Dictionary) -> Array:
+	var by_stat = {}
+	for n in all():
+		var stat = str(n.get("stat", ""))
+		if stat == "" or has_node(rpg, str(n.id)):
+			continue
+		var st = sheet.get("stats", {}).get(stat)
+		var have = float(st.get("v", 0.0)) if st is Dictionary else 0.0
+		var need = float(RpgDefs.REQ[clampi(int(n.tier), 0, RpgDefs.REQ.size() - 1)])
+		if need <= have:
+			continue
+		var cur = by_stat.get(stat)
+		if cur == null or need < float(cur.need):
+			by_stat[stat] = {"stat": stat, "name": str(RpgDefs.STAT_NAMES.get(stat, stat)), "have": have, "need": need, "gap": need - have,
+				"tier": int(n.tier), "nodes": [n], "names": []}
+		elif need == float(cur.need):
+			cur.nodes.append(n)
+	var out = []
+	for stat in RpgDefs.STATS:              # a fixed order before the sort, so equal gaps always come out alike
+		if not by_stat.has(stat):
+			continue
+		var row = by_stat[stat]
+		for n in row.nodes:
+			var ref = RpgPassives.by_id(str(n.ref)) if str(n.kind) == "passive" else RpgMoves.by_id(str(n.ref))
+			row.names.append(str(ref.name) if ref != null else str(n.ref))
+		out.append(row)
+	out.sort_custom(func(a, b): return float(a.gap) < float(b.gap))
+	return out
+
+
 ## The node ids that could be learned right now (for "A skill can be learned").
 static func learnable(rpg: Dictionary, sheet: Dictionary, level: int, active_days: int) -> Array:
 	var out = []

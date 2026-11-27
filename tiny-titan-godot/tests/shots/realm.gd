@@ -214,6 +214,15 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 				check(row_now != null and str(row_now.get_meta("feat_state")) != "", "and its row goes on to the next step (%s)" % (str(row_now.get_meta("feat_state")) if row_now != null else "?"))
 				ShotHelper.scroll_main(main, 0)
 				await ShotHelper.frames(tree, 3)
+			var un = _one("section", "realm_unlocks")
+			var want_rows = mini(RealmHero.UNLOCK_ROWS, RpgSkills.next_unlocks(App.rpg(), RpgUi.sheet()).size())
+			check((un != null and _all("unlock_row", un).size() == want_rows and want_rows >= 1) or (un == null and want_rows == 0), "the Hero page says what training opens next (%d rows)" % want_rows)
+			if un != null:
+				ShotHelper.reveal(un)
+				await ShotHelper.frames(tree, 3)
+				await ShotHelper.snap(tree, "realm_8d_training_opens")
+				ShotHelper.scroll_main(main, 0)
+				await ShotHelper.frames(tree, 3)
 			var jr = _one("section", "realm_journey")
 			check(jr != null and _all("journey_num", jr).size() == 10, "the Hero page ends in the journey so far: ten counts")
 			if jr != null:

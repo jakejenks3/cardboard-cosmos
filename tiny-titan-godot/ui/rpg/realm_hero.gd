@@ -24,11 +24,55 @@ extends RefCounted
 static func fill(box: VBoxContainer, _screen) -> void:
 	var sheet = RpgUi.sheet()
 	box.add_child(_body(sheet))
+	var opens = _unlocks(sheet)
+	if opens != null:
+		box.add_child(opens)
 	box.add_child(_traits(sheet))
 	box.add_child(_fight())
 	box.add_child(_boosts())
 	box.add_child(_feats(_screen))
 	box.add_child(_journey())
+
+
+## How many rows "TRAINING OPENS NEXT" shows.
+const UNLOCK_ROWS = 3
+## What raises a stat in real life, in a few words.
+const STAT_FROM = {"chest": "presses, push-ups, flyes", "shoulders": "overhead presses and raises", "arms": "curls and extensions",
+	"back": "rows and pull-ups", "core": "core work", "legs": "squats, deadlifts, lunges", "speed": "faster runs", "endurance": "longer runs",
+	"grip": "climbing and hangs", "mind": "pages read", "flow": "physical therapy", "grit": "showing up, week after week"}
+
+## TRAINING OPENS NEXT: the real stats nearest to a mark that opens skills (RpgSkills.next_unlocks), each with
+## how far it is, what waits behind it, and what raises it. Null when nothing is left to open.
+static func _unlocks(sheet: Dictionary) -> Variant:
+	var rows = RpgSkills.next_unlocks(RpgUi.save(), sheet)
+	if rows.is_empty():
+		return null
+	var sec = Kit.section("realm_unlocks", "TRAINING OPENS NEXT", "muscle", Pal.GOOD, null, Callable(), 6, 10)
+	for i in range(mini(UNLOCK_ROWS, rows.size())):
+		var r = rows[i]
+		var stat = str(r.stat)
+		var col = stat_color(stat)
+		var st = sheet.get("stats", {}).get(stat)
+		var row = Kit.row(open_stat.bind(st) if st is Dictionary else Callable(), col, col, 8, 2, 0.1)
+		row.set_meta("unlock_row", stat)
+		row.set_meta("unlock_need", int(r.need))
+		var head = Kit.hbox(6)
+		head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var icon = str(RpgDefs.STAT_ICONS.get(stat, "star"))
+		head.add_child(Kit.vcenter(Icons.rect(icon if Icons.has_icon(icon) else "star", 16)))
+		var title = Kit.clip("%s %d" % [str(r.name), int(floor(float(r.have)))], 14, null, true)
+		head.add_child(Kit.vcenter(title))
+		head.add_child(Kit.vcenter(Kit.label("at %d:" % int(r.need), 12, Pal.MUTED, true)))
+		var n = r.names.size()
+		var what = Kit.clip("%s%s" % [str(r.names[0]), " and %d more" % (n - 1) if n > 1 else ""], 13, col, true)
+		what.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		head.add_child(Kit.vcenter(what))
+		row.add(head)
+		row.add(Kit.bar(clampf(float(r.have) / maxf(1.0, float(r.need)), 0.0, 1.0), col, 6))
+		row.add(Kit.clip("%s to go · raised by %s" % [one(float(r.gap)), str(STAT_FROM.get(stat, "training"))], 11, Pal.MUTED))
+		sec.add(row)
+	sec.add(Kit.muted_para("Your real training opens skills. A skill may also ask for a fighter level and the tier under it.", 11))
+	return sec
 
 
 ## The colour of a stat: its school's (Endurance: the Realm's own).

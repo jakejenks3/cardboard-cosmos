@@ -231,6 +231,30 @@ func _init() -> void:
 			if int(two.get("cd", 0)) != int(m.get("cd", 0)) or (int(m.get("cd", 0)) >= 2 and int(top.cd) != int(m.cd) - 1) or int(top.get("cd", 0)) < mini(1, int(m.get("cd", 0))):
 				short_ok = false
 	ok(short_ok and int(mkinds.power) > 40 and RpgMoves.mastery_kind("nope") == "" and RpgMoves.mastered("nope", 2) == null, "a move with no number to raise gets a turn off its cooldown once Mastered, never sooner", mkinds)
+	# --- what training opens next ---------------------------------------------------------------------------
+	var flat12 = {"stats": {}}
+	for sid in RpgDefs.STATS:
+		flat12.stats[sid] = {"v": 12.0, "raw": 12.0, "name": str(RpgDefs.STAT_NAMES.get(sid, sid))}
+	flat12.stats["chest"]["v"] = 23.5
+	flat12.stats["legs"]["v"] = 99.0
+	var opens = RpgSkills.next_unlocks(RpgSave.empty(), flat12)
+	var chest_row = null
+	var legs_row = null
+	var sorted_ok = true
+	for oi in range(opens.size()):
+		if str(opens[oi].stat) == "chest":
+			chest_row = opens[oi]
+		if str(opens[oi].stat) == "legs":
+			legs_row = opens[oi]
+		if oi > 0 and float(opens[oi].gap) < float(opens[oi - 1].gap):
+			sorted_ok = false
+	ok(not opens.is_empty() and sorted_ok and str(opens[0].stat) == "chest" and chest_row != null and int(chest_row.need) == RpgDefs.REQ[3] and absf(float(chest_row.gap) - 0.5) < 0.001 and chest_row.names.size() == chest_row.nodes.size()
+		and chest_row.names.size() >= 1 and legs_row == null, "what training opens next: the nearest mark a stat has not reached and the skills behind it, the nearest first; a stat past every mark is left out",
+		[opens.size(), chest_row.need if chest_row != null else null])
+	var all_in = RpgSave.empty()
+	for nd in RpgSkills.all():
+		all_in.nodes[str(nd.id)] = true
+	ok(RpgSkills.next_unlocks(all_in, flat12).is_empty(), "with every skill learned nothing is left to open")
 	print("RPG MOVES: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 
