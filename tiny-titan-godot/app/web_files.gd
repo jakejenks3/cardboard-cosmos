@@ -11,6 +11,8 @@ static var _on_pick: Callable
 static var _saved = null
 static var _on_saved: Callable
 static var _copied = null
+## Why the file picked last could not be used ("" when it could, or when the chooser was closed).
+static var last_error: String = ""
 static var _on_copied: Callable
 
 
@@ -62,9 +64,34 @@ static func pick(accept: String, label: String, done: Callable, max_side: int = 
 	f.pick(accept, label, _picked, max_side)
 
 
+## What became of the file picked last, as the page tells it (how it was read, its kind and size): for
+## Settings -> Phone app, so a picture that would not load can be told apart from here.
+static func last_pick() -> String:
+	if not OS.has_feature("web"):
+		return ""
+	var v = JavaScriptBridge.eval("(window.ttFile && window.ttFile.last) || ''", true)
+	return str(v) if v != null else ""
+
+
+## What kind of picture these bytes are, by how they begin: "jpeg", "png", "webp", "heic" or "".
+static func kind_of(bytes: PackedByteArray) -> String:
+	if bytes.size() < 12:
+		return ""
+	if bytes[0] == 0xFF and bytes[1] == 0xD8:
+		return "jpeg"
+	if bytes[0] == 0x89 and bytes[1] == 0x50 and bytes[2] == 0x4E and bytes[3] == 0x47:
+		return "png"
+	if bytes.slice(0, 4).get_string_from_ascii() == "RIFF":
+		return "webp"
+	if bytes.slice(4, 8).get_string_from_ascii() == "ftyp":
+		return "heic"
+	return ""
+
+
 static func _got(args: Array) -> void:
 	var file_name = str(args[0]) if args.size() > 0 else ""
 	var b64 = str(args[1]) if args.size() > 1 else ""
+	last_error = str(args[2]) if args.size() > 2 and args[2] != null else ""
 	var bytes = Marshalls.base64_to_raw(b64) if b64 != "" else PackedByteArray()
 	if _on_pick.is_valid():
 		_on_pick.call(file_name, bytes)

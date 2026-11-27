@@ -39,7 +39,9 @@ const CACHE = 'tiny-titan-' + BUILD;
 const FILES = %FILES%;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // Every file is asked of the SITE, never of the browser's own short-lived copy: two builds
+  // published minutes apart would otherwise leave the newer worker holding the older build's files.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

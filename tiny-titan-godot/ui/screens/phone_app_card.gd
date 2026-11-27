@@ -223,6 +223,13 @@ func _version_row() -> void:
 			if float(d.get("short", 0)) > 0.0:
 				said += " · %d short" % int(d.get("short", 0))
 			add_child(Kit.clip(said, 11, Pal.with_alpha(Pal.MUTED, 0.8)))
+		# What became of the picture picked last (a progress photo that would not load: this line says how
+		# far it got and what kind of file the phone handed over).
+		var picked = WebFiles.last_pick()
+		if picked != "":
+			var pl = Kit.muted_para("Last photo: %s" % picked, 11)
+			pl.set_meta("last_pick", picked)
+			add_child(pl)
 
 
 ## In the phone app, before it is connected: paste the code (or the link).

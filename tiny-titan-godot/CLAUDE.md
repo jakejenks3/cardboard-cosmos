@@ -1869,6 +1869,22 @@ is the Windows handoff.
   run): level and XP bar, four headline tiles, the same card Journey -> Stats shows (`JourneyScreen.lift_card`
   / `run_card` are static now), week bars, the last five sessions, "Log one" and "All stats". The tiles
   used to open the log form; `Parts.stat_tile(d, level, tap)`. Test: `tests/discipline_sheet_test.gd`.
+- Progress photos on the iPhone (2026-11-27, "could not load image... when I try to take picture for progress
+  pictures or take one from my photos"). Never reproduced: on the PC every kind of file went through. What
+  was certain: the page had handed the game the RAW file (it does that when its one way of drawing the
+  picture failed), and the game cannot open a HEIC or a camera's full picture. `web/tt.js` `ttFile.pick` with
+  `maxSide` now makes the JPEG three ways in turn (`<img>` from the file's blob link, `<img>` from the file
+  read into a data: link, `createImageBitmap`), each at maxSide, then 1024, then 640; only when all fail
+  does it look at the raw file, and it hands that over only if it is a JPEG / PNG / WebP of 6 MB or less,
+  else it says why (`cb(name, b64, why)` -> `WebFiles.last_error`; the toast "Could not use that picture:
+  ..."). `window.ttFile.last` says what became of the last pick (kind, size, each step tried):
+  Settings -> Phone app shows it as "Last photo: ..." (`WebFiles.last_pick`, meta `last_pick`). ASK FOR A
+  SCREENSHOT OF THAT LINE if photos still fail. Tried in the browser with made-up files (a 12 MP JPEG, one
+  with no type, a PNG, a HEIC, garbage, and with each way forced to fail): `HTMLInputElement.prototype.click`
+  replaced so the chooser "returns" a file. Test a rebuilt page with the browser's copy of tt.js refreshed
+  (`fetch('tt.js', {cache: 'reload'})`): it is cached.
+  - `sw.js` (tools/build_web.py) now fetches every file with `cache: 'reload'` when a new build installs: two
+    builds published minutes apart could leave the newer worker holding the older build's files.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window

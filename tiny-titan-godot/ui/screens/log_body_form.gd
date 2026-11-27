@@ -275,11 +275,16 @@ func pick_photo(angle: String) -> void:
 		# The phone app: the browser's own chooser (take a photo, or the library).
 		WebFiles.pick("image/*", "%s photo: take or choose" % TT.PHOTO_ANGLE_NAMES[angle], func(file_name: String, bytes: PackedByteArray):
 			if file_name == "" or bytes.is_empty():
+				if WebFiles.last_error != "":
+					# The page could not make a picture of it: say why, in its words.
+					Sfx.error()
+					App.toast("Could not use that picture: %s" % WebFiles.last_error, "bad", "warning")
 				return
 			var id = App.import_photo_bytes(bytes, file_name)
 			if id == "":
 				Sfx.error()
-				App.toast("Could not read that image", "bad", "warning")
+				var kind = WebFiles.kind_of(bytes)
+				App.toast("Could not read that image (%s, %s KB)" % [kind if kind != "" else "not a picture", Xp.fmt_int(int(bytes.size() / 1024.0))], "bad", "warning")
 				return
 			photos[angle] = id
 			Sfx.shutter()
