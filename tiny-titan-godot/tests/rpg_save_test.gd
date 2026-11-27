@@ -141,6 +141,13 @@ func _run() -> void:
 	var m2 = RpgSave.finish(m1.rpg, {"kind": "stage", "id": "r1s1"}, ms1, {"xp": 5, "ore": 1}, {"win": true, "turns": 3, "moves": {"stomp": 6, "shove": 500}}, "2026-01-05")
 	ok(m1.rpg.mastery == {"stomp": 3} and m2.rpg.mastery == {"stomp": 9, "shove": 99}, "the uses of a move add up over fights, won or lost; only real moves, at most 99 a fight", [m1.rpg.get("mastery"), m2.rpg.get("mastery")])
 	ok(RpgSave.parse({"mastery": {"stomp": 12, "nope": 3, "yank": -1}}).mastery == {"stomp": 12}, "only real moves with a count survive the save file", RpgSave.parse({"mastery": {"stomp": 12, "nope": 3, "yank": -1}}).mastery)
+	# --- the hardest hit is a record, not a sum ---------------------------------------------------------
+	var b0 = RpgSave.first_open(RpgSave.empty(), {}, "")
+	var bst = RpgWorld.stage("r1s1")
+	var b1 = RpgSave.finish(b0, {"kind": "stage", "id": "r1s1"}, bst, {}, {"win": false, "best_hit": 40}, "2026-01-05")
+	var b2 = RpgSave.finish(b1.rpg, {"kind": "stage", "id": "r1s1"}, bst, {}, {"win": false, "best_hit": 25}, "2026-01-05")
+	var b3 = RpgSave.finish(b2.rpg, {"kind": "stage", "id": "r1s1"}, bst, {}, {"win": false, "best_hit": 90}, "2026-01-05")
+	ok(int(b1.rpg.tally.best_hit) == 40 and int(b2.rpg.tally.best_hit) == 40 and int(b3.rpg.tally.best_hit) == 90 and int(RpgSave.parse(b3.rpg).tally.best_hit) == 90, "the hardest hit ever is kept as the most, never added up", [b1.rpg.tally, b2.rpg.tally, b3.rpg.tally])
 	print("RPG SAVE: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

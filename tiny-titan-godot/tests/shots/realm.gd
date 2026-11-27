@@ -204,7 +204,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 				ShotHelper.scroll_main(main, 0)
 				await ShotHelper.frames(tree, 3)
 			var jr = _one("section", "realm_journey")
-			check(jr != null and _all("journey_num", jr).size() == 6, "the Hero page ends in the journey so far: six counts")
+			check(jr != null and _all("journey_num", jr).size() == 10, "the Hero page ends in the journey so far: ten counts")
 			if jr != null:
 				ShotHelper.reveal(jr)
 				await ShotHelper.frames(tree, 4)

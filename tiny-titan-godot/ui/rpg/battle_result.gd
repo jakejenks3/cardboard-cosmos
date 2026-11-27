@@ -167,6 +167,22 @@ func _build() -> void:
 		prow.add(ph)
 		_late.append(prow)
 		body.add_child(prow)
+	if info.get("record_hit") is Dictionary:
+		# The hardest single hit ever dealt: a line of its own.
+		var rec = info.record_hit
+		var rrow = Kit.row(Callable(), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
+		rrow.set_meta("br_record", int(rec.get("now", 0)))
+		var rh = Kit.hbox(8)
+		rh.add_child(Kit.vcenter(Icons.rect("power" if Icons.has_icon("power") else "star", 24)))
+		var rv = Kit.vbox(0)
+		rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		rv.add_child(Kit.clip("Your hardest hit ever: %s" % Xp.fmt_int(int(rec.get("now", 0))), 15, Pal.ACCENT, true))
+		rv.add_child(Kit.clip("The record was %s." % Xp.fmt_int(int(rec.get("was", 0))), 11, Pal.MUTED))
+		rh.add_child(rv)
+		rrow.add(rh)
+		_late.append(rrow)
+		body.add_child(rrow)
 	var grown = info.get("mastery") if info.get("mastery") is Array else []
 	for g in grown:
 		if not (g is Dictionary):

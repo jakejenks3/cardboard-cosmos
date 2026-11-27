@@ -548,6 +548,7 @@ static func summary(B: Dictionary) -> Dictionary:
 	return _norm({"win": won(B), "turns": _i(s, "turns"), "dealt": _i(s, "dealt"), "taken": _i(s, "taken"),
 		"breaks": _i(s, "breaks"), "items": _i(s, "items"), "guards": _i(s, "guards"), "perfect": _i(s, "perfect"),
 		"moves": h.get("flags", {}).get("uses", {}).duplicate(), "unguarded": _i(s, "unguarded"), "treasure": _i(s, "treasure"),
+		"best_hit": _i(s, "best_hit"),
 		"schools": s.schools.duplicate(),
 		"worst_share": _f(s, "worst"), "hp_share": _share(h), "learned": learned, "used": s.used.duplicate(),
 		"fled": bool(B.fled), "kos": _i(s, "kos"), "waves": _i(s, "waves"),
@@ -1584,6 +1585,8 @@ static func _hurt(B: Dictionary, ev: Array, dst: Dictionary, amount: int, info: 
 		ev.append({"t": "survive", "dst": str(dst.id), "hp": int(dst.hp)})
 	if str(dst.side) == "foe":
 		B.sum["dealt"] = _i(B.sum, "dealt") + lost
+		# the hardest single hit of the fight, as its number read on screen
+		B.sum["best_hit"] = maxi(_i(B.sum, "best_hit"), hit)
 	else:
 		_took(B, ev, lost, true)
 	if int(dst.hp) > 0:

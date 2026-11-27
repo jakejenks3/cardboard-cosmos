@@ -192,7 +192,7 @@ static func parse(raw) -> Dictionary:
 	out.hints = _flags(raw.get("hints"))
 	var tally = raw.get("tally")
 	if tally is Dictionary:
-		for k in TALLY:
+		for k in TALLY + TALLY_BEST:
 			if _int(tally.get(k)) > 0:
 				out.tally[k] = _int(tally.get(k))
 	var mastery = raw.get("mastery")
@@ -430,6 +430,10 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 		var more = maxi(0, _int(summary.get(k)))
 		if more > 0:
 			out.tally[k] = _int(out.tally.get(k)) + more
+	for k in TALLY_BEST:
+		var best_now = maxi(0, _int(summary.get(k)))
+		if best_now > _int(out.tally.get(k)):
+			out.tally[k] = best_now
 	# ... and every use of a move, for its mastery (RpgDefs.MASTERY_AT)
 	if not (out.get("mastery") is Dictionary):
 		out["mastery"] = {}
@@ -611,6 +615,8 @@ const MASTERY_MOST = 9999
 ## Deeds counted over every fight (saved.rpg.tally = {key: how many}; a key is only there once it is above 0):
 ## perfect guards and guard breaks, from the fight's summary.
 const TALLY = ["perfect", "breaks"]
+## ... and records kept as the most ever in one fight: the hardest single hit.
+const TALLY_BEST = ["best_hit"]
 
 ## How the player likes a fight (saved.rpg.prefs; each is kept only while it is on): "auto" (the hero plays by
 ## himself), "fast" (x2), "light" (no particle effects, no flashes, no shakes: for a phone that stutters).

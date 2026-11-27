@@ -62,6 +62,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	rpg.stages["r1s1"] = {"stars": [true, true, true], "wins": 1, "best": 2}
 	# Stomp is one use short of its second star, Yank is mastered, Shove has a few uses, Deep Breath none.
 	rpg["mastery"] = {"stomp": RpgDefs.MASTERY_AT[1] - 1, "yank": RpgDefs.MASTERY_AT[2], "shove": 3}
+	# (a hardest hit of 1 on record: the fight's first hit beats it)
+	rpg["tally"] = {"best_hit": 1}
 	App.set_rpg(rpg)
 	App.go("realm")
 	await ShotHelper.wait(tree, 1.0)
@@ -128,6 +130,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.4)
 		var row = _one("br_mastery", "stomp", bv.result())
 		check(row != null and ShotHelper.all_text(bv.result()).contains("Stomp: Seasoned") and ShotHelper.all_text(bv.result()).contains("+6% damage"), "the result says Stomp reached its second star, and what that gives")
+		var rec = _one("br_record", null, bv.result())
+		check(rec != null and int(rec.get_meta("br_record")) == int(App.rpg().tally.best_hit) and int(App.rpg().tally.best_hit) > 1 and ShotHelper.all_text(bv.result()).contains("Your hardest hit ever"),
+			"the result says the hardest hit ever was beaten (%d)" % int(App.rpg().tally.get("best_hit", 0)))
 		await ShotHelper.snap(tree, "mastery_2_result")
 		var back = _one("br_key", "back", bv.result())
 		if back != null:

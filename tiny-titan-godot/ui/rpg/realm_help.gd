@@ -49,7 +49,7 @@ static func link() -> Control:
 	h.add_child(Kit.vcenter(Icons.rect("book" if Icons.has_icon("book") else "star", 16)))
 	var l = Kit.clip("How fights work", 14, null, true)
 	h.add_child(Kit.vcenter(l))
-	h.add_child(Kit.vcenter(Kit.clip("energy, guard, weaknesses, breaks", 12, Pal.MUTED)))
+	h.add_child(Kit.vcenter(Kit.clip("energy, guard, breaks", 12, Pal.MUTED)))
 	row.add(h)
 	return row
 
@@ -65,7 +65,7 @@ static func yard_link() -> Control:
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(Kit.vcenter(Icons.rect("guard" if Icons.has_icon("guard") else "star", 16)))
 	h.add_child(Kit.vcenter(Kit.clip("Practice yard", 14, null, true)))
-	h.add_child(Kit.vcenter(Kit.clip("a sparring dummy, for nothing", 12, Pal.MUTED)))
+	h.add_child(Kit.vcenter(Kit.clip("try a guard, risk nothing", 12, Pal.MUTED)))
 	row.add(h)
 	return row
 

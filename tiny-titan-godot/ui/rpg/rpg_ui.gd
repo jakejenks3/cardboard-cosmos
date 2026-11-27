@@ -482,6 +482,7 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 	var win = RpgBattle.won(B)
 	var before = RpgDefs.level_of(int(rpg.get("xp", 0)))
 	var mastery_before = rpg.get("mastery", {}).duplicate() if rpg.get("mastery") is Dictionary else {}
+	var hit_before = int(rpg.get("tally", {}).get("best_hit", 0)) if rpg.get("tally") is Dictionary else 0
 	var points_before = int(points().earned)
 	var rewards = {}
 	var stars = null
@@ -520,6 +521,10 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 				grown.append({"id": str(mid), "name": str(mrow.name), "school": str(mrow.get("school", "plain")), "lvl": l1,
 					"rank": str(RpgDefs.MASTERY_NAMES[l1]), "words": RpgMoves.mastery_words(str(mid), l1)})
 	info["mastery"] = grown
+	# The hardest single hit ever, beaten in this fight (not the very first one: that is no record yet).
+	var hit_now = int(save().get("tally", {}).get("best_hit", 0)) if save().get("tally") is Dictionary else 0
+	if hit_before > 0 and hit_now > hit_before:
+		info["record_hit"] = {"now": hit_now, "was": hit_before}
 	# Skill points the win brought (a level, a boss, enough stars): the result says so.
 	info["points"] = maxi(0, int(points().earned) - points_before)
 	_store(what, B, info)

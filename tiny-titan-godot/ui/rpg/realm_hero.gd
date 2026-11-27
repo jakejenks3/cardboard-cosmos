@@ -408,6 +408,14 @@ static func journey(rpg: Dictionary) -> Dictionary:
 	out["relics_of"] = RpgRelics.all().size()
 	var sp = rpg.get("spire", {})
 	out["spire"] = int(sp.get("best", 0)) if sp is Dictionary else 0
+	var tally = rpg.get("tally", {})
+	out["best_hit"] = int(tally.get("best_hit", 0)) if tally is Dictionary else 0
+	out["perfect"] = int(tally.get("perfect", 0)) if tally is Dictionary else 0
+	out["dares"] = RpgWorld.dare_count(rpg)
+	out["dares_of"] = 0
+	for reg in RpgWorld.regions():
+		out.dares_of += int(RpgWorld.dare_progress(rpg, str(reg.id)).of)
+	out["mastery"] = int(RpgFeats.counts(rpg).get("mastery", 0))
 	return out
 
 
@@ -423,6 +431,10 @@ static func _journey() -> Control:
 		["foes", "Foes met", "skull", Pal.BOUNTY, "%d / %d" % [int(j.foes), int(j.foes_of)], float(j.foes) / float(maxi(1, int(j.foes_of)))],
 		["relics", "Relics found", "relic", RpgUi.color("grit"), "%d / %d" % [int(j.relics), int(j.relics_of)], float(j.relics) / float(maxi(1, int(j.relics_of)))],
 		["spire", "The Spire", "spire", Pal.SECOND, ("Floor %d" % int(j.spire)) if int(j.spire) > 0 else "Not climbed", -1.0],
+		["hit", "Hardest hit", "power", Pal.ACCENT, Xp.fmt_int(int(j.best_hit)) if int(j.best_hit) > 0 else "None yet", -1.0],
+		["perfect", "Perfect guards", "guard", Pal.SECOND, Xp.fmt_int(int(j.perfect)), -1.0],
+		["dares", "Dares won", "flame", Pal.ACCENT2, "%d / %d" % [int(j.dares), int(j.dares_of)], float(j.dares) / float(maxi(1, int(j.dares_of)))],
+		["mastery", "Mastery stars", "star_on", Pal.ACCENT, Xp.fmt_int(int(j.mastery)), -1.0],
 	]
 	for r in rows:
 		var t = Kit.row(Callable(), r[3], r[3], 8, 2)

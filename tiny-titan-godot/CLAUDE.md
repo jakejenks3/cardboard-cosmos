@@ -1823,7 +1823,8 @@ is the Windows handoff.
       the gauge gains `GAUGE_PERFECT` (12) and the hero gets `PERFECT_FOCUS` (1) stack of Focus (the riposte:
       his next hit is a sure crit). Engine: in `RpgBattle._foe_act`, event `perfect {src, chip,
       guard}`, `summary.perfect`. Screen: a "PERFECT GUARD" banner, sound "perfect", a hit stop, hint
-      "perfect". AUTO (the heuristic) was NOT taught to go for it: playing by hand is worth a little more.
+      "perfect". AUTO (the heuristic) was not changed: it guards a charged blow only when the blow is
+      dangerous, so it lands some perfect guards and a hand-played fight more.
       The balance bands (rpg_sim_test) did not move. `saved.rpg.tally` = {perfect, breaks} (`RpgSave.TALLY`,
       added up by `RpgSave.finish`, won or lost) feeds two more feats: Stone Wall and Breaker (14 ladders).
       Walkthrough `tests/shots/perfect.gd` (year data). The news card is `NEWS_ID` "news_2".
@@ -1900,6 +1901,10 @@ is the Windows handoff.
       down (so no XP, ore, weakness, mastery use or count comes of it). Opened from the Map's foot
       (`RealmHelp.yard_link`, meta `realm_practice`) and from "How fights work" (meta `help_practice`). A
       fight can open with a line of its own (`opts.opening_line`). Walkthrough `tests/shots/yard.gd`.
+    - THE HARDEST HIT (2026-11-27): the engine keeps the fight's hardest single hit on a foe (`summary.best_hit`);
+      `RpgSave.finish` keeps the most ever in `saved.rpg.tally.best_hit` (`TALLY_BEST`: a record, not a sum).
+      Beaten, the result has a line (`info.record_hit` {now, was}, meta `br_record`; not for the very first
+      one). The Hero page's journey has ten tiles now: + hardest hit, perfect guards, dares won, mastery stars.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
