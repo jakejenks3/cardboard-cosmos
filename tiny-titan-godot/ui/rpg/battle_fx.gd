@@ -643,6 +643,7 @@ class Ambient extends Control:
 	## A blink of lightning (the storm): seconds left.
 	var _bolt: float = 0.0
 	var _next_bolt: float = 5.0
+	var _since: float = 0.0
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -651,13 +652,17 @@ class Ambient extends Control:
 		if not is_visible_in_tree():
 			return
 		_age += delta
+		_since += delta
 		if mode == "rain":
 			_bolt = maxf(0.0, _bolt - delta)
 			_next_bolt -= delta
 			if _next_bolt <= 0.0:
 				_next_bolt = 6.0 + 7.0 * BattleFx._rand(int(_age * 10.0), 3)
 				_bolt = 0.22
-		queue_redraw()
+		# Slow things need few pictures a second (rain is quick: it gets every frame).
+		if mode == "rain" or _since >= 0.05:
+			_since = 0.0
+			queue_redraw()
 
 	func _draw() -> void:
 		var w = size.x

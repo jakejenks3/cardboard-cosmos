@@ -332,7 +332,7 @@ func _run() -> void:
 	realm = _realm()
 	var rpg = app.rpg()
 	var secs = _metas(realm, "section").filter(func(s): return s.begins_with("realm_"))
-	ok(secs == ["realm_banner", "realm_notices", "realm_boosts", "realm_tabs", "realm_map"], "the hub's sections in order: banner, notices, boosts, sub-tabs, the page", secs)
+	ok(secs == ["realm_tabs", "realm_banner", "realm_notices", "realm_boosts", "realm_map"], "the hub's sections in order: sub-tabs, banner, notices, boosts, the page", secs)
 	var order = _with(realm, "section").filter(func(c): return str(c.get_meta("section")).begins_with("realm_")).map(func(c): return c.global_position.y)
 	var sorted_y = order.duplicate()
 	sorted_y.sort()
@@ -765,7 +765,7 @@ func _run() -> void:
 	await _show_realm()
 	realm = _realm()
 	secs = _metas(realm, "section").filter(func(s): return s.begins_with("realm_"))
-	ok(secs == ["realm_banner", "realm_notices", "realm_boosts", "realm_tabs", "realm_map"] or secs == ["realm_banner", "realm_boosts", "realm_tabs", "realm_map"], "an empty log: the hub still stands", secs)
+	ok(secs == ["realm_tabs", "realm_banner", "realm_notices", "realm_boosts", "realm_map"] or secs == ["realm_tabs", "realm_banner", "realm_boosts", "realm_map"], "an empty log: the hub still stands", secs)
 	ok(_with(realm, "realm_chest").is_empty() and _one(realm, "realm_no_boost") != null and _with(realm, "realm_boost").is_empty() and _too_wide() == "", "with no chest, and one line on what earns a boost")
 
 	print("RPG HUB: %d/%d passed" % [passed, total])

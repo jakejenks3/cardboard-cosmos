@@ -247,14 +247,21 @@ func _skip() -> void:
 
 func _build_hub(rpg: Dictionary) -> void:
 	var can_learn = RpgSkills.learnable(rpg, RpgUi.sheet(), RpgUi.level(), RpgUi.days())
-	add_child(_banner(rpg))
-	var notices = _notices(rpg, can_learn)
-	if notices != null:
-		add_child(notices)
-	add_child(_boost_section(RpgUi.boosts()))
 	if not PAGES.any(func(p): return str(p[0]) == str(RpgUi.page)):
 		RpgUi.page = "map"
+	# The tabs come first, so they are in the same place on every page and a page starts right under them
+	# (they used to sit under the banner and the boosts: every page began a screen down).
 	add_child(_tabs(rpg, can_learn))
+	if str(RpgUi.page) == "map":
+		# The Map is the Realm's front page: the banner, what waits, today's boosts.
+		add_child(_banner(rpg))
+		var notices = _notices(rpg, can_learn)
+		if notices != null:
+			add_child(notices)
+		add_child(_boost_section(RpgUi.boosts()))
+	else:
+		# Another page: one slim line, then the page.
+		add_child(_slim(rpg))
 	var box = Kit.vbox(12)
 	box.set_meta("section", "realm_" + str(RpgUi.page))
 	_fill_page(box, str(RpgUi.page))
@@ -370,6 +377,29 @@ func _banner(rpg: Dictionary) -> Control:
 	h.add_child(side)
 	sec.add(h)
 	return sec
+
+
+## The banner in one line, over the pages that are not the Map: the level and its bar, the ore.
+func _slim(rpg: Dictionary) -> Control:
+	var realm = RpgUi.color("realm")
+	var row = Kit.row(Callable(), realm, realm, 8, 0, 0.14)
+	row.set_meta("section", "realm_slim")
+	var h = Kit.hbox(8)
+	h.add_child(Kit.vcenter(Icons.rect("realm", 16)))
+	var info = RpgUi.level_info()
+	var lvl = Kit.label("Lv %d" % int(info.lvl), 15, null, true)
+	lvl.set_meta("realm_level", int(info.lvl))
+	h.add_child(Kit.vcenter(lvl))
+	var need = int(info.get("need", 0))
+	var bar = Kit.bar(float(int(info.get("into", 0))) / float(need) if need > 0 else 1.0, realm, 8)
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(Kit.vcenter(bar))
+	var left = int(RpgUi.points().left)
+	if left > 0 and str(RpgUi.page) != "skills":
+		h.add_child(Kit.vcenter(Kit.pill("sp", str(left), Pal.ACCENT)))
+	h.add_child(Kit.vcenter(RpgUi.ore_pill(int(rpg.get("ore", 0)))))
+	row.add(h)
+	return row
 
 
 # --- the notices -----------------------------------------------------------------------------

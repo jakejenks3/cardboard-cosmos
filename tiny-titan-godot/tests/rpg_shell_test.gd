@@ -515,7 +515,7 @@ func _run() -> void:
 	await _frames(3)
 	# (The made-up save is an opened one: the hub takes the first visit's place.)
 	var hub_sections = _with_meta(realm, "section").map(func(n): return str(n.get_meta("section"))).filter(func(id): return id.begins_with("realm_") and id != "realm_notices")
-	ok(counts.rpg == 1 and counts.changed == 0 and not is_instance_valid(realm_first) and is_instance_valid(realm) and hub_sections == ["realm_banner", "realm_boosts", "realm_tabs", "realm_map"], "set_rpg draws the Realm's screen again: the hub (banner, boosts, sub-tabs, the Map)", hub_sections)
+	ok(counts.rpg == 1 and counts.changed == 0 and not is_instance_valid(realm_first) and is_instance_valid(realm) and hub_sections == ["realm_tabs", "realm_banner", "realm_boosts", "realm_map"], "set_rpg draws the Realm's screen again: the hub (sub-tabs, banner, boosts, the Map)", hub_sections)
 	ok(_too_wide(main) == "" and _with_meta(realm, "realm_tab").map(func(n): return str(n.get_meta("realm_tab"))) == ["map", "hero", "moves", "skills", "gear"] and _with_meta(realm, "map_stage").size() == 10, "the hub fits the column, with its five sub-tabs and the Map's ten stage nodes", _too_wide(main))
 	app.go("home")
 	await _frames(4)

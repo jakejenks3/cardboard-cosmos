@@ -66,6 +66,8 @@ const POSES = ["strike", "kick", "guard", "cast", "hurt", "pull", "flex"]
 const STEP_IN = 26.0
 ## Under this share of his HP the arena's edge beats red.
 const LOW_HP = 0.3
+## Statuses that stay drawn on a fighter while it has them: [the effect, seconds a round].
+const STATUS_LOOPS = {"burn": ["flame", 1.0], "bleed": ["drops", 1.3], "stun": ["stars", 1.2], "shield": ["shield", 1.9], "regen": ["heal", 1.7]}
 ## The air of each scene (BattleFx.Ambient): [what drifts, its colour, how many].
 const AMBIENT = {
 	"rustyard": ["dust", "#e0c296", 14], "greenmile": ["leaves", "#c9e88f", 10], "chalk": ["snow", "#f4f1e6", 12],
@@ -158,6 +160,8 @@ var _hit_counts: Dictionary = {}
 var _word_counts: Dictionary = {}
 ## Foes whose fall was already shown with the blow that felled them.
 var _ko_done: Dictionary = {}
+## The looping effects of lasting statuses: "unit|status" -> the effect.
+var _status_nodes: Dictionary = {}
 var _gauge_full: bool = false
 var _ambient: BattleFx.Ambient = null
 var _sky_fx: BattleFx.SkyBand = null
@@ -695,6 +699,65 @@ func _sync() -> void:
 	_refresh_timeline()
 	_refresh_hint()
 	_mark_danger()
+	_status_fx(true)
+
+
+## What lasts is seen: flames on a burning fighter, drops on a bleeding one, stars round a stunned or broken
+## head, a faint bubble for a shield, green motes for regeneration. `fresh`: everything is drawn anew (the
+## fighters may stand somewhere else); otherwise only what changed is added or taken away.
+func _status_fx(fresh: bool = false) -> void:
+	if instant or _fx_layer == null:
+		return
+	var want = {}
+	if not RpgBattle.over(B):
+		for st in _hero_statuses:
+			if STATUS_LOOPS.has(str(st.get("id", ""))):
+				want["hero|" + str(st.id)] = true
+		for id in _foes:
+			var nd = _foes[id]
+			if not bool(nd.unit.get("alive", true)):
+				continue
+			for st in nd.unit.get("statuses", []):
+				if STATUS_LOOPS.has(str(st.get("id", ""))):
+					want[str(id) + "|" + str(st.id)] = true
+			if bool(nd.unit.get("broken", false)):
+				want[str(id) + "|stun"] = true
+	for key in _status_nodes.keys():
+		var node = _status_nodes[key]
+		if fresh or not want.has(key) or not is_instance_valid(node):
+			if is_instance_valid(node):
+				node.queue_free()
+			_status_nodes.erase(key)
+	for key in want:
+		if _status_nodes.has(key):
+			continue
+		var parts = str(key).split("|")
+		var id2 = str(parts[0])
+		var sid = str(parts[1])
+		var row = STATUS_LOOPS[sid]
+		var hero = id2 == "hero"
+		var at = _mid(id2)
+		var col = Pal.ACCENT
+		var opts = {"loop": true}
+		match sid:
+			"burn":
+				at = _feet(id2) + Vector2(0, -22)
+				col = Pal.ACCENT2
+			"bleed":
+				col = Pal.DANGER
+			"stun":
+				at = _head(id2) + Vector2(0, 8)
+				opts["half"] = 12.0
+			"shield":
+				col = RpgUi.color("grit") if hero else Pal.MUTED
+			"regen":
+				col = Pal.GOOD
+				opts["n"] = 4
+		var node2 = BattleFx.at(_fx_layer, str(row[0]), at, col, float(row[1]) * float(speed), opts)
+		if node2 != null:
+			node2.modulate.a = 0.45 if sid == "shield" else 0.8
+			node2.set_meta("bv_status_fx", key)
+			_status_nodes[key] = node2
 
 
 ## A foe about to hit hard says so: its intent beats red (a quarter of the hero's HP or more in one action,
@@ -1422,6 +1485,7 @@ func _show(e: Dictionary) -> float:
 				nd.plate.set_statuses(nd.unit.get("statuses", []), false)
 				_fx("up", _mid(str(e.get("dst", ""))), Pal.MUTED, 0.4)
 				_snd("recover")
+				_status_fx()
 			return 0.0
 		"chip":
 			var nd2 = _foes.get(str(e.get("dst", "")))
@@ -1848,6 +1912,7 @@ func _show_status(e: Dictionary) -> float:
 	else:
 		nd.unit["statuses"] = list
 		nd.plate.set_statuses(list, bool(nd.unit.get("broken", false)))
+	_status_fx()
 	if not on:
 		return 0.0
 	var good = str(row.get("kind", "debuff")) == "buff"
@@ -1860,7 +1925,6 @@ func _show_status(e: Dictionary) -> float:
 			_fx("shield", at, RpgUi.color("grit") if dst == "hero" else Pal.MUTED, 0.5)
 			_snd("shield")
 		"stun":
-			_fx("stars", _head(dst) + Vector2(0, 8), Pal.ACCENT, 0.7, {"half": 12.0})
 			_snd("stun")
 		"burn":
 			_fx("flame", at + Vector2(0, 6), Pal.ACCENT2, 0.5)
@@ -1890,7 +1954,6 @@ func _show_break(dst: String) -> float:
 	_word(dst, "BREAK!", Pal.ACCENT, 3, 0.05, 10.0)
 	_fx("shards", at, Pal.ACCENT, 0.6, {"n": 16})
 	_fx("ring", at, Color(1, 1, 1), 0.4)
-	_fx("stars", _head(dst) + Vector2(0, 8), Pal.ACCENT, 1.2, {"half": 12.0, "delay": 0.3})
 	_knock(dst, 14.0)
 	_shake(1.1)
 	if not instant:
@@ -1899,6 +1962,7 @@ func _show_break(dst: String) -> float:
 		Kit.pop(nd.plate, 1.1, 0.24)
 	_snd("break")
 	RpgSfx.buzz(2)
+	_status_fx()
 	_say("%s's guard breaks: it loses its next action." % _name(dst))
 	return 0.6
 
@@ -1926,6 +1990,7 @@ func _show_ko(dst: String) -> float:
 	nd.view.set_marked(false)
 	nd.view.faint()
 	nd.hit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_fx()
 	var big = bool(nd.unit.get("boss", false)) or bool(nd.unit.get("elite", false))
 	_fx("poof", _mid(dst), Pal.MUTED, 0.6, {"delay": 0.18})
 	_fx("sparkle", _mid(dst), Pal.ACCENT, 0.7, {"delay": 0.25, "n": 8 if big else 5})

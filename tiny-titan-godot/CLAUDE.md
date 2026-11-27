@@ -1676,6 +1676,13 @@ is the Windows handoff.
       must not change its size even for a moment, and the test checks it), a move refused for energy
       blinks the pips red; the timeline's tiles slide one place on. In an `instant` playback no plate pops
       either (the test checks the layout right after a press).
+    - Lasting statuses stay drawn on a fighter (`BattleView.STATUS_LOOPS`, `_status_fx`, meta `bv_status_fx`):
+      flames while it burns, drops while it bleeds, stars round a stunned or broken head, a faint bubble for a
+      shield, green motes for regeneration.
+    - The hub's sub-tabs are the FIRST thing on the Realm's screen (they never move when a page is picked; a
+      test checks it). Under them the Map page has the banner, the notices and the boosts; the other pages
+      have one slim line (`RealmScreen._slim`, section `realm_slim`: level, its bar, points, ore), so a page
+      starts at the top of the screen, not a screen down.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

@@ -219,6 +219,23 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	for i in range(second.size()):
 		await _film(bv, "bv_move", str(second[i]), names[i], [0.16, 0.34, 0.5], 0.5 if i == 2 else 1.0)
 	await _film(bv, "bv_key", "guard", "GUARD", [0.12, 0.7, 0.9])
+	# What lasts is seen: a burning foe, a stunned one, a shielded hero.
+	bv.B.foes[0]["statuses"] = [{"id": "burn", "turns": 3, "stacks": 1, "amount": 5.0}]
+	if bv.B.foes.size() > 1:
+		bv.B.foes[1]["statuses"] = [{"id": "stun", "turns": 1, "stacks": 1, "amount": 0.0}]
+	bv.B.hero["statuses"] = [{"id": "shield", "turns": 2, "stacks": 1, "amount": 20.0}, {"id": "regen", "turns": 2, "stacks": 1, "amount": 5.0}]
+	bv._sync()
+	await ShotHelper.wait(tree, 0.45)
+	check(_all("bv_status_fx", bv).size() >= 3, "lasting statuses stay drawn on the fighters (%d)" % _all("bv_status_fx", bv).size())
+	await _cut(bv, "STATUS 1")
+	await ShotHelper.wait(tree, 0.3)
+	await _cut(bv, "STATUS 2")
+	bv.B.hero["statuses"] = []
+	for f in bv.B.foes:
+		f["statuses"] = []
+	bv._sync()
+	await ShotHelper.frames(tree, 3)
+	check(_all("bv_status_fx", bv).is_empty(), "and go when the status goes")
 	# The hero nearly down: the red edge.
 	bv.B.hero["hp"] = maxi(1, int(float(bv.B.hero.hp_max) * 0.2))
 	bv._sync()

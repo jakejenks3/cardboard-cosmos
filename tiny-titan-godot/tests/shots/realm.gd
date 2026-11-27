@@ -124,7 +124,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	ShotHelper.scroll_main(main, 0)
 	await ShotHelper.wait(tree, 0.4)
 	var secs = _all("section").map(func(n): return str(n.get_meta("section"))).filter(func(s): return s.begins_with("realm_"))
-	check(secs == ["realm_banner", "realm_notices", "realm_boosts", "realm_tabs", "realm_map"], "the hub: banner, notices, boosts, sub-tabs, the Map (%s)" % str(secs))
+	check(secs == ["realm_tabs", "realm_banner", "realm_notices", "realm_boosts", "realm_map"], "the hub: sub-tabs, banner, notices, boosts, the Map (%s)" % str(secs))
 	check(_one("realm_hero") != null and _one("realm_level") != null and _one("realm_power") != null and _one("realm_points") != null, "the banner: the hero, the level, the power, the skill points")
 	check(_all("realm_boost").size() >= 1, "today's boosts (%d)" % _all("realm_boost").size())
 	check(_all("tab_dot").size() == 1, "the tab has its dot: a chest waits")
