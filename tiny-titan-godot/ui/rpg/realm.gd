@@ -503,38 +503,70 @@ func _note_stats() -> void:
 ## What is new since the Realm was first shown, said once: a card with a "Got it" key (kept among the hints
 ## as NEWS_ID, so it never comes back). A new batch of news gets a new id.
 const NEWS_ID = "news_3"
+## [icon, a word or two for its chip, the full sentence (the sheet), the school or "" for its chip's colour].
 const NEWS = [
-	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks and your next hit is a sure crit."],
-	["star_on", "Mastery: a move you use a lot earns stars and hits harder. See the Moves page."],
-	["flame", "Dares: fight a stage you have won again, with foes as strong as you. Nine dares open a region's dare chest."],
-	["ore", "A golden Ore Mole sometimes stands with a pack. Fell it before it digs away: bonus ore."],
-	["spire", "The Spire: every 5 floors climbed, pick a blessing that holds there for good."],
-	["hunt", "Hunts: a streak for winning the daily hunt on days in a row, and a weekly gauntlet of three waves."],
-	["music", "Also: music and sounds (the note key), AUTO, and Effects: Light in a fight's log."],
+	["guard", "Perfect guard", "Guard a blow a foe has charged up: its guard cracks and your next hit is a sure crit. Try it in the practice yard at the foot of the Map."],
+	["star_on", "Mastery", "A move you use a lot earns stars and hits harder. The Moves page shows how far each one is."],
+	["flame", "Dares", "Fight a stage you have won again, with foes as strong as you and a rule against you. Nine dares open a region's dare chest."],
+	["ore", "Ore Mole", "A golden mole sometimes stands with a pack. Fell it before it digs away: bonus ore."],
+	["spire", "Blessings", "The Spire: every 5 floors climbed, pick a blessing that holds there for good."],
+	["hunt", "Streak, gauntlet", "Win the daily hunt on days in a row for more ore each day. Once a week: a gauntlet of three waves."],
+	["music", "Sound, AUTO", "Music and sounds (the note key switches the music off), AUTO in a fight, and Effects: Light in a fight's log."],
 ]
 
+## What is new, said once: a card of chips (a tap opens the sentences), put away for good by "Got it".
 func _news_card(rpg: Dictionary):
 	if bool(rpg.get("hints", {}).get(NEWS_ID, false)):
 		return null
 	var col = Pal.ACCENT
-	var card = Kit.row(Callable(), col, col, 8, 4, 0.12)
+	var card = Kit.row(_news_open, col, col, 8, 6, 0.12)
 	card.set_meta("realm_news", NEWS_ID)
 	var head = Kit.hbox(8)
+	head.mouse_filter = Control.MOUSE_FILTER_PASS
 	head.add_child(Kit.vcenter(Icons.rect("sparkle" if Icons.has_icon("sparkle") else "star", 16)))
 	var title = Kit.clip("New in the Realm", 14, null, true)
 	head.add_child(Kit.vcenter(title))
+	var more = Kit.clip("tap to read", 11, Pal.MUTED)
+	more.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	head.add_child(Kit.vcenter(more))
 	var got = Kit.button("Got it", "ghost", _news_seen, "sm")
 	got.custom_minimum_size = Vector2(72, 40 if Kit.fingers else 30)
 	got.set_meta("realm_news_ok", true)
 	got.set_meta("anchor_id", "realm_news_ok")
 	head.add_child(Kit.vcenter(got))
 	card.add(head)
+	var flow = Kit.flow(6)
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for n in NEWS:
-		var line = Kit.hbox(8)
-		line.add_child(Icons.rect(str(n[0]) if Icons.has_icon(str(n[0])) else "star", 16))
-		line.add_child(Kit.para(str(n[1]), 12, Pal.TEXT))
-		card.add(line)
+		var chip = Kit.icon_chip(str(n[0]) if Icons.has_icon(str(n[0])) else "star", str(n[1]), Pal.PANEL2)
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		chip.set_meta("realm_news_chip", str(n[1]))
+		flow.add_child(chip)
+	card.add(flow)
 	return card
+
+
+## The news in full: a sentence each.
+func _news_open() -> void:
+	var sh = Kit.sheet("New in the Realm")
+	sh.box.set_meta("realm_news_sheet", NEWS_ID)
+	for n in NEWS:
+		var row = Kit.row(Callable(), RpgUi.color("realm"), null, 8, 2)
+		row.set_meta("realm_news_line", str(n[1]))
+		var head = Kit.hbox(8)
+		head.add_child(Kit.vcenter(Icons.rect(str(n[0]) if Icons.has_icon(str(n[0])) else "star", 16)))
+		head.add_child(Kit.vcenter(Kit.label(str(n[1]), 14, null, true)))
+		row.add(head)
+		row.add(Kit.para(str(n[2]), 13, Pal.TEXT))
+		sh.box.add_child(row)
+	var close = Kit.button("Got it", "primary", func():
+		sh.close()
+		_news_seen(), "lg")
+	close.set_meta("realm_news_sheet_ok", true)
+	if Kit.fingers:
+		close.custom_minimum_size.y = 44
+	sh.box.add_child(close)
+	sh.open()
 
 
 func _news_seen() -> void:

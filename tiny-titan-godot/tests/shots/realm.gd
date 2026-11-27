@@ -132,6 +132,17 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var news = _one("realm_news")
 	check(news != null and _one("realm_news_ok") != null, "what is new is said once on the front page")
 	await ShotHelper.snap(tree, "realm_4b_news")
+	if news != null:
+		# It is a row of chips, not a page of text: a tap opens the sentences.
+		check(_all("realm_news_chip", news).size() == RealmScreen.NEWS.size() and news.size.y < 150.0, "as a short card of chips (%d chips, %d px high)" % [_all("realm_news_chip", news).size(), int(news.size.y)])
+		if news.get("_tap") is Callable and news._tap.is_valid():
+			news._tap.call()
+		await ShotHelper.wait(tree, 0.7)
+		var ns = _sheet()
+		check(ns != null and _all("realm_news_line", ns).size() == RealmScreen.NEWS.size(), "a tap on it opens every piece of news in full")
+		await ShotHelper.snap(tree, "realm_4c_news_sheet")
+		await _close_sheets()
+		check(_one("realm_news") != null, "closing the sheet leaves the card until \"Got it\"")
 	if _one("realm_news_ok") != null:
 		await _click(_one("realm_news_ok"))
 		await ShotHelper.wait(tree, 0.5)

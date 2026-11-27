@@ -1766,9 +1766,11 @@ is the Windows handoff.
       (it has its own band) or an `instant` playback. `saved.rpg.hints` = {id: true}
       (`RpgSave.note_hint`), handed to a fight as `opts.hints`, told back through `opts.on_hint`
       (`RpgUi._hint_given`, a quiet commit).
-    - "New in the Realm" (`RealmScreen.NEWS`, `NEWS_ID` "news_1", `_news_card`, metas `realm_news`,
-      `realm_news_ok`): a card on the front page that says what is new until "Got it" is tapped
-      (`saved.rpg.hints[NEWS_ID]`). For a later batch of news: new lines and a new id.
+    - "New in the Realm" (`RealmScreen.NEWS` = [icon, chip words, sentence]; `NEWS_ID` "news_3"; `_news_card`,
+      metas `realm_news`, `realm_news_ok`, `realm_news_chip`): a SHORT card of chips on the front page (it had
+      grown into seven lines of small text); a tap opens the sentences (`_news_open`, sheet meta
+      `realm_news_sheet`, lines `realm_news_line`); "Got it" on either puts it away for good
+      (`saved.rpg.hints[NEWS_ID]`). For a later batch of news: new rows and a new id.
     - `BattleFx.flash` never strobes: at most one flash in `FLASH_GAP_MS` 450 and none past `FLASH_MAX`
       0.45 (flashing light several times a second is unpleasant for anyone and unsafe for some). Keep it so.
     - `RpgUi.purse_pill(amount)` (the banner's and the slim line's ore): counts up from what it last
