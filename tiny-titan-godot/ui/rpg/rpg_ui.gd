@@ -463,6 +463,7 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 	var st = stage_of(what)
 	var win = RpgBattle.won(B)
 	var before = RpgDefs.level_of(int(rpg.get("xp", 0)))
+	var mastery_before = rpg.get("mastery", {}).duplicate() if rpg.get("mastery") is Dictionary else {}
 	var points_before = int(points().earned)
 	var rewards = {}
 	var stars = null
@@ -489,6 +490,18 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 		"learned": learned, "next": win and nxt != "" and RpgWorld.is_open(save(), nxt)}
 	if not win:
 		info["tips"] = tips(B, st, summary)
+	# Moves that reached a new mastery level with this fight's uses (won or lost).
+	var grown = []
+	var mastery_now = save().get("mastery", {})
+	if mastery_now is Dictionary:
+		for mid in mastery_now:
+			var l0 = RpgDefs.mastery_level(int(mastery_before.get(mid, 0)))
+			var l1 = RpgDefs.mastery_level(int(mastery_now[mid]))
+			var mrow = RpgMoves.by_id(str(mid))
+			if l1 > l0 and mrow != null:
+				grown.append({"id": str(mid), "name": str(mrow.name), "school": str(mrow.get("school", "plain")), "lvl": l1,
+					"rank": str(RpgDefs.MASTERY_NAMES[l1]), "words": RpgMoves.mastery_words(str(mid), l1)})
+	info["mastery"] = grown
 	# Skill points the win brought (a level, a boss, enough stars): the result says so.
 	info["points"] = maxi(0, int(points().earned) - points_before)
 	_store(what, B, info)

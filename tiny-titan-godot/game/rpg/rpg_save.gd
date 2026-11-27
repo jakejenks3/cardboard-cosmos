@@ -64,6 +64,7 @@ static func empty() -> Dictionary:
 		"hints": {},
 		"prefs": {},
 		"tally": {},
+		"mastery": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
@@ -192,6 +193,11 @@ static func parse(raw) -> Dictionary:
 		for k in TALLY:
 			if _int(tally.get(k)) > 0:
 				out.tally[k] = _int(tally.get(k))
+	var mastery = raw.get("mastery")
+	if mastery is Dictionary:
+		for k in mastery:
+			if _int(mastery[k]) > 0 and RpgMoves.by_id(str(k)) != null:
+				out.mastery[str(k)] = mini(_int(mastery[k]), MASTERY_MOST)
 	var prefs = raw.get("prefs")
 	if prefs is Dictionary:
 		for k in PREFS:
@@ -413,6 +419,15 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 		var more = maxi(0, _int(summary.get(k)))
 		if more > 0:
 			out.tally[k] = _int(out.tally.get(k)) + more
+	# ... and every use of a move, for its mastery (RpgDefs.MASTERY_AT)
+	if not (out.get("mastery") is Dictionary):
+		out["mastery"] = {}
+	var uses = summary.get("moves")
+	if uses is Dictionary:
+		for k in uses:
+			var n = clampi(_int(uses[k]), 0, 99)
+			if n > 0 and RpgMoves.by_id(str(k)) != null:
+				out.mastery[str(k)] = mini(_int(out.mastery.get(str(k))) + n, MASTERY_MOST)
 	if not bool(summary.get("win", false)):
 		return _yes(out)
 	match kind:
@@ -533,6 +548,9 @@ static func claim_chest(rpg: Dictionary, chest) -> Dictionary:
 	out.chests[date] = int(pay.kinds)
 	return _yes(out)
 
+
+## Move mastery: saved.rpg.mastery = {move id: how often it was used in fights}, at most this.
+const MASTERY_MOST = 9999
 
 ## Deeds counted over every fight (saved.rpg.tally = {key: how many}; a key is only there once it is above 0):
 ## perfect guards and guard breaks, from the fight's summary.

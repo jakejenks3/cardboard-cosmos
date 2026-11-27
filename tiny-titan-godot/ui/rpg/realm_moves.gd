@@ -95,7 +95,10 @@ static func facts(move: Dictionary, hint: String = "") -> Control:
 	var h = Kit.hbox(6)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(Kit.tag(tier_word(move), Pal.PANEL2, false))
-	var power = float(move.get("power", 0.0))
+	# (the power as the hero plays it by now: mastery counted)
+	var uses = mastery_uses(str(move.get("id", "")))
+	var played = RpgMoves.mastered(str(move.get("id", "")), RpgDefs.mastery_level(uses))
+	var power = float((played if played is Dictionary else move).get("power", 0.0))
 	if str(move.get("kind", "attack")) == "attack" and power > 0.0:
 		var pw = Kit.tag("Power %s" % TTUtil.num_str(snappedf(power, 0.01)), col)
 		pw.set_meta("move_power", power)
@@ -106,6 +109,52 @@ static func facts(move: Dictionary, hint: String = "") -> Control:
 	var tail = Kit.clip(hint, 11, Pal.MUTED)
 	tail.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	h.add_child(Kit.vcenter(tail))
+	var mrow = mastery_row(move)
+	if mrow == null:
+		return h
+	var v = Kit.vbox(4)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(h)
+	v.add_child(mrow)
+	return v
+
+
+## How often a move was used in fights (saved.rpg.mastery).
+static func mastery_uses(id: String) -> int:
+	var m = RpgUi.save().get("mastery", {})
+	return int(m.get(id, 0)) if m is Dictionary else 0
+
+
+## A move's mastery as a line: three stars, its level's name and what it gives, the uses towards the next
+## level. Null for an ultimate (its uses are not counted) and for what is not a move.
+static func mastery_row(move: Dictionary) -> Variant:
+	var id = str(move.get("id", ""))
+	if id == "" or bool(move.get("ult", false)) or RpgMoves.by_id(id) == null:
+		return null
+	var step = RpgDefs.mastery_step(mastery_uses(id))
+	var lvl = int(step.lvl)
+	var h = Kit.hbox(6)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.set_meta("move_mastery", lvl)
+	h.set_meta("move_mastery_of", id)
+	var stars = Kit.hbox(1)
+	stars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in range(RpgDefs.MASTERY_AT.size()):
+		var st = Icons.rect("star_on" if i < lvl else "star_off", 16)
+		if i >= lvl:
+			st.modulate.a = 0.6
+		stars.add_child(st)
+	h.add_child(Kit.vcenter(stars))
+	var words = ""
+	if lvl <= 0:
+		words = "Mastery: %d of %d uses" % [int(step.uses), int(step.next)]
+	elif int(step.next) > 0:
+		words = "%s · %s · %d of %d uses" % [str(RpgDefs.MASTERY_NAMES[lvl]), RpgMoves.mastery_words(id, lvl), int(step.uses), int(step.next)]
+	else:
+		words = "%s · %s" % [str(RpgDefs.MASTERY_NAMES[lvl]), RpgMoves.mastery_words(id, lvl)]
+	var l = Kit.clip(words, 11, Pal.ACCENT if lvl > 0 else Pal.MUTED, lvl > 0)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(Kit.vcenter(l))
 	return h
 
 

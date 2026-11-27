@@ -200,6 +200,37 @@ func _init() -> void:
 	points()
 	learning()
 	fights()
+	# --- mastery -------------------------------------------------------------------------------------------
+	ok(RpgDefs.mastery_level(0) == 0 and RpgDefs.mastery_level(RpgDefs.MASTERY_AT[0] - 1) == 0 and RpgDefs.mastery_level(RpgDefs.MASTERY_AT[0]) == 1 and RpgDefs.mastery_level(RpgDefs.MASTERY_AT[2]) == 3 and RpgDefs.mastery_level(99999) == 3,
+		"mastery levels come at the uses of MASTERY_AT, three at most")
+	var step = RpgDefs.mastery_step(RpgDefs.MASTERY_AT[0] + 2)
+	ok(int(step.lvl) == 1 and int(step.from) == RpgDefs.MASTERY_AT[0] and int(step.next) == RpgDefs.MASTERY_AT[1] and int(RpgDefs.mastery_step(99999).next) == 0, "a step says where its level began and what the next asks", step)
+	var plain = RpgMoves.by_id("stomp")
+	var up2 = RpgMoves.mastered("stomp", 2)
+	ok(RpgMoves.mastery_kind("stomp") == "power" and absf(float(up2.power) - float(plain.power) * (1.0 + 2.0 * RpgDefs.MASTERY_PCT)) < 0.0001 and float(RpgMoves.by_id("stomp").power) == float(plain.power)
+		and RpgMoves.mastered("stomp", 0) == plain and RpgMoves.mastery_words("stomp", 2) == "+6% damage", "a mastered attack hits harder by MASTERY_PCT a level; the row of the catalog is not touched", [plain.power, up2.power])
+	var breath = RpgMoves.by_id("deep_breath")
+	var breath3 = RpgMoves.mastered("deep_breath", 3)
+	var h0 = 0.0
+	var h3 = 0.0
+	for e in breath.fx:
+		if str(e.get("k", "")) == "heal":
+			h0 = float(e.pct)
+	for e in breath3.fx:
+		if str(e.get("k", "")) == "heal":
+			h3 = float(e.pct)
+	ok(RpgMoves.mastery_kind("deep_breath") == "help" and h0 > 0.0 and absf(h3 - h0 * (1.0 + 3.0 * RpgDefs.MASTERY_PCT)) < 0.0001 and int(breath3.cd) == int(breath.cd), "a mastered heal heals more", [h0, h3])
+	var mkinds = {"power": 0, "help": 0, "cd": 0}
+	var short_ok = true
+	for m in RpgMoves.all():
+		var mk = RpgMoves.mastery_kind(str(m.id))
+		mkinds[mk] = int(mkinds.get(mk, 0)) + 1
+		if mk == "cd":
+			var top = RpgMoves.mastered(str(m.id), 3)
+			var two = RpgMoves.mastered(str(m.id), 2)
+			if int(two.get("cd", 0)) != int(m.get("cd", 0)) or (int(m.get("cd", 0)) >= 2 and int(top.cd) != int(m.cd) - 1) or int(top.get("cd", 0)) < mini(1, int(m.get("cd", 0))):
+				short_ok = false
+	ok(short_ok and int(mkinds.power) > 40 and RpgMoves.mastery_kind("nope") == "" and RpgMoves.mastered("nope", 2) == null, "a move with no number to raise gets a turn off its cooldown once Mastered, never sooner", mkinds)
 	print("RPG MOVES: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

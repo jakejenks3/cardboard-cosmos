@@ -448,6 +448,28 @@ static func level_of(xp: int) -> Dictionary:
 
 
 ## The tier a fighter level belongs to (the over-level rule and the pet's speed).
+## MOVE MASTERY (RPG_PLAN.md 5): a move gets better as it is used in fights. Uses are counted over every fight
+## (saved.rpg.mastery); at MASTERY_AT uses a move reaches level 1, 2, 3, each worth MASTERY_PCT more of what
+## it does in numbers (RpgMoves.mastered). The reference heroes of the balance have none.
+const MASTERY_AT = [8, 25, 60]
+const MASTERY_PCT = 0.03
+const MASTERY_NAMES = ["", "Practiced", "Seasoned", "Mastered"]
+
+static func mastery_level(uses: int) -> int:
+	var lvl = 0
+	for at in MASTERY_AT:
+		if uses >= int(at):
+			lvl += 1
+	return lvl
+
+
+## {"lvl", "uses", "from" (the uses its level began at), "next" (the uses the next level asks for; 0 at the top)}.
+static func mastery_step(uses: int) -> Dictionary:
+	var lvl = mastery_level(uses)
+	return {"lvl": lvl, "uses": maxi(0, uses), "from": 0 if lvl == 0 else int(MASTERY_AT[lvl - 1]),
+		"next": int(MASTERY_AT[lvl]) if lvl < MASTERY_AT.size() else 0}
+
+
 static func tier_of_level(level: int) -> int:
 	return clampi(int(floor(float(level + 4) / 5.0)), 1, 12)
 

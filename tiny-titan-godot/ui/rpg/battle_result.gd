@@ -167,6 +167,31 @@ func _build() -> void:
 		prow.add(ph)
 		_late.append(prow)
 		body.add_child(prow)
+	var grown = info.get("mastery") if info.get("mastery") is Array else []
+	for g in grown:
+		if not (g is Dictionary):
+			continue
+		# A move reached a new mastery level: its stars, its new name, what it gives.
+		var mcol = RpgUi.color(str(g.get("school", "plain")))
+		var mrow = Kit.row(Callable(), mcol, mcol, 8, 0, 0.14)
+		mrow.set_meta("br_mastery", str(g.get("id", "")))
+		var mh = Kit.hbox(8)
+		var stars = Kit.hbox(1)
+		for i in range(RpgDefs.MASTERY_AT.size()):
+			var st = Icons.rect("star_on" if i < int(g.get("lvl", 0)) else "star_off", 16)
+			if i >= int(g.get("lvl", 0)):
+				st.modulate.a = 0.6
+			stars.add_child(st)
+		mh.add_child(Kit.vcenter(stars))
+		var mv = Kit.vbox(0)
+		mv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		mv.add_child(Kit.clip("%s: %s" % [str(g.get("name", "")), str(g.get("rank", ""))], 15, Pal.ACCENT, true))
+		mv.add_child(Kit.clip("Used enough to get better at it: %s." % str(g.get("words", "")), 11, Pal.MUTED))
+		mh.add_child(mv)
+		mrow.add(mh)
+		_late.append(mrow)
+		body.add_child(mrow)
 	if win and info.get("rewards") is Dictionary:
 		var loot = _loot(info.rewards)
 		_late.append(loot)

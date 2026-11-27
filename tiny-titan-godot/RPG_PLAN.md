@@ -483,6 +483,16 @@ grind. A new build equips shove, yank, stomp, deep_breath.
 
 --------------------------------------------------------------------------------------------------
 
+### 5.9 Mastery (added 2026-11-27)
+
+A move gets better as it is used. Every use of an equipped move in a fight is counted (`summary.moves`,
+added to `saved.rpg.mastery` by `RpgSave.finish`, won or lost; an ultimate is not counted). At
+`RpgDefs.MASTERY_AT` (8, 25, 60) uses a move reaches level 1, 2, 3; a level is `MASTERY_PCT` (3%)
+more damage for an attack, or bigger heals and shields for a support move; a move with no such number
+has its cooldown a turn shorter at level 3. `RpgMoves.mastered(id, lvl)` makes the row;
+`RpgWorld.setup` hands the mastered rows of the equipped moves to the battle as `custom.moves`. The
+engine has no rule for it. Respec does not touch it. The balance's reference heroes have none.
+
 ## 6. Skills (`RpgSkills`, `RpgPassives`)
 
 Eight **boards**, one per school. Node: `{"id": "<board>:<ref>", "board", "tier" (1..5), "kind":

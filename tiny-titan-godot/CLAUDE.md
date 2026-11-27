@@ -1826,6 +1826,18 @@ is the Windows handoff.
       The balance bands (rpg_sim_test) did not move. `saved.rpg.tally` = {perfect, breaks} (`RpgSave.TALLY`,
       added up by `RpgSave.finish`, won or lost) feeds two more feats: Stone Wall and Breaker (14 ladders).
       Walkthrough `tests/shots/perfect.gd` (year data). The news card is `NEWS_ID` "news_2".
+    - MOVE MASTERY (2026-11-27, gameplay; RPG_PLAN.md 5): a move gets better as it is USED in fights.
+      `saved.rpg.mastery` = {move id: uses} (`RpgSave.finish` adds `summary.moves`, the engine's count of each
+      move's uses, won or lost, at most 99 a fight; ultimates are not counted). `RpgDefs.MASTERY_AT` [8, 25,
+      60] uses = levels 1 to 3 (Practiced, Seasoned, Mastered), `MASTERY_PCT` 3% a level: `RpgMoves.mastered(id,
+      lvl)` is a COPY of the row with more power, or bigger heals and shields (`mastery_kind` "power" / "help"),
+      or, for a move with no such number ("cd"), a turn off its cooldown at level 3. `RpgWorld.setup` puts the
+      equipped moves that have a level into the battle as `custom.moves`, so the engine needed no new rule
+      and a stored battle keeps the rows it began with. The reference heroes of the balance have none.
+      Screens: the Moves page's tiles (`RealmMoves.mastery_row`: three stars, the name, what it gives, uses to
+      the next; metas `move_mastery`, `move_mastery_of`; the Power tag is the power it is played at), the
+      result (`info.mastery` from `RpgUi.finish`, rows `br_mastery`), the help sheet, the news card.
+      Walkthrough `tests/shots/mastery.gd` (year data).
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

@@ -803,7 +803,19 @@ static func setup(what: Dictionary, rpg: Dictionary, hero_unit: Dictionary, pet_
 	var kind = str(what.get("kind", ""))
 	if kind == "":
 		kind = "echo" if bool(st.get("echo", false)) else ("stage" if ["battle", "elite", "boss"].has(str(st.kind)) else str(st.kind))
+	# Move mastery: the hero's equipped moves as he plays them by now (RpgMoves.mastered), as rows of the battle.
+	var custom = st.get("custom", {}).duplicate(true)
+	var mastery = rpg.get("mastery", {})
+	if mastery is Dictionary and hero_unit.get("moves") is Array:
+		for id in hero_unit.moves:
+			var lvl = RpgDefs.mastery_level(int(mastery.get(str(id), 0)))
+			if lvl <= 0:
+				continue
+			if not (custom.get("moves") is Dictionary):
+				custom["moves"] = {}
+			if not custom.moves.has(str(id)):
+				custom.moves[str(id)] = RpgMoves.mastered(str(id), lvl)
 	return {"hero": hero_unit, "pet": pet_unit if pet_unit is Dictionary else null,
 		"waves": st.waves.duplicate(true), "seed": battle_seed, "what": {"kind": kind, "id": str(st.id)},
 		"rules": st.get("rules", []).duplicate(), "known": known, "day": today,
-		"custom": st.get("custom", {}).duplicate(true)}
+		"custom": custom}

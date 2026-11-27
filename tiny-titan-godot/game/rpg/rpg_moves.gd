@@ -413,6 +413,57 @@ static func all() -> Array:
 
 
 ## A move by id, or null.
+## What mastery raises in a move: "power" (an attack's damage), "help" (the heals and shields it gives), or
+## "cd" (it has no such number: Mastered, its cooldown is a turn shorter). "" = no such move.
+static func mastery_kind(id: String) -> String:
+	var row = by_id(id)
+	if row == null:
+		return ""
+	if float(row.get("power", 0.0)) > 0.0:
+		return "power"
+	for e in row.get("fx", []):
+		if e is Dictionary and ["heal", "shield"].has(str(e.get("k", ""))) and e.has("pct"):
+			return "help"
+	return "cd"
+
+
+## The move as a hero plays it at mastery level `lvl` (RpgDefs.MASTERY_PCT a level more damage, healing and
+## shield; a move without such a number: cooldown -1 at the top level). A copy: the catalog is not touched.
+## The catalog's own row at level 0.
+static func mastered(id: String, lvl: int) -> Variant:
+	var row = by_id(id)
+	if row == null or lvl <= 0:
+		return row
+	var out = row.duplicate(true)
+	var k = 1.0 + RpgDefs.MASTERY_PCT * float(mini(lvl, RpgDefs.MASTERY_AT.size()))
+	match mastery_kind(id):
+		"power", "help":
+			if float(out.get("power", 0.0)) > 0.0:
+				out["power"] = float(out.power) * k
+			for e in out.get("fx", []):
+				if e is Dictionary and ["heal", "shield"].has(str(e.get("k", ""))) and e.has("pct"):
+					e["pct"] = float(e.pct) * k
+		"cd":
+			if lvl >= RpgDefs.MASTERY_AT.size() and int(out.get("cd", 0)) >= 2:
+				out["cd"] = int(out.cd) - 1
+	return out
+
+
+## What a mastery level gives this move, in words ("+6% damage", "+6% healing and shields", "cooldown -1").
+static func mastery_words(id: String, lvl: int) -> String:
+	if lvl <= 0:
+		return ""
+	var pct = int(round(RpgDefs.MASTERY_PCT * 100.0 * float(mini(lvl, RpgDefs.MASTERY_AT.size()))))
+	match mastery_kind(id):
+		"power":
+			return "+%d%% damage" % pct
+		"help":
+			return "+%d%% healing and shields" % pct
+		"cd":
+			return "cooldown -1" if lvl >= RpgDefs.MASTERY_AT.size() else "cooldown -1 once Mastered"
+	return ""
+
+
 static func by_id(id: String) -> Variant:
 	if _by_id == null:
 		var map = {}

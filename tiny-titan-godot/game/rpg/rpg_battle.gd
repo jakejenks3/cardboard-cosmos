@@ -546,6 +546,7 @@ static func summary(B: Dictionary) -> Dictionary:
 		learned[k] = B.learned[k].duplicate()
 	return _norm({"win": won(B), "turns": _i(s, "turns"), "dealt": _i(s, "dealt"), "taken": _i(s, "taken"),
 		"breaks": _i(s, "breaks"), "items": _i(s, "items"), "guards": _i(s, "guards"), "perfect": _i(s, "perfect"),
+		"moves": h.get("flags", {}).get("uses", {}).duplicate(),
 		"schools": s.schools.duplicate(),
 		"worst_share": _f(s, "worst"), "hp_share": _share(h), "learned": learned, "used": s.used.duplicate(),
 		"fled": bool(B.fled), "kos": _i(s, "kos"), "waves": _i(s, "waves"),

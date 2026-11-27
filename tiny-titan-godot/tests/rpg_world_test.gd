@@ -30,6 +30,24 @@ func _init() -> void:
 	_beyond()
 	_battles()
 	_loot()
+	# --- move mastery goes into a fight as rows of the battle ---------------------------------------------
+	var mh = RpgHero.reference_hero(1.0)
+	var mrpg = RpgSave.first_open(RpgSave.empty(), {}, "")
+	var mid = str(mh.moves[0])
+	mrpg["mastery"] = {mid: RpgDefs.MASTERY_AT[1]}
+	var with_m = RpgWorld.setup({"kind": "stage", "id": "r1s1"}, mrpg, mh, null, 5, "2026-01-05")
+	var none_m = RpgWorld.setup({"kind": "stage", "id": "r1s1"}, RpgSave.first_open(RpgSave.empty(), {}, ""), mh, null, 5, "2026-01-05")
+	var row_m = with_m.get("custom", {}).get("moves", {}).get(mid)
+	ok(row_m is Dictionary and none_m.get("custom", {}).get("moves", {}).get(mid) == null, "a move with mastery is brought to the fight as a row of its own; one without is not", with_m.get("custom", {}).keys())
+	if row_m is Dictionary:
+		var Bm = RpgBattle.start(with_m)
+		var B0 = RpgBattle.start(none_m)
+		var kind_m = RpgMoves.mastery_kind(mid)
+		var got_p = float(RpgBattle.move_row(Bm, mid).get("power", 0.0))
+		var base_p = float(RpgBattle.move_row(B0, mid).get("power", 0.0))
+		ok(kind_m != "power" or absf(got_p - base_p * (1.0 + 2.0 * RpgDefs.MASTERY_PCT)) < 0.0001, "and the battle plays it at its level (%s: %s against %s)" % [mid, str(got_p), str(base_p)])
+		RpgBattle.act(Bm, {"t": "move", "id": mid, "target": str(RpgBattle.foes(Bm)[0].id)})
+		ok(int(RpgBattle.summary(Bm).moves.get(mid, 0)) == 1, "the summary of a fight says how often each move was used", RpgBattle.summary(Bm).moves)
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 
