@@ -66,6 +66,25 @@ const POSES = ["strike", "kick", "guard", "cast", "hurt", "pull", "flex"]
 const STEP_IN = 26.0
 ## Under this share of his HP the arena's edge beats red.
 const LOW_HP = 0.3
+## Hints given ONCE EVER, the first time a thing happens in a fight (the first fight teaches the basics by
+## its own band; the rest of what a fight can do is met later, one thing at a time). The caller says which
+## were given before (opts "hints": {id: true}) and is told when one is (opts "on_hint": Callable(id)).
+const HINTS = {
+	"charge": "It is winding up a big hit. Guard on your next turn, or break its guard to stop it.",
+	"count": "A countdown: when it runs out the blow lands. Finish the foe first, or guard in time.",
+	"danger": "An intent that beats red is a quarter of your HP or more. Guard cuts it by half.",
+	"break": "Its guard is broken: it loses its next action and takes more. Hit hard now.",
+	"resist": "It resists that school: the hit does less. Try a move of another school.",
+	"summon": "It called for help. The new ones fall fast: clear them, or go for the caller.",
+	"shield": "A shield soaks damage before HP does. Chip through it, or wait it out.",
+	"dot": "Burn and Bleed take HP every turn until they wear off.",
+	"stun": "Stunned: a turn is lost. Tap a plate to read what a fighter has on it.",
+	"phase": "A boss changes when it is hurt: new moves, sometimes new weaknesses.",
+	"gauge": "Your gauge is full: the Ultimate key is lit. It costs no energy.",
+	"pet": "Your companion's command is charged: its key is lit, and using it costs no turn.",
+}
+## Seconds a hint stays up.
+const HINT_SECS = 6.0
 ## The hour of a stage, by its place on its region's road: the light the picture is seen in (it is multiplied
 ## into the backdrop and its sky, never into the fighters). Ten fights in one region do not all look the same.
 const HOURS = {"day": Color(1, 1, 1), "dusk": Color(1.0, 0.8, 0.66), "night": Color(0.5, 0.56, 0.86), "boss": Color(0.78, 0.6, 0.66)}
@@ -140,6 +159,11 @@ var _hero_mid: float = 32.0
 var _hero_mark: Control = null
 var _pet_view: PetView = null
 var _hint: Label = null
+## The once-only hints: their band, the ones given (before this fight or in it), the band's fade.
+var _tip: Label = null
+var _hints_given: Dictionary = {}
+var _tip_tw: Tween = null
+var _tip_at: int = -100000
 var _timeline: BattleWidgets.Timeline
 var _hero_plate: BattleWidgets.HeroPlate
 var _line_box: PanelContainer
@@ -401,6 +425,21 @@ func _build_arena() -> void:
 		_hint.add_theme_stylebox_override("normal", Kit.sbox(Pal.with_alpha(Pal.OUTLINE, 0.86), 3, Pal.ACCENT, 1, 6, 0))
 		_hint.set_meta("bv_hint", true)
 		_arena.add_child(_hint)
+	elif not instant:
+		# The band of the once-only hints (two lines of small words, at the foot of the arena; unseen until one is given).
+		_tip = Kit.para("", 12, Pal.TEXT, true)
+		_tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_tip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_tip.max_lines_visible = 2
+		_tip.add_theme_stylebox_override("normal", Kit.sbox(Pal.with_alpha(Pal.OUTLINE, 0.9), 3, Pal.ACCENT, 1, 6, 2))
+		_tip.set_meta("bv_tip", "")
+		_tip.modulate.a = 0.0
+		_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_arena.add_child(_tip)
+	var given = _opts.get("hints")
+	if given is Dictionary:
+		for k in given:
+			_hints_given[str(k)] = true
 
 
 ## Where the hero's figure is on its canvas (the rows and columns that are not empty, standing idle).
@@ -540,6 +579,8 @@ func _layout() -> void:
 		_rect(_move_order[i], float(i % 2) * (kw + KEY_GAP), float(int(i / 2.0)) * (_move_h + KEY_GAP), kw, _move_h)
 	if _hint != null:
 		_rect(_hint, 6, arena_h - 22.0, w - 12.0, 20)
+	if _tip != null:
+		_rect(_tip, 6, arena_h - 40.0, w - 12.0, 38)
 	# Banners stay over the fighters, however much sky is above them.
 	_rect(_fx_layer, 0, arena_h - ARENA_H, w, ARENA_H)
 	if _ambient != null:
@@ -739,6 +780,8 @@ func _sync() -> void:
 	_refresh_hint()
 	_mark_danger()
 	_status_fx(true)
+	if not _busy and B.get("pet") is Dictionary and not RpgBattle.over(B) and bool(RpgBattle.options(B).pet.ok):
+		_teach("pet")
 
 
 ## What lasts is seen: flames on a burning fighter, drops on a bleeding one, stars round a stunned or broken
@@ -824,6 +867,8 @@ func _mark_danger() -> void:
 			var total = float(it.get("dmg", 0)) * float(maxi(1, int(it.get("hits", 1))))
 			hard = total >= 0.25 * most or (bool(it.get("windup", false)) and bool(it.get("charged", false)))
 		nd.plate.set_danger(hard and not instant)
+		if hard and not _busy:
+			_teach("danger")
 
 
 ## A foe that is down keeps its place (its plate fades) until another one
@@ -1655,6 +1700,7 @@ func _show(e: Dictionary) -> float:
 			var full = gv >= RpgDefs.GAUGE_MAX
 			if full and not _gauge_full and str(B.hero.get("ult", "")) != "":
 				_word("hero", "ULTIMATE READY", Pal.ACCENT, 1, 0.1, 10.0)
+				_teach("gauge")
 				_fx("sparkle", _mid("hero"), Pal.ACCENT, 0.6, {"n": 8})
 				_snd("gauge_full")
 				if _act.has("ult") and not instant:
@@ -1687,6 +1733,7 @@ func _show(e: Dictionary) -> float:
 				BattleFx.flash(_arena, Pal.DANGER, 0.3, 0.3)
 			_dim_back(0.5, 0.6)
 			_shake(1.2)
+			_teach("phase")
 			_say(say if say != "" else "%s changes." % _name(who))
 			_snd("phase")
 			return 0.9
@@ -1700,6 +1747,7 @@ func _show(e: Dictionary) -> float:
 			_place_foes()
 			_enter_foes(fresh)
 			_snd("summon")
+			_teach("summon")
 			_say("%s calls for help." % _name(str(e.get("by", ""))) if str(e.get("by", "")) != "" else "More foes arrive.")
 			return 0.45
 		"wave":
@@ -1871,6 +1919,7 @@ func _show_act(e: Dictionary) -> float:
 			_say(_act_head + "!")
 			_fx("gather", _mid(who), Pal.DANGER, 0.6, {"n": 14})
 			_word(who, "CHARGING", Pal.DANGER, 1)
+			_teach("charge")
 			_snd("charge")
 			if nd != null and not instant:
 				Kit.pop(nd.view, 1.08, 0.2)
@@ -1879,6 +1928,7 @@ func _show_act(e: Dictionary) -> float:
 			_act_head = "%s counts down" % nm
 			_fx("ring", _mid(who), Pal.ACCENT2, 0.4)
 			_snd("count")
+			_teach("count")
 			_say("%s: %s is coming." % [nm, move])
 			return 0.38
 	_act_head = "%s uses %s" % [nm, move]
@@ -2003,6 +2053,7 @@ func _show_dmg(e: Dictionary) -> float:
 		_word(dst, "WEAK", RpgUi.color(school), 2 if not crit else 1, 0.08, 0.0 if not crit else 24.0)
 	elif resist:
 		_word(dst, "RESIST", Pal.MUTED, 1, 0.06)
+		_teach("resist")
 		if not nd.known.resist.has(school):
 			nd.known.resist.append(school)
 			nd.plate.set_known(nd.unit.get("weak", []).size(), nd.known)
@@ -2089,14 +2140,22 @@ func _show_status(e: Dictionary) -> float:
 		"shield":
 			_fx("shield", at, RpgUi.color("grit") if dst == "hero" else Pal.MUTED, 0.5)
 			_snd("shield")
+			if dst != "hero":
+				_teach("shield")
 		"stun":
 			_snd("stun")
+			if dst == "hero":
+				_teach("stun")
 		"burn":
 			_fx("flame", at + Vector2(0, 6), Pal.ACCENT2, 0.5)
 			_snd("burn")
+			if dst == "hero":
+				_teach("dot")
 		"bleed":
 			_fx("drops", at, Pal.DANGER, 0.45)
 			_snd("bleed")
+			if dst == "hero":
+				_teach("dot")
 		_:
 			_fx("up" if good else "down", at, col, 0.5)
 			_snd("buff" if good else "debuff", 1.0, 0.04)
@@ -2128,6 +2187,7 @@ func _show_break(dst: String) -> float:
 	_snd("break")
 	RpgSfx.buzz(2)
 	_status_fx()
+	_teach("break")
 	_say("%s's guard breaks: it loses its next action." % _name(dst))
 	return 0.6
 
@@ -2363,6 +2423,36 @@ func _intro(first: Array) -> void:
 		_end_playback()
 	else:
 		_play(first)
+
+
+## Give a hint of HINTS, if it was never given: its band comes up for a few seconds, and the caller is told.
+func _teach(id: String) -> void:
+	if _tip == null or instant or _hints_given.has(id) or not HINTS.has(id) or _closed:
+		return
+	# One at a time: while a hint is still being read, the next one waits for its next occasion.
+	if Time.get_ticks_msec() - _tip_at < 3500:
+		return
+	_tip_at = Time.get_ticks_msec()
+	_hints_given[id] = true
+	_tip.text = str(HINTS[id])
+	_tip.set_meta("bv_tip", id)
+	# Over the foes' plates when there is sky for it (it covers no fighter there), else at the arena's foot.
+	var top = _arena.size.y
+	for fid in _foes:
+		if _foes[fid].plate != null:
+			top = minf(top, _foes[fid].plate.position.y)
+	if top - 44.0 >= 4.0:
+		_rect(_tip, 6, floor(top - 44.0), _arena.size.x - 12.0, 38)
+	else:
+		_rect(_tip, 6, _arena.size.y - 40.0, _arena.size.x - 12.0, 38)
+	_kill(_tip_tw)
+	_tip_tw = create_tween()
+	_tip_tw.tween_property(_tip, "modulate:a", 1.0, 0.2)
+	_tip_tw.tween_interval(HINT_SECS)
+	_tip_tw.tween_property(_tip, "modulate:a", 0.0, 0.4)
+	var cb = _opts.get("on_hint")
+	if cb is Callable and cb.is_valid():
+		cb.call(id)
 
 
 ## The keys go quiet while something plays (they still hear a tap: it skips).

@@ -1758,6 +1758,14 @@ is the Windows handoff.
       of the furthest region that is not won, a cache included) and a key that goes there
       (`RealmMap.go_to`); not shown while a fight waits to be continued. Keys that hand something out
       (the training chest, a ready star chest, a feat to claim) have `Fx.shine`.
+    - Hints given ONCE EVER in a fight (`BattleView.HINTS`, `_teach(id)`, the band `_tip`, meta `bv_tip`):
+      the first time a foe winds up, counts down, shows a red intent, is broken, resists, calls for help or
+      shields itself, the hero burns / bleeds or is stunned, a boss changes, the gauge is full, the
+      companion is charged. One at a time (a second one within 3.5 s waits for its next occasion), over
+      the foes' plates when there is sky there, else at the arena's foot; never in the taught first fight
+      (it has its own band) or an `instant` playback. `saved.rpg.hints` = {id: true}
+      (`RpgSave.note_hint`), handed to a fight as `opts.hints`, told back through `opts.on_hint`
+      (`RpgUi._hint_given`, a quiet commit).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

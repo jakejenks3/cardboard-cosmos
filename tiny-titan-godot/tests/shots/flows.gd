@@ -159,6 +159,19 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	if bv4 != null:
 		await ShotHelper.wait(tree, 1.0)
 		bv4.skip()
+		# a hint is given once ever: it is kept the moment it shows, and nothing is redrawn for it
+		var redraws = [0]
+		var on_change = func(): redraws[0] += 1
+		App.rpg_changed.connect(on_change)
+		var had = App.rpg().get("hints", {}).has("break")
+		bv4._tip_at = -100000
+		bv4._teach("break")
+		await ShotHelper.wait(tree, 0.5)
+		var tip = _one("bv_tip", null, bv4)
+		check(not had and tip != null and str(tip.get_meta("bv_tip")) == "break" and tip.modulate.a > 0.9 and str(tip.text).contains("broken"), "the first time a guard breaks, a hint says what that means")
+		check(bool(App.rpg().get("hints", {}).get("break", false)) and redraws[0] == 0, "it is remembered at once, and nothing was drawn again for it")
+		await ShotHelper.snap(tree, "flows_1b_hint")
+		App.rpg_changed.disconnect(on_change)
 		var xp3 = int(App.rpg().xp)
 		bv4._do({"t": "flee"})
 		await ShotHelper.wait(tree, 1.5)
@@ -172,6 +185,11 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	if bv5 != null:
 		await ShotHelper.wait(tree, 1.0)
 		bv5.skip()
+		bv5._tip_at = -100000
+		bv5._teach("break")
+		await ShotHelper.frames(tree, 3)
+		var tip5 = _one("bv_tip", null, bv5)
+		check(tip5 != null and str(tip5.get_meta("bv_tip")) != "break", "in the next fight the same hint is not given again")
 		# (a hero with one hit point and foes that hit like a wall: the next blow fells him)
 		bv5.B.hero["hp"] = 1
 		for f in bv5.B.foes:
@@ -205,6 +223,20 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 			_press_result(bv6, "back")
 			await ShotHelper.wait(tree, 0.8)
 	check(_battle() == null and _one("realm_continue") == null, "at the end no fight is open and none is offered")
+	# --- the music belongs to the Realm: it goes when the tab is left, and comes back with it ------------
+	var m = RpgSfx.music()
+	check(m != null and RpgSfx.music_on() and str(m.current()) == "hub" and RpgSfx._holders == 1, "in the Realm, out of a fight, the hub's tune is the one asked for (%s, %d holding)" % [str(m.current()) if m != null else "none", RpgSfx._holders])
+	App.go("home")
+	await ShotHelper.wait(tree, 2.0)
+	check(RpgSfx._holders == 0 and m != null and not m.is_playing(), "on another tab nothing holds the music and it has stopped")
+	App.go("realm")
+	await ShotHelper.wait(tree, 1.0)
+	check(RpgSfx._holders == 1 and str(m.current()) == "hub", "back in the Realm it is asked for again")
+	RpgSfx.set_music(false)
+	await ShotHelper.wait(tree, 1.2)
+	check(not RpgSfx.music_on() and not m.is_playing() and bool(_one("realm_music") != null and not bool(_one("realm_music").get_meta("realm_music"))), "switched off, it is silent and its key says so")
+	RpgSfx.set_music(true)
+	await ShotHelper.wait(tree, 0.6)
 	LootPop.close_all()
 	BattleView.auto_kept = false
 	print("FLOWS %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

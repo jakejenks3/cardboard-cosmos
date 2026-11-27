@@ -382,6 +382,7 @@ static func fight(what: Dictionary, resume_b = null):
 	var nxt = RpgWorld.next_stage(id) if ["battle", "elite", "boss"].has(str(st.get("kind", ""))) else ""
 	var opts = {"title": str(st.get("name", "")), "scene": str(st.get("scene", "rustyard")), "tutorial": id == "r1s1" and first_time,
 		"hero": hero_look(), "next": nxt != "",
+		"hints": save().get("hints", {}).duplicate(), "on_hint": func(hint_id): RpgUi._hint_given(hint_id),
 		"store": func(B): RpgUi._store(what, B),
 		"result": func(B, summary): return RpgUi.finish(B, what, summary)}
 	if resume_b is Dictionary:
@@ -389,6 +390,13 @@ static func fight(what: Dictionary, resume_b = null):
 	var bv = BattleView.open(setup, opts)
 	bv.finished.connect(func(_b, _summary): RpgUi._after(bv, what, nxt))
 	return bv
+
+
+## A fight gave one of its once-only hints: it is remembered, quietly (nothing is redrawn).
+static func _hint_given(id: String) -> void:
+	var res = RpgSave.note_hint(save(), id)
+	if bool(res.get("changed", false)):
+		commit_quiet(res.rpg)
 
 
 ## Continue the kept battle (kept_battle() says whether there is one).

@@ -116,6 +116,11 @@ func _run() -> void:
 	var n2 = RpgSave.note_stats(n1.rpg, {"back": 40, "legs": 30, "core": 9})
 	ok(not bool(n2.changed) and n2.rose.is_empty() and int(n2.rpg.statsSeen.legs) == 36, "nothing new: nothing changes, and what is remembered never falls", n2.rpg.statsSeen)
 	ok(RpgSave.parse(JSON.parse_string(JSON.stringify(n1.rpg))).statsSeen == {"back": 40, "legs": 36, "core": 9} and RpgSave.parse({"statsSeen": {"nope": 5, "back": "x", "legs": 250}}).statsSeen == {"legs": 99}, "it survives the save file; junk in it does not", RpgSave.parse({"statsSeen": {"nope": 5, "back": "x", "legs": 250}}).statsSeen)
+	# --- the hints a fight has given ---------------------------------------------------------------
+	var h1 = RpgSave.note_hint(RpgSave.empty(), "charge")
+	var h2 = RpgSave.note_hint(h1.rpg, "charge")
+	ok(bool(h1.changed) and h1.rpg.hints == {"charge": true} and not bool(h2.changed) and h2.rpg.hints == {"charge": true} and not bool(RpgSave.note_hint(h1.rpg, "").changed), "a hint given is kept, once", [h1.rpg.hints, h2.changed])
+	ok(RpgSave.parse(JSON.parse_string(JSON.stringify(h1.rpg))).hints == {"charge": true} and RpgSave.parse({"hints": {"a": true, "b": false, "c": 3}}).hints == {"a": true}, "and survives the save file", RpgSave.parse({"hints": {"a": true, "b": false, "c": 3}}).hints)
 	print("RPG SAVE: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 
@@ -444,5 +449,5 @@ func _app() -> void:
 	saved["rpg"] = RpgSave.copy(rpg)
 	var back = app.parse_saved(JSON.parse_string(JSON.stringify(saved)))
 	ok(back != null and same(back.rpg, rpg) and not rpg.stages.is_empty(), "a save with the campaign's Realm survives App.parse_saved, through JSON", back.rpg.keys() if back != null else null)
-	ok(same(app.parse_saved({"sessions": []}).rpg, RpgSave.empty()) and RpgSave.empty().keys() == ["v", "opened", "xp", "ore", "nodes", "builds", "build", "plus", "runes", "socket", "relics", "scrolls", "items", "stages", "starChests", "caches", "seen", "statsSeen", "feats", "chests", "hunt", "rival", "spire"],
+	ok(same(app.parse_saved({"sessions": []}).rpg, RpgSave.empty()) and RpgSave.empty().keys() == ["v", "opened", "xp", "ore", "nodes", "builds", "build", "plus", "runes", "socket", "relics", "scrolls", "items", "stages", "starChests", "caches", "seen", "statsSeen", "feats", "hints", "chests", "hunt", "rival", "spire"],
 		"a save without one gets the empty Realm, whose keys are the plan's and no more", RpgSave.empty().keys())

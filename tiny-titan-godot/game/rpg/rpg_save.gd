@@ -61,6 +61,7 @@ static func empty() -> Dictionary:
 		"seen": {},
 		"statsSeen": {},
 		"feats": {},
+		"hints": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
@@ -183,6 +184,7 @@ static func parse(raw) -> Dictionary:
 		for k in stats_seen:
 			if RpgDefs.STATS.has(str(k)) and _int(stats_seen[k]) > 0:
 				out.statsSeen[str(k)] = clampi(_int(stats_seen[k]), 1, 99)
+	out.hints = _flags(raw.get("hints"))
 	var feats = raw.get("feats")
 	if feats is Dictionary:
 		for k in feats:
@@ -511,6 +513,19 @@ static func claim_chest(rpg: Dictionary, chest) -> Dictionary:
 			out.chests.erase(k)
 	out.chests[date] = int(pay.kinds)
 	return _yes(out)
+
+
+## A hint of a fight was given (BattleView.HINTS): it is not given again. {"ok", "why", "rpg", "changed"}.
+static func note_hint(rpg: Dictionary, id: String) -> Dictionary:
+	var out = copy(rpg)
+	if not (out.get("hints") is Dictionary):
+		out["hints"] = {}
+	var fresh = id != "" and not bool(out.hints.get(id, false))
+	if fresh:
+		out.hints[id] = true
+	var res = _yes(out)
+	res["changed"] = fresh
+	return res
 
 
 ## The next step of a feat's ladder is claimed: its ore is paid, once. `sheet` is the stat sheet (the days
