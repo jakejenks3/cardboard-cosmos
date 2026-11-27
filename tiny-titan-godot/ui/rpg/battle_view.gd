@@ -2333,8 +2333,12 @@ func _show_ko(dst: String) -> float:
 	nd.plate.set_intent({})
 	nd.plate.set_down(true)
 	nd.view.set_marked(false)
-	nd.view.faint()
 	nd.hit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if bool(nd.unit.get("boss", false)) and not instant and not BattleFx.light:
+		_status_fx()
+		_say("%s is down." % _name(dst))
+		return _boss_falls(dst, nd)
+	nd.view.faint()
 	_status_fx()
 	var big = bool(nd.unit.get("boss", false)) or bool(nd.unit.get("elite", false))
 	_fx("poof", _mid(dst), Pal.MUTED, 0.6, {"delay": 0.18})
@@ -2348,6 +2352,41 @@ func _show_ko(dst: String) -> float:
 			Kit.burst(nd.view, Pal.ACCENT, 30)
 	_say("%s is down." % _name(dst))
 	return 0.7 if big else 0.45
+
+
+## A boss does not just drop: it shakes and comes apart, burst after burst, each a note higher, and only
+## then goes down in light. (Skipped, the playback's end lets it fall at once: the tween is one of _moving.)
+func _boss_falls(dst: String, nd: Dictionary) -> float:
+	var at = _mid(dst)
+	var k = 1.0 / float(maxi(1, speed))
+	var spots = [Vector2(-22, -14), Vector2(18, -26), Vector2(-8, 12), Vector2(24, 8), Vector2(0, -12), Vector2(-20, -30)]
+	var view = nd.view
+	var home = nd.home
+	_dim_back(0.45, 1.3)
+	var tw = view.create_tween()
+	_moving.append(tw)
+	for i in range(spots.size()):
+		var spot = at + spots[i]
+		var col = Pal.ACCENT if i % 2 == 0 else Color(1, 1, 1)
+		var pitch = 0.8 + 0.12 * float(i)
+		tw.tween_callback(func():
+			_fx("impact", spot, col, 0.3, {"n": 10})
+			_snd("hit_plain", pitch, 0.0)
+			_shake(0.5))
+		tw.tween_property(view, "position", home + Vector2(3.0 if i % 2 == 0 else -3.0, 0.0), 0.05 * k)
+		tw.tween_property(view, "position", home, 0.1 * k)
+	tw.tween_callback(func():
+		view.faint()
+		_fx("poof", at, Pal.MUTED, 0.6)
+		_fx("ring", at, Pal.ACCENT, 0.5, {"u": 5.0, "half": 14.0})
+		_fx("sparkle", at, Pal.ACCENT, 0.9, {"n": 14, "half": 28.0})
+		_snd("ko", 0.75, 0.0)
+		_shake(1.6)
+		_hit_stop("ult")
+		RpgSfx.buzz(3)
+		BattleFx.flash(_arena, Color(1, 1, 1), 0.6, 0.4)
+		Kit.burst(view, Pal.ACCENT, 34))
+	return (0.15 * float(spots.size()) + 0.75) * k * float(maxi(1, speed))
 
 
 func _show_learn(e: Dictionary) -> float:
