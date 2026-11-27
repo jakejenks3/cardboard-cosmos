@@ -1669,7 +1669,7 @@ is the Windows handoff.
       picture, the hero where the fight was beside the words (`_tableau`, meta `br_tableau`); stars slam in
       a step higher each, the three numbers count up, the loot comes one piece after the other.
     - The hub's boosts are two across (a tap opens a boost in full), so the tabs and the map come up.
-    - More of the same day: the arena's plain sky has clouds by day and stars at night (`BattleFx.SkyBand`,
+    - More of the same day: the arena's plain sky has clouds by day and stars at night (`BattleFx.SkyBand`; not over the scenes of `BattleView.INDOORS`,
       only where the arena is taller than its picture); a foe about to hit for a quarter of the hero's HP or
       with a charged blow has an intent that beats red (`BattleView._mark_danger`, `FoePlate.set_danger`,
       meta `bv_danger`); a move or action key blinks and clicks when pressed (a blink, never a pop: a key
@@ -2027,6 +2027,8 @@ battle (a fight played by its keys to the result, a pack, the first boss; year d
 realm_own (the Realm with the player's own log, from the file in REALM_OWN_SAVE; see THE REALM),
 realm_touch (the Realm under real finger events, as a phone sends them: tabs, the chest's moment, Go, Fight,
   a move, the log, AUTO, the music key, a fight won by taps; year data, run it with --fingers),
+tour (the elite and the boss of every region on AUTO at x2 for a while, every effect on, a hero who cannot
+  fall: the rarer events drawn and sounded once, "TOUR ..." lines say which; needs G_TIMEOUT 560; year data),
 flows (the Realm's fights as a player goes through them: win and Next stage, the app closed mid-fight and
   Continue, flee, lose and Again, with the hub's state checked after each; year data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
