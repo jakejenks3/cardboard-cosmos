@@ -220,6 +220,11 @@ static func rewards(stage: Dictionary, summary: Dictionary, rpg: Dictionary, lev
 		if want_rune:
 			out.runes.append(rune(n, rpg, "%s:first" % id, runes))
 			runes += 1
+	# an Ore Mole felled before it dug away: its ore
+	var moles = int(summary.get("treasure", 0))
+	if moles > 0:
+		out["treasure"] = moles * RpgDefs.treasure_ore(n)
+		out["ore"] = int(out.ore) + int(out.treasure)
 	if kind == "hunt" and first:
 		# the hunt streak: days in a row add ore to the day's first win
 		var streak = RpgWorld.hunt_streak_next(rpg, str(stage.get("date", "")))

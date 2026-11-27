@@ -89,6 +89,7 @@ extends RefCounted
 ##   chip {n, to}               chips n guard pips whatever the school
 ##   when {hp_below, do}        `do` (one effect, not another when) only if the user's HP share is under hp_below
 ##   self_ko                    the user falls (a foe's bomb)
+##   flee                       the foe that uses it leaves the fight: gone, not felled (event flee {dst})
 ##
 ## PASSIVE EFFECTS, {"p": kind, ...}: board passives, gear, runes, sets, relics, pets, boosts, foe traits.
 ##   baked into the hero's numbers by RpgHero.build (a foe's hp, hp_pct, armor, def_pct, spd_pct, res_add, crit_add
@@ -546,7 +547,7 @@ static func summary(B: Dictionary) -> Dictionary:
 		learned[k] = B.learned[k].duplicate()
 	return _norm({"win": won(B), "turns": _i(s, "turns"), "dealt": _i(s, "dealt"), "taken": _i(s, "taken"),
 		"breaks": _i(s, "breaks"), "items": _i(s, "items"), "guards": _i(s, "guards"), "perfect": _i(s, "perfect"),
-		"moves": h.get("flags", {}).get("uses", {}).duplicate(), "unguarded": _i(s, "unguarded"),
+		"moves": h.get("flags", {}).get("uses", {}).duplicate(), "unguarded": _i(s, "unguarded"), "treasure": _i(s, "treasure"),
 		"schools": s.schools.duplicate(),
 		"worst_share": _f(s, "worst"), "hp_share": _share(h), "learned": learned, "used": s.used.duplicate(),
 		"fled": bool(B.fled), "kos": _i(s, "kos"), "waves": _i(s, "waves"),
@@ -1623,6 +1624,8 @@ static func _ko(B: Dictionary, ev: Array, u: Dictionary) -> void:
 		u["broken"] = false
 		u["intent"] = {}
 		B.sum["kos"] = _i(B.sum, "kos") + 1
+		if str(u.get("foe", "")) == RpgDefs.TREASURE_FOE:
+			B.sum["treasure"] = _i(B.sum, "treasure") + 1
 	ev.append({"t": "ko", "dst": str(u.id)})
 
 
@@ -1990,6 +1993,15 @@ static func _apply_fx(B: Dictionary, ev: Array, e: Dictionary, ctx: Dictionary) 
 		"self_ko":
 			if str(src.side) == "foe" and src.alive:
 				_ko(B, ev, src)
+		"flee":
+			# the foe leaves the fight: gone, but not felled (no kill is counted, nothing is paid for it)
+			if str(src.side) == "foe" and src.alive:
+				src["alive"] = false
+				src["fled"] = true
+				src["statuses"] = []
+				src["broken"] = false
+				src["intent"] = {}
+				ev.append({"t": "flee", "dst": str(src.id)})
 
 
 ## Removes up to `n` statuses of a kind from a unit, oldest first (0 = all).
@@ -2546,6 +2558,7 @@ const FX_KEYS = {
 	"chip": {"need": ["n"], "may": ["to"]},
 	"when": {"need": ["hp_below", "do"], "may": []},
 	"self_ko": {"need": [], "may": []},
+	"flee": {"need": [], "may": []},
 }
 const MOD_KEYS = {
 	"vs_status": ["id", "pct"], "vs_debuff": ["pct"], "per_debuff": ["pct", "max"], "vs_broken": ["pct"], "vs_full_hp": ["pct"],
@@ -2891,8 +2904,8 @@ static func check_move(move) -> String:
 		var k = str(e.k)
 		if not attack and (k == "lifesteal" or k == "refund"):
 			return "%s: %s needs an attack" % [id, k]
-		if k == "self_ko":
-			return id + ": self_ko is for foes"
+		if k == "self_ko" or k == "flee":
+			return id + ": %s is for foes" % k
 		if str(move.target) == "self" and (str(e.get("to", "")) == "target" or (not e.has("to") and ["delay", "dispel", "interrupt", "chip"].has(k))):
 			return "%s: %s needs a foe, and the move aims at the hero" % [id, k]
 	for tag in move.tags:
@@ -3289,6 +3302,8 @@ static func fx_words(e: Dictionary, attack: bool = true) -> String:
 			return "Under %s HP: %s" % [_pct(e.get("hp_below", 0.0)), _inner(inner)]
 		"self_ko":
 			return "It falls"
+		"flee":
+			return "It leaves the fight"
 	return ""
 
 

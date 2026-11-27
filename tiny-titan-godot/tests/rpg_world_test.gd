@@ -113,6 +113,79 @@ func _init() -> void:
 	var hday5 = RpgWorld.hunt("2026-01-15", hw2.rpg, [])
 	var hw5 = RpgSave.finish(hw2.rpg, {"kind": "hunt", "id": str(hday5.id)}, hday5, RpgLoot.rewards(hday5, {"win": true, "turns": 3}, hw2.rpg, 1, [], 6), {"win": true, "turns": 3}, "2026-01-15")
 	ok(int(hw5.rpg.hunt.streak) == 1 and int(hw5.rpg.hunt.best) == 2 and int(RpgSave.parse(hw5.rpg).hunt.best) == 2 and int(RpgFeats.counts(hw5.rpg).hunts) == 2, "days missed start it again at one; the best is kept, in the save file too, and the feats read it", hw5.rpg.get("hunt"))
+	# --- the Ore Mole --------------------------------------------------------------------------------------
+	var mole_rpg = RpgSave.first_open(RpgSave.empty(), {}, "")
+	for ms in range(1, 6):
+		mole_rpg.stages["r1s%d" % ms] = {"stars": [true, false, false], "wins": 1, "best": 3}
+	var with_mole = 0
+	var mole_seed = 0
+	var free_seed = 0
+	for sd in range(1, 801):
+		var en = RpgWorld.treasure_entry(RpgWorld.stage("r1s2"), "stage", sd)
+		if not en.is_empty():
+			with_mole += 1
+			if mole_seed == 0:
+				mole_seed = sd
+		elif free_seed == 0:
+			free_seed = sd
+	ok(with_mole > 800 * RpgDefs.TREASURE_CHANCE * 0.6 and with_mole < 800 * RpgDefs.TREASURE_CHANCE * 1.5, "a mole stands with a pack about TREASURE_CHANCE of the time (%d of 800)" % with_mole)
+	ok(RpgWorld.treasure_entry(RpgWorld.stage("r1s2"), "stage", mole_seed) == RpgWorld.treasure_entry(RpgWorld.stage("r1s2"), "stage", mole_seed)
+		and RpgWorld.treasure_entry(RpgWorld.stage("r1s2"), "stage", mole_seed).weak.size() == 2, "the same seed, the same mole, with two weak schools to show")
+	var never = true
+	for sd in range(1, 801):
+		if not RpgWorld.treasure_entry(RpgWorld.stage("r1s1"), "stage", sd).is_empty() or not RpgWorld.treasure_entry(RpgWorld.stage("r1s5"), "stage", sd).is_empty() \
+				or not RpgWorld.treasure_entry(RpgWorld.stage("r1s10"), "stage", sd).is_empty() or not RpgWorld.treasure_entry(RpgWorld.stage("r1s2"), "hunt", sd).is_empty() \
+				or not RpgWorld.treasure_entry(RpgWorld.dare("r1s5", mole_rpg), "dare", sd).is_empty():
+			never = false
+	ok(never, "never in the first stage, an elite's or a boss's fight, a hunt, or the dare of an elite")
+	var crowded = true
+	for st3 in RpgWorld.all_stages():
+		if str(st3.get("kind", "")) == "battle" and not st3.waves.is_empty() and st3.waves[0].size() >= RpgDefs.FOES_MAX:
+			for sd in range(1, 60):
+				if not RpgWorld.treasure_entry(st3, "stage", sd).is_empty():
+					crowded = false
+	ok(crowded, "never where the first wave is full")
+	var mset = RpgWorld.setup({"kind": "stage", "id": "r1s2"}, mole_rpg, RpgHero.reference_hero(2.0), null, mole_seed, "2026-01-05")
+	var pset = RpgWorld.setup({"kind": "stage", "id": "r1s2"}, mole_rpg, RpgHero.reference_hero(2.0), null, free_seed, "2026-01-05")
+	ok(mset.waves[0].size() == RpgWorld.stage("r1s2").waves[0].size() + 1 and str(mset.waves[0][-1].foe) == RpgDefs.TREASURE_FOE and mset.custom.foes.has(RpgDefs.TREASURE_FOE) and mset.custom.foe_moves.has(RpgDefs.TREASURE_MOVE)
+		and pset.waves[0].size() == RpgWorld.stage("r1s2").waves[0].size() and not pset.get("custom", {}).get("foes", {}).has(RpgDefs.TREASURE_FOE) and RpgWorld.stage("r1s2").waves[0].size() < RpgDefs.FOES_MAX,
+		"the setup brings the mole and its rows along; the stage itself is not touched", [mset.waves[0].size(), pset.waves[0].size()])
+	# it digs and is gone: nothing is paid
+	var Bm2 = RpgBattle.start(mset)
+	var mole_u = null
+	for f2 in Bm2.foes:
+		if str(f2.get("foe", "")) == RpgDefs.TREASURE_FOE:
+			mole_u = f2
+	ok(mole_u != null and int(mole_u.intent.get("count", 0)) >= RpgDefs.TREASURE_TURNS - 1 and int(mole_u.intent.get("count", 0)) <= RpgDefs.TREASURE_TURNS and int(mole_u.intent.get("dmg", 0)) == 0 and RpgBattle.known(Bm2, str(mole_u.id)).weak.size() == 2, "in the fight it shows its countdown, no damage, and its two weaknesses", mole_u.intent if mole_u != null else null)
+	Bm2.hero["hp_max"] = 999999
+	Bm2.hero["hp"] = 999999
+	var fled = false
+	for i2 in range(60):
+		if RpgBattle.over(Bm2) or fled:
+			break
+		for e2 in RpgBattle.act(Bm2, {"t": "guard"}):
+			if str(e2.get("t", "")) == "flee" and str(e2.get("dst", "")) == str(mole_u.id):
+				fled = true
+	ok(fled and not bool(mole_u.alive) and bool(mole_u.get("fled", false)) and int(RpgBattle.summary(Bm2).treasure) == 0 and int(RpgBattle.summary(Bm2).kos) == 0 and not RpgBattle.over(Bm2), "left alone it digs away: gone, not felled, and the fight goes on", [fled, RpgBattle.summary(Bm2).kos])
+	# felled first: the win pays its ore
+	var Bm3 = RpgBattle.start(mset)
+	Bm3.hero["hp_max"] = 999999
+	Bm3.hero["hp"] = 999999
+	for f3 in Bm3.foes:
+		f3["hp"] = 1
+	var guard3 = 0
+	while not RpgBattle.over(Bm3) and guard3 < 40:
+		guard3 += 1
+		var tgt = ""
+		for f3 in RpgBattle.foes(Bm3):
+			if str(f3.get("foe", "")) == RpgDefs.TREASURE_FOE or tgt == "":
+				tgt = str(f3.id)
+		RpgBattle.act(Bm3, {"t": "strike", "target": tgt})
+	var sum3 = RpgBattle.summary(Bm3)
+	var plain_rw = RpgLoot.rewards(RpgWorld.stage("r1s2"), {"win": true, "turns": 3}, mole_rpg, 1, [], 9)
+	var mole_rw = RpgLoot.rewards(RpgWorld.stage("r1s2"), sum3, mole_rpg, 1, [], 9)
+	ok(RpgBattle.won(Bm3) and int(sum3.treasure) == 1 and int(mole_rw.treasure) == RpgDefs.treasure_ore(float(RpgWorld.stage("r1s2").n)) and int(mole_rw.ore) == int(plain_rw.ore) + int(mole_rw.treasure) and not plain_rw.has("treasure"),
+		"felled before it is gone, the win pays the mole's ore on top", [sum3.treasure, mole_rw.ore, plain_rw.ore])
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

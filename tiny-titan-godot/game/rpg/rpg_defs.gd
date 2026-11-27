@@ -450,6 +450,19 @@ static func level_of(xp: int) -> Dictionary:
 
 
 ## The tier a fighter level belongs to (the over-level rule and the pet's speed).
+## THE ORE MOLE (RPG_PLAN.md 8.4, added 2026-11-27): a treasure foe that sometimes stands with a pack. It does
+## no harm; it digs for TREASURE_TURNS of its turns and is gone. Felled first, the win pays `treasure_ore`.
+## It is not a foe of the catalog: RpgWorld.setup brings its rows along (custom), by the battle's seed.
+const TREASURE_FOE = "ore_mole"
+const TREASURE_MOVE = "mole_dig"
+const TREASURE_CHANCE = 0.12
+const TREASURE_TURNS = 4
+const TREASURE_ORE = 40.0
+
+static func treasure_ore(n: float) -> int:
+	return int(round(TREASURE_ORE * pow(ORE_GROW, n / 10.0)))
+
+
 ## MOVE MASTERY (RPG_PLAN.md 5): a move gets better as it is used in fights. Uses are counted over every fight
 ## (saved.rpg.mastery); at MASTERY_AT uses a move reaches level 1, 2, 3, each worth MASTERY_PCT more of what
 ## it does in numbers (RpgMoves.mastered). The reference heroes of the balance have none.

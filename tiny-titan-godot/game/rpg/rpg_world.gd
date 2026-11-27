@@ -486,6 +486,34 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 	return before == "" or done(rpg, before)
 
 
+## THE ORE MOLE: the rows a battle needs for it ({"foes": {id: row}, "foe_moves": {id: row}}).
+static func treasure_rows() -> Dictionary:
+	var mv = {"name": "Dig Away", "kind": "buff", "power": 0.0, "count": RpgDefs.TREASURE_TURNS, "target": "self", "rank": 1.0,
+		"fx": [{"k": "flee"}], "icon": "in_bomb", "text": "It is digging its way out, ore and all. Fell it before the count runs out."}
+	var foe = {"id": RpgDefs.TREASURE_FOE, "name": "Ore Mole", "region": "", "role": "bomb", "weak": [], "resist": [], "guard": 2,
+		"moves": [RpgDefs.TREASURE_MOVE], "pattern": [RpgDefs.TREASURE_MOVE], "rules": [], "traits": [], "phases": [],
+		"text": "It carries ore in its cheeks and does no harm. It will not stay long."}
+	return {"foes": {RpgDefs.TREASURE_FOE: foe}, "foe_moves": {RpgDefs.TREASURE_MOVE: mv}}
+
+
+## Does a mole stand with this fight's first wave? By the battle's seed, TREASURE_CHANCE of the time, for a
+## plain pack of the road, an echo or a dare (never an elite, a boss, the hunt, the rival, the Spire or the
+## very first stage), where the first wave has a place free. {} when not, else the wave entry to add
+## (its two weak schools, by the seed, are shown from the start).
+static func treasure_entry(st: Dictionary, kind: String, battle_seed: int) -> Dictionary:
+	if not ["stage", "echo", "dare"].has(kind) or str(st.get("kind", "")) == "elite" or str(st.get("kind", "")) == "boss":
+		return {}
+	if str(st.get("of_kind", "battle")) != "battle" or str(st.get("id", "")) == "r1s1":
+		return {}
+	var waves = st.get("waves", [])
+	if waves.is_empty() or waves[0].size() >= RpgDefs.FOES_MAX:
+		return {}
+	var rng = Rng.make_rng("mole:%d" % battle_seed)
+	if rng.next() >= RpgDefs.TREASURE_CHANCE:
+		return {}
+	return {"foe": RpgDefs.TREASURE_FOE, "n": float(waves[0][0].get("n", st.get("n", 1.0))), "weak": _two_schools([], rng)}
+
+
 ## THE HUNT STREAK (added 2026-11-27): days in a row on which the day's hunt was won. saved.rpg.hunt keeps
 ## "streak" (as of its "date", the day of the last hunt won) and "best". A day missed ends it; nothing is
 ## lost but the bonus: the first win of a day pays HUNT_STREAK_ORE more ore for every day of the streak
@@ -933,7 +961,18 @@ static func setup(what: Dictionary, rpg: Dictionary, hero_unit: Dictionary, pet_
 				custom["moves"] = {}
 			if not custom.moves.has(str(id)):
 				custom.moves[str(id)] = RpgMoves.mastered(str(id), lvl)
+	# Now and then an Ore Mole stands with the pack (its rows come along with the battle).
+	var waves = st.waves.duplicate(true)
+	var mole = treasure_entry(st, kind, battle_seed)
+	if not mole.is_empty():
+		waves[0].append(mole)
+		var rows = treasure_rows()
+		for part in rows:
+			if not (custom.get(part) is Dictionary):
+				custom[part] = {}
+			for rid in rows[part]:
+				custom[part][rid] = rows[part][rid]
 	return {"hero": hero_unit, "pet": pet_unit if pet_unit is Dictionary else null,
-		"waves": st.waves.duplicate(true), "seed": battle_seed, "what": {"kind": kind, "id": str(st.id)},
+		"waves": waves, "seed": battle_seed, "what": {"kind": kind, "id": str(st.id)},
 		"rules": st.get("rules", []).duplicate(), "known": known, "day": today,
 		"custom": custom}

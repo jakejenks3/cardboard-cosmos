@@ -720,6 +720,10 @@ push, marsh mind and grip, stormspine and titans_rest spread evenly); at most on
   the first pays `first` (ore `60 * 1.15^(n/10)`; an elite's or a boss's also a rune) and puts a flame
   on the stage. All nine dares of a region open its dare chest (`RpgLoot.dare_chest`: ore `150 + 50 r`,
   a rune, three of the region's belt item; `saved.rpg.starChests["<region>:dare"]`).
+- **The Ore Mole** (added 2026-11-27): about one plain pack in eight (`TREASURE_CHANCE`, by the battle's
+  seed) has a mole in its first wave when a place is free. It does no harm, counts down `TREASURE_TURNS`
+  of its turns and leaves (effect `flee`). Felled first: `treasure_ore(n) = 40 * 1.15^(n/10)` ore on top
+  of the win. Its rows come with the battle (`custom`); it is not one of the 56 foes.
 - **Echo regions** (after region 8): each region again at `n = 80 + 3 (r - 1) + 0.3 (s - 1)` with
   one rule from `RULES`; stage ids `e3s5`.
 

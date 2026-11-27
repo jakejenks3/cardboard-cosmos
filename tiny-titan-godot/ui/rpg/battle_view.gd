@@ -83,6 +83,7 @@ const LOW_HP = 0.3
 const HINTS = {
 	"charge": "It is winding up a big hit. Guard it for a perfect guard, or break its guard to stop it.",
 	"perfect": "A perfect guard! The foe loses a guard pip, your gauge fills, and your next hit is a sure crit.",
+	"treasure": "An Ore Mole! It does no harm and carries ore. It digs away when its count runs out: fell it first.",
 	"count": "A countdown: when it runs out the blow lands. Finish the foe first, or guard in time.",
 	"danger": "An intent that beats red is a quarter of your HP or more. Guard cuts it by half.",
 	"break": "Its guard is broken: it loses its next action and takes more. Hit hard now.",
@@ -1772,6 +1773,24 @@ func _show(e: Dictionary) -> float:
 				nd2.plate.set_guard(int(e.get("guard", 0)), int(nd2.unit.get("guard_max", 0)))
 				_snd("chip", 1.0, 0.05)
 			return 0.12
+		"flee":
+			# A foe leaves the fight (the Ore Mole digs away): gone, not felled.
+			var who6 = str(e.get("dst", ""))
+			var nd6 = _foes.get(who6)
+			if nd6 != null:
+				nd6.unit["alive"] = false
+				nd6.unit["intent"] = {}
+				nd6.plate.set_intent({})
+				nd6.plate.set_down(true)
+				nd6.view.set_marked(false)
+				nd6.hit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				_fx("dust", _feet(who6), Pal.MUTED, 0.5)
+				_fx("poof", _mid(who6), Pal.MUTED, 0.5)
+				nd6.view.faint()
+				_status_fx()
+			_snd("miss", 0.8)
+			_say("%s digs away, ore and all." % _name(who6))
+			return 0.6
 		"perfect":
 			# A perfect guard: the Guard took a charged blow. The foe reels and its guard cracks.
 			var who5 = str(e.get("src", ""))
@@ -2040,6 +2059,15 @@ func _show_act(e: Dictionary) -> float:
 				Kit.pop(nd.view, 1.08, 0.2)
 			return 0.5
 		"count":
+			if _is_mole(who):
+				# The Ore Mole digs: no blow is coming, it is leaving.
+				_act_head = "%s digs deeper" % nm
+				_say(_act_head + ". Fell it before it is gone!")
+				_fx("dust", _feet(who), Pal.MUTED, 0.4)
+				_fx("sparkle", _mid(who), Pal.ACCENT, 0.6, {"n": 6, "half": 16.0})
+				_snd("count")
+				_teach("treasure")
+				return 0.4
 			_act_head = "%s counts down" % nm
 			_fx("ring", _mid(who), Pal.ACCENT2, 0.4)
 			_snd("count")
@@ -2337,6 +2365,12 @@ func _show_break(dst: String) -> float:
 	return 0.6
 
 
+## Is this unit the Ore Mole (the treasure foe a battle may bring along)?
+func _is_mole(id: String) -> bool:
+	var nd = _foes.get(id)
+	return nd != null and str(nd.unit.get("foe", "")) == RpgDefs.TREASURE_FOE
+
+
 func _show_ko(dst: String) -> float:
 	if dst == "hero":
 		_end_pose = "hurt"
@@ -2366,6 +2400,11 @@ func _show_ko(dst: String) -> float:
 	nd.view.faint()
 	_status_fx()
 	var big = bool(nd.unit.get("boss", false)) or bool(nd.unit.get("elite", false))
+	if str(nd.unit.get("foe", "")) == RpgDefs.TREASURE_FOE:
+		# The mole is caught: its ore spills.
+		_word(dst, "ORE!", Pal.ACCENT, 2, 0.1)
+		_fx("sparkle", _mid(dst), Pal.ACCENT, 0.9, {"n": 14, "half": 24.0})
+		_snd("loot", 1.0, 0.0)
 	_fx("poof", _mid(dst), Pal.MUTED, 0.6, {"delay": 0.18})
 	_fx("sparkle", _mid(dst), Pal.ACCENT, 0.7, {"delay": 0.25, "n": 8 if big else 5})
 	_snd("ko", 0.8 if big else 1.0, 0.05)

@@ -1638,7 +1638,7 @@ static var _tex = {} # "id|frame|silhouette|dim" -> ImageTexture
 
 ## True for a foe with a look of its own (the weekly rival's monsters too).
 static func has(foe_id: String) -> bool:
-	if LOOKS.has(foe_id):
+	if LOOKS.has(foe_id) or EXTRA_LOOKS.has(foe_id):
 		return true
 	return is_rival(foe_id) and BossSprites.boss_looks().has(foe_id)
 
@@ -1648,8 +1648,15 @@ static func is_rival(foe_id: String) -> bool:
 	return foe_id.begins_with("wk_")
 
 
+## Looks of foes that are not in the catalog (RpgFoes): the Ore Mole a battle brings along.
+const EXTRA_LOOKS = {
+	"ore_mole": {"sprite": "rat", "palette": {"a": "#e8b93a", "b": "#a8741c", "c": "#fff0a8", "p": "#f2c9a0", "k": K, "w": "#ffffff"}, "hover": false},
+}
+
 ## The look of a foe: {sprite, palette, hover}. An unknown id gets the plain blob.
 static func look(foe_id: String) -> Dictionary:
+	if EXTRA_LOOKS.has(foe_id):
+		return EXTRA_LOOKS[foe_id]
 	return LOOKS.get(foe_id, DEFAULT_LOOK)
 
 

@@ -374,6 +374,10 @@ func _loot(rw: Dictionary) -> Control:
 		sec.add(flow)
 		flow.set_meta("br_rare", false)
 		_loot_rows.append(flow)
+	if int(rw.get("treasure", 0)) > 0:
+		var mole_row = _loot_row("ore" if Icons.has_icon("ore") else "star", "Ore Mole caught", "+%s ore, in the total above" % Xp.fmt_int(int(rw.treasure)))
+		mole_row.set_meta("br_treasure", int(rw.treasure))
+		sec.add(mole_row)
 	var items = rw.get("items") if rw.get("items") is Array else []
 	for it in items:
 		if not (it is Dictionary):

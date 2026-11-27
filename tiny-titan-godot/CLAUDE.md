@@ -1871,6 +1871,17 @@ is the Windows handoff.
       first win (`rewards.streak`), `RpgSave.finish` keeps it. The hunt's row has an "N days" tag (meta
       `map_hunt_streak`), its sheet a line (meta `prep_streak`); the feat Tracker reads `best`. A day
       missed costs only the bonus.
+    - THE ORE MOLE (2026-11-27, gameplay; RPG_PLAN.md 8.4): a treasure foe that stands with a plain pack about
+      one fight in eight (`RpgDefs.TREASURE_CHANCE` 0.12, by the battle's seed: `RpgWorld.treasure_entry`; never
+      in r1s1, an elite's or a boss's fight, the hunt, the rival, the Spire, or where the first wave is full).
+      It does no harm: its one move counts down (`TREASURE_TURNS` 4) and then it is gone (the new effect
+      `flee`: the foe leaves, not felled, event `flee {dst}`, no kill counted). Felled first, the win pays
+      `RpgDefs.treasure_ore(n)` (`summary.treasure` -> `rewards.treasure`, a line in the result's loot, meta
+      `br_treasure`). It is NOT a foe of the catalog (the 56 stay 56): `RpgWorld.setup` brings its foe row and
+      move row along as `custom` (`treasure_rows`), its two weak schools are shown from the start, and its
+      look is `FoeSprites.EXTRA_LOOKS` (the rat's shape in gold). The fight: `BattleView._is_mole`, the hint
+      "treasure", "ORE!" when it is caught, "digs away, ore and all" when it is not. The simulator's fights
+      have none. Walkthrough `tests/shots/mole.gd` (year data).
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

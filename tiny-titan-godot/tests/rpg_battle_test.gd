@@ -2321,7 +2321,7 @@ func fx_samples() -> Dictionary:
 		"heal": {"k": "heal", "pct": 0.2}, "shield": {"k": "shield", "pct": 0.25}, "energy": {"k": "energy", "n": 2}, "gauge": {"k": "gauge", "n": 10},
 		"delay": {"k": "delay", "pct": 0.4}, "cleanse": {"k": "cleanse", "n": 0}, "dispel": {"k": "dispel", "n": 1}, "interrupt": {"k": "interrupt"},
 		"cd_cut": {"k": "cd_cut", "n": 1}, "hp_cost": {"k": "hp_cost", "pct": 0.2}, "lifesteal": {"k": "lifesteal", "pct": 0.5}, "refund": {"k": "refund", "n": 2},
-		"extra_turn": {"k": "extra_turn"}, "chip": {"k": "chip", "n": 1}, "when": {"k": "when", "hp_below": 0.4, "do": {"k": "heal", "pct": 0.15}}, "self_ko": {"k": "self_ko"}}
+		"extra_turn": {"k": "extra_turn"}, "chip": {"k": "chip", "n": 1}, "when": {"k": "when", "hp_below": 0.4, "do": {"k": "heal", "pct": 0.15}}, "self_ko": {"k": "self_ko"}, "flee": {"k": "flee"}}
 
 
 ## A well-formed mod of every kind.
