@@ -274,6 +274,9 @@ func rename_lift(old_name: String, new_name: String) -> Dictionary:
 		if not saved.pt.has(new_key):
 			mark["name"] = want
 			saved.pt[new_key] = mark
+	# Its note for next time goes with it (LiftNotes).
+	if saved.settings.has(LiftNotes.KEY):
+		saved.settings[LiftNotes.KEY] = LiftNotes.renamed(saved.settings, old_name, want)
 	# Reps logged as both sides added up (Sides): the lift stays what it was.
 	var both_marks = Sides.renamed(saved.settings, old_name, want, joined)
 	if not both_marks.is_empty() or saved.settings.has(Sides.KEY):
@@ -704,7 +707,7 @@ func body_by_id(id):
 
 ## What the missions read from the save (Missions.daily / weekly).
 func mission_data() -> Dictionary:
-	return {"sessions": saved.sessions, "pt": pt(), "settings": saved.settings, "reading": reading(), "now": today}
+	return {"sessions": saved.sessions, "pt": pt(), "settings": saved.settings, "reading": reading(), "now": today, "body": saved.body}
 
 
 ## {"daily": [...], "weekly": [...], "yesterday": [...]} for today (cached until
@@ -725,11 +728,155 @@ func quests() -> Dictionary:
 	return _quests
 
 
+# ---------------------------------------------------------------------------
+# Goals with a date (LiftGoals) and the workout's receipt
+# ---------------------------------------------------------------------------
+
+func goals() -> Array:
+	if not (saved.get("goals") is Array):
+		saved["goals"] = []
+	return saved.goals
+
+
+## Set a goal for a lift: `kg` for `reps` by the day `by`. Returns false when too many are open.
+func add_goal(lift_name: String, kg: float, reps: int, by: String) -> bool:
+	if lift_name.strip_edges() == "" or kg <= 0.0:
+		return false
+	if goals().filter(func(g): return str(g.get("done", "")) == "").size() >= LiftGoals.MAX_OPEN:
+		return false
+	goals().append(LiftGoals.make(lift_name, kg, reps, by, saved.sessions, today, Rng.uid("g")))
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+	return true
+
+
+func remove_goal(id: String) -> void:
+	var before = goals().size()
+	saved.goals = goals().filter(func(g): return str(g.id) != id)
+	if saved.goals.size() != before:
+		saved.updatedAt = now_ms()
+		_write()
+		changed.emit()
+
+
+## Goals the log has just reached: marked done, and a card each for the reel.
+func _goal_events() -> Array:
+	var out = []
+	for pair in LiftGoals.newly_done(goals(), saved.sessions):
+		var g = saved.goals[int(pair[0])]
+		g["done"] = str(pair[1])
+		out.append({"type": "goal", "id": str(g.id), "lift": str(g.lift), "kg": float(g.kg), "reps": int(g.reps), "by": str(g.by), "at": str(g.at), "done": str(pair[1])})
+	if not out.is_empty():
+		_write()
+	return out
+
+
+## The receipt of one lift workout, for the end of the results reel: what each muscle got today and where
+## its week stands, the sets, the weight moved and the records. null for a workout of no strength sets.
+func receipt_of(s: Dictionary, events: Array):
+	var marks = pt()
+	var today_w = Dose.window([s], marks, saved.settings, str(s.date), 1)
+	var week_w = Dose.window(saved.sessions, marks, saved.settings, str(s.date))
+	var parts = []
+	for p in Dose.PARTS:
+		var got = float(today_w.parts[p].total)
+		if got < 0.5:
+			continue
+		var wk = week_w.parts[p]
+		parts.append({"part": p, "name": Dose.part_name(p), "today": got, "week": float(wk.total), "min": float(wk.min), "max": float(wk.max), "mode": str(wk.mode), "state": str(wk.state)})
+	if parts.is_empty():
+		return null
+	parts.sort_custom(func(a, b): return float(a.today) > float(b.today))
+	var sets = 0
+	var vol = 0.0
+	for ex in s.get("exercises", []):
+		var real = LiftTrend.real_sets(ex.get("sets", []))
+		if Dosage.is_mobility(ex, marks):
+			continue
+		sets += real.size()
+		for one in real:
+			vol += float(one.get("weightKg", 0)) * int(one.reps)
+	var prs = events.filter(func(e): return str(e.type) == "pr").size()
+	return {"type": "receipt", "sessionId": str(s.id), "date": str(s.date), "parts": parts, "sets": sets, "volKg": vol, "prs": prs,
+		"durationSec": int(s.get("durationSec", 0)), "heat": Recovery.heat([s], str(s.date))}
+
+
+## Swap a daily mission for another one (Missions.rerolled): once a day.
+func reroll_mission(id: String) -> bool:
+	var rr = saved.settings.get(Missions.REROLLS, {})
+	if rr is Dictionary and rr.has(today):
+		return false
+	saved.settings[Missions.REROLLS] = Missions.with_reroll(saved.settings, today, id)
+	saved.updatedAt = now_ms()
+	_write()
+	_quests = null
+	changed.emit()
+	return true
+
+
+## Is today's swap still there to use?
+func reroll_left() -> bool:
+	var rr = saved.settings.get(Missions.REROLLS, {})
+	return not (rr is Dictionary and rr.has(today))
+
+
 ## What the player will probably do today (Missions.day_plan; cached).
 func plan() -> Dictionary:
 	if _plan == null:
 		_plan = Missions.day_plan(saved.sessions, today, pt(), saved.settings)
 	return _plan
+
+
+var _aim_stats = null
+var _aim_stats_at = -1.0
+
+## A lift's note for next time (LiftNotes), "" when it has none.
+func lift_note(lift_name: String) -> String:
+	return LiftNotes.of(saved.settings, lift_name)
+
+
+## Store a lift's note ("" takes it off). Nothing is worked out again.
+func set_lift_note(lift_name: String, text: String) -> void:
+	if LiftNotes.key(lift_name) == "" or LiftNotes.of(saved.settings, lift_name) == text.strip_edges():
+		return
+	saved.settings[LiftNotes.KEY] = LiftNotes.with_note(saved.settings, lift_name, text, today)
+	saved.updatedAt = now_ms()
+	_write()
+	changed.emit()
+
+
+## What to aim for on a lift today: {"cap", "sets", "kind"} or null. A lift of the day's plan (or a way of
+## doing one) gets the plan's aim (its sets carry the plan's tags: both sides, heavy / light day); any other
+## lift with a history one step past its last time.
+func aim_for(lift_name: String, both: bool = false):
+	var k = Xp.normalize_exercise(lift_name)
+	if k == "":
+		return null
+	var step = Missions._step_kg(weight_unit())
+	var p = plan()
+	for l in p.get("lifts", []):
+		if bool(l.get("pt", false)):
+			continue
+		for o in l.get("options", []):
+			if Xp.normalize_exercise(str(o.name)) == k and not bool(o.get("new", false)) and not (o.get("last", []) as Array).is_empty():
+				var t = LiftTrend.next_target(o.last, step)
+				if str(t.kind) == "none":
+					return null
+				return {"cap": LiftTrend.aim_cap(t), "sets": t.sets, "kind": str(t.kind)}
+	if _aim_stats == null or _aim_stats_at != saved.updatedAt:
+		_aim_stats = LiftLibrary.stats(saved.sessions)
+		_aim_stats_at = saved.updatedAt
+	var hist = _aim_stats.get(k)
+	if hist == null or (hist.history as Array).is_empty():
+		return null
+	var sets = hist.history[0].sets
+	if both or Sides.both(saved.settings, lift_name):
+		sets = Sides.tag_sets(sets, 2)
+	var t2 = LiftTrend.next_target(sets, step)
+	if str(t2.kind) == "none":
+		return null
+	return {"cap": LiftTrend.aim_cap(t2), "sets": t2.sets, "kind": str(t2.kind)}
 
 
 ## The next days as they will probably go (Missions.ahead; cached). Read only:
@@ -907,6 +1054,11 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	events = _with_extras(events, Diff.diff_extras(before, state, fresh[0].discipline if fresh.size() == 1 else null, settings()))
 	events = _with_extras(events, _project_events(fresh))
 	events = _with_extras(events, _split_events(fresh))
+	events = _with_extras(events, _goal_events())
+	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
+		var rc = receipt_of(fresh[0], events)
+		if rc != null:
+			events = _with_extras(events, [rc])
 	var ids = []
 	for s in fresh:
 		ids.append(s.id)
@@ -1010,7 +1162,7 @@ func _with_extras(events: Array, extras: Array) -> Array:
 		if ["xp", "import", "bodyxp", "boss"].has(out[i].type):
 			at = i + 1
 	for e in extras:
-		if e.type == "bounty" or e.type == "pr" or e.type == "project":
+		if e.type == "bounty" or e.type == "pr" or e.type == "project" or e.type == "goal":
 			out.insert(at, e)
 			at += 1
 		else:
@@ -1528,6 +1680,7 @@ static func empty_saved() -> Dictionary:
 		"projects": [],
 		"todos": [],
 		"books": [],
+		"goals": [],
 		"rpg": RpgSave.empty(),
 	}
 
@@ -1561,6 +1714,7 @@ static func parse_saved(raw):
 	out.projects = Projects.parse(o.get("projects"))
 	out.todos = Todos.parse(o.get("todos"))
 	out.books = Books.parse(o.get("books"))
+	out["goals"] = LiftGoals.parse(o.get("goals"))
 	out.rpg = RpgSave.parse(o.get("rpg"))
 	if o.get("loadout") is Dictionary:
 		out.loadout = o.loadout.duplicate(true)

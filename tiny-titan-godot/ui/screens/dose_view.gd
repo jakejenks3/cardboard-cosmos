@@ -173,6 +173,11 @@ static func open() -> void:
 	var sh = Kit.sheet("Weekly sets")
 	sh.box.add_child(Kit.label(str(plan.name), 16, Pal.LIFT, true))
 	sh.box.add_child(Kit.para(str(plan.blurb) + " Sets of the last 7 days against what each muscle needs in a week, and the lifts they came from.", 12, Pal.MUTED))
+	var sr = TrackingViews.streak_row()
+	if sr != null:
+		sh.box.add_child(sr)
+	sh.box.add_child(Kit.section_title("The last 8 weeks"))
+	sh.box.add_child(TrackingViews.weekly_block())
 	for mode in ["build", "keep"]:
 		var parts = Dose.PARTS.filter(func(p): return str(w.parts[p].mode) == mode)
 		if parts.is_empty():

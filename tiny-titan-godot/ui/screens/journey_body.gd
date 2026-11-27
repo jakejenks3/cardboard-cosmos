@@ -31,6 +31,10 @@ static func build(parent: Control, st: Dictionary, rebuild: Callable) -> void:
 
 	# --- the weight as the big number, the change since the start as a chip ----------
 	parent.add_child(_summary(App.state.body, wu))
+	# The trend: a 7-day average, the change a week, the main lifts meanwhile (TrainingReport.body_trend).
+	var trend_card = TrackingViews.body_card()
+	if trend_card != null:
+		parent.add_child(trend_card)
 
 	# --- then & now photos ----------------------------------------------------------------
 	if not with_photos.is_empty():

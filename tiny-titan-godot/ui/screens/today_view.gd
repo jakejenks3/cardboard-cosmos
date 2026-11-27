@@ -346,8 +346,8 @@ static func aim_words(l: Dictionary, main: Dictionary, wu: String, got: int = 0)
 	if bool(main.new):
 		return {"cap": "FIRST TIME", "said": "Find your weight", "col": Pal.SECOND}
 	# (reps logged as both sides added up: the aim is that total too)
-	return {"cap": "AIM · %s" % Sides.SHORT if int(main.get("sides", 1)) > 1 else "AIM",
-		"said": LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w), "col": Pal.ACCENT}
+	var t = LiftTrend.next_target(main.last, _step_kg(wu))
+	return {"cap": LiftTrend.aim_cap(t), "said": LiftHistory.describe_sets(t.sets, fmt_w), "col": Pal.ACCENT}
 
 
 ## How a lift done TODAY went, against the same lift (movement AND variation) before today:
@@ -518,9 +518,13 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 			var tail = "new to you"
 			if not bool(o.new) and o_last is Array and not o_last.is_empty():
 				tail = "aim " + LiftHistory.describe_sets(LiftTrend.next_target(o_last, _step_kg(wu)).sets, fmt_w)
-			var b = Kit.option_chip("%s · %s" % [word, tail], Pal.SECOND if bool(o.new) else null, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), 12)
+			# Done the same way many times in a row: this way is offered as a change (Missions._mark_rotation).
+			var rot = str(l.get("rotate", "")) == str(o.name)
+			var b = Kit.option_chip(("TRY A CHANGE · " if rot else "") + "%s · %s" % [word, tail], Pal.ACCENT2 if rot else (Pal.SECOND if bool(o.new) else null), JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), 12)
 			b.tooltip_text = ("New to you: " if bool(o.new) else "") + Missions.short_name(str(o.name))
 			b.set_meta("lift_option", str(o.name))
+			if rot:
+				b.set_meta("rotate_option", str(o.name))
 			flow.add_child(b)
 		ways.add_child(flow)
 		c.add(ways)

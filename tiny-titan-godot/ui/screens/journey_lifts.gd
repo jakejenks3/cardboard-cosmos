@@ -538,6 +538,15 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 	box.add_child(sides_holder)
 	_sides_block(sides_holder, lift, ctx, sides_tag)
 
+	# A goal with a date for this lift (LiftGoals): redrawn in place when one is set or taken off.
+	var goal_holder = Kit.vbox(0)
+	goal_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(goal_holder)
+	var fill_goal = func(me):
+		Kit.clear(goal_holder)
+		goal_holder.add_child(TrackingViews.goal_block(lift, func(): me.call(me)))
+	fill_goal.call(fill_goal)
+
 	if not e.own:
 		box.add_child(Kit.section_title("How to do it"))
 		box.add_child(Kit.para(e.tip, 14))

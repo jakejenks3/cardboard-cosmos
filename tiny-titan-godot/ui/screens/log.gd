@@ -111,14 +111,19 @@ func build() -> void:
 
 
 func _build_picker() -> void:
-	add_child(Kit.section_title("Log a workout"))
+	# (2026-11-27: the same sections as the Hero tab, a band in the section's colour across the top)
+	add_theme_constant_override("separation", 18)
+	var main = Kit.section("log_workout", "LOG A WORKOUT", "log", Pal.tab("log"), null, Callable(), 10, 10)
 	var grid = Kit.grid(Misc.MAIN.size(), 10)
 	for d in Misc.MAIN:
 		grid.add_child(_picker_tile(d))
-	add_child(grid)
-	add_child(_body_tile())
+	main.add(grid)
+	add_child(main)
+	var daily = Kit.section("log_daily", "EVERY DAY", "calendar", Pal.ACCENT2, null, Callable(), 8, 10)
+	daily.add(_body_tile())
 	# Reading is not a workout: its key opens the reading sheet (game/reading.gd).
-	add_child(_reading_tile())
+	daily.add(_reading_tile())
+	add_child(daily)
 	# What of the day's plan is still to do (LogPlanCard.picker): a tap opens
 	# the lift form with that lift in the workout. Under the keys used every
 	# day, which stay where they were, and above what is done now and then.
@@ -128,7 +133,7 @@ func _build_picker() -> void:
 	# Miscellaneous: what is done now and then, in small keys at the end.
 	# Cycling (Misc.SIDE) and the activities outside the four disciplines
 	# (game/misc.gd: a weighted vest walk).
-	var mhead = Kit.section_title("Miscellaneous")
+	var mhead = Kit.section("log_misc", "MISCELLANEOUS", "misc", Pal.MISC, null, Callable(), 8, 10)
 	mhead.set_meta("misc_section", true)
 	add_child(mhead)
 	var misc = Kit.grid(2, 10)
@@ -138,7 +143,7 @@ func _build_picker() -> void:
 		misc.add_child(st)
 	for k in Misc.ORDER:
 		misc.add_child(_misc_tile(k))
-	add_child(misc)
+	mhead.add(misc)
 	# Workouts jotted in the phone note (app/inbox.gd): the PC reads the note (a
 	# browser cannot fetch a Google Doc), so the phone app has no such key.
 	if not OS.has_feature("web"):

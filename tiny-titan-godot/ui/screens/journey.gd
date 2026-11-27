@@ -353,11 +353,9 @@ func _build_stats() -> void:
 	_then_now()
 
 	# --- recaps: a week or a month as one poster --------------------------------------
-	var rc = Kit.card(6, Callable(), 10)
-	rc.accent(Pal.tab_accent())
+	var rc = Kit.section("recaps", "RECAPS", "calendar", Pal.tab("journey"), null, Callable(), 6, 10)
 	var rrow = Kit.hbox(8)
-	rrow.add_child(Kit.vcenter(Icons.rect("calendar", 26)))
-	var rl = Kit.label("Recaps", 15, null, true)
+	var rl = Kit.para("A week or a month as one poster.", 12, Pal.MUTED)
 	rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rrow.add_child(Kit.vcenter(rl))
 	rrow.add_child(Kit.button("This week", "secondary", RecapSheet.open.bind("week", Dates.week_key(App.today)), "sm"))
@@ -366,13 +364,10 @@ func _build_stats() -> void:
 	add_child(rc)
 
 	# --- the training dose as text, to paste into a chat (game/dosage.gd) -------------
-	var dc = Kit.card(6, Callable(), 10)
-	dc.accent(Pal.LIFT)
+	var dc = Kit.section("summary", "TRAINING SUMMARY", "log", Pal.LIFT, null, Callable(), 6, 10)
 	var drow = Kit.hbox(8)
-	drow.add_child(Kit.vcenter(Icons.rect("log", 26)))
 	var dv = Kit.vbox(1)
 	dv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dv.add_child(Kit.label("Training summary", 15, null, true))
 	dv.add_child(Kit.para("Your weekly sets per muscle, lifts, climbs and runs as text, to paste into a chat with a coach or an AI.", 11, Pal.MUTED))
 	drow.add_child(dv)
 	var dkey = Kit.button("Copy", "secondary", _copy_dosage, "sm")
@@ -399,14 +394,20 @@ func _build_stats() -> void:
 		tiles.append(num_tile(x[0], x[1], x[2], x[3], sc, x[4]))
 	add_child(_tiles(tiles))
 
+	# --- weekly sets over 8 weeks, the streak on target, the lift report ----------------
+	var wsec = TrackingViews.weekly_card()
+	if wsec != null:
+		add_child(wsec)
+	var rsec = TrackingViews.report_card()
+	if rsec != null:
+		add_child(rsec)
+
 	# --- charts ---------------------------------------------------------------------
-	add_child(Kit.section_title("Weekly XP"))
-	var wcard = Kit.card()
+	var wcard = Kit.section("weekly_xp", "WEEKLY XP", "star", Pal.ACCENT, null, Callable(), 6, 10)
 	wcard.add(Charts.weekly_xp(_weekly_points(sessions, s)))
 	add_child(wcard)
 
-	add_child(Kit.section_title("Consistency"))
-	var hcard = Kit.card()
+	var hcard = Kit.section("consistency", "CONSISTENCY", "calendar", Pal.GOOD, null, Callable(), 6, 10)
 	hcard.add(Charts.heatmap(s.xpByDate, App.today))
 	add_child(hcard)
 

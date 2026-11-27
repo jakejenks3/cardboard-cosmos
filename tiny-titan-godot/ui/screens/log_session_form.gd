@@ -57,6 +57,8 @@ const LOAD_PICKS = {"lb": [10, 20, 30, 40], "kg": [5, 10, 15, 20]}
 var last_same = null
 ## The form came back from the kept draft (the app was closed mid-workout).
 var restored: bool = false
+## The player answered the unticked sets question for this save.
+var _ticks_ok: bool = false
 var _draft_text: String = ""
 ## The player said the lifts still as planned were done as shown.
 var _planned_ok: bool = false
@@ -166,6 +168,8 @@ func _take_draft() -> void:
 						row["hold"] = str(s.hold)
 					if str(s.get("band", "")) != "":
 						row["band"] = str(s.band)
+					if bool(s.get("done", false)):
+						row["done"] = true
 					sets.append(row)
 			var one = {"name": str(e.get("name", "")), "bodyweight": bool(e.get("bodyweight", false)), "timed": bool(e.get("timed", false)), "sets": sets}
 			if bool(e.get("planned", false)):
@@ -176,6 +180,10 @@ func _take_draft() -> void:
 			for k in ["both", "pt"]:
 				if e.get(k) is bool:
 					one[k] = bool(e[k])
+			if str(e.get("effort", "")) != "":
+				one["effort"] = str(e.effort)
+			if e.get("ss") != null:
+				one["ss"] = int(e.ss)
 			lift.exercises.append(one)
 	for c in cl:
 		if c is Dictionary and c.has("grade") and c.has("count"):
@@ -193,13 +201,14 @@ func _take_draft() -> void:
 	title = str(d.get("title", ""))
 	notes = str(d.get("notes", ""))
 	show_extra = title != "" or notes != ""
+	lift.started = float(d.get("started", 0.0))
 	restored = true
 	_draft_text = JSON.stringify(_draft_dict())
 
 
 func _draft_dict() -> Dictionary:
 	return {"day": App.today, "wu": wu, "date": date, "dh": dh, "dm": dm, "ds": ds, "title": title, "notes": notes,
-		"exercises": lift.exercises, "climbs": climbs, "hangs": hangs, "scale": scale}
+		"exercises": lift.exercises, "climbs": climbs, "hangs": hangs, "scale": scale, "started": lift.started}
 
 
 ## Write the draft when it changed (called from refresh, so after every change).
@@ -252,6 +261,8 @@ func draft() -> Dictionary:
 	if notes.strip_edges() != "":
 		s["notes"] = notes.strip_edges()
 	var sec = duration_sec()
+	if sec <= 0 and discipline == "lift":
+		sec = auto_duration()
 	if sec > 0:
 		s["durationSec"] = sec
 	if editing != null:
@@ -1219,6 +1230,11 @@ func save() -> void:
 		return
 	# Lifts filled in from the day's plan and never touched: done as shown, or
 	# skipped? Asked once, so a skipped lift is not logged by accident.
+	# Sets left unticked in lifts that were being ticked off as they went: done, or not?
+	var untick = lift.unticked_count() if discipline == "lift" and not _ticks_ok else 0
+	if untick > 0:
+		_ask_unticked(untick)
+		return
 	var left = lift.planned_names() if discipline == "lift" and not _planned_ok else []
 	if not left.is_empty():
 		var shown = []
@@ -1246,6 +1262,40 @@ func save() -> void:
 func _save_planned() -> void:
 	_planned_ok = true
 	save()
+
+
+## The workout's time when none is typed: from the first ticked set until now, for a new workout of today
+## (between AUTO_MIN and AUTO_MAX; else 0).
+const AUTO_MIN = 5 * 60
+const AUTO_MAX = 5 * 3600
+
+func auto_duration() -> int:
+	if editing != null or discipline != "lift" or lift == null or lift.started <= 0.0 or date != App.today:
+		return 0
+	var sec = int(Time.get_unix_time_from_system() - lift.started)
+	return sec if sec >= AUTO_MIN and sec <= AUTO_MAX else 0
+
+
+func _ask_unticked(n: int) -> void:
+	var s = Kit.sheet("Sets not ticked")
+	s.set_meta("unticked_sheet", n)
+	s.box.add_child(Kit.muted_para("%d set%s with reps %s no tick, in lifts you were ticking off. Were they done?" % [n, "" if n == 1 else "s", "has" if n == 1 else "have"], 14))
+	var all = Kit.button("Yes, save them too", "primary", func():
+		s.close()
+		_ticks_ok = true
+		save())
+	all.set_meta("unticked_key", "all")
+	s.box.add_child(all)
+	var only = Kit.button("No, leave them out", "ghost", func():
+		s.close()
+		lift.drop_unticked()
+		_ticks_ok = true
+		save())
+	only.set_meta("unticked_key", "only")
+	s.box.add_child(only)
+	var back = Kit.button("Go back", "ghost", s.close)
+	s.box.add_child(back)
+	s.open()
 
 
 func remove() -> void:

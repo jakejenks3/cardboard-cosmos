@@ -615,6 +615,10 @@ static func next_target(sets: Array, step_kg: float) -> Dictionary:
 		most = maxi(most, int(real[i].reps))
 		if int(real[i].reps) < int(real[least_i].reps):
 			least_i = i
+	# A heavy or a light day (sets tagged by the day's plan: Missions._tag_ranges).
+	var rng = str(real[0].get("range", ""))
+	if rng != "" and top > 0.0 and RANGES.has(rng):
+		return _range_target(real, aim, out, work, top, sides, rng, step_kg)
 	if top > 0.0 and int(real[least_i].reps) >= HIGH_REPS * sides:
 		for i in work:
 			aim[i].weightKg = top + step_kg
@@ -639,6 +643,108 @@ static func next_target(sets: Array, step_kg: float) -> Dictionary:
 	out.reps = int(aim[least_i].reps)
 	out.sets = aim
 	return out
+
+
+## Heavy and light days (2026-11-27, the user's "build all": rotating rep ranges). A lift of a muscle being
+## built goes from one to the other each time it is done (next_range): its working sets aim for these reps
+## (a side, for both sides added up). The day's plan tags the sets it plans with "range" (copies, never the
+## log), and next_target then aims inside that range: last time in the same range, one more rep on the
+## weakest set until all reach the top, then a step heavier back at the bottom; last time in the other range,
+## the weight that the best set's estimated one-rep max gives for the bottom of this range.
+const RANGES = {"heavy": [6, 8], "light": [10, 12]}
+const RANGE_NAMES = {"heavy": "Heavy day", "light": "Light day"}
+
+
+## The range for next time, from the last time's sets: after reps of 9 or fewer a side, light; else heavy.
+static func next_range(sets: Array) -> String:
+	var real = real_sets(sets)
+	if real.is_empty():
+		return ""
+	var sides = Sides.of_sets(real)
+	var top = 0.0
+	for one in real:
+		top = maxf(top, float(one.get("weightKg", 0)))
+	if top <= 0.0 or real.any(func(one): return Bands.is_band(one) or is_hold(one)):
+		return ""
+	var sum = 0.0
+	var n = 0
+	for one in real:
+		if absf(float(one.get("weightKg", 0)) - top) <= 1e-6:
+			sum += float(one.reps) / float(sides)
+			n += 1
+	return "light" if sum / float(maxi(1, n)) < 9.5 else "heavy"
+
+
+## Copies of `sets` that say which range they are planned for ("" takes it off).
+static func tag_range(sets: Array, rng: String) -> Array:
+	var out = []
+	for one in sets:
+		if not (one is Dictionary):
+			out.append(one)
+			continue
+		var c = one.duplicate()
+		if rng != "":
+			c["range"] = rng
+		else:
+			c.erase("range")
+		out.append(c)
+	return out
+
+
+static func _range_target(real: Array, aim: Array, out: Dictionary, work: Array, top: float, sides: int, rng: String, step_kg: float) -> Dictionary:
+	var lo = int(RANGES[rng][0]) * sides
+	var hi = int(RANGES[rng][1]) * sides
+	out["range"] = rng
+	out["lo"] = lo
+	out["hi"] = hi
+	var least_i = work[0]
+	var sum = 0.0
+	for i in work:
+		sum += float(real[i].reps)
+		if int(real[i].reps) < int(real[least_i].reps):
+			least_i = i
+	var avg = sum / float(work.size())
+	if avg >= float(lo) - 0.5 and avg <= float(hi) + 0.5:
+		if int(real[least_i].reps) >= hi:
+			for i in work:
+				aim[i].weightKg = top + step_kg
+				aim[i].reps = lo
+			out.kind = "weight"
+			out.addKg = step_kg
+			out.reps = lo
+		else:
+			aim[least_i].reps = maxi(lo, int(aim[least_i].reps) + 1)
+			out.kind = "reps"
+			out.set = least_i + 1
+			out.reps = int(aim[least_i].reps)
+		out.sets = aim
+		return out
+	var best = 0.0
+	for i in work:
+		best = maxf(best, Xp.e1rm(top, float(real[i].reps) / float(sides)))
+	var w = best / (1.0 + float(lo / sides) / 30.0)
+	if step_kg > 0.0:
+		w = floor(w / step_kg + 1e-6) * step_kg
+	if w <= 0.0:
+		w = top
+	for i in work:
+		aim[i].weightKg = w
+		aim[i].reps = lo
+	out.kind = "weight" if w > top + 1e-6 else "reps"
+	out.addKg = w - top
+	out.reps = lo
+	out["switch"] = true
+	out.sets = aim
+	return out
+
+
+## The words over an aim: "AIM", "AIM · L+R", "HEAVY DAY · 6-8", "LIGHT DAY · 10-12".
+static func aim_cap(t: Dictionary) -> String:
+	var rng = str(t.get("range", ""))
+	if rng != "":
+		var sides = int(t.get("sides", 1))
+		return "%s · %d-%d%s" % [str(RANGE_NAMES[rng]).to_upper(), int(RANGES[rng][0]), int(RANGES[rng][1]), " A SIDE" if sides > 1 else ""]
+	return "AIM · %s" % Sides.SHORT if int(t.get("sides", 1)) > 1 else "AIM"
 
 
 ## A band's reps on every working set before it is time for the next band up

@@ -135,11 +135,11 @@ static func lift_rows(data: Dictionary, opts: Dictionary = {}) -> Control:
 			for d in days.slice(maxi(0, days.size() - 7)):
 				spark.append(LiftTrend.main_value(d, in_band))
 			spark.append(LiftTrend.main_value(LiftTrend.day(sets), in_band))
-		box.add_child(_lift_row(lift, sets, cmp, bool(ex.get("pt", false)) or Pt.is_pt(marks, lift), wu, page, spark))
+		box.add_child(_lift_row(lift, sets, cmp, bool(ex.get("pt", false)) or Pt.is_pt(marks, lift), wu, page, spark, str(ex.get("effort", "")), str(ex.get("superset", ""))))
 	return box
 
 
-static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: String, page: Dictionary, spark: Array = []) -> Card:
+static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: String, page: Dictionary, spark: Array = [], effort: String = "", superset: String = "") -> Card:
 	var c = Kit.card(0, JourneyLifts.open_named.bind(lift, page), 7)
 	c.tooltip_text = "Trends and history of %s" % lift
 	var row = Kit.hbox(8)
@@ -155,6 +155,16 @@ static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: 
 		top.add_child(variation_tag(str(sp.variation), 10, true))
 	if pt:
 		top.add_child(Kit.vcenter(pt_tag()))
+	# How hard it was and its superset, as marked in the Log tab (LogLiftMenu): shown only.
+	if superset != "":
+		var sst = Kit.tag("SS " + superset, Pal.SECOND, true, 10)
+		sst.tooltip_text = "Done as a superset"
+		sst.set_meta("session_superset", superset)
+		top.add_child(Kit.vcenter(sst))
+	if effort != "":
+		var eft = Kit.tag(LogLiftMenu.effort_word(effort).to_upper(), LogLiftMenu.effort_color(effort), true, 10)
+		eft.set_meta("session_effort", effort)
+		top.add_child(Kit.vcenter(eft))
 	words.add_child(top)
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var said = Kit.clip(LiftHistory.describe_sets(sets, fmt_w), 12, Pal.MUTED)

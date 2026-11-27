@@ -52,6 +52,12 @@ var _chips: HFlowContainer = null
 var _no_match: Label = null
 var _add_btn: Button = null
 var _building: bool = false
+## When the first set of this workout was ticked (unix seconds; 0 = none yet): the workout's time is taken from
+## it when no time is typed (LogSessionForm.auto_duration). Kept in the draft.
+var started: float = 0.0
+var _plates: Array = []  # [exercise] -> Label: what goes on the bar (barbell lifts)
+## The superset label of each exercise ("A1", "A2", "B1"... or ""), worked out on every build.
+var _labels: Array = []
 
 
 func _init(owner_form, edit_id = null) -> void:
@@ -137,7 +143,9 @@ func _touched(i: int) -> void:
 ## The exercises as they will be saved: named, with at least one real set.
 func session_exercises() -> Array:
 	var out = []
-	for e in exercises:
+	var labels = _group_labels()
+	for ei in range(exercises.size()):
+		var e = exercises[ei]
 		var nm = str(e.name).strip_edges()
 		var sets = sets_from_draft(e, wu)
 		if nm != "" and not sets.is_empty():
@@ -146,6 +154,12 @@ func session_exercises() -> Array:
 			# lift and takes the flag off again.
 			if e.has("both"):
 				one["bothSides"] = bool(e.both)
+			# How hard it was (LogLiftMenu) and the superset it was in ("A", "B"...): shown only.
+			if str(e.get("effort", "")) != "":
+				one["effort"] = str(e.effort)
+			var gl = str(labels[ei])
+			if gl != "":
+				one["superset"] = gl.substr(0, 1)
 			# The PT key was touched: App.absorb_pt marks the lift, or takes its
 			# mark off, and drops the flag. Off also takes a typed "(PT)" off.
 			if e.get("pt") is bool:
@@ -241,7 +255,11 @@ func build(parent: Control) -> void:
 				tv.add_child(tile)
 			parent.add_child(tv)
 
+	_labels = _group_labels()
+	_plates = []
 	for i in range(exercises.size()):
+		if i > 0 and linked_next(i - 1):
+			parent.add_child(_superset_line(i - 1))
 		parent.add_child(_exercise_card(i))
 
 	if plan_card != null and not exercises.is_empty():
@@ -323,14 +341,22 @@ func _exercise_card(i: int) -> Card:
 	_built_names.append(str(e.name).strip_edges())
 	var timed = bool(e.get("timed", false))
 	var c = Kit.card(4, Callable(), 10)
-	# From the day's plan and not touched yet: a quiet edge until it is.
-	c.accent(Pal.LINE if bool(e.get("planned", false)) else Pal.LIFT)
+	# From the day's plan and not touched yet: a quiet edge until it is. Else the colour of the muscle it
+	# works (as on the Today card), green once every set is ticked.
+	c.accent(_edge_color(i))
 	c.set_meta("exercise_card", i)
+	c.set_meta("card_part", str(Missions.part_of(str(e.name))))
 	_cards.append(c)
 
 	# The name and the cross on a line of their own (the user, 2026-11-24, asking for a
 	# PT key: five keys beside it left the name too little room on a phone).
 	var head = Kit.hbox(4)
+	var glabel = str(_labels[i]) if i < _labels.size() else ""
+	if glabel != "":
+		var gt = Kit.tag(glabel, Pal.SECOND, true, 11)
+		gt.set_meta("superset_tag", glabel)
+		gt.tooltip_text = "Superset: done in turn with the lift next to it"
+		head.add_child(Kit.vcenter(gt))
 	var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
 	name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
 	name_edit.set_meta("type_top", true)
@@ -338,6 +364,16 @@ func _exercise_card(i: int) -> Card:
 	name_edit.focus_exited.connect(_on_name_done.bind(i))
 	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
 	head.add_child(name_edit)
+	var eff = str(e.get("effort", ""))
+	if eff != "":
+		var et = Kit.tag(LogLiftMenu.effort_word(eff).to_upper(), LogLiftMenu.effort_color(eff), true, 10)
+		et.set_meta("effort_tag", eff)
+		head.add_child(Kit.vcenter(et))
+	var more = LogWidgets.mini_chip("More", false, LogLiftMenu.open.bind(self, i), Pal.LIFT, 8)
+	# (the text and tooltip never change: the screen finds this lift's key again after a rebuild)
+	more.tooltip_text = "More for %s: swap, superset, note, how hard" % (str(e.name).strip_edges() if str(e.name).strip_edges() != "" else "this exercise")
+	more.set_meta("more_key", i)
+	head.add_child(Kit.vcenter(more))
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
 	# What goes beside the reps, one of four (a pick-one track: every key is always
@@ -409,6 +445,30 @@ func _exercise_card(i: int) -> Card:
 		if has_best:
 			ref.add_child(Kit.label("Best " + _fmt_w(best.weightKg), 12, Pal.ACCENT, true))
 		c.add(Kit.pad(ref, 6, 0, 4, 1))
+	var note = App.lift_note(str(e.name)) if str(e.name).strip_edges() != "" else ""
+	if note != "":
+		var nb = Kit.link("Note: " + note, LogLiftMenu.open.bind(self, i), 12, Pal.ACCENT2)
+		nb.clip_text = true
+		nb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		nb.set_meta("lift_note", note)
+		nb.tooltip_text = "Your note for %s (tap to change it)" % str(e.name).strip_edges()
+		c.add(Kit.pad(nb, 6, 0, 4, 0))
+	var aim = _aim_of(i)
+	if aim != null:
+		var ar = Kit.hbox(6)
+		var acap = Kit.label(str(aim.cap), 9, Pal.MUTED, true)
+		acap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ar.add_child(acap)
+		var aw = Kit.clip(str(aim.words), 12, null, true)
+		aw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ar.add_child(aw)
+		var fk = LogWidgets.mini_chip("Fill", false, fill_aim.bind(i), Pal.LIFT, 8)
+		fk.tooltip_text = "%s: fill in the aim" % label_name_of(i)
+		fk.set_meta("fill_aim", i)
+		ar.add_child(Kit.vcenter(fk))
+		ar.set_meta("aim_line", str(aim.words))
+		c.add(Kit.pad(ar, 6, 0, 4, 0))
 
 	# Sets
 	var slots = []
@@ -420,11 +480,8 @@ func _exercise_card(i: int) -> Card:
 	for j in range(e.sets.size()):
 		var s = e.sets[j]
 		var ref_set = _ref_set(lp, j)
-		var row = Kit.hbox(4)
-		var n = PixelFont.rect(str(j + 1), 2, Pal.MUTED)
-		n.custom_minimum_size.x = 16
-		n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		row.add_child(n)
+		var row = Kit.hbox(3 if Kit.fingers else 4)
+		row.add_child(_tick_key(i, j, label_name))
 		var reps_opts = {"placeholder": "–", "width": 32, "min": 0, "compact": true}
 		if ref_set != null:
 			reps_opts["base"] = int(ref_set.reps)
@@ -476,8 +533,16 @@ func _exercise_card(i: int) -> Card:
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.alignment = BoxContainer.ALIGNMENT_BEGIN
 		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(Kit.pad(slot, 2, 0, 0, 0))
-		row.get_child(row.get_child_count() - 1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# (in a clipping box that asks for no width: a long badge is cut, it never widens the row and so the
+		# page; a phone's row has little room once its keys are finger-sized)
+		var clipper = Control.new()
+		clipper.clip_contents = true
+		clipper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clipper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot.set_anchors_preset(Control.PRESET_FULL_RECT)
+		slot.offset_left = 2
+		clipper.add_child(slot)
+		row.add_child(clipper)
 		slots.append(slot)
 		wsteps.append(ws if ws != null else rs)
 		row.add_child(LogWidgets.quiet_icon("close", remove_set.bind(i, j), "Remove set %d" % (j + 1), 26))
@@ -522,6 +587,11 @@ func _exercise_card(i: int) -> Card:
 	acts.add_child(delta)
 	c.add(Kit.pad(acts, 0, 2, 0, 0))
 	_deltas.append(delta)
+	var pl = Kit.clip("", 11, Pal.MUTED)
+	pl.set_meta("plates_line", "")
+	pl.visible = false
+	_plates.append(pl)
+	c.add(Kit.pad(pl, 6, 0, 4, 0))
 	_refresh_exercise(i)
 	_refresh_filed(i)
 	return c
@@ -650,6 +720,7 @@ func _refresh_exercise(i: int) -> void:
 			slot.add_child(badge)
 		if trend != null and str(trend.kind) == "pr":
 			_celebrate_pr(i, j)
+	_refresh_plates(i)
 	var dslot = _deltas[i] if i < _deltas.size() else null
 	if dslot == null or not is_instance_valid(dslot):
 		return
@@ -1125,7 +1196,7 @@ func _on_band(id: String, i: int, j: int) -> void:
 	if bool(exercises[i].get("planned", false)):
 		_touched(i)
 		if i < _cards.size() and is_instance_valid(_cards[i]):
-			_cards[i].accent(Pal.LIFT)
+			_cards[i].accent(_edge_color(i))
 	_refresh_exercise(i)
 	_changed(false)
 
@@ -1237,7 +1308,7 @@ func _on_set_text(text: String, i: int, j: int, field: String) -> void:
 		# edge lights up in place (a rebuild would take the keyboard away).
 		_touched(i)
 		if i < _cards.size() and is_instance_valid(_cards[i]):
-			_cards[i].accent(Pal.LIFT)
+			_cards[i].accent(_edge_color(i))
 	_refresh_exercise(i)
 	_changed(false)
 
@@ -1269,3 +1340,321 @@ func _on_name_done(i: int) -> void:
 func _on_query(text: String) -> void:
 	query = text
 	_fill_chips()
+
+
+# ---------------------------------------------------------------------------
+# Ticking sets off, the aim, plates, supersets, swapping, how hard (2026-11-27)
+# ---------------------------------------------------------------------------
+
+func label_name_of(i: int) -> String:
+	var nm = str(exercises[i].name).strip_edges() if i < exercises.size() else ""
+	return nm if nm != "" else "Exercise %d" % (i + 1)
+
+
+## The card's edge: quiet while as the plan filled it in, green once every set with reps is ticked, else the
+## colour of the muscle it works.
+func _edge_color(i: int) -> Color:
+	var e = exercises[i]
+	if bool(e.get("planned", false)):
+		return Pal.LINE
+	if all_ticked(i):
+		return Pal.GOOD
+	var part = str(Missions.part_of(str(e.name)))
+	return JourneyLifts.part_color(part) if part != "" else Pal.LIFT
+
+
+func all_ticked(i: int) -> bool:
+	var any = false
+	for s in exercises[i].sets:
+		if LogWidgets.num(s.reps) > 0.0:
+			if not bool(s.get("done", false)):
+				return false
+			any = true
+	return any
+
+
+## The tick at the start of a set's row: its number in an empty box, a green tick once done (Kit.tick_box).
+## Its tooltip names the lift and the set and never changes, so the screen keeps it under the finger.
+func _tick_key(i: int, j: int, label_name: String) -> Button:
+	var done = bool(exercises[i].sets[j].get("done", false))
+	var b = Button.new()
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.tooltip_text = "%s: set %d done" % [label_name, j + 1]
+	b.set_meta("set_tick", "%d:%d" % [i, j])
+	b.set_meta("set_done", done)
+	# (at finger sizes Kit.tick_box adds 4: the row has no room for more than the number had)
+	var box = Kit.tick_box(done, 18 if Kit.fingers else 20)
+	if not done:
+		var num = PixelFont.rect(str(j + 1), 2, Pal.MUTED)
+		box.get_child(0).add_child(num)
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	b.custom_minimum_size = box.custom_minimum_size
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.add_child(box)
+	b.pressed.connect(toggle_set_done.bind(i, j))
+	return b
+
+
+## Tick a set off (or take the tick back). An empty set is filled in from last time first; a set with no
+## reps and nothing to fill it from cannot be ticked. In a superset, says which set is next.
+func toggle_set_done(i: int, j: int) -> void:
+	if i >= exercises.size() or j >= exercises[i].sets.size():
+		return
+	var e = exercises[i]
+	var s = e.sets[j]
+	if bool(s.get("done", false)):
+		s.erase("done")
+		Sfx.unpop()
+		_changed(true)
+		return
+	if LogWidgets.num(s.reps) <= 0.0:
+		var ref = _ref_set(_last.get(Xp.normalize_exercise(str(e.name))), j)
+		if ref == null or int(ref.reps) <= 0:
+			Sfx.error()
+			App.toast("Put in the reps first, then tick it", "info", "lift")
+			return
+		s.reps = str(int(ref.reps))
+		if not e.bodyweight and not bool(e.get("timed", false)) and not bool(e.get("band", false)) and str(s.weight).strip_edges() == "" and float(ref.get("weightKg", 0)) > 0.0:
+			s.weight = LogWidgets.trim_num(Fmt.kg_to_unit(float(ref.weightKg), wu))
+	s["done"] = true
+	_touched(i)
+	if started <= 0.0:
+		started = Time.get_unix_time_from_system()
+	Sfx.pop()
+	Sfx.buzz(1)
+	var nxt = _superset_next(i)
+	if nxt != "":
+		App.toast(nxt, "info", "repeat")
+	elif all_ticked(i):
+		App.toast("%s: every set done" % Missions.short_name(label_name_of(i)), "good", "check")
+	_changed(true)
+
+
+## In a superset: "Next: Lateral Raise, set 2", the next lift of the pair with a set still to do.
+func _superset_next(i: int) -> String:
+	var g = exercises[i].get("ss")
+	if g == null:
+		return ""
+	var n = exercises.size()
+	for step in range(1, n):
+		var k = (i + step) % n
+		if exercises[k].get("ss") != g:
+			continue
+		for j in range(exercises[k].sets.size()):
+			if not bool(exercises[k].sets[j].get("done", false)):
+				return "Next: %s, set %d" % [Missions.short_name(label_name_of(k)), j + 1]
+	return ""
+
+
+## Sets with reps that are not ticked, in exercises where something IS ticked (the player is ticking as
+## they go: an unticked set there may not have been done).
+func unticked_count() -> int:
+	var n = 0
+	for e in exercises:
+		if not e.sets.any(func(x): return bool(x.get("done", false))):
+			continue
+		for x in e.sets:
+			if LogWidgets.num(x.reps) > 0.0 and not bool(x.get("done", false)):
+				n += 1
+	return n
+
+
+func drop_unticked() -> void:
+	for e in exercises:
+		if not e.sets.any(func(x): return bool(x.get("done", false))):
+			continue
+		e.sets = e.sets.filter(func(x): return bool(x.get("done", false)) or LogWidgets.num(x.reps) <= 0.0)
+
+
+## What to aim for on this exercise: the day's plan's aim when it is planned today (App.aim_for), else one
+## more step past last time. {"cap", "words", "sets"} or null.
+func _aim_of(i: int):
+	var e = exercises[i]
+	var nm = str(e.name).strip_edges()
+	if nm == "" or editing_id != null:
+		return null
+	var a = App.aim_for(nm, _both(e))
+	if a == null or (a.sets as Array).is_empty():
+		return null
+	return {"cap": str(a.get("cap", "AIM")), "words": LiftHistory.describe_sets(a.sets, _fmt_w), "sets": a.sets}
+
+
+## Every set as the aim says (the sets past the aim's stay as they are).
+func fill_aim(i: int) -> void:
+	var a = _aim_of(i)
+	if a == null:
+		return
+	Sfx.pop()
+	_touched(i)
+	var e = exercises[i]
+	var rows = draft_from_sets(str(e.name), a.sets, wu).sets
+	for j in range(rows.size()):
+		var row = rows[j]
+		if j < e.sets.size():
+			var keep_done = bool(e.sets[j].get("done", false))
+			e.sets[j] = row
+			if keep_done:
+				row["done"] = true
+		else:
+			e.sets.append(row)
+	_changed(true)
+
+
+func _refresh_plates(i: int) -> void:
+	if i >= _plates.size() or not is_instance_valid(_plates[i]):
+		return
+	var e = exercises[i]
+	var lab = _plates[i]
+	var t = ""
+	if not e.bodyweight and not bool(e.get("timed", false)) and not bool(e.get("band", false)) and Plates.is_barbell(str(e.name)):
+		var top = 0.0
+		for s in e.sets:
+			top = maxf(top, LogWidgets.num(s.weight))
+		if top > 0.0:
+			t = Plates.text(top, wu)
+	lab.text = ("Plates: " + t) if t != "" else ""
+	lab.visible = t != ""
+	lab.set_meta("plates_line", t)
+
+
+# --- supersets: exercises next to each other with the same "ss" are done in turn ---------------------------
+
+func linked_next(i: int) -> bool:
+	if i < 0 or i + 1 >= exercises.size():
+		return false
+	var g = exercises[i].get("ss")
+	return g != null and exercises[i + 1].get("ss") == g
+
+
+## "A1", "A2", "B1"... for every exercise in a superset (a run of linked exercises), "" for the others.
+func _group_labels() -> Array:
+	var out = []
+	var letter = -1
+	var pos = 0
+	for i in range(exercises.size()):
+		var with_prev = i > 0 and linked_next(i - 1)
+		var with_next = linked_next(i)
+		if with_prev:
+			pos += 1
+			out.append("%s%d" % [char(65 + letter), pos])
+		elif with_next:
+			letter += 1
+			pos = 1
+			out.append("%s%d" % [char(65 + letter), pos])
+		else:
+			out.append("")
+	return out
+
+
+func group_label(i: int) -> String:
+	if i < 0:
+		return ""
+	var labels = _group_labels()
+	return str(labels[i]) if i < labels.size() else ""
+
+
+func _new_group() -> int:
+	var most = 0
+	for e in exercises:
+		if e.get("ss") != null:
+			most = maxi(most, int(e.ss))
+	return most + 1
+
+
+## Link this exercise with the next one (a superset), or, when they are linked, part them.
+func link_next(i: int) -> void:
+	if i < 0 or i + 1 >= exercises.size():
+		return
+	if linked_next(i):
+		var g = exercises[i].ss
+		var fresh = _new_group()
+		for k in range(i + 1, exercises.size()):
+			if exercises[k].get("ss") != g:
+				break
+			exercises[k]["ss"] = fresh
+		Sfx.unpop()
+	else:
+		var g2 = exercises[i].get("ss")
+		if g2 == null:
+			g2 = exercises[i + 1].get("ss") if exercises[i + 1].get("ss") != null else _new_group()
+		var old = exercises[i + 1].get("ss")
+		exercises[i]["ss"] = g2
+		for e in exercises:
+			if old != null and e.get("ss") == old:
+				e["ss"] = g2
+		exercises[i + 1]["ss"] = g2
+		Sfx.pop()
+		App.toast("Superset: %s and %s, done in turn" % [Missions.short_name(label_name_of(i)), Missions.short_name(label_name_of(i + 1))], "info", "repeat")
+	_tidy_groups()
+	_changed(true)
+
+
+## Take one exercise out of its superset (the others stay together).
+func unlink(i: int) -> void:
+	if i < 0 or i >= exercises.size():
+		return
+	exercises[i].erase("ss")
+	var fresh = _new_group()
+	for k in range(i + 1, exercises.size()):
+		if k > i + 1 and not linked_next(k - 1):
+			break
+		if exercises[k].get("ss") != null:
+			exercises[k]["ss"] = fresh
+	Sfx.unpop()
+	_tidy_groups()
+	_changed(true)
+
+
+## A group of one is no group.
+func _tidy_groups() -> void:
+	for i in range(exercises.size()):
+		if exercises[i].get("ss") != null and not linked_next(i) and not (i > 0 and linked_next(i - 1)):
+			exercises[i].erase("ss")
+
+
+## The line between two linked cards.
+func _superset_line(i: int) -> Control:
+	var h = Kit.hbox(6)
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect("repeat", 16, Pal.SECOND)))
+	h.add_child(Kit.vcenter(Kit.label("SUPERSET · ONE SET EACH IN TURN", 10, Pal.SECOND, true)))
+	h.set_meta("superset_line", i)
+	return h
+
+
+## Swap an exercise for another way of doing it: in its place, with as many sets, filled in from that lift's
+## last time (none: its first set empty, then copies). The superset and "planned" stay.
+func swap_exercise(i: int, new_name: String) -> void:
+	if i < 0 or i >= exercises.size() or new_name.strip_edges() == "":
+		return
+	var old = exercises[i]
+	var n = maxi(1, old.sets.size())
+	var lp = _last.get(Xp.normalize_exercise(new_name))
+	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else _blank(new_name)
+	while one.sets.size() < n:
+		one.sets.append(one.sets[one.sets.size() - 1].duplicate())
+	while one.sets.size() > n:
+		one.sets.remove_at(one.sets.size() - 1)
+	for s in one.sets:
+		s.erase("done")
+	for k in ["ss", "planned"]:
+		if old.get(k) != null:
+			one[k] = old[k]
+	exercises[i] = one
+	Sfx.pop()
+	App.toast("Swapped for %s" % Missions.short_name(new_name), "good", "repeat")
+	_changed(true)
+
+
+func set_effort(i: int, id: String) -> void:
+	if i < 0 or i >= exercises.size():
+		return
+	Sfx.tick()
+	if id == "":
+		exercises[i].erase("effort")
+	else:
+		exercises[i]["effort"] = id
+	_changed(true)

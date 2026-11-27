@@ -356,6 +356,17 @@ func _build_focus() -> void:
 		row.add_child(l)
 		row.add_child(Kit.vcenter(Kit.switch(Dose.run_on(st), _on_run_goal, "Grow the weekly run a little at a time")))
 		card.add(row)
+		# Heavy and light days for the muscles being built (LiftTrend.RANGES).
+		var rr = Kit.hbox(8)
+		var rl = Kit.vbox(1)
+		rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rl.add_child(Kit.label("Heavy and light days", 14, null, true))
+		rl.add_child(Kit.para("Lifts for the muscles you build take turns: a heavy day of 6 to 8 reps, then a light day of 10 to 12. The aims follow it.", 11, Pal.MUTED))
+		rr.add_child(rl)
+		var rsw = Kit.switch(st.get("repRanges", true) != false, _on_rep_ranges, "Take turns between heavy and light days")
+		rsw.set_meta("rep_ranges", true)
+		rr.add_child(Kit.vcenter(rsw))
+		card.add(rr)
 		if Dose.run_on(st):
 			# The run's day: its goals show on that day only.
 			var picked = st.get("runDay")
@@ -373,6 +384,12 @@ func _build_focus() -> void:
 		see.set_meta("see_dose", true)
 		card.add(see)
 	add_child(card)
+
+
+func _on_rep_ranges(on: bool) -> void:
+	Sfx.tick()
+	App.update_settings({"repRanges": on})
+	call_deferred("_refill")
 
 
 func _on_run_goal(on: bool) -> void:

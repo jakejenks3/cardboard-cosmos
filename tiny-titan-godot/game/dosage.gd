@@ -412,7 +412,8 @@ static func text(saved: Dictionary, today: String) -> String:
 
 	L.append("")
 	L.append("NOT IN THE LOG")
-	L.append("Calories, protein, sleep, steps, age, height, how long I have trained, %sand how hard each set was. Ask me for whichever you need before you answer." % ("how long most sessions took, " if untimed else ""))
+	var any_effort = f.sessions.any(func(x): return x.get("exercises", []).any(func(ex): return str(ex.get("effort", "")) != ""))
+	L.append("Calories, protein, sleep, steps, age, height, how long I have trained, %s%s. Ask me for whichever you need before you answer." % ["how long most sessions took, " if untimed else "", "and how hard each set was (some lifts are marked easy, hard or to failure in the day by day list)" if any_effort else "and how hard each set was"])
 	L.append("")
 	L.append("WHAT I WANT FROM YOU")
 	L.append("1. Which muscle groups get too little, enough or too much work a week for building muscle?")
@@ -447,6 +448,14 @@ static func _session_words(s: Dictionary, marks: Dictionary, wu: String, du: Str
 		words = "lift (sets: %s)" % ", ".join(PackedStringArray(bits)) if not bits.is_empty() else "PT / stretches only"
 		if mob > 0 and not bits.is_empty():
 			words += " + %d PT / stretch exercise%s" % [mob, "" if mob == 1 else "s"]
+		# How hard a lift was, where the player marked it (the Log tab's More: easy, hard, to failure).
+		var marked = []
+		for ex in s.get("exercises", []):
+			var ef = str(ex.get("effort", ""))
+			if ef != "":
+				marked.append("%s %s" % [str(ex.get("name", "")), {"easy": "easy", "hard": "hard", "fail": "to failure"}.get(ef, ef)])
+		if not marked.is_empty():
+			words += " [how hard: %s]" % ", ".join(PackedStringArray(marked))
 		return words
 	if disc == "climb":
 		var sent = 0

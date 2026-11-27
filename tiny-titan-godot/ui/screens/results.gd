@@ -398,6 +398,12 @@ func _reveal(i: int, animate: bool) -> void:
 				Sfx.achievement()
 			"pet":
 				Sfx.pet()
+			"goal":
+				Sfx.level_up()
+				_confetti.burst(1.2)
+				_shake()
+			"receipt":
+				Sfx.claim()
 			"pr":
 				# A record is the big moment: a fanfare, confetti and a shake.
 				Sfx.pr()
@@ -438,7 +444,7 @@ func _reveal(i: int, animate: bool) -> void:
 			var tw = card.create_tween()
 			tw.tween_interval(0.3)
 			tw.tween_callback(func(): Kit.burst(card, col, 20))
-		if ev.type == "pr":
+		if ev.type == "pr" or ev.type == "goal":
 			_fireworks(card)
 
 
@@ -590,7 +596,7 @@ func _burst_color(ev: Dictionary):
 				return Pal.rarity(pet.rarity)
 		"rank":
 			return Pal.hex(Xp.RANKS[int(ev.to)].color)
-		"stage", "pr", "coins":
+		"stage", "pr", "coins", "goal":
 			return Pal.ACCENT
 	return null
 
@@ -680,6 +686,10 @@ func _build_card(ev: Dictionary, animate: bool):
 			return _stage_card(ev)
 		"project":
 			return _project_card(ev)
+		"goal":
+			return _goal_card(ev)
+		"receipt":
+			return _receipt_card(ev)
 		"pr":
 			var c = _rcard(Pal.ACCENT)
 			c.main.add_child(_kicker("NEW RECORD", Pal.ACCENT))
@@ -1028,3 +1038,76 @@ func _refresh_buttons() -> void:
 		Kit.style_button(e.button, "ghost" if on else "secondary", "sm")
 	if is_instance_valid(_hero):
 		_hero.setup(App.state, App.profile(), App.loadout(), App.active_pet(), false)
+
+
+## A goal with a date reached (LiftGoals): the lift, the weight for the reps, and how it went against the day.
+func _goal_card(ev: Dictionary) -> Control:
+	var c = _rcard(Pal.ACCENT, true)
+	c.main.add_child(_kicker("GOAL REACHED", Pal.ACCENT))
+	var wu = App.weight_unit()
+	c.main.add_child(_title_l("%s: %s × %d" % [Missions.short_name(str(ev.lift)), Fmt.fmt_weight(float(ev.kg), wu), int(ev.reps)]))
+	var said = "Set %s." % Dates.format_date(str(ev.at))
+	if str(ev.by) != "":
+		var early = Dates.days_between(str(ev.done), str(ev.by))
+		if early > 0:
+			said += " %d day%s before your date." % [early, "" if early == 1 else "s"]
+		elif early == 0:
+			said += " Right on your date."
+		else:
+			said += " %d day%s after your date: still done." % [-early, "" if early == -1 else "s"]
+	c.main.add_child(_sub(said))
+	c.panel.set_meta("reel_goal", str(ev.id))
+	return _finish(c, _icon_cell("target", Pal.ACCENT))
+
+
+## The workout's receipt (App.receipt_of): the muscle map of what was worked, each muscle's sets today and its
+## week against the target, and the totals.
+func _receipt_card(ev: Dictionary) -> Control:
+	var card = Kit.card(6, Callable(), 12)
+	card.accent(Pal.LIFT)
+	card.set_meta("reel_receipt", ev.parts.size())
+	var head = Kit.hbox(8)
+	head.add_child(_kicker("WORKOUT RECEIPT", Pal.LIFT))
+	head.add_child(Kit.spacer())
+	var bits = ["%d sets" % int(ev.sets)]
+	if float(ev.volKg) > 0.0:
+		bits.append("%s moved" % Fmt.fmt_weight(float(ev.volKg), App.weight_unit()))
+	if int(ev.durationSec) > 0:
+		bits.append(Fmt.fmt_duration_short(int(ev.durationSec)))
+	head.add_child(Kit.vcenter(Kit.clip(" · ".join(PackedStringArray(bits)), 12, Pal.MUTED, true)))
+	card.add(head)
+	var body = Kit.hbox(12)
+	var pic = PixelRect.make(Art.muscle_texture(App.state, App.profile(), ev.heat), 1.0)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	body.add_child(pic)
+	var rows = Kit.vbox(4)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var cap = Kit.hbox(6)
+	var c1 = Kit.label("TODAY", 9, Pal.MUTED, true)
+	c1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cap.add_child(c1)
+	cap.add_child(Kit.label("7 DAYS · TARGET", 9, Pal.MUTED, true))
+	rows.add_child(cap)
+	for p in ev.parts.slice(0, 7):
+		var r = Kit.hbox(6)
+		var col = JourneyLifts.part_color(str(p.part))
+		var nm = Kit.clip("%s  +%s" % [str(p.name), TTUtil.num_str(snappedf(float(p.today), 0.5))], 13, col, true)
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		r.add_child(nm)
+		var wk = TTUtil.num_str(snappedf(float(p.week), 0.5))
+		var tcol = Pal.MUTED
+		var said = wk
+		if float(p.min) > 0.0 or float(p.max) > 0.0:
+			said = "%s / %s-%s" % [wk, TTUtil.num_str(float(p.min)), TTUtil.num_str(float(p.max))]
+			tcol = Pal.GOOD if str(p.state) == "ok" else (Pal.ACCENT2 if str(p.state) == "plenty" else Pal.TEXT)
+		var tl = Kit.label(said, 12, tcol, true)
+		r.add_child(tl)
+		if str(p.state) == "ok":
+			r.add_child(Kit.vcenter(Icons.rect("check", 16, Pal.GOOD)))
+		rows.add_child(r)
+	body.add_child(rows)
+	card.add(body)
+	if int(ev.prs) > 0:
+		card.add(Kit.clip("%d record%s in this workout" % [int(ev.prs), "" if int(ev.prs) == 1 else "s"], 12, Pal.ACCENT, true))
+	return card

@@ -2031,6 +2031,77 @@ is the Windows handoff.
   - The jumping itself was NOT reproduced: set taps, a set's cross, a weight's +, an exercise's cross all
     keep their place with finger events on the PC (`tests/shots/logjump.gd`) and in the phone build in a
     phone-size browser. The search-and-add path above is the one found that moved the page.
+- THE "BUILD ALL" BATCH (2026-11-27; I listed 20 ideas for logging, tracking, progression and missions and the
+  user said "Build all"):
+  - Set ticks (Log tab): a set's number is its tick (`LogLiftEditor._tick_key`, metas `set_tick` "i:j", `set_done`;
+    `Kit.tick_box` 20 px, 18 at finger sizes). `toggle_set_done`: an empty set is filled from last time first; a
+    tick touches a planned lift; the first tick starts `LogLiftEditor.started` (kept in the draft as "started").
+    Draft set field `done` (never saved). The card's edge is the muscle's colour (`_edge_color`: quiet while
+    planned, green once every set is ticked; `JourneyLifts.part_color`). Finish asks about sets with reps left
+    unticked in lifts that were being ticked (`LogSessionForm._ask_unticked`, metas `unticked_sheet`,
+    `unticked_key` all | only). The badge slot beside a set is in a clipping Control that asks for no width:
+    a set row can no longer widen the page.
+  - Workout length: with no time typed, a new lift workout of today gets the time from its first tick to now
+    (`LogSessionForm.auto_duration`, 5 min to 5 h), in `draft()`, so the XP preview has it too.
+  - The aim on a card (`_aim_of`, meta `aim_line`) with a Fill key (`fill_aim`, meta `fill_aim`): `App.aim_for(name,
+    both)` = the day's plan's aim when the lift (or a way of a planned lift) is planned, else one step past its
+    last time (`LiftLibrary.stats` cached on `saved.updatedAt`). Plates on a barbell card (`_refresh_plates`, meta
+    `plates_line`, `Plates.text` of the heaviest set).
+  - The card's More key (meta `more_key`) opens `LogLiftMenu` (ui/screens/log_lift_menu.gd, sheet meta
+    `lift_menu`): a superset with the next lift (`superset_key` link | unlink | leave), a note for next time
+    (`lift_note_box`, `lift_note_save`), how hard it was (`effort_key` "" | easy | hard | fail), then Swap for
+    another way (`swap_ways`: Missions.options_for, then the movement's library variations, 6 at most; rows meta
+    `swap_way`; `LogLiftEditor.swap_exercise` keeps its place, its number of sets, the superset and "planned").
+  - Supersets: draft field `ss` (a group number); exercises next to each other with the same `ss` are a
+    superset (`linked_next`, `_group_labels` "A1", "A2", "B1"...; `link_next`, `unlink`, `_tidy_groups`). A line
+    between linked cards (meta `superset_line`), a tag on the card (meta `superset_tag`), and after a tick a toast
+    "Next: <lift>, set N". Saved on the exercise as `superset: "A"`; `effort` likewise. Both are shown in a
+    session's sheet (`SessionView._lift_row`: metas `session_superset`, `session_effort`) and the effort in the
+    training summary's day by day list. Neither changes any aim or XP.
+  - Notes per lift: `game/lift_notes.gd` (`LiftNotes`), STORED in `settings.liftNotes` = {normalized name: {name,
+    text, at}}; `App.lift_note`, `set_lift_note`; shown on the card (meta `lift_note`); `App.rename_lift` moves it.
+  - Heavy and light days: `LiftTrend.RANGES` {heavy [6, 8], light [10, 12]} (a side for L+R). `next_range(sets)`
+    (after 9 or fewer reps a side: light, else heavy). `Missions._tag_ranges` tags the planned sets of a lift whose
+    `mode` is "build" (and of every way of it) with `range`, like Sides tags `sides`: COPIES, never the log; every
+    place that makes an aim through `next_target` follows (`_range_target`: same range as last time = double
+    progression inside it; the other range = the weight the best set's estimated 1RM gives for the range's bottom,
+    `switch: true`). `LiftTrend.aim_cap(t)` ("HEAVY DAY · 6-8", "AIM · L+R"). Off with `settings.repRanges ==
+    false` (Settings -> Training focus, meta `rep_ranges`). Kept muscles, PT, bands, holds, bodyweight: never.
+  - Try a change: `Missions._mark_rotation`: a lift done the same way ROTATE_AFTER (6) times in a row whose
+    movement has another way offered gets `rotate` (that way) and `rotateRun`; only the longest run of the day
+    keeps it. The Today card's chip says "TRY A CHANGE" (meta `rotate_option`). A suggestion only.
+  - Goals with a date: `game/lift_goals.gd` (`LiftGoals`), STORED in `saved.goals` = [{id, lift, kg, reps, by,
+    at, start, done}] (kept by `parse_saved`, in `SaveMerge.RECORD_LISTS`). Reached by a set of at least that
+    weight for at least those reps on or after `at`; `status` forecasts from a straight line through the lift's
+    daily best estimated 1RM of the last 56 days (said as an estimate on screen). `App.add_goal` (MAX_OPEN 8),
+    `remove_goal`, `_goal_events` (in `commit_sessions`: marks it done, a reel card "goal"). Screens
+    (`ui/screens/tracking_views.gd`, `TrackingViews`): a lift's page has the Goal block (`goal_block`, metas
+    `goal_add`, `goal_row`, `goal_remove`) and the sheet (`open_goal_sheet`: weight, reps, 4 / 8 / 12 / 16 weeks;
+    metas `goal_sheet`, `goal_weeks`, `goal_save`); the Hero tab has a GOALS section after Coming up (section
+    `lift_goals`) once one is set.
+  - The workout's receipt: `App.receipt_of(session, events)` adds a reel card "receipt" to a single lift
+    workout (`ResultsOverlay._receipt_card`, meta `reel_receipt`): the muscle map of that workout, each muscle's
+    sets today and its 7 days against the target, the sets, weight moved, time and records.
+  - `game/training_report.gd` (`TrainingReport`, pure): `weekly_sets` (the sets of the 7 days ending each of the
+    last 8 weeks, a muscle with a target each; `ui/charts/dose_weeks.gd` `DoseWeeks` draws a muscle's bars against
+    its band), `streak` (Monday-weeks in a row with every built muscle at its least; badges Bronze 3, Silver 6,
+    Gold 12, Platinum 26), `lift_report` (best of the last 28 days against the 28 before: up, down, stuck by
+    `LiftTrend.plateau`, holding, new; PT and stretches left out), `body_trend` (a 7-day average, the change a
+    week from a straight line of 28 days, the main lifts meanwhile). Screens: Journey -> Stats' "SETS A WEEK · 8
+    WEEKS" (section `weekly_sets`, rows `weekly_part`, the streak row `target_streak`) and "LIFT REPORT"
+    (`lift_report`, rows `report_row`); the Weekly sets sheet (DoseView.open) has the streak and the 8 weeks
+    (meta `weekly_block`); Journey -> Body has "TREND · 4 WEEKS" (section `body_trend`, metas `body_avg`,
+    `body_rate`), over 1% a week down is said to be fast.
+  - Missions: one free swap a day (`settings.rerolls` = {date: id}; `Missions.can_reroll`, `rerolled`, `spares`:
+    twelve sets, a check-in, any workout, XP hunter; `with_reroll`; `App.reroll_mission`, `reroll_left`; the Hero
+    MISSIONS header's "Swap one" link, meta `mission_swap`, sheet `swap_sheet`, rows `swap_pick`). A muscle's week
+    (`Missions.challenge_part`: the built muscle furthest short the week before): weekly `tw:<wk>:mus:<part>`,
+    its least in the Monday-week, 300 XP. `App.mission_data` now carries `body`.
+  - Look: the Log tab's first page is sections (`log_workout`, `log_daily`, `log_misc` with meta `misc_section`);
+    Journey -> Stats' Recaps, Training summary, Weekly XP and Consistency are sections too.
+  - Tests: `tests/tracking_test.gd`; walkthroughs `tests/shots/logplus.gd` (year, also --fingers) and
+    `tests/shots/tracking.gd` (year). picks.gd's "a moment later a tap counts again" now taps the second
+    exercise's up key wherever the cards put it (the cards grew).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2206,6 +2277,7 @@ godot --headless --path . --script res://tests/units_test.gd
 godot --headless --path . --script res://tests/sfx_test.gd
 godot --headless --path . --script res://tests/books_test.gd
 godot --headless --path . --script res://tests/bands_test.gd
+godot --headless --path . --script res://tests/tracking_test.gd
 godot --headless --path . --script res://tests/rpg_shell_test.gd
 godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
@@ -2271,6 +2343,8 @@ yard (the practice yard: a perfect guard, and nothing kept; year data),
 prep (a stage's sheet: the build's moves against known weaknesses; year data),
 logjump (a workout edited with finger events: + Set, a set's cross, a weight's +, an exercise's cross, a search and an add keep their place; year data, --fingers),
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
+logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
+tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 

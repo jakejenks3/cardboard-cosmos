@@ -57,6 +57,10 @@ func build() -> void:
 	var coming = AheadView.card()
 	if coming != null:
 		add_child(coming)
+	# Goals with a date (LiftGoals), once one is set.
+	var lg = TrackingViews.goals_section()
+	if lg != null:
+		add_child(lg)
 	# A plain to-do list, apart from the game (game/todos.gd).
 	add_child(TodoView.card())
 	# Reading: the page box is filled in every day, so it sits up here.
@@ -158,6 +162,12 @@ func _missions() -> Control:
 	var done = daily.filter(func(m): return bool(m.done))
 	var still = daily.filter(func(m): return not bool(m.done))
 	var right = Kit.hbox(8)
+	# One free swap a day, for a mission that cannot be done today (Missions.rerolled).
+	var swappable = daily.filter(func(m): return Missions.can_reroll(m))
+	if App.reroll_left() and not swappable.is_empty():
+		var sw = Kit.link("Swap one", _open_swap, 13, Pal.ACCENT.lightened(0.45))
+		sw.set_meta("mission_swap", swappable.size())
+		right.add_child(Kit.vcenter(sw))
 	right.add_child(Kit.vcenter(Kit.label("%d / %d" % [done.size(), daily.size()], 12, Pal.TEXT, true)))
 	right.add_child(Kit.vcenter(Kit.link("All →", App.go.bind("adventure", "quests"), 13, Pal.ACCENT.lightened(0.45))))
 	var c = Kit.section("missions", "MISSIONS", "quest", Pal.ACCENT, right, Callable(), 6, 10)
@@ -172,6 +182,25 @@ func _missions() -> Control:
 			c.add(Kit.sub_head("STILL OPEN", Pal.ACCENT))
 		c.add(Parts.mission_grid(still))
 	return c
+
+
+## The free swap of the day: pick a mission that cannot be done today; another one takes its place.
+func _open_swap() -> void:
+	Sfx.tap()
+	var s = Kit.sheet("Swap a mission")
+	s.set_meta("swap_sheet", true)
+	s.box.add_child(Kit.muted_para("One swap a day, for a mission you cannot do today (equipment taken, the gym closed). Another mission takes its place.", 13))
+	for m in App.quests().daily.filter(func(x): return Missions.can_reroll(x)):
+		var r = Kit.row(func():
+			s.close()
+			if App.reroll_mission(str(m.id)):
+				Sfx.pop()
+				App.toast("Swapped: %s" % str(m.title), "good", "repeat"), Pal.ACCENT, null, 8, 2)
+		r.set_meta("swap_pick", str(m.id))
+		r.add(Kit.clip(str(m.title), 14, null, true))
+		r.add(Kit.clip(str(m.desc), 11, Pal.MUTED))
+		s.box.add_child(r)
+	s.open()
 
 
 ## The hero in the gym (tap to flex), the level under it, and the companion's

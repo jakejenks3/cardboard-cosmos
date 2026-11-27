@@ -1245,6 +1245,14 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	# and in every way to do it, so whatever makes an aim of them goes by one side.
 	for l in extra + lifts:
 		_tag_sides(l, settings)
+		_tag_ranges(l, settings)
+		_mark_rotation(l, hist)
+	# One change offered a day at most: the lift done the same way the longest.
+	var rot = (extra + lifts).filter(func(x): return x.has("rotate"))
+	rot.sort_custom(func(a, b): return int(a.rotateRun) > int(b.rotateRun))
+	for x in rot.slice(1):
+		x.erase("rotate")
+		x.erase("rotateRun")
 	var label = str(KIND_NAMES.get(kind, "")) if kind != "" else str(GROUP_NAMES.get(group, ""))
 	var focus = Dose.plan_id(settings)
 	# The weekly run being built up has ONE day (Dose.run_day): on that day it
@@ -1283,6 +1291,65 @@ static func _tag_sides(l: Dictionary, settings: Dictionary) -> void:
 		if on > 1:
 			o["last"] = Sides.tag_sets(o.get("last", []), on)
 			o["sides"] = on
+
+
+## Heavy and light days (LiftTrend.RANGES) for a lift of a muscle being built: its sets, and those of every
+## way to do it, say which range they are planned for, so whatever makes an aim of them aims inside it.
+## Off with settings.repRanges == false, and for physical therapy, bands, holds and bodyweight.
+static func _tag_ranges(l: Dictionary, settings: Dictionary) -> void:
+	if settings.get("repRanges", true) == false or str(l.get("mode", "")) != "build" or bool(l.get("pt", false)):
+		return
+	if l.get("last") is Dictionary:
+		var r = LiftTrend.next_range(l.last.get("sets", []))
+		if r != "":
+			var last = l.last.duplicate()
+			last["sets"] = LiftTrend.tag_range(last.get("sets", []), r)
+			l["last"] = last
+			l["range"] = r
+	for o in l.get("options", []):
+		var orng = LiftTrend.next_range(o.get("last", []))
+		if orng != "":
+			o["last"] = LiftTrend.tag_range(o.get("last", []), orng)
+			o["range"] = orng
+
+
+## Done the same way ROTATE_AFTER times in a row, and another way of the movement is there to pick: the
+## plan says it may be time for a change (`rotate` = that way's name; the Today card marks its chip). Never
+## for physical therapy. A suggestion only: nothing else changes.
+const ROTATE_AFTER = 6
+
+static func _mark_rotation(l: Dictionary, hist: Dictionary) -> void:
+	if bool(l.get("pt", false)) or (l.get("options", []) as Array).size() < 2:
+		return
+	var name = str(l.options[0].name)
+	var st = hist.get(Xp.normalize_exercise(name))
+	if st == null or int(st.count) < ROTATE_AFTER:
+		return
+	# The movement's last ROTATE_AFTER sessions were all this one variation.
+	var mk = Xp.normalize_exercise(move_of(name))
+	var days = []
+	for k in hist:
+		if Xp.normalize_exercise(move_of(str(hist[k].name))) != mk:
+			continue
+		for h in hist[k].history:
+			days.append([str(h.date), k])
+	days.sort_custom(func(a, b): return str(a[0]) > str(b[0]))
+	if days.size() < ROTATE_AFTER:
+		return
+	var run = 0
+	for d in days:
+		if str(d[1]) != Xp.normalize_exercise(name):
+			break
+		run += 1
+	if run < ROTATE_AFTER:
+		return
+	var pick = l.options[1]
+	for o in l.options.slice(1):
+		if str(o.move) == str(l.options[0].move):
+			pick = o
+			break
+	l["rotate"] = str(pick.name)
+	l["rotateRun"] = run
 
 
 ## One line on why today is that kind of day: "Yesterday was a pull day",
@@ -1431,6 +1498,8 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			desc = "New: %s. Find a weight you can do for 8 to 12 good reps." % short_name(str(main.name))
 		else:
 			desc = "Last time %s. Aim for %s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
+			if str(aim.get("range", "")) != "":
+				desc += " %s: %d to %d reps." % [str(LiftTrend.RANGE_NAMES[aim.range]), int(LiftTrend.RANGES[aim.range][0]), int(LiftTrend.RANGES[aim.range][1])]
 			if int(aim.get("sides", 1)) > 1:
 				desc += " Both sides added up: %s." % Sides.side_words(LiftTrend.real_sets(aim.sets))
 			if str(aim.get("kind", "")) == "band":
@@ -1539,7 +1608,107 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 		for s in todays:
 			xp += int(state.get("sessionXp", {}).get(s.id, 0))
 		out.append(_mission("t:%s:xp" % today, "daily", today, "XP hunter", "Earn %s XP from workouts today." % Xp.fmt_int(target), "bolt", null, target, xp, "xp", 150, claims))
+	# One mission swapped for another today (settings.rerolls: the player's free swap of the day).
+	var rr = str(settings.get(REROLLS, {}).get(today, "")) if settings.get(REROLLS) is Dictionary else ""
+	if rr != "":
+		out = rerolled(out, rr, today, data, state, claims)
 	return out
+
+
+# ---------------------------------------------------------------------------
+# The free swap of the day (2026-11-27, the user's "build all": a mission that cannot be done today,
+# equipment taken or the gym closed, is swapped once a day for another one)
+# ---------------------------------------------------------------------------
+
+## settings.rerolls = {date: the id of the mission swapped that day}; one a day, kept REROLLS_KEPT days.
+const REROLLS = "rerolls"
+const REROLLS_KEPT = 7
+
+
+## Can this mission be swapped? Not one already done or claimed, not Show up, a rest day or Perfect day.
+static func can_reroll(m: Dictionary) -> bool:
+	var id = str(m.get("id", ""))
+	if bool(m.get("done", false)) or bool(m.get("claimed", false)) or bool(m.get("perfect", false)) or bool(m.get("rerolled", false)):
+		return false
+	return not (id.ends_with(":show") or id.ends_with(":rest") or id.ends_with(":perfect"))
+
+
+## The missions with `id` swapped for the first spare one not already there (or as they were).
+static func rerolled(list: Array, id: String, today: String, data: Dictionary, state: Dictionary, claims: Array) -> Array:
+	var at = -1
+	for i in range(list.size()):
+		if str(list[i].id) == id:
+			at = i
+	if at < 0 or bool(list[at].get("claimed", false)):
+		return list
+	var have = list.map(func(m): return str(m.id))
+	for sp in spares(today, data, state, claims):
+		if not have.has(str(sp.id)):
+			sp["rerolled"] = true
+			sp["swappedFor"] = str(list[at].title)
+			var out = list.duplicate()
+			out[at] = sp
+			return out
+	return list
+
+
+## Missions to swap in: any 12 working sets, a body check-in, any workout, XP from workouts.
+static func spares(today: String, data: Dictionary, state: Dictionary, claims: Array) -> Array:
+	var sessions = data.get("sessions", [])
+	var marks = data.get("pt", {})
+	var todays = sessions.filter(func(s): return str(s.get("date", "")) == today)
+	var sets = 0
+	for s in todays:
+		if str(s.get("discipline", "")) != "lift":
+			continue
+		for ex in s.get("exercises", []):
+			if not Dosage.is_mobility(ex, marks):
+				sets += LiftTrend.real_sets(ex.get("sets", [])).size()
+	var checked = 0
+	for b in data.get("body", []):
+		if str(b.get("date", "")) == today:
+			checked = 1
+	var xp = 0
+	for s in todays:
+		xp += int(state.get("sessionXp", {}).get(s.id, 0))
+	var target = maxi(50, TTUtil.jsround((300 + 60 * int(state.get("levels", {}).get("hero", {}).get("level", 1))) / 50.0) * 50)
+	return [
+		_mission("t:%s:sets" % today, "daily", today, "Twelve sets", "Do 12 working sets today, any lifts.", "lift", "lift", 12, sets, "sets", 150, claims),
+		_mission("t:%s:checkin" % today, "daily", today, "Check in", "Log your weight or a progress photo today.", "camera", null, 1, checked, "", 100, claims),
+		_mission("t:%s:any" % today, "daily", today, "Move", "Log any workout today: a climb, a run, a lift.", "flame", null, 1, todays.size(), "sessions", 150, claims),
+		_mission("t:%s:xp" % today, "daily", today, "XP hunter", "Earn %s XP from workouts today." % Xp.fmt_int(target), "bolt", null, target, xp, "xp", 150, claims),
+	]
+
+
+## The settings' swaps with today's set to `id` (older than REROLLS_KEPT days dropped).
+static func with_reroll(settings: Dictionary, today: String, id: String) -> Dictionary:
+	var out = {}
+	var all = settings.get(REROLLS, {})
+	if all is Dictionary:
+		for d in all:
+			if str(d) >= Dates.add_days(today, -REROLLS_KEPT):
+				out[d] = all[d]
+	out[today] = id
+	return out
+
+
+## A muscle being built that fell furthest short in the week before `wk` (sets against its least); "".
+static func challenge_part(sessions: Array, marks: Dictionary, settings: Dictionary, wk: String) -> String:
+	var build = Dose.build_parts(settings)
+	if build.is_empty():
+		return ""
+	var w = Dose.window(sessions, marks, settings, Dates.add_days(wk, -1))
+	var best = ""
+	var low = 99.0
+	for p in build:
+		var r = w.parts[p]
+		if float(r.min) <= 0.0:
+			continue
+		var share = float(r.total) / float(r.min)
+		if share < low - 0.0001:
+			low = share
+			best = str(p)
+	return best
 
 
 static func weekly(wk: String, today: String, data: Dictionary, state: Dictionary, claims: Array) -> Array:
@@ -1627,6 +1796,17 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 		out.append(_mission("tw:%s:dose" % wk, "weekly", wk, "Dosed right", "Have %s all at their weekly sets at once (the last 7 days), on any day this week." % ", ".join(PackedStringArray(build.map(func(p): return Dose.part_name(str(p)).to_lower()))), "muscle", "lift",
 			build.size(), best, "", 500, claims))
 	# (No run mission for the week: the run's goals show on its day only.)
+
+	# A muscle's week: the muscle being built that fell furthest short last week, its least in this week.
+	var cp = challenge_part(sessions, marks, settings, wk)
+	if cp != "":
+		var t = Dose.plan_of(settings).targets[cp]
+		var days_in = mini(7, Dates.days_between(wk, today) + 1)
+		var end = Dates.add_days(wk, days_in - 1)
+		var got = float(Dose.window(sessions, marks, settings, end, days_in).parts[cp].total)
+		var need = int(ceil(float(t[0])))
+		out.append(_mission("tw:%s:mus:%s" % [wk, cp], "weekly", wk, "%s week" % Dose.part_name(cp), "Do %d sets for your %s this week (sets of other lifts that work them count half). Last week they fell shortest." % [need, Dose.part_name(cp).to_lower()], "muscle", "lift",
+			need, int(floor(got)), "sets", 300, claims, {"part": cp}))
 
 	if int(state.get("body", {}).get("entries", 0)) > 0:
 		var checked = 1 if int(state.body.get("weekFlags", {}).get(wk, 0)) > 0 else 0
