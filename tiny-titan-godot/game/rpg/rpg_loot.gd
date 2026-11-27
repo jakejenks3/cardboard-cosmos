@@ -276,6 +276,21 @@ static func star_chest(region_id: String, threshold: int, chest_seed: int, rpg: 
 	return out
 
 
+## What a region's dare chest holds (every dare of the region won): ore, a rune a step above the region's own,
+## and a stack of the region's belt item.
+static func dare_chest(region_id: String, chest_seed: int, rpg: Dictionary = {}) -> Dictionary:
+	var reg = RpgWorld.region(region_id)
+	if reg == null:
+		return {}
+	var r = int(reg.r)
+	var n = 10.0 * float(r - 1) + 15.0
+	var salt = "dares:%s:%d" % [region_id, chest_seed]
+	var out = {"ore": 150 + 50 * r, "items": [], "runes": [], "relic": "", "scroll": ""}
+	_add_item(out.items, str(RpgWorld.REGION_ITEMS[r - 1]), 3)
+	out.runes.append(rune(n, rpg, salt, 0, 1))
+	return out
+
+
 ## The three prizes of a day's hunt (pick one after the first win): ore, a
 ## stack of one belt item, a rune.
 static func hunt_prizes(date: String, n: float, rpg: Dictionary) -> Array:

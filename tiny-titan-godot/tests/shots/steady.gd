@@ -100,6 +100,10 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await _page("map")
 	var fn = _one("realm_feat_notice")
 	if fn != null:
+		# (it may lie under the tab bar: a click there would be the Log key's)
+		ShotHelper.reveal(fn)
+		await ShotHelper.wait(tree, 0.5)
+		fn = _one("realm_feat_notice")
 		await ShotHelper.click(tree, fn)
 		await ShotHelper.wait(tree, 0.8)
 		var feats = null

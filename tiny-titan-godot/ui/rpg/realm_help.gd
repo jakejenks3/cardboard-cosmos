@@ -11,7 +11,7 @@ extends RefCounted
 ## [id, icon, title, words]. {..} are filled in from RpgDefs.
 const POINTS = [
 	["turns", "energy", "Energy", "A move costs energy (its pips). You start a fight with {start} and gain {turn} every turn. Strike is free and gives {strike}; Guard gives {guard}."],
-	["guard", "guard", "Guard", "Guard cuts every hit until your next turn by half or more (more with a strong Core). Use it when a foe's intent shows a big number or beats red. Guard a blow a foe charged up (or a countdown going off) and it is a PERFECT GUARD: the foe loses a guard pip, which can break it, and your gauge fills."],
+	["guard", "guard", "Guard", "Guard cuts every hit until your next turn by half or more (more with a strong Core). Use it when a foe's intent shows a big number or beats red. Guard a blow a foe charged up (or a countdown going off) and it is a PERFECT GUARD: the foe loses a guard pip, which can break it, your gauge fills, and your next hit is a sure crit."],
 	["weak", "sch_legs", "Weaknesses", "A foe is weak to some schools (most to two) and may resist one. A weak hit does {weak}% more and knocks a pip off its guard; a resisted one does {resist}% less. A \"?\" on its plate is a weakness you have not found yet."],
 	["break", "fx_broken", "Breaking a guard", "When a foe's last guard pip goes, it is BROKEN: it loses its next action and takes {broken}% more damage. That is the moment for your hardest move."],
 	["intent", "in_attack", "Intents", "A foe shows what it will do next on its plate. Tap a plate to read a fighter in full: its statuses and what its moves do."],

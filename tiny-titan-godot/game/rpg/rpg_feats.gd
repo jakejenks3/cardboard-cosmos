@@ -28,6 +28,7 @@ const LADDERS = [
 	["relics", "Treasure Hunter", "relic", "Find %d relics", [[1, 50], [5, 150], [12, 300], [24, 600]]],
 	["spire", "Climber", "spire", "Reach floor %d of the Spire", [[5, 100], [10, 200], [20, 400]]],
 	["dares", "Daredevil", "flame", "Win the dare of %d stages", [[1, 40], [10, 150], [30, 400], [72, 900]]],
+	["mastery", "Craftsman", "star_on", "Earn %d mastery stars", [[1, 30], [6, 100], [15, 250], [30, 500]]],
 	["perfect", "Stone Wall", "guard", "Land %d perfect guards", [[1, 30], [10, 100], [40, 250], [100, 500]]],
 	["breaks", "Breaker", "fx_broken", "Break %d guards", [[5, 30], [25, 100], [100, 250], [300, 500]]],
 	["days", "Regular", "bolt", "Train on %d days", [[10, 50], [30, 100], [60, 200], [100, 300], [200, 500]]],
@@ -108,6 +109,10 @@ static func counts(rpg: Dictionary, sheet = null) -> Dictionary:
 	var spire = rpg.get("spire", {})
 	out.spire = int(spire.get("best", 0)) if spire is Dictionary else 0
 	out.dares = RpgWorld.dare_count(rpg)
+	var mastery = rpg.get("mastery", {})
+	if mastery is Dictionary:
+		for mid in mastery:
+			out.mastery += RpgDefs.mastery_level(int(mastery[mid]))
 	var tally = rpg.get("tally", {})
 	if tally is Dictionary:
 		out.perfect = int(tally.get("perfect", 0))
@@ -160,7 +165,7 @@ static func rows(rpg: Dictionary, sheet = null) -> Array:
 static func _one(words: String, n: int) -> String:
 	if n != 1:
 		return words
-	return words.replace(" bosses", " boss").replace(" relics", " relic").replace(" days", " day").replace(" stages", " stage").replace(" stars", " star").replace(" guards", " guard")
+	return words.replace(" bosses", " boss").replace(" relics", " relic").replace(" days", " day").replace(" stages", " stage").replace(" stars", " star").replace(" guards", " guard").replace(" mastery stars", " mastery star")
 
 
 static func ready(rpg: Dictionary, sheet = null) -> int:

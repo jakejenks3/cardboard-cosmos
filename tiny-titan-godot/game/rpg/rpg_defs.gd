@@ -139,6 +139,8 @@ const GAUGE_BREAK = 20.0
 ## The foe loses this many guard pips (which can break it) and the gauge fills by this much.
 const PERFECT_CHIP = 1
 const GAUGE_PERFECT = 12.0
+## ... and the hero gets this many stacks of Focus: his next hit is a sure crit (the riposte).
+const PERFECT_FOCUS = 1
 const GAUGE_HURT = 60.0
 const GRIT_GAUGE = 200.0
 const FLOW_HEAL = 100.0

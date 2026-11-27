@@ -519,6 +519,23 @@ static func open_star_chest(rpg: Dictionary, region_id: String, threshold: int, 
 	return _yes(out)
 
 
+## A region's dare chest is opened (`contents` = RpgLoot.dare_chest): once, when every dare of the region is
+## won. It is kept among the star chests, under "<region>:dare".
+static func open_dare_chest(rpg: Dictionary, region_id: String, contents: Dictionary) -> Dictionary:
+	if RpgWorld.region(region_id) == null:
+		return _no(rpg, "There is no such chest.")
+	var key = "%s:dare" % region_id
+	if bool(rpg.get("starChests", {}).get(key, false)):
+		return _no(rpg, "This chest is open already.")
+	var prog = RpgWorld.dare_progress(rpg, region_id)
+	if int(prog.of) <= 0 or int(prog.won) < int(prog.of):
+		return _no(rpg, "Win every dare here first (%d of %d)." % [int(prog.won), int(prog.of)])
+	var out = copy(rpg)
+	_give(out, contents)
+	out.starChests[key] = true
+	return _yes(out)
+
+
 ## The prize of a day's hunt is picked (`option` = one of the hunt's
 ## "prizes"): once a day, after a win that day.
 static func take_hunt_prize(rpg: Dictionary, date: String, option) -> Dictionary:

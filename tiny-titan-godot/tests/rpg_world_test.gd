@@ -79,6 +79,22 @@ func _init() -> void:
 	ok(float(RpgWorld.dare("r1s1", drpg, 1.0).n) == float(d1.n) and float(RpgWorld.dare("r1s1", drpg, 999999.0).n) == RpgWorld.DARE_TOP and RpgWorld.n_for_power(0.0, 7.0) == 7.0,
 		"never under the reach of the road, never over DARE_TOP", [RpgWorld.dare("r1s1", drpg, 1.0).n, RpgWorld.dare("r1s1", drpg, 999999.0).n])
 	ok(float(RpgWorld.stage_of({"kind": "dare", "id": "dare:r1s1", "power": strong}, drpg).n) == float(dp.n), "the power comes with what is fought")
+	# --- the dares of a region, and its dare chest -------------------------------------------------------
+	var pg0 = RpgWorld.dare_progress(drpg, "rustyard")
+	ok(int(pg0.won) == 0 and int(pg0.of) == 9 and str(pg0.next) == "r1s1" and int(RpgWorld.dare_progress(RpgSave.empty(), "rustyard").of) == 9 and str(RpgWorld.dare_progress(RpgSave.empty(), "rustyard").next) == ""
+		and int(RpgWorld.dare_progress(drpg, "nope").of) == 0, "a region has nine dares (not its cache); the next is the first stage won and not dared", pg0)
+	var pg1 = RpgWorld.dare_progress(dwin.rpg, "rustyard")
+	ok(int(pg1.won) == 1 and str(pg1.next) == "r1s2", "a dare won counts, and the next one moves on", pg1)
+	var chest = RpgLoot.dare_chest("rustyard", 7, dwin.rpg)
+	ok(int(chest.ore) > 0 and chest.runes.size() == 1 and chest.items.size() == 1 and RpgLoot.dare_chest("nope", 7, dwin.rpg).is_empty(), "the dare chest holds ore, a rune and belt items", chest)
+	ok(not bool(RpgSave.open_dare_chest(dwin.rpg, "rustyard", chest).ok), "it stays shut until every dare of the region is won")
+	var full = dwin.rpg.duplicate(true)
+	for ds2 in range(1, 11):
+		if ds2 != 6:
+			full.stages["r1s%d" % ds2] = {"stars": [true, false, false], "wins": 1, "best": 3, "dares": 1}
+	var opened = RpgSave.open_dare_chest(full, "rustyard", chest)
+	ok(bool(opened.ok) and int(opened.rpg.ore) == int(full.ore) + int(chest.ore) and bool(opened.rpg.starChests.get("rustyard:dare", false)) and not bool(RpgSave.open_dare_chest(opened.rpg, "rustyard", chest).ok)
+		and bool(RpgSave.parse(opened.rpg).starChests.get("rustyard:dare", false)), "with all nine won it opens once, pays, and is kept in the save file", opened.get("why", ""))
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

@@ -536,6 +536,25 @@ static func dared(rpg: Dictionary, stage_id: String) -> bool:
 	return rec is Dictionary and int(rec.get("dares", 0)) > 0
 
 
+## The dares of a region: {"won", "of" (its stages that can be dared: all but the cache), "next" (the first
+## stage that is won and not dared yet, "" when there is none)}. All of them won opens the region's dare chest.
+static func dare_progress(rpg: Dictionary, region_id: String) -> Dictionary:
+	var out = {"won": 0, "of": 0, "next": ""}
+	var reg = region(region_id)
+	if reg == null:
+		return out
+	for id in reg.ids:
+		var st = stage(str(id))
+		if not (st is Dictionary) or str(st.kind) == "cache":
+			continue
+		out.of += 1
+		if dared(rpg, str(id)):
+			out.won += 1
+		elif str(out.next) == "" and done(rpg, str(id)):
+			out["next"] = str(id)
+	return out
+
+
 ## How many stages have their dare won.
 static func dare_count(rpg: Dictionary) -> int:
 	var n = 0

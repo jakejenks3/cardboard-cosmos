@@ -95,6 +95,21 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var plain_row = RpgMoves.by_id("stomp")
 	var played = RpgBattle.move_row(bv.B, "stomp")
 	check(absf(float(played.power) - float(plain_row.power) * (1.0 + RpgDefs.MASTERY_PCT)) < 0.001, "the fight plays Stomp at its first star (power %s, plain %s)" % [str(played.power), str(plain_row.power)])
+	var k_stomp = null
+	var k_yank = null
+	var k_breath = null
+	for n in ShotHelper.walk(bv):
+		if n.has_meta("bv_move"):
+			match str(n.get_meta("bv_move")):
+				"stomp":
+					k_stomp = n
+				"yank":
+					k_yank = n
+				"deep_breath":
+					k_breath = n
+	check(k_stomp != null and int(k_stomp.get_meta("bv_mastery")) == 1 and k_stomp._stars.visible and int(k_yank.get_meta("bv_mastery")) == 3 and int(k_breath.get_meta("bv_mastery")) == 0 and not k_breath._stars.visible
+		and k_stomp.get_global_rect().encloses(k_stomp._stars.get_global_rect()), "the fight's move keys show their stars (stomp 1, yank 3, deep breath none)")
+	await ShotHelper.snap(tree, "mastery_1b_keys")
 	var foes = RpgBattle.foes(bv.B)
 	bv._do({"t": "move", "id": "stomp", "target": str(foes[0].id)})
 	var t0 = Time.get_ticks_msec()

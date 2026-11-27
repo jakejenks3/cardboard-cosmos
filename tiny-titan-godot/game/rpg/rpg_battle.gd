@@ -2357,6 +2357,8 @@ static func _foe_act(B: Dictionary, ev: Array, f: Dictionary) -> Dictionary:
 			var off = _chip(f, RpgDefs.PERFECT_CHIP)
 			ev.append({"t": "perfect", "src": str(f.id), "chip": off, "guard": _i(f, "guard")})
 			_gauge(B, ev, RpgDefs.GAUGE_PERFECT, false)
+			# ... and the hero sees his opening: Focus, so his next hit is a sure crit (the riposte).
+			_add_status(B, ev, B.hero, {"id": "focus", "stacks": RpgDefs.PERFECT_FOCUS}, {"src": B.hero, "targets": [B.hero]})
 			if off > 0 and _i(f, "guard") <= 0:
 				_break(B, ev, f)
 		elif told and bool(run.hit) and not bool(B.hero.get("guarding", false)):

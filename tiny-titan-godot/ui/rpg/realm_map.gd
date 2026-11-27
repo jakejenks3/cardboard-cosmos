@@ -503,7 +503,57 @@ static func _region_card(reg: Dictionary, rpg: Dictionary, stars: int) -> Contro
 		b.pressed.connect(_open_star_chest.bind(str(reg.id), n, chests, b))
 		chests.add_child(_finger(b))
 	v.add_child(chests)
+	var dares = _dares_row(reg, rpg)
+	if dares != null:
+		v.add_child(dares)
 	return v
+
+
+## A region's dares in one row (once a stage of it is won): how many are won, a key to the next one, and the
+## dare chest when all are.
+static func _dares_row(reg: Dictionary, rpg: Dictionary) -> Variant:
+	var prog = RpgWorld.dare_progress(rpg, str(reg.id))
+	if int(prog.of) <= 0 or (int(prog.won) == 0 and str(prog.next) == ""):
+		return null
+	var taken = bool(rpg.get("starChests", {}).get("%s:dare" % str(reg.id), false))
+	var all = int(prog.won) >= int(prog.of)
+	var row = Kit.hbox(6)
+	row.set_meta("map_dares", str(reg.id))
+	row.set_meta("map_dares_won", int(prog.won))
+	row.add_child(Kit.vcenter(Icons.rect("flame", 16)))
+	var words = Kit.clip("Dares %d of %d" % [int(prog.won), int(prog.of)], 13, Pal.TEXT, true)
+	row.add_child(Kit.vcenter(words))
+	var tail = Kit.clip("" if taken else ("the chest is yours" if all else "all %d: a chest" % int(prog.of)), 11, Pal.MUTED)
+	tail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(Kit.vcenter(tail))
+	var b
+	if all:
+		b = Kit.button("Taken" if taken else "Open", "ghost" if taken else "primary", Callable(), "sm", "check" if taken else "chest_gold")
+		b.set_meta("dare_chest", str(reg.id))
+		b.set_meta("dare_chest_state", "opened" if taken else "ready")
+		if taken:
+			b.modulate.a = 0.7
+		else:
+			Fx.shine(b, 3.2, 0.6, 0.5)
+		b.pressed.connect(_open_dare_chest.bind(str(reg.id), row, b))
+	elif str(prog.next) != "":
+		b = Kit.button("Next dare", "secondary", Callable(), "sm", "flame")
+		b.set_meta("dare_next", str(prog.next))
+		b.pressed.connect(open_prep.bind({"kind": "dare", "id": "dare:" + str(prog.next)}))
+	else:
+		return row
+	b.set_meta("anchor_id", "dares:" + str(reg.id))
+	row.add_child(_finger(b))
+	return row
+
+
+static func _open_dare_chest(reg_id: String, row: Control, key: Control) -> void:
+	var rpg = RpgUi.save()
+	var contents = RpgLoot.dare_chest(reg_id, CHEST_SEED, rpg)
+	var res = RpgSave.open_dare_chest(rpg, reg_id, contents)
+	if bool(res.get("ok", false)):
+		loot_fx(row, key, pack_lines(contents), "Dare chest", "chest_gold")
+	RpgUi.apply(res)
 
 
 static func _open_star_chest(reg_id: String, n: int, row: Control, key: Control) -> void:

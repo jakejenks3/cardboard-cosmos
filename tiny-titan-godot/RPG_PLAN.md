@@ -291,7 +291,8 @@ Exactly one of:
   energy, rank 0.7.
   A **perfect guard**: a Guard that takes a blow the foe had charged (a wind-up) or a bomb going off.
   The foe loses `PERFECT_CHIP` (1) guard pip, which can break it, and the gauge gains
-  `GAUGE_PERFECT` (12). Event `perfect {src, chip, guard}`; `summary.perfect` counts them.
+  `GAUGE_PERFECT` (12), and the hero gets `PERFECT_FOCUS` (1) stack of Focus (his next hit is a sure
+  crit). Event `perfect {src, chip, guard}`; `summary.perfect` counts them.
 - **An item** from the belt (rank 0.6).
 - **The ultimate** when the gauge is 100 (uses all of it; rank 1.0).
 - **Flee**: the battle ends as a loss; nothing is lost.
@@ -717,7 +718,8 @@ push, marsh mind and grip, stormspine and titans_rest spread evenly); at most on
   `DARE_TOP`, with one rule (by its place, as an
   echo's). Stage id `dare:r3s5`, kind "dare", no stars. A win adds to `saved.rpg.stages[id].dares`;
   the first pays `first` (ore `60 * 1.15^(n/10)`; an elite's or a boss's also a rune) and puts a flame
-  on the stage.
+  on the stage. All nine dares of a region open its dare chest (`RpgLoot.dare_chest`: ore `150 + 50 r`,
+  a rune, three of the region's belt item; `saved.rpg.starChests["<region>:dare"]`).
 - **Echo regions** (after region 8): each region again at `n = 80 + 3 (r - 1) + 0.3 (s - 1)` with
   one rule from `RULES`; stage ids `e3s5`.
 

@@ -504,7 +504,7 @@ func _note_stats() -> void:
 ## as NEWS_ID, so it never comes back). A new batch of news gets a new id.
 const NEWS_ID = "news_2"
 const NEWS = [
-	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks and your gauge fills."],
+	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks, and your next hit is a sure crit."],
 	["star_on", "Mastery: a move you use a lot earns up to three stars and hits harder. See the Moves page."],
 	["flame", "Dares: tap a stage you have won to fight it again with foes as strong as you, for extra ore."],
 	["music", "Music, and a sound for every move. The note key (here and in a fight) switches the music off."],

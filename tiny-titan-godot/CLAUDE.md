@@ -1820,7 +1820,8 @@ is the Windows handoff.
       `TABLEAU_MORE` 110): on a phone the whole scene shows, and there is less of a hole over the keys.
     - PERFECT GUARD (2026-11-27, gameplay; RPG_PLAN.md 4.3): a Guard that takes a blow the foe had CHARGED (a
       wind-up) or a bomb going off. The foe loses `RpgDefs.PERFECT_CHIP` (1) guard pip, which can break it,
-      and the gauge gains `GAUGE_PERFECT` (12). Engine: in `RpgBattle._foe_act`, event `perfect {src, chip,
+      the gauge gains `GAUGE_PERFECT` (12) and the hero gets `PERFECT_FOCUS` (1) stack of Focus (the riposte:
+      his next hit is a sure crit). Engine: in `RpgBattle._foe_act`, event `perfect {src, chip,
       guard}`, `summary.perfect`. Screen: a "PERFECT GUARD" banner, sound "perfect", a hit stop, hint
       "perfect". AUTO (the heuristic) was NOT taught to go for it: playing by hand is worth a little more.
       The balance bands (rpg_sim_test) did not move. `saved.rpg.tally` = {perfect, breaks} (`RpgSave.TALLY`,
@@ -1836,7 +1837,9 @@ is the Windows handoff.
       and a stored battle keeps the rows it began with. The reference heroes of the balance have none.
       Screens: the Moves page's tiles (`RealmMoves.mastery_row`: three stars, the name, what it gives, uses to
       the next; metas `move_mastery`, `move_mastery_of`; the Power tag is the power it is played at), the
-      result (`info.mastery` from `RpgUi.finish`, rows `br_mastery`), the help sheet, the news card.
+      result (`info.mastery` from `RpgUi.finish`, rows `br_mastery`), the help sheet, the news card, and gold
+      pips at the foot of a move key's icon in a fight (`MoveKey.set_mastery`, meta `bv_mastery`; the levels
+      come as `opts.mastery` from `RpgUi.mastery_levels`). The feat Craftsman counts the stars.
       Walkthrough `tests/shots/mastery.gd` (year data).
     - DARES (2026-11-27, gameplay; RPG_PLAN.md 8.4): a road stage that is WON can be fought again as a dare:
       its own foes raised to the HERO'S OWN STRENGTH (the highest of the stage's index, `RpgWorld.best_n` +
@@ -1850,7 +1853,11 @@ is the Windows handoff.
       the stage itself), the first pays `first`. No stars, no next stage. `RpgWorld.dared`, `dare_count`; the
       feat Daredevil (15 ladders). Screens: a row on a won stage's prep sheet (`RealmMap._dare_row`, metas
       `prep_dare`, `prep_dare_won`) opens the dare's own prep sheet; a flame on the stage's medal
-      (`RoadMap.Place.dared`, meta `map_stage_dare`). Walkthrough `tests/shots/dares.gd` (year data). Why:
+      (`RoadMap.Place.dared`, meta `map_stage_dare`). A REGION'S DARES: `RpgWorld.dare_progress(rpg, region)` ({won, of 9, next}); the region's
+      card has a row "Dares N of 9" (`RealmMap._dares_row`, metas `map_dares`, `map_dares_won`) with a "Next
+      dare" key (meta `dare_next`) and, with all nine won, the DARE CHEST (`RpgLoot.dare_chest`: ore, a rune,
+      three of the region's belt item; `RpgSave.open_dare_chest`, kept as `starChests["<region>:dare"]`; key
+      metas `dare_chest`, `dare_chest_state`). Walkthrough `tests/shots/dares.gd` (year data). Why:
       the player's real stats make the first regions a turn or two a fight; a dare gives a won stage a
       second life at his own level.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of

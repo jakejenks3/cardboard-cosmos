@@ -120,5 +120,8 @@ func _run() -> void:
 	var cs = RpgFeats.counts(world, null)
 	ok(int(cs.stages) == 1 and int(cs.stars) == 2 and int(cs.foes) >= 2, "a stage won counts, with its stars and the foes that stood in it", [cs.stages, cs.stars, cs.foes])
 
+	var fm = RpgSave.empty()
+	fm["mastery"] = {"stomp": RpgDefs.MASTERY_AT[2], "yank": RpgDefs.MASTERY_AT[0], "shove": 1}
+	ok(int(RpgFeats.counts(fm).mastery) == 4 and int(RpgFeats.counts(RpgSave.empty()).mastery) == 0, "the feats count mastery stars over every move", RpgFeats.counts(fm).mastery)
 	print("RPG FEATS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)

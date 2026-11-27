@@ -412,6 +412,7 @@ static func fight(what: Dictionary, resume_b = null):
 		"hero": hero_look(), "next": nxt != "",
 		"hints": save().get("hints", {}).duplicate(), "on_hint": func(hint_id): RpgUi._hint_given(hint_id),
 		"on_pref": func(key, on): RpgUi._pref_set(key, on),
+		"mastery": mastery_levels(),
 		"store": func(B): RpgUi._store(what, B),
 		"result": func(B, summary): return RpgUi.finish(B, what, summary)}
 	if resume_b is Dictionary:
@@ -420,6 +421,18 @@ static func fight(what: Dictionary, resume_b = null):
 	var bv = BattleView.open(setup, opts)
 	bv.finished.connect(func(_b, _summary): RpgUi._after(bv, what, nxt))
 	return bv
+
+
+## The mastery level of every move that has one: {move id: 1..3} (the fight's keys show them).
+static func mastery_levels() -> Dictionary:
+	var out = {}
+	var m = save().get("mastery", {})
+	if m is Dictionary:
+		for id in m:
+			var lvl = RpgDefs.mastery_level(int(m[id]))
+			if lvl > 0:
+				out[str(id)] = lvl
+	return out
 
 
 ## How the player likes a fight, from the save to where a fight reads it (BattleView's statics, BattleFx.light).

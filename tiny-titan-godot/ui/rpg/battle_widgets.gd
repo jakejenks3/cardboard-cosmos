@@ -630,6 +630,8 @@ class MoveKey extends Button:
 	var _tag: Label
 	var _icon: TextureRect
 
+	var _stars: Pips = null
+
 	func _init(move: Dictionary, h: int) -> void:
 		move_id = str(move.get("id", ""))
 		school = str(move.get("school", "plain"))
@@ -697,6 +699,26 @@ class MoveKey extends Button:
 		button_down.connect(_sink.bind(true))
 		button_up.connect(_sink.bind(false))
 		Kit.juice(self)
+		# The move's mastery: gold pips at the foot of its icon (none until it has a star).
+		_stars = Pips.new(Pal.ACCENT, 8, 6)
+		_stars.size = Vector2(28, 6)
+		_stars.visible = false
+		add_child(_stars)
+		resized.connect(_place_stars)
+
+	func _place_stars() -> void:
+		if _stars == null:
+			return
+		var mid_y = 3.0 + (size.y - 6.0 - float(BattleWidgets.DROP)) / 2.0
+		_stars.position = Vector2(11, floor(mid_y + 18.0 - 4.0))
+		_stars.size = Vector2(28, 6)
+
+	## 0 to 3 mastery stars (RpgDefs.mastery_level), shown as pips on the icon.
+	func set_mastery(lvl: int) -> void:
+		set_meta("bv_mastery", lvl)
+		_stars.visible = lvl > 0
+		_stars.set_values(lvl, RpgDefs.MASTERY_AT.size())
+		_place_stars()
 
 	## What a support move does, in one word for its key: a heal before a
 	## shield before a cleanse before a status, whatever order they are written in.

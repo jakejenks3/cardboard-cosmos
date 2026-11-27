@@ -82,7 +82,7 @@ const LOW_HP = 0.3
 ## were given before (opts "hints": {id: true}) and is told when one is (opts "on_hint": Callable(id)).
 const HINTS = {
 	"charge": "It is winding up a big hit. Guard it for a perfect guard, or break its guard to stop it.",
-	"perfect": "A perfect guard: you guarded a charged blow. The foe loses a guard pip and your gauge fills.",
+	"perfect": "A perfect guard! The foe loses a guard pip, your gauge fills, and your next hit is a sure crit.",
 	"count": "A countdown: when it runs out the blow lands. Finish the foe first, or guard in time.",
 	"danger": "An intent that beats red is a quarter of your HP or more. Guard cuts it by half.",
 	"break": "Its guard is broken: it loses its next action and takes more. Hit hard now.",
@@ -517,6 +517,8 @@ func _build_moves() -> void:
 			_move_order.append(empty)
 			continue
 		var key = BattleWidgets.MoveKey.new(row, int(_move_h))
+		var stars = _opts.get("mastery")
+		key.set_mastery(int(stars.get(key.move_id, 0)) if stars is Dictionary else 0)
 		key.pressed.connect(_on_move.bind(key.move_id))
 		_moves.add_child(key)
 		_move_keys[key.move_id] = key
@@ -1790,7 +1792,7 @@ func _show(e: Dictionary) -> float:
 			_hit_stop("crit")
 			RpgSfx.buzz(2)
 			_teach("perfect")
-			_say("Perfect guard! %s is thrown off and its guard cracks." % _name(who5))
+			_say("Perfect guard! %s is thrown off, its guard cracks. Your next hit is a crit." % _name(who5))
 			return 0.5
 		"ko":
 			if _ko_done.has(str(e.get("dst", ""))):
