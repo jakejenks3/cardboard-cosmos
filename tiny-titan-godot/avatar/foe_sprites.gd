@@ -1650,6 +1650,7 @@ static func is_rival(foe_id: String) -> bool:
 
 ## Looks of foes that are not in the catalog (RpgFoes): the Ore Mole a battle brings along.
 const EXTRA_LOOKS = {
+	"sparring_post": {"sprite": "blob", "palette": {"a": "#c9a06a", "b": "#8f6a3c", "c": "#ecd3a4", "k": K, "w": "#ffffff"}, "hover": false},
 	"ore_mole": {"sprite": "rat", "palette": {"a": "#e8b93a", "b": "#a8741c", "c": "#fff0a8", "p": "#f2c9a0", "k": K, "w": "#ffffff"}, "hover": false},
 }
 

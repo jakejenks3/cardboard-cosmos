@@ -96,6 +96,7 @@ static func fill(box: VBoxContainer, screen) -> void:
 	box.add_child(_spire(rpg))
 	box.add_child(RealmBestiary.card(rpg))
 	box.add_child(RealmHelp.link())
+	box.add_child(RealmHelp.yard_link())
 
 
 ## Is there something to pick up on the map: a star chest that can be opened, or the hunt's prize?

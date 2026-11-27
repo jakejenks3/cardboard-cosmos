@@ -168,6 +168,8 @@ static func rewards(stage: Dictionary, summary: Dictionary, rpg: Dictionary, lev
 	if not bool(summary.get("win", false)):
 		return out
 	var kind = str(stage.get("kind", ""))
+	if kind == "practice":
+		return out          # the practice yard pays nothing
 	var id = str(stage.get("id", ""))
 	var n = float(stage.get("n", 0))
 	var first = is_first(stage, rpg)

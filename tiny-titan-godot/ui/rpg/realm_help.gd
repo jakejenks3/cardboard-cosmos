@@ -54,6 +54,22 @@ static func link() -> Control:
 	return row
 
 
+## The practice yard, as a row of the Map's foot.
+static func yard_link() -> Control:
+	var row = Kit.row(func(): RpgUi.fight({"kind": "practice", "id": RpgWorld.PRACTICE_ID}), Pal.SECOND, Pal.SECOND, 8, 0, 0.12)
+	row.set_meta("realm_practice", true)
+	row.set_meta("anchor_id", "realm_practice")
+	if Kit.fingers:
+		row.custom_minimum_size.y = 44
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect("guard" if Icons.has_icon("guard") else "star", 16)))
+	h.add_child(Kit.vcenter(Kit.clip("Practice yard", 14, null, true)))
+	h.add_child(Kit.vcenter(Kit.clip("a sparring dummy, for nothing", 12, Pal.MUTED)))
+	row.add(h)
+	return row
+
+
 static func open() -> void:
 	RpgSfx.play("select")
 	var sh = Kit.sheet("How fights work")
@@ -67,6 +83,14 @@ static func open() -> void:
 		row.add(head)
 		row.add(Kit.para(_fill(str(p[3])), 13, Pal.TEXT))
 		sh.box.add_child(row)
+	var yard = Kit.button("Try it in the practice yard", "primary", func():
+		sh.close()
+		RpgUi.fight.call_deferred({"kind": "practice", "id": RpgWorld.PRACTICE_ID}), "lg", "guard" if Icons.has_icon("guard") else "")
+	yard.set_meta("help_practice", true)
+	if Kit.fingers:
+		yard.custom_minimum_size.y = 44
+	sh.box.add_child(yard)
+	sh.box.add_child(Kit.muted_para("A sparring dummy that winds up a blow again and again. No reward, nothing kept, nothing lost.", 11))
 	var close = Kit.button("Close", "ghost", sh.close, "lg")
 	if Kit.fingers:
 		close.custom_minimum_size.y = 44

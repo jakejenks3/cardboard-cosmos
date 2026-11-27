@@ -1893,6 +1893,13 @@ is the Windows handoff.
       a "Pick one" key; metas `map_bless`, `map_bless_owed`, `bless_pick`, `bless_held`), the sheet
       `open_blessings` (meta `bless_option`). The events walkthrough covers it. The news card is `NEWS_ID`
       "news_3".
+    - THE PRACTICE YARD (2026-11-27): `RpgWorld.practice(rpg)`, a stage of kind "practice" (id `PRACTICE_ID`) with
+      one Sparring Dummy (`PRACTICE_FOE`, custom rows: a jab, then a heavy blow it winds up, over and over;
+      five times a tank's HP; index = the player's reach). For trying a build and the perfect guard. It
+      pays NOTHING and NOTHING is kept: `RpgLoot.rewards` returns zeros and `RpgSave.finish` turns the kind
+      down (so no XP, ore, weakness, mastery use or count comes of it). Opened from the Map's foot
+      (`RealmHelp.yard_link`, meta `realm_practice`) and from "How fights work" (meta `help_practice`). A
+      fight can open with a line of its own (`opts.opening_line`). Walkthrough `tests/shots/yard.gd`.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

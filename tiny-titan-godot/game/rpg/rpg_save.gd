@@ -417,6 +417,8 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 	var id = str(stage.get("id", ""))
 	if id == "" or kind == "" or kind == "cache":
 		return _no(rpg, "There was no battle here.")
+	if kind == "practice":
+		return _no(rpg, "Practice is for nothing: nothing is kept.")
 	if str(what.get("id", id)) != id:
 		return _no(rpg, "That battle was for another stage.")
 	var out = copy(rpg)

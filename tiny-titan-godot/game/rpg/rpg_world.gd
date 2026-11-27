@@ -476,6 +476,8 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 		return true
 	if stage_id.begins_with("dare:"):
 		return dare(stage_id.substr(5), rpg) != null
+	if stage_id == PRACTICE_ID:
+		return true
 	if stage_id.begins_with("spire:"):
 		var f = int(stage_id.substr(6))
 		return f >= 1 and spire_open(rpg) and f <= int(rpg.get("spire", {}).get("best", 0)) + 1
@@ -484,6 +486,28 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 		return false
 	var before = _prev(st)
 	return before == "" or done(rpg, before)
+
+
+## THE PRACTICE YARD (added 2026-11-27): a fight for nothing, against a sparring post that jabs and then winds
+## up a heavy blow, over and over: the place to try a build and to practise the perfect guard. It pays nothing
+## and is kept nowhere (RpgSave.finish turns it down; no weakness, mastery or count comes of it). The post is
+## not a foe of the catalog: its rows come with the stage ("custom"). Its index is the player's reach.
+const PRACTICE_ID = "practice"
+const PRACTICE_FOE = "sparring_post"
+
+static func practice(rpg: Dictionary) -> Dictionary:
+	var n = maxf(1.0, best_n(rpg))
+	var foe = {"id": PRACTICE_FOE, "name": "Sparring Dummy", "region": "", "role": "tank", "weak": [], "resist": [], "guard": 3,
+		"moves": ["post_jab", "post_haymaker"], "pattern": ["post_jab", "post_haymaker"], "rules": [],
+		"traits": [{"p": "hp_pct", "pct": 4.0}], "phases": [], "text": "A dummy on a spring. It hits back, and it tells you when."}
+	var moves = {
+		"post_jab": {"name": "Jab", "kind": "attack", "power": 0.5, "text": "A light knock."},
+		"post_haymaker": {"name": "Haymaker", "kind": "heavy", "power": 1.6, "windup": 1, "rank": 1.2, "text": "It leans all the way back first. Guard the turn it lands."},
+	}
+	return {"id": PRACTICE_ID, "region": "rustyard", "r": 1, "s": 0, "n": n, "name": "Practice yard",
+		"text": "A sparring dummy, for nothing: no reward, nothing kept, nothing lost. It jabs, then winds up a heavy blow. Guard the turn the blow lands for a perfect guard.",
+		"kind": "practice", "scene": "rustyard", "waves": [[{"foe": PRACTICE_FOE, "n": n}]], "rules": [], "stars": [], "par": 0,
+		"first": _no_first(), "rec": rec_of(n), "custom": {"foes": {PRACTICE_FOE: foe}, "foe_moves": moves}}
 
 
 ## SPIRE BLESSINGS. Held: saved.rpg.spire.bless = {id: stacks}.
@@ -978,6 +1002,8 @@ static func stage_of(what: Dictionary, rpg: Dictionary) -> Variant:
 			return st if (st is Dictionary and (id.begins_with("r") or id.begins_with("e"))) else null
 		"dare":
 			return dare(id.substr(5), rpg, float(what.get("power", 0.0))) if id.begins_with("dare:") else null
+		"practice":
+			return practice(rpg)
 		"spire":
 			var f = int(id.substr(6)) if id.begins_with("spire:") else int(what.get("floor", 0))
 			return spire(f) if f >= 1 else null

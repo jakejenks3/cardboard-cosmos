@@ -415,6 +415,8 @@ static func fight(what: Dictionary, resume_b = null):
 		"mastery": mastery_levels(),
 		"store": func(B): RpgUi._store(what, B),
 		"result": func(B, summary): return RpgUi.finish(B, what, summary)}
+	if str(st.get("kind", "")) == "practice":
+		opts["opening_line"] = "Practice: when the dummy winds up, Guard on your next turn. Nothing here is kept or lost."
 	if resume_b is Dictionary:
 		opts["resume"] = resume_b
 	use_prefs()

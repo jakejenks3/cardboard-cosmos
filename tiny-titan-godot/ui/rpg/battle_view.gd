@@ -2596,7 +2596,8 @@ func _show_new_wave(e: Dictionary) -> float:
 	_snd("wave" if n > 1 else "enter")
 	if not instant:
 		BattleWidgets.banner(_fx_layer, "FIGHT!" if of <= 1 else "WAVE %d/%d" % [n, of], Pal.TEXT, 0.4 / float(speed))
-	_say("Wave %d of %d." % [n, of] if of > 1 else "The fight begins.")
+	var first_words = str(_opts.get("opening_line", ""))
+	_say("Wave %d of %d." % [n, of] if of > 1 else (first_words if first_words != "" else "The fight begins."))
 	return 0.65 if n > 1 else 0.45
 
 

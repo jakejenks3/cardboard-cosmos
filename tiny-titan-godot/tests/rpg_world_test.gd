@@ -229,6 +229,30 @@ func _init() -> void:
 				sp_open.stages[sid2] = {"stars": [true, false, false], "wins": 1, "best": 3}
 	var climbed = RpgSave.finish(sp_open, {"kind": "spire", "id": str(spf.id)}, spf, {}, {"win": true, "turns": 3}, "2026-01-05")
 	ok(bool(climbed.ok) and int(climbed.rpg.spire.best) == 12 and climbed.rpg.spire.bless == tk2.rpg.spire.bless, "a floor climbed keeps the blessings", climbed.get("why", climbed.rpg.get("spire")))
+	# --- the practice yard -----------------------------------------------------------------------------------
+	var yard_rpg = RpgSave.first_open(RpgSave.empty(), {}, "")
+	var yard = RpgWorld.stage_of({"kind": "practice", "id": RpgWorld.PRACTICE_ID}, yard_rpg)
+	ok(yard is Dictionary and yard.kind == "practice" and yard.waves.size() == 1 and yard.waves[0].size() == 1 and RpgWorld.is_open(yard_rpg, RpgWorld.PRACTICE_ID) and yard.custom.foes.has(RpgWorld.PRACTICE_FOE), "the practice yard is a stage of one sparring post, always open")
+	var yset = RpgWorld.setup({"kind": "practice", "id": RpgWorld.PRACTICE_ID}, yard_rpg, RpgHero.reference_hero(1.0), null, 4, "2026-01-05")
+	var By = RpgBattle.start(yset)
+	var perfects = 0
+	var charged_seen = 0
+	for iy in range(40):
+		if RpgBattle.over(By):
+			break
+		var charged = false
+		for fy in RpgBattle.foes(By):
+			if bool(fy.get("intent", {}).get("charged", false)):
+				charged = true
+		if charged:
+			charged_seen += 1
+		for ey in RpgBattle.act(By, {"t": "guard"} if charged else {"t": "strike", "target": str(RpgBattle.foes(By)[0].id)}):
+			if str(ey.get("t", "")) == "perfect":
+				perfects += 1
+	ok(charged_seen >= 2 and perfects >= 2 and not RpgBattle.over(By), "its post winds up a blow again and again: a Guard on the turn it lands is a perfect guard, every time (%d of %d)" % [perfects, charged_seen])
+	var yard_rw = RpgLoot.rewards(yard, {"win": true, "turns": 3, "treasure": 1}, yard_rpg, 1, [], 2)
+	var yard_fin = RpgSave.finish(yard_rpg, {"kind": "practice", "id": RpgWorld.PRACTICE_ID}, yard, yard_rw, {"win": true, "turns": 3, "perfect": 5, "moves": {"stomp": 9}}, "2026-01-05")
+	ok(int(yard_rw.xp) == 0 and int(yard_rw.ore) == 0 and yard_rw.items.is_empty() and not bool(yard_fin.ok) and yard_fin.rpg == yard_rpg, "it pays nothing and nothing of it is kept", [yard_rw, yard_fin.get("why")])
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 
