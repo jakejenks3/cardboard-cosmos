@@ -88,7 +88,25 @@ static func _figure() -> Control:
 	var stage = Stage.new()
 	stage.setup(RpgUi.color("realm"), 2)
 	well.add_child(stage)
-	well.add_child(hero_view(2))
+	# The hero at x3: he is what this page is about. His picture is wider than the well, so it stands in a
+	# frame that cuts it at the well's sides (only empty margin, and the tip of a wide piece of gear) and
+	# never makes the well wider than it was.
+	var frame = Control.new()
+	frame.clip_contents = true
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.custom_minimum_size = Vector2(128, 214)
+	var hv = hero_view(3)
+	hv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(hv)
+	var place = func():
+		if not is_instance_valid(hv) or not is_instance_valid(frame):
+			return
+		hv.size = hv.get_combined_minimum_size()
+		hv.position = Vector2(floor((frame.size.x - hv.size.x) / 2.0), floor(frame.size.y - hv.size.y))
+	frame.resized.connect(place)
+	hv.minimum_size_changed.connect(place)
+	hv.ready.connect(place, CONNECT_ONE_SHOT)
+	well.add_child(frame)
 	return well
 
 
