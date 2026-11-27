@@ -1722,6 +1722,14 @@ is the Windows handoff.
       `BattleWidgets.Arena` + `BattleFx.Ambient` in the well, a tag with its name; metas `realm_place`,
       `realm_where`). A move of three energy or more (or rank 1.35+) lands heavier (`_act_heavy`). A fight's
       music is made ready when its prep sheet opens (`RpgSfx.tune_ready`).
+    - `tests/shots/realm_own.gd` (any data kind; env `REALM_OWN_SAVE` = a save or backup file kept OUTSIDE
+      the project, read only, loaded into the run's throwaway data folder): the Realm with the player's own
+      log: the stats and boosts printed, the first fight, the hub, the Hero page, r1s2 and the first boss on
+      AUTO ("OWN ..." lines say how each went). Delete the run's data and shots folders afterwards: they hold
+      a copy of the log. It found that the hub kept offering "Continue the battle" after a paid fight's
+      result was left (the hub had been drawn while the draft was still kept): `RpgUi._after` now emits
+      `rpg_changed` once the draft is cleared. With the Nov 23 backup: first fights 1 to 2 turns, the first
+      boss won on AUTO in 9 turns with 61% of the HP lost and nothing learned yet.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
@@ -1969,6 +1977,7 @@ books (books pasted in, the page box on the reading card doing the page math, fi
 bands (a band instead of a weight in the Log tab, the band picker, the PT key on an exercise card, the band words on the lift page; year data),
 realm (the Realm: first visit, hub, training chest, the five pages, map, prep sheet, cache; year data),
 battle (a fight played by its keys to the result, a pack, the first boss; year data),
+realm_own (the Realm with the player's own log, from the file in REALM_OWN_SAVE; see THE REALM),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 

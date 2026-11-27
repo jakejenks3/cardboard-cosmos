@@ -441,6 +441,9 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 static func _after(bv, what: Dictionary, nxt: String) -> void:
 	var choice = str(bv.choice) if is_instance_valid(bv) else "back"
 	App.draft_store("battle", null)
+	# The hub was drawn again when the fight was paid, while the kept battle was still there: it would go on
+	# offering "Continue the battle" for a fight that is over. Now that the draft is gone, it is drawn once more.
+	App.rpg_changed.emit()
 	match choice:
 		"again":
 			fight.call_deferred(what)
