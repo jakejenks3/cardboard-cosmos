@@ -1977,6 +1977,31 @@ is the Windows handoff.
   (`fetch('tt.js', {cache: 'reload'})`): it is cached.
   - `sw.js` (tools/build_web.py) now fetches every file with `cache: 'reload'` when a new build installs: two
     builds published minutes apart could leave the newer worker holding the older build's files.
+- The Hero tab's lifts, cleaned up (2026-11-27; the user: "a jumbled mess and hard to look and see and
+  differentiate different types of lifts and ways that you can beat those types of lifts that day"; "today I
+  did Bayesian curls for the first time... it says I beat my lift for that day, even though it was my first
+  one, and underneath it has the last time I did reclined curls"; "in the history of a lift it says you beat
+  something that day, but the date says a week prior").
+  - THE BUG: `Missions.beat_any` counts a lift done for the first time as beaten (on purpose: the "Beat it"
+    MISSION is done by trying a new variation too), and the Today row printed it as "DONE · BEAT IT". The row
+    now asks `TodayView.done_words(done_name, sessions, today)`: the lift done (movement AND variation)
+    against ITSELF before today: "DONE · FIRST TIME" (blue), "DONE · BEAT LAST TIME" / "DONE · RECORD"
+    (green), "DONE · SAME AS LAST TIME", "DONE · LIGHTER THAN LAST TIME" (meta `today_done` = first | up |
+    same | down), then TODAY (its sets) and LAST (the sets it is compared with, and when). Done another
+    way than planned: a line "Planned: <lift>. Done another way, so it counts." The mission is unchanged.
+  - THE LIFT PAGE when the lift was not done today (and not opened from a session or the note): ctx
+    `past`; a line "Not done today. Your latest time was Fri, Nov 20, against the time before it." (meta
+    `lift_past`), the versus card and the set table say LATEST / TIME BEFORE (not THIS TIME / LAST TIME),
+    the verdict and the records card name the day ("Fri, Nov 20: a new record!...").
+  - THE TODAY ROW (`TodayView._lift_row`, meta `today_lift` = the planned name): the stripe is the BODY
+    PART's colour (green once done; a focus lift's muscle), the part named in its colour on the second line
+    (meta `today_part`) with why it is likely; not done: LAST (sets · when, meta `today_last`), AIM (meta
+    `today_aim`), the warm-up; then "OR ANOTHER WAY": each way a chip WITH ITS OWN AIM ("Dumbbell · aim 3×9
+    @ 60 lb", "Push-up · new to you"; meta `lift_option` as before). STUCK is not shown on a done row.
+  - THE VARIATIONS on a lift's page (`JourneyLifts._variation_chips`, now a vbox): "YOUR VARIATIONS", a row
+    each (meta `variation_row`, `variation_here`): name, "3 times · Nov 20", "Last: 3×10 @ 11 kg"; a tap
+    opens that variation's page; then "NOT TRIED" chips (a few, "+N more").
+  - Walkthrough `tests/shots/curls.gd` (`new` data, also `--fingers`): the user's case, end to end.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2215,6 +2240,7 @@ dares (a won stage's dare, the region's dares row and its dare chest; year data)
 mole (the Ore Mole: left alone it digs away, felled it pays; year data),
 yard (the practice yard: a perfect guard, and nothing kept; year data),
 prep (a stage's sheet: the build's moves against known weaknesses; year data),
+curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 

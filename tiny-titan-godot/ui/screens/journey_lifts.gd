@@ -505,7 +505,7 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 
 	# The variations: done ones lit, the rest to try. One tap switches the page.
 	if choices.size() > 1 or str(pick.variation) != "":
-		var vf = Kit.flow(5)
+		var vf = Kit.vbox(4)
 		box.add_child(vf)
 		_variation_chips(vf, sheet, e, rows, choices, pick, false)
 
@@ -523,7 +523,10 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		# list of exercises (the note's review, a session) it opens on Compare.
 		var view = str(opts.get("view", LiftViews.last_view))
 		ctx = {"sheet": sheet, "lift": lift, "history": history, "cur": cur, "st": st, "wu": wu,
-			"goal": Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0, "view": view, "sides": sides}
+			"goal": Pt.per_week(App.pt(), lift) if Pt.is_pt(App.pt(), lift) else 0, "view": view, "sides": sides,
+			# Not done today and not opened from a session or the note: the page is about the LATEST time, and
+			# says so (it used to say "THIS TIME... better than last time" of a day a week ago).
+			"past": not (pending is Dictionary) and opts.get("session_id") == null and str(cur.date) != App.today}
 		LiftViews.build(box, ctx)
 
 	var pt_holder = Kit.vbox(0)
@@ -640,21 +643,53 @@ static func _variation_chips(vf: Control, sheet: Sheet, e: Dictionary, rows: Arr
 	if not is_instance_valid(vf):
 		return
 	Kit.clear(vf)
+	var wu = App.weight_unit()
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	# The variations done, each a row: its name, how often, when last and what was done last (2026-11-27:
+	# the chips alone did not say which variation a history was about). The page's own one is lit.
+	var done = choices.filter(func(d): return d.st != null)
+	if not done.is_empty():
+		vf.add_child(Kit.label("YOUR VARIATIONS" if done.size() > 1 else "YOUR VARIATION", 10, Pal.MUTED, true))
+	for d in done:
+		var here = d.name == pick.name
+		var r = Kit.row(Callable() if here else JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.LIFT if here else Pal.LINE, Pal.LIFT if here else null, 6, 1, 0.14 if here else 0.0)
+		r.set_meta("variation_row", str(d.variation))
+		r.set_meta("variation_here", here)
+		r.tooltip_text = "This page" if here else "Open this variation"
+		var h = Kit.hbox(6)
+		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var said = str(d.variation) if str(d.variation) != "" else "No variation"
+		var nl = Kit.clip(said, 14, null, true)
+		nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(Kit.vcenter(nl))
+		var n = int(d.st.count)
+		h.add_child(Kit.vcenter(Kit.label("%d time%s · %s" % [n, "" if n == 1 else "s", Missions.when_text(str(d.st.last), App.today)], 11, Pal.MUTED, true)))
+		r.add(h)
+		if not d.st.history.is_empty():
+			r.add(Kit.clip("Last: " + LiftHistory.describe_sets(d.st.history[0].sets, fmt_w), 12, Pal.TEXT if here else Pal.MUTED))
+		vf.add_child(r)
+	# The ones not done yet, to try: chips (a few, then "+N more").
+	var fresh = choices.filter(func(d): return d.st == null)
+	if fresh.is_empty():
+		return
+	var flow = Kit.flow(5)
+	flow.add_child(Kit.vcenter(Kit.label("NOT TRIED" if not done.is_empty() else "VARIATIONS", 10, Pal.MUTED, true)))
 	var hidden = 0
-	for d in choices:
-		if not all and choices.size() > 6 and d.st == null and d.name != pick.name:
+	for d in fresh:
+		if not all and fresh.size() > 6 and d.name != pick.name and flow.get_child_count() > 5:
 			hidden += 1
 			continue
-		var said = str(d.variation) if str(d.variation) != "" else "No variation"
-		var chip = LogWidgets.mini_chip(said, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.LIFT if d.st != null else Pal.MUTED)
-		chip.tooltip_text = ("Done %d time%s" % [int(d.st.count), "" if int(d.st.count) == 1 else "s"]) if d.st != null else "Not done yet"
-		if d.st == null and d.name != pick.name:
-			chip.modulate.a = 0.6
-		vf.add_child(chip)
+		var said2 = str(d.variation) if str(d.variation) != "" else "No variation"
+		var chip = LogWidgets.mini_chip(said2, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.SECOND if d.name == pick.name else Pal.MUTED)
+		chip.tooltip_text = "Not done yet"
+		if d.name != pick.name:
+			chip.modulate.a = 0.75
+		flow.add_child(chip)
 	if hidden > 0:
 		var more = LogWidgets.mini_chip("+%d more" % hidden, false, JourneyLifts._more_variations.bind(vf, sheet, e, rows, choices, pick), Pal.MUTED)
 		more.tooltip_text = "Show every variation"
-		vf.add_child(more)
+		flow.add_child(more)
+	vf.add_child(flow)
 
 
 static func _more_variations(vf: Control, sheet: Sheet, e: Dictionary, rows: Array, choices: Array, pick: Dictionary) -> void:

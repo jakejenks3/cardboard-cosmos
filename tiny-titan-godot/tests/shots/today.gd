@@ -168,7 +168,8 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.frames(tree, 3)
 		await ShotHelper.click(tree, row)
 		await ShotHelper.wait(tree, 0.7)
-		check(_sheet() != null and ShotHelper.all_text(_sheet()).contains("THIS TIME"), "it opens the lift on Compare")
+		# (a lift not done today: its Compare is about its LATEST time, and says so)
+		check(_sheet() != null and (ShotHelper.all_text(_sheet()).contains("THIS TIME") or ShotHelper.all_text(_sheet()).contains("LATEST")), "it opens the lift on Compare")
 		await _close_sheets()
 
 	# The Adventure tab lists them with what to aim for.

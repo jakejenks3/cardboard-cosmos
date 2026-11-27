@@ -162,21 +162,27 @@ static func compare(holder: Control, ctx: Dictionary) -> void:
 	if best == null or best == last:
 		against = "last"
 	var other = best if against == "best" else last
+	var past = bool(ctx.get("past", false))
+	if past:
+		# Not done today: what follows is about the latest time, against the time before it.
+		var pl = Kit.para("Not done today. Your latest time was %s%s." % [_day_text(str(cur.date)), ", against the time before it" if last != null else ""], 12, Pal.MUTED)
+		pl.set_meta("lift_past", str(cur.date))
+		holder.add_child(pl)
 	if last != null and best != null and best != last:
 		var ch = Kit.hbox(6)
 		ch.add_child(Kit.vcenter(Kit.label("Against", 12, Pal.MUTED, true)))
 		ch.add_child(LogWidgets.mini_chip("Last time", against == "last", LiftViews._against.bind("last", ctx), Pal.LIFT))
 		ch.add_child(LogWidgets.mini_chip("Best day", against == "best", LiftViews._against.bind("best", ctx), Pal.ACCENT))
 		holder.add_child(ch)
-	holder.add_child(_versus(cur, other, against == "best", mode, wu))
+	holder.add_child(_versus(cur, other, against == "best", mode, wu, past))
 	var cmp = LiftTrend.compare(cur.sets, [other] if other != null else [])
 	var recs = LiftTrend.records(cur.sets, before)
-	holder.add_child(_verdict(cmp, recs, other, against, wu))
+	holder.add_child(_verdict(cmp, recs, other, against, wu, str(cur.date) if past else ""))
 	if other != null:
-		holder.add_child(_set_table(cur, other, against, wu))
+		holder.add_child(_set_table(cur, other, against, wu, past))
 	holder.add_child(_totals(cur, other, mode, wu))
 	if not recs.is_empty():
-		holder.add_child(_records_card(recs, wu))
+		holder.add_child(_records_card(recs, wu, str(cur.date) if past else ""))
 	elif best != null and LiftTrend.main_value(LiftTrend.day(best.sets), in_band) > LiftTrend.main_value(LiftTrend.day(cur.sets), in_band) + 1e-6 \
 			and (mode != "band" or (int(LiftTrend.day(best.sets).get("band", 0)) > 0 and int(LiftTrend.day(cur.sets).get("band", 0)) > 0)):
 		# (a band lift: only a band day against a band day; a day logged before
@@ -208,17 +214,17 @@ static func _against(which: String, ctx: Dictionary) -> void:
 
 
 ## Both sessions side by side, their top sets big, "VS" between them.
-static func _versus(cur: Dictionary, other, is_best: bool, mode: String, wu: String) -> Card:
+static func _versus(cur: Dictionary, other, is_best: bool, mode: String, wu: String, past: bool = false) -> Card:
 	var note = bool(cur.get("note", false))
 	var c = Kit.card(6, Callable(), 12)
 	c.accent(Pal.GOOD if note else Pal.LIFT)
 	var row = Kit.hbox(8)
 	if other != null:
-		row.add_child(_side(other, "BEST DAY" if is_best else "LAST TIME", false, mode, wu))
+		row.add_child(_side(other, "BEST DAY" if is_best else ("TIME BEFORE" if past else "LAST TIME"), false, mode, wu))
 	else:
 		var none = Kit.vbox(4)
 		none.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		none.add_child(Kit.label("LAST TIME", 10, Pal.MUTED, true))
+		none.add_child(Kit.label("TIME BEFORE" if past else "LAST TIME", 10, Pal.MUTED, true))
 		none.add_child(Kit.vcenter(PixelFont.rect("--", 3, Pal.with_alpha(Pal.MUTED, 0.6))))
 		none.add_child(Kit.label("Nothing yet", 11, Pal.MUTED, true))
 		row.add_child(none)
@@ -227,7 +233,7 @@ static func _versus(cur: Dictionary, other, is_best: bool, mode: String, wu: Str
 	vs.add_theme_stylebox_override("panel", PixBox.make(Pal.INK, {"ring": Pal.ACCENT, "lip": 1, "pad_h": 6, "pad_v": 5}))
 	vs.add_child(PixelFont.rect("VS", 2, Pal.ACCENT))
 	row.add_child(Kit.vcenter(vs))
-	row.add_child(_side(cur, "IN YOUR NOTE" if note else "THIS TIME", true, mode, wu))
+	row.add_child(_side(cur, "IN YOUR NOTE" if note else ("LATEST" if past else "THIS TIME"), true, mode, wu))
 	c.add(row)
 	return c
 
@@ -265,11 +271,13 @@ static func _side(h: Dictionary, kicker: String, lit: bool, mode: String, wu: St
 
 
 ## One line that says how it went, in the colour of the news.
-static func _verdict(cmp: Dictionary, recs: Array, other, against: String, wu: String) -> Control:
+## `past`: the date of the latest time when it is not today (the words then say which day they are about).
+static func _verdict(cmp: Dictionary, recs: Array, other, against: String, wu: String, past: String = "") -> Control:
+	var on = "%s: " % _day_text(past) if past != "" else ""
 	if other == null:
-		return banner("sparkle", "First time: this is the mark to beat.", Pal.SECOND)
+		return banner("sparkle", ("%sthe first time, the mark to beat." % on) if past != "" else "First time: this is the mark to beat.", Pal.SECOND)
 	if not recs.is_empty():
-		var b = banner("crown", "New record! %s." % str(recs[0].label), Pal.ACCENT)
+		var b = banner("crown", "%sa new record! %s." % [on, str(recs[0].label)] if past != "" else "New record! %s." % str(recs[0].label), Pal.ACCENT)
 		Fx.shine(b, 3.5, 0.4)
 		return b
 	var said = SessionView.delta_text(cmp, wu)
@@ -278,29 +286,29 @@ static func _verdict(cmp: Dictionary, recs: Array, other, against: String, wu: S
 		where = "on your top set"
 	elif int(cmp.get("sec", 0)) != 0:
 		where = "on your longest hold"
-	var who = "your best day" if against == "best" else "last time"
+	var who = "your best day" if against == "best" else ("the time before" if past != "" else "last time")
 	if int(cmp.get("band", 0)) != 0:
 		# A band: "+1 band: a heavier band than last time."
 		var heavier = int(cmp.band) > 0
-		return banner("arrow_up" if heavier else "arrow_down", "%s: a %s band than %s." % [said, "heavier" if heavier else "lighter", who], Pal.GOOD if heavier else Pal.ACCENT2)
+		return banner("arrow_up" if heavier else "arrow_down", "%s%s: a %s band than %s." % [on, said, "heavier" if heavier else "lighter", who], Pal.GOOD if heavier else Pal.ACCENT2)
 	match str(cmp.kind):
 		"up":
-			return banner("arrow_up", "%s %s. Better than %s." % [said, where, who], Pal.GOOD)
+			return banner("arrow_up", "%s%s %s. Better than %s." % [on, said, where, who], Pal.GOOD)
 		"down":
-			return banner("arrow_down", "%s %s. A lighter day than %s." % [said, where, who], Pal.ACCENT2)
-	return banner("repeat", "Same as %s." % who, Pal.PANEL2, false)
+			return banner("arrow_down", "%s%s %s. A lighter day than %s." % [on, said, where, who], Pal.ACCENT2)
+	return banner("repeat", "%sSame as %s." % [on, who], Pal.PANEL2, false)
 
 
 ## Set by set: last time on the left, this time on the right, the change between.
-static func _set_table(cur: Dictionary, other: Dictionary, against: String, wu: String) -> Card:
+static func _set_table(cur: Dictionary, other: Dictionary, against: String, wu: String, past: bool = false) -> Card:
 	var c = Kit.card(4, Callable(), 10)
 	var head = Kit.hbox(6)
 	head.add_child(_col(Kit.label("SET", 10, Pal.MUTED, true), 26))
-	var l = Kit.label("BEST DAY" if against == "best" else "LAST TIME", 10, Pal.MUTED, true)
+	var l = Kit.label("BEST DAY" if against == "best" else ("TIME BEFORE" if past else "LAST TIME"), 10, Pal.MUTED, true)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(l)
 	head.add_child(_col(Control.new(), 84))
-	var r = Kit.label("THIS TIME", 10, Pal.MUTED, true)
+	var r = Kit.label("LATEST" if past else "THIS TIME", 10, Pal.MUTED, true)
 	r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	r.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	head.add_child(r)
@@ -445,13 +453,13 @@ static func record_value(r: Dictionary, wu: String) -> String:
 	return "%d reps" % int(r.value)
 
 
-static func _records_card(recs: Array, wu: String) -> Card:
+static func _records_card(recs: Array, wu: String, past: String = "") -> Card:
 	var c = Kit.card(6, Callable(), 12)
 	c.accent(Pal.ACCENT)
 	var head = Kit.hbox(8)
 	head.add_child(Kit.vcenter(Icons.rect("trophy", 20)))
 	head.add_child(Kit.vcenter(PixelFont.rect("RECORDS", 2, Pal.ACCENT)))
-	head.add_child(Kit.vcenter(Kit.clip("beaten this time", 12, Pal.MUTED, true)))
+	head.add_child(Kit.vcenter(Kit.clip("beaten on %s" % _day_text(past) if past != "" else "beaten this time", 12, Pal.MUTED, true)))
 	c.add(head)
 	for r in recs:
 		var row = Kit.hbox(8)

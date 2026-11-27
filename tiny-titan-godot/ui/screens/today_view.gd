@@ -350,32 +350,76 @@ static func aim_words(l: Dictionary, main: Dictionary, wu: String, got: int = 0)
 		"said": LiftHistory.describe_sets(LiftTrend.next_target(main.last, _step_kg(wu)).sets, fmt_w), "col": Pal.ACCENT}
 
 
-## A likely lift as done last (its first option), as a flat row: the name and
-## variation with the box at the end of that line, what to aim for on a line
-## of its own, why it is likely (unless the heading said it: `shared_why`), the
-## warm-up for a barbell; the other ways the player has done it under it as
-## outlined chips. Done today (any way): what was done.
+## How a lift done TODAY went, against the same lift (movement AND variation) before today:
+## {"cap", "col", "kind" (first | up | same | down), "last" (sets before), "lastDate"}.
+## A lift done for the first time is FIRST TIME, never "beat it" (2026-11-27: a first Bayesian
+## curl said "beat it", and named the reclined curl it was never compared with).
+static func done_words(done_name: String, sessions: Array, today: String) -> Dictionary:
+	var sets = Missions.sets_on(sessions, done_name, today)
+	var hist = Missions._history_before(sessions, done_name, today)
+	if hist.is_empty():
+		return {"cap": "DONE · FIRST TIME", "col": Pal.SECOND, "kind": "first", "last": [], "lastDate": ""}
+	var cmp = LiftTrend.compare(sets, hist)
+	var rec = not LiftTrend.records(sets, hist).is_empty()
+	var out = {"last": hist[0].sets, "lastDate": str(hist[0].date)}
+	if str(cmp.kind) == "up" or rec:
+		out["cap"] = "DONE · RECORD" if rec else "DONE · BEAT LAST TIME"
+		out["col"] = Pal.GOOD
+		out["kind"] = "up"
+	elif str(cmp.kind) == "down":
+		out["cap"] = "DONE · LIGHTER THAN LAST TIME"
+		out["col"] = Pal.TEXT
+		out["kind"] = "down"
+	else:
+		out["cap"] = "DONE · SAME AS LAST TIME"
+		out["col"] = Pal.TEXT
+		out["kind"] = "same"
+	return out
+
+
+## "Nov 21", "yesterday": when a lift was last done, short.
+static func _when(date: String) -> String:
+	if date == "":
+		return ""
+	return Missions.when_text(date, App.today)
+
+
+## A small caption and its words on one line (LAST, AIM...).
+static func _line(cap: String, said: String, cap_col: Color, said_col: Color, said_px: int = 14, bold: bool = true) -> Control:
+	var h = Kit.hbox(6)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cl = Kit.label(cap, 11, cap_col, true)
+	cl.custom_minimum_size = Vector2(38, 0)
+	h.add_child(Kit.vcenter(cl))
+	var sl = Kit.clip(said, said_px, said_col, bold)
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(Kit.vcenter(sl))
+	return h
+
+
+## A likely lift, as a flat row (2026-11-27 rework, after "a jumbled mess... hard to see and differentiate
+## different types of lifts and ways that you can beat those types"):
+##   - the stripe is the BODY PART's colour (green once done), and the part is named on the second line;
+##   - not done: LAST (what was done last time, and when), then AIM (what beats it), the warm-up for a barbell;
+##     then OTHER WAYS, each with its own aim ("Dumbbell · aim 3×9 @ 60 lb", "Push-up · new to you");
+##   - done: what was done and how it went against THAT lift before (first time, beat last time, same,
+##     lighter), and the last time it is compared with, by its date.
 static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_why: String = "") -> Card:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var opts = l.get("options", [])
-	var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": l.last.sets}
-	var planned_move = str(LiftNames.split(str(l.name)).move)
-	var ways = []
-	for o in opts:
-		if not ways.has(str(o.name)):
-			ways.append(str(o.name))
+	var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": l.last.sets, "lastDate": str(l.last.get("date", ""))}
 	# An extra lift of the training focus ("dose").
 	var dose = l.get("dose")
 	var done_name = Missions.lift_done(l, App.plan(), App.sessions(), App.today)
 	var shown = done_name if done_name != "" else str(main.name)
-	# The stripe only says a state: done, or the muscle a lift of the focus is for.
-	var stripe = Pal.LINE
-	if done_name != "":
-		stripe = Pal.GOOD
-	elif dose != null:
-		stripe = JourneyLifts.part_color(str(dose.part))
+	var part = str(l.get("part", ""))
+	if part == "":
+		part = str(Missions.part_of(shown))
+	var part_col = JourneyLifts.part_color(part)
+	var stripe = Pal.GOOD if done_name != "" else (JourneyLifts.part_color(str(dose.part)) if dose != null else part_col)
 	var c = Kit.row(JourneyLifts.open_named.bind(shown, {"view": "compare"}), stripe, Pal.GOOD if done_name != "" else null, 8, 4)
 	c.tooltip_text = "Last time, and what to beat"
+	c.set_meta("today_lift", str(main.name))
 	var left = Kit.vbox(2)
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Line 1: the movement, its variation and tags, the box at the end.
@@ -384,7 +428,7 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 	var top = Kit.squeeze(6)
 	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var sp = LiftNames.split(shown)
-	top.add_child(Kit.soft_name(str(sp.move), 15, null, true, 200.0))
+	top.add_child(Kit.soft_name(str(sp.move), 16, null, true, 200.0))
 	if str(sp.variation) != "":
 		top.add_child(SessionView.variation_tag(str(sp.variation), 11, true))
 	if dose != null and done_name == "":
@@ -393,42 +437,58 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 		top.add_child(Kit.vcenter(ft))
 	if bool(l.pt):
 		top.add_child(Kit.vcenter(SessionView.pt_tag(11)))
-	elif LiftTrend.plateau(_history_of(shown)) != null:
+	elif done_name == "" and LiftTrend.plateau(_history_of(shown)) != null:
 		var st_tag = Kit.tag("STUCK", Pal.DANGER, true, 11)
 		st_tag.tooltip_text = "No new best for three sessions: its page has ways out"
 		top.add_child(Kit.vcenter(st_tag))
 	line1.add_child(top)
 	line1.add_child(_tick(done_name != ""))
 	left.add_child(line1)
-	# Line 2: what to aim for (or what was done), white; gold is for rewards.
-	var said = ""
-	var cap = ""
-	var col = Pal.PT if bool(l.pt) else Pal.TEXT
-	var beat = false
+	# Line 2: the body part in its colour, and why it is likely (unless the heading said it).
+	var why = str(l.why)
+	if dose != null:
+		why = "Added for your %s" % Dose.part_name(str(dose.part)).to_lower()
+	if done_name != "" or why == shared_why:
+		why = ""
+	var kick = Kit.hbox(6)
+	kick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if part != "":
+		var pl = Kit.label(LiftLibrary.part_name(part).to_upper(), 11, part_col, true)
+		pl.set_meta("today_part", part)
+		kick.add_child(Kit.vcenter(pl))
+	if why != "":
+		var wl = Kit.clip(why, 12, Pal.MUTED)
+		wl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		kick.add_child(Kit.vcenter(wl))
+	if kick.get_child_count() > 0:
+		left.add_child(kick)
 	if done_name != "":
-		# Already done today (any way): what was done, green when it beat last
-		# time or was a first.
-		beat = Missions.beat_any(App.sessions(), ways if not ways.is_empty() else [str(l.name)], "" if bool(l.pt) else planned_move, App.today, same)
-		said = LiftHistory.describe_sets(Missions.sets_on(App.sessions(), done_name, App.today), fmt_w)
-		cap = "DONE · BEAT IT" if beat else "DONE TODAY"
-		col = Pal.GOOD if beat else Pal.TEXT
-	else:
-		var aim = aim_words(l, main, wu, int(Dose.extra_done(l, App.sessions(), App.today, same).sets) if dose != null else 0)
-		said = str(aim.said)
-		cap = str(aim.cap)
-		col = Pal.TEXT if aim.col == Pal.ACCENT else aim.col
-	var line2 = Kit.hbox(6)
-	line2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line2.add_child(Kit.vcenter(Kit.label(cap, 11, Pal.GOOD if beat else Pal.MUTED, true)))
-	line2.add_child(Kit.vcenter(Kit.clip(said, 14, col, true)))
-	left.add_child(line2)
-	# Line 3: why it is likely (an extra lift once done: what it was for, its
-	# count is out of date), unless the heading already says it.
-	var why = "Added for your %s" % Dose.part_name(str(dose.part)).to_lower() if (dose != null and done_name != "") else str(l.why)
-	if why != "" and not (dose == null and why == shared_why):
-		left.add_child(Kit.clip(why, 12, Pal.MUTED))
+		# What was done, and how it went against THAT lift (this movement AND variation) before today.
+		var dw = done_words(done_name, App.sessions(), App.today)
+		var cap = Kit.label(str(dw.cap), 11, dw.col if dw.col != Pal.TEXT else Pal.MUTED, true)
+		cap.set_meta("today_done", str(dw.kind))
+		left.add_child(cap)
+		left.add_child(_line("TODAY", LiftHistory.describe_sets(Missions.sets_on(App.sessions(), done_name, App.today), fmt_w), Pal.MUTED, dw.col, 15))
+		if not (dw.last as Array).is_empty():
+			left.add_child(_line("LAST", "%s · %s" % [LiftHistory.describe_sets(dw.last, fmt_w), _when(str(dw.lastDate))], Pal.MUTED, Pal.MUTED, 12, false))
+		var planned_key = Xp.normalize_exercise(str(main.name))
+		if Xp.normalize_exercise(done_name) != planned_key and not bool(l.pt):
+			left.add_child(Kit.clip("Planned: %s. Done another way, so it counts." % Missions.short_name(str(main.name)), 11, Pal.MUTED))
+		c.add(left)
+		return c
+	# Not done yet: LAST (when), then AIM.
+	var main_last = main.get("last", [])
+	if not bool(main.get("new", false)) and main_last is Array and not main_last.is_empty() and not bool(l.pt):
+		var ll = _line("LAST", "%s · %s" % [LiftHistory.describe_sets(main_last, fmt_w), _when(str(main.get("lastDate", "")))], Pal.MUTED, Pal.MUTED, 12, false)
+		ll.set_meta("today_last", str(main.get("lastDate", "")))
+		left.add_child(ll)
+	var aim = aim_words(l, main, wu, int(Dose.extra_done(l, App.sessions(), App.today, same).sets) if dose != null else 0)
+	var cap_word = str(aim.cap)
+	var aim_line = _line(cap_word, str(aim.said), Pal.ACCENT if cap_word.begins_with("AIM") else (aim.col if aim.col != Pal.TEXT else Pal.MUTED), Pal.TEXT if aim.col == Pal.ACCENT else aim.col, 15)
+	aim_line.set_meta("today_aim", str(aim.said))
+	left.add_child(aim_line)
 	# A barbell lift: the warm-up and what goes on the bar.
-	if done_name == "" and not bool(l.pt) and not bool(main.new) and Plates.is_barbell(shown):
+	if not bool(l.pt) and not bool(main.new) and Plates.is_barbell(shown):
 		var top_kg = 0.0
 		for one in LiftTrend.next_target(main.last, _step_kg(wu)).sets:
 			top_kg = maxf(top_kg, float(one.get("weightKg", 0.0)))
@@ -439,28 +499,31 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 		if Plates.text(wt, wu) != "":
 			bits.append(Plates.text(wt, wu))
 		if not bits.is_empty():
-			var wl = Kit.para(" · ".join(PackedStringArray(bits)), 11, Pal.MUTED)
-			wl.tooltip_text = "Warm-up sets, then the plates on each side of the bar"
-			left.add_child(wl)
+			var wl2 = Kit.para(" · ".join(PackedStringArray(bits)), 11, Pal.MUTED)
+			wl2.tooltip_text = "Warm-up sets, then the plates on each side of the bar"
+			left.add_child(wl2)
 	c.add(left)
-	# The other ways to do it here, each opening its own page.
-	if done_name == "" and opts.size() > 1:
-		var more = Kit.flow(6)
-		more.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var orl = Kit.label("OR", 11, Pal.MUTED, true)
-		orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		more.add_child(orl)
-		# Each other way: a variation of the same movement by its own words, another
-		# movement by its name; one never done yet in the "new" colour.
+	# The other ways, each with ITS OWN aim (a way never done: new to you), each opening its own page.
+	if opts.size() > 1:
+		var ways = Kit.vbox(4)
+		ways.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ways.add_child(Kit.label("OR ANOTHER WAY", 10, Pal.MUTED, true))
+		var flow = Kit.flow(6)
+		flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var main_move = str(main.get("move", LiftNames.split(str(main.name)).move))
 		for o in opts.slice(1):
 			var same_move = str(o.move) == main_move
-			var text = str(o.variation) if same_move and str(o.variation) != "" else Missions.way_word(o, main_move)
-			var b = Kit.option_chip(text, Pal.SECOND if bool(o.new) else null, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), 12)
+			var word = str(o.variation) if same_move and str(o.variation) != "" else Missions.way_word(o, main_move)
+			var o_last = o.get("last", [])
+			var tail = "new to you"
+			if not bool(o.new) and o_last is Array and not o_last.is_empty():
+				tail = "aim " + LiftHistory.describe_sets(LiftTrend.next_target(o_last, _step_kg(wu)).sets, fmt_w)
+			var b = Kit.option_chip("%s · %s" % [word, tail], Pal.SECOND if bool(o.new) else null, JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}), 12)
 			b.tooltip_text = ("New to you: " if bool(o.new) else "") + Missions.short_name(str(o.name))
 			b.set_meta("lift_option", str(o.name))
-			more.add_child(b)
-		c.add(more)
+			flow.add_child(b)
+		ways.add_child(flow)
+		c.add(ways)
 	return c
 
 
@@ -532,11 +595,10 @@ static func _new_row(nw: Dictionary) -> Card:
 	# Others that count just the same, for when the equipment is not there.
 	var alts = nw.get("alts", [])
 	if not done and not alts.is_empty():
+		# (headed like a planned lift's other ways)
+		c.add(Kit.label("OR ANOTHER NEW ONE", 10, Pal.MUTED, true))
 		var more = Kit.flow(6)
 		more.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var orl = Kit.label("OR", 11, Pal.MUTED, true)
-		orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		more.add_child(orl)
 		for a in alts:
 			var b = Kit.option_chip(Missions.short_name(str(a.name)), Pal.SECOND, JourneyLifts.open_named.bind(str(a.name), {"view": "compare"}), 12)
 			b.tooltip_text = "New to you: a %s movement" % str(a.partName).to_lower()
