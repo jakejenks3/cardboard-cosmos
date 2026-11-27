@@ -1766,6 +1766,9 @@ is the Windows handoff.
       (it has its own band) or an `instant` playback. `saved.rpg.hints` = {id: true}
       (`RpgSave.note_hint`), handed to a fight as `opts.hints`, told back through `opts.on_hint`
       (`RpgUi._hint_given`, a quiet commit).
+    - "New in the Realm" (`RealmScreen.NEWS`, `NEWS_ID` "news_1", `_news_card`, metas `realm_news`,
+      `realm_news_ok`): a card on the front page that says what is new until "Got it" is tapped
+      (`saved.rpg.hints[NEWS_ID]`). For a later batch of news: new lines and a new id.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

@@ -259,6 +259,9 @@ func _build_hub(rpg: Dictionary) -> void:
 		var onward = _next_row(rpg)
 		if onward != null:
 			add_child(onward)
+		var news = _news_card(rpg)
+		if news != null:
+			add_child(news)
 		var grew = _gains_row()
 		if grew != null:
 			add_child(grew)
@@ -462,6 +465,45 @@ func _note_stats() -> void:
 		lines.append("%s %d   (+%d)" % [str(RpgDefs.STAT_NAMES[str(r.id)]), int(r.to), int(r.to) - int(r.from)])
 	lines.append("Your training did that. Higher stats hit harder and open higher skill tiers.")
 	LootPop.open("Stronger", "muscle", lines, Pal.GOOD, "level")
+
+
+## What is new since the Realm was first shown, said once: a card with a "Got it" key (kept among the hints
+## as NEWS_ID, so it never comes back). A new batch of news gets a new id.
+const NEWS_ID = "news_1"
+const NEWS = [
+	["music", "Music, and a sound for every move. The note key (here and in a fight) switches the music off."],
+	["sword", "AUTO in a fight: the hero plays by himself until you tap it again."],
+	["book", "Tap the message line in a fight to read back what happened, and how fights work."],
+	["trophy", "Feats on the Hero page pay ore. The Bestiary is at the foot of the Map."],
+]
+
+func _news_card(rpg: Dictionary):
+	if bool(rpg.get("hints", {}).get(NEWS_ID, false)):
+		return null
+	var col = Pal.ACCENT
+	var card = Kit.row(Callable(), col, col, 8, 4, 0.12)
+	card.set_meta("realm_news", NEWS_ID)
+	var head = Kit.hbox(8)
+	head.add_child(Kit.vcenter(Icons.rect("sparkle" if Icons.has_icon("sparkle") else "star", 16)))
+	var title = Kit.clip("New in the Realm", 14, null, true)
+	head.add_child(Kit.vcenter(title))
+	var got = Kit.button("Got it", "ghost", _news_seen, "sm")
+	got.custom_minimum_size = Vector2(72, 40 if Kit.fingers else 30)
+	got.set_meta("realm_news_ok", true)
+	got.set_meta("anchor_id", "realm_news_ok")
+	head.add_child(Kit.vcenter(got))
+	card.add(head)
+	for n in NEWS:
+		var line = Kit.hbox(8)
+		line.add_child(Icons.rect(str(n[0]) if Icons.has_icon(str(n[0])) else "star", 16))
+		line.add_child(Kit.para(str(n[1]), 12, Pal.TEXT))
+		card.add(line)
+	return card
+
+
+func _news_seen() -> void:
+	RpgSfx.play("select")
+	RpgUi.apply(RpgSave.note_hint(RpgUi.save(), NEWS_ID))
 
 
 ## The way on, one tap from the top of the Realm: the next place of the road and a key to it (the road

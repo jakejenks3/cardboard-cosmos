@@ -129,6 +129,13 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(_all("realm_boost").size() >= 1, "today's boosts (%d)" % _all("realm_boost").size())
 	check(_all("tab_dot").size() == 1, "the tab has its dot: a chest waits")
 	await ShotHelper.snap(tree, "realm_4_hub")
+	var news = _one("realm_news")
+	check(news != null and _one("realm_news_ok") != null, "what is new is said once on the front page")
+	await ShotHelper.snap(tree, "realm_4b_news")
+	if _one("realm_news_ok") != null:
+		await _click(_one("realm_news_ok"))
+		await ShotHelper.wait(tree, 0.5)
+		check(_one("realm_news") == null and bool(App.rpg().hints.get(RealmScreen.NEWS_ID, false)), "\"Got it\" puts it away for good")
 	var onward = _one("realm_next")
 	check(onward != null and str(onward.get_meta("realm_next")) == "r1s1" and _one("realm_next_go") != null, "the front page names the next place of the road, with a key to it")
 	if _one("realm_next_go") != null:
