@@ -14,6 +14,7 @@ extends Control
 ##         "level_before": {"lvl", "into", "need"}, "level_after": the same,
 ##         "learned": ["Dust Bunny is weak to Legs", ...], "next": bool,
 ##         "tips": [lines] (after a loss: what would help, RpgUi.tips),
+##         "points": skill points the win brought (a row says so),
 ##         "scene": a RealmScenes id, "hero": {"state", "profile", "loadout"}, "hero_fit": {"top", "low", "mid"}}
 ## Every part may be left out: what is not given is not shown. With a hero the
 ## head of the result is a picture (the tableau): the hero where the fight was,
@@ -140,6 +141,22 @@ func _build() -> void:
 			lv.set_meta("br_level_up", false)
 			_level_up = lv
 			body.add_child(lv)
+	var pts = int(info.get("points", 0))
+	if win and pts > 0:
+		# A skill point (or more) came with this win: a line of its own, with the way to spend it.
+		var prow = Kit.row(Callable(), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
+		prow.set_meta("br_points", pts)
+		var ph = Kit.hbox(8)
+		ph.add_child(Kit.vcenter(Icons.rect("sp" if Icons.has_icon("sp") else "star", 24)))
+		var pv = Kit.vbox(0)
+		pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pv.add_child(Kit.clip("+%d skill point%s" % [pts, "" if pts == 1 else "s"], 15, Pal.ACCENT, true))
+		pv.add_child(Kit.clip("Spend it on the Skills page: a new move or a passive.", 11, Pal.MUTED))
+		ph.add_child(pv)
+		prow.add(ph)
+		_late.append(prow)
+		body.add_child(prow)
 	if win and info.get("rewards") is Dictionary:
 		var loot = _loot(info.rewards)
 		_late.append(loot)
@@ -465,6 +482,13 @@ func _run() -> void:
 		await _wait(0.18)
 		if not _alive(gen):
 			return
+		if c.has_meta("br_points"):
+			Kit.pop(c, 1.06, 0.2)
+			Kit.burst(c, Pal.ACCENT, 16)
+			RpgSfx.play("learn")
+			await _wait(0.3)
+			if not _alive(gen):
+				return
 		if c.has_meta("br_loot"):
 			if _first_tag != null:
 				Kit.pop(_first_tag, 1.4, 0.35)

@@ -106,6 +106,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 
 	# --- win, and on to the next stage ---------------------------------------------------------
 	var xp0 = int(App.rpg().xp)
+	var pts0 = int(RpgUi.points().earned)
 	RpgUi.fight({"kind": "stage", "id": "r1s1"})
 	await ShotHelper.wait(tree, 0.6)
 	var bv = _battle()
@@ -114,6 +115,10 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(is_instance_valid(bv) and RpgBattle.won(bv.B) and bv.result() != null, "r1s1 is won and its result is up")
 	var xp1 = int(App.rpg().xp)
 	check(xp1 > xp0 and RpgWorld.done(App.rpg(), "r1s1"), "the win is paid and kept (%d XP)" % (xp1 - xp0))
+	var pts_won = int(RpgUi.points().earned) - pts0
+	var prow = _one("br_points", null, bv.result())
+	check((prow != null) == (pts_won > 0) and (prow == null or int(prow.get_meta("br_points")) == pts_won), "the result says so exactly when the win brought skill points (%d)" % pts_won)
+	await ShotHelper.snap(tree, "flows_0_result")
 	check(_one("br_key", "next", bv.result()) != null, "the result offers the next stage")
 	_press_result(bv, "next")
 	await ShotHelper.wait(tree, 1.2)

@@ -444,6 +444,7 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 	var st = stage_of(what)
 	var win = RpgBattle.won(B)
 	var before = RpgDefs.level_of(int(rpg.get("xp", 0)))
+	var points_before = int(points().earned)
 	var rewards = {}
 	var stars = null
 	var objectives = null
@@ -469,6 +470,8 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 		"learned": learned, "next": win and nxt != "" and RpgWorld.is_open(save(), nxt)}
 	if not win:
 		info["tips"] = tips(B, st, summary)
+	# Skill points the win brought (a level, a boss, enough stars): the result says so.
+	info["points"] = maxi(0, int(points().earned) - points_before)
 	_store(what, B, info)
 	return info
 

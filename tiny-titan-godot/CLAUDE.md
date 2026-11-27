@@ -1775,6 +1775,8 @@ is the Windows handoff.
       showed when there is more, not while a fight covers the page (`RpgSfx.battles`). A page of the Realm
       fades in only when its tab was just picked (`_page_fresh`). `BattleView.speed_kept` (static): x1 / x2
       as picked last, for the next fight of the visit.
+    - A win that brought skill points (a level, a boss, enough stars) says so in the result (`info.points`
+      from `RpgUi.finish`, a row with meta `br_points` between LEVEL UP and the loot).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

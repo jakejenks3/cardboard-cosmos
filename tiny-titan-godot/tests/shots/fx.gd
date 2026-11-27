@@ -330,7 +330,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		"stars": [true, true, true], "objectives": ["Win the fight", "Break a guard", "Win in 8 turns or fewer"],
 		"rewards": {"xp": 120, "ore": 45, "items": [{"id": "protein_shake", "n": 2}], "runes": ["A rune of might"], "relic": "frayed_bookmark", "scroll": "stomp", "first": true},
 		"level_before": {"lvl": 1, "into": 40, "need": 100}, "level_after": {"lvl": 2, "into": 60, "need": 130},
-		"learned": ["Dust Bunny is weak to Push"], "next": true, "scene": "greenmile",
+		"learned": ["Dust Bunny is weak to Push"], "next": true, "scene": "greenmile", "points": 1,
 		"hero": {"state": App.state, "profile": App.saved.profile, "loadout": App.loadout()}, "hero_fit": {"top": 7, "low": 68, "mid": 32.0}})
 	await ShotHelper.wait(tree, 0.75)
 	await ShotHelper.snap(tree, "fx_result_1")
@@ -338,6 +338,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	while not r.done and Time.get_ticks_msec() - t0 < 12000:
 		await ShotHelper.wait(tree, 0.1)
 	check(r.done, "the result plays to its end")
+	check(_all("br_points", r).size() == 1, "a win that brought a skill point says so")
 	await ShotHelper.wait(tree, 0.5)
 	await ShotHelper.snap(tree, "fx_result_2")
 	r.queue_free()
