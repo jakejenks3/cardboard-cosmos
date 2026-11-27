@@ -210,7 +210,8 @@ static func _end_slot(c: Control, w: int = 72) -> Control:
 
 
 ## The schools a pack is weak to, as icons after the word.
-static func _weak_line(weak: Array, extra: String = "") -> Control:
+## `named` false: the schools as icons alone (when the line has something else to say after them).
+static func _weak_line(weak: Array, extra: String = "", named: bool = true) -> Control:
 	var h = Kit.hbox(4)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(Kit.vcenter(Kit.label("Weak to", 11, Pal.MUTED)))
@@ -219,7 +220,7 @@ static func _weak_line(weak: Array, extra: String = "") -> Control:
 	var names = []
 	for s in weak:
 		names.append(str(RpgDefs.SCHOOL_NAMES.get(str(s), str(s))))
-	h.add_child(Kit.vcenter(Kit.clip(" and ".join(PackedStringArray(names)) + extra, 11, Pal.MUTED)))
+	h.add_child(Kit.vcenter(Kit.clip((" and ".join(PackedStringArray(names)) if named else "") + extra, 11, Pal.MUTED)))
 	return h
 
 
@@ -317,10 +318,12 @@ static func _hunt_row(hunt: Dictionary, rpg: Dictionary, today: String) -> Contr
 	# Days in a row with the hunt won (alive while yesterday's or today's is).
 	var streak = RpgWorld.hunt_streak(rpg, today)
 	row.set_meta("map_hunt_streak", streak)
-	if streak >= 2:
-		top.add_child(Kit.tag("%d days" % streak, Pal.ACCENT))
 	mid.add_child(top)
-	mid.add_child(_weak_line(weak))
+	# (the streak goes on the second line: beside the rule's tag it squeezed the title to "Dai…")
+	if streak >= 2:
+		mid.add_child(_weak_line(weak, "· streak: %d days" % streak, false))
+	else:
+		mid.add_child(_weak_line(weak))
 	h.add_child(mid)
 	if prize:
 		var key = Kit.button("Prize", "primary", open_prizes, "sm")

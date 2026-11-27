@@ -142,7 +142,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	# --- the daily hunt -------------------------------------------------------------------------------
 	var hunt = _one("map_hunt")
 	check(hunt != null and str(hunt.get_meta("map_hunt_state")) == "open", "the hunt of the day is open")
-	check(hunt != null and int(hunt.get_meta("map_hunt_streak")) == 2 and ShotHelper.all_text(hunt).contains("2 days"), "its row shows the hunt streak that is alive (2 days)")
+	check(hunt != null and int(hunt.get_meta("map_hunt_streak")) == 2 and ShotHelper.all_text(hunt).contains("streak: 2 days") and ShotHelper.all_text(hunt).contains("Daily Hunt"), "its row shows the hunt streak that is alive (2 days), and its title in full")
 	var ore0 = int(App.rpg().ore)
 	var xp0 = int(App.rpg().xp)
 	_tap(hunt)
