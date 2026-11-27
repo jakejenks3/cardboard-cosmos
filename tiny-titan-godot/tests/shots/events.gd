@@ -139,6 +139,20 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.4)
 	check(RpgWorld.spire_open(App.rpg()) and str(_all("map_stage")[0].get_meta("map_stage")) == "r3s1", "two regions in: the road is at r3s1 and the Spire is open")
 
+	# --- what is open today, as keys at the top of the Map ----------------------------------------------
+	var strip = _one("realm_today")
+	var chips = {}
+	for c in _all("today_chip"):
+		chips[str(c.get_meta("today_chip"))] = str(c.get_meta("today_state"))
+	check(strip != null and chips.get("hunt") == "open" and chips.get("rival") == "open" and chips.get("gauntlet") == "open" and chips.get("spire") == "open" and not chips.has("blessing"),
+		"the top of the Map has a key for what is open today: the hunt, the rival, the gauntlet, the Spire (%s)" % str(chips))
+	await ShotHelper.snap(tree, "events_0_today_strip")
+	var g_chip = _one("today_chip", "gauntlet")
+	_tap(g_chip)
+	await ShotHelper.wait(tree, 0.7)
+	check(_sheet() != null and str(_sheet().box.get_meta("prep_sheet", "")).begins_with("gauntlet:"), "a key opens its thing: the gauntlet's sheet")
+	await _close_sheets()
+
 	# --- the daily hunt -------------------------------------------------------------------------------
 	var hunt = _one("map_hunt")
 	check(hunt != null and str(hunt.get_meta("map_hunt_state")) == "open", "the hunt of the day is open")
@@ -280,5 +294,10 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 					bv2.close()
 				await ShotHelper.wait(tree, 0.6)
 	LootPop.close_all()
+	await ShotHelper.wait(tree, 0.4)
+	chips = {}
+	for c in _all("today_chip"):
+		chips[str(c.get_meta("today_chip"))] = str(c.get_meta("today_state"))
+	check(chips.get("hunt") == "done" and chips.get("rival") == "done" and chips.get("gauntlet") == "done" and chips.get("spire") == "open", "at the end of the day's fights its keys say what is done (%s)" % str(chips))
 	BattleView.auto_kept = false
 	print("EVENTS %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

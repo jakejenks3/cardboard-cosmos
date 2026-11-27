@@ -1939,6 +1939,10 @@ is the Windows handoff.
       `skill_suggest`, `suggest_learn`; the key shows the page the skill's board), and the tile wears the
       points' mark (meta `node_suggested`). The row sits ABOVE the "Learned ..." notice so its key does
       not move when it is used. The steady walkthrough covers it.
+    - WHAT IS OPEN TODAY (2026-11-27): `RealmMap.today_strip(rpg)`, a strip of small keys on the Map under "Next
+      on the road" (meta `realm_today`; keys `today_chip` = hunt | prize | rival | gauntlet | spire | blessing,
+      `today_state` open | done): each opens its thing's sheet. The things themselves are far down a page
+      that has grown long.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

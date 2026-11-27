@@ -255,6 +255,52 @@ static func _hunts(rpg: Dictionary) -> Control:
 	return sec
 
 
+## WHAT IS OPEN TODAY, as a strip of keys for the top of the Map (the things themselves are a long way down
+## the page): the daily hunt (or its prize), the week's rival and gauntlet, the Spire's next floor, a
+## blessing to pick. A key for something done is quiet and still opens it. Null when nothing of it exists yet.
+## Each key: meta "today_chip" = hunt | prize | rival | gauntlet | spire | blessing, "today_state" = open | done.
+static func today_strip(rpg: Dictionary) -> Variant:
+	var today = RpgUi.today()
+	var keys = []
+	var hunt = RpgUi.stage_of({"kind": "hunt", "id": "hunt:" + today})
+	if hunt is Dictionary:
+		var h_rec = rpg.get("hunt", {})
+		var h_won = str(h_rec.get("date", "")) == today and bool(h_rec.get("won", false))
+		if h_won and RpgLoot.hunt_prize_left(rpg, today):
+			keys.append(["prize", "Hunt prize", "hunt", "open", open_prizes])
+		else:
+			keys.append(["hunt", "Hunt", "hunt", "done" if h_won else "open", open_prep.bind({"kind": "hunt", "id": str(hunt.id)})])
+	var rival = RpgUi.stage_of({"kind": "rival", "id": ""})
+	if rival is Dictionary:
+		var r_rec = rpg.get("rival", {})
+		var r_won = str(r_rec.get("week", "")) == str(rival.get("week", "")) and bool(r_rec.get("won", false))
+		keys.append(["rival", "Rival", "rival", "done" if r_won else "open", open_prep.bind({"kind": "rival", "id": str(rival.id)})])
+	var gt = RpgUi.stage_of({"kind": "gauntlet", "id": "gauntlet:" + Dates.week_key(today)})
+	if gt is Dictionary:
+		var g_rec = rpg.get("gauntlet", {})
+		var g_won = g_rec is Dictionary and str(g_rec.get("week", "")) == str(gt.get("week", "")) and bool(g_rec.get("won", false))
+		keys.append(["gauntlet", "Gauntlet", "skull", "done" if g_won else "open", open_prep.bind({"kind": "gauntlet", "id": str(gt.id)})])
+	if RpgWorld.spire_open(rpg):
+		var f = int(rpg.get("spire", {}).get("best", 0)) + 1
+		keys.append(["spire", "Spire %d" % f, "spire", "open", open_prep.bind({"kind": "spire", "id": str(RpgWorld.spire(f).id)})])
+		if RpgWorld.blessings_owed(rpg) > 0:
+			keys.append(["blessing", "Blessing", "sparkle", "open", open_blessings])
+	if keys.is_empty():
+		return null
+	var flow = Kit.flow(6)
+	flow.set_meta("realm_today", keys.size())
+	for k in keys:
+		var done = str(k[3]) == "done"
+		var b = Kit.button(str(k[1]), "ghost" if done else "secondary", k[4], "sm", "check" if done else (str(k[2]) if Icons.has_icon(str(k[2])) else ""))
+		b.set_meta("today_chip", str(k[0]))
+		b.set_meta("today_state", str(k[3]))
+		b.set_meta("anchor_id", "today_chip:" + str(k[0]))
+		if done:
+			b.modulate.a = 0.75
+		flow.add_child(_finger(b))
+	return flow
+
+
 ## The weekly gauntlet: its last wave's elite, three waves, the week's prize or WON.
 static func _gauntlet_row(gt: Dictionary, rpg: Dictionary) -> Control:
 	var rec = rpg.get("gauntlet", {})

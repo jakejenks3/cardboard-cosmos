@@ -263,6 +263,10 @@ func _build_hub(rpg: Dictionary) -> void:
 		var onward = _next_row(rpg)
 		if onward != null:
 			add_child(onward)
+		# What is open today (the hunt, the rival, the gauntlet, the Spire): keys to things far down the page.
+		var strip = RealmMap.today_strip(rpg)
+		if strip != null:
+			add_child(strip)
 		var news = _news_card(rpg)
 		if news != null:
 			add_child(news)
