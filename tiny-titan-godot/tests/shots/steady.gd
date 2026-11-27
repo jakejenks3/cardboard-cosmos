@@ -80,6 +80,37 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	LootPop.close_all()
 	await ShotHelper.wait(tree, 0.4)
 
+	# --- a key half way down the front page leads to another page: that page begins at its top ----------
+	var see = _one("anchor_id", "realm_skill_notice")
+	check(see != null, "the front page has the \"A skill can be learned\" row")
+	if see != null:
+		ShotHelper.scroll_main(main, 160)
+		await ShotHelper.wait(tree, 0.5)
+		see = _one("anchor_id", "realm_skill_notice")
+		await ShotHelper.click(tree, see)
+		await ShotHelper.wait(tree, 0.7)
+		var sc = null
+		for n in ShotHelper.walk(main):
+			if n is ScrollContainer and n.is_visible_in_tree() and sc == null:
+				sc = n
+		check(str(RpgUi.page) == "skills" and sc != null and sc.scroll_vertical == 0 and _one("realm_tab", "skills") != null and _one("realm_tab", "skills").get_global_rect().position.y >= 0.0,
+			"its Skills key shows the Skills page from its top, tabs in view (scrolled %s)" % (str(sc.scroll_vertical) if sc != null else "?"))
+
+	# --- "N feats done" leads to the feats themselves, four sections down the Hero page ----------------
+	await _page("map")
+	var fn = _one("realm_feat_notice")
+	if fn != null:
+		await ShotHelper.click(tree, fn)
+		await ShotHelper.wait(tree, 0.8)
+		var feats = null
+		for n in ShotHelper.walk(main):
+			if n.has_meta("section") and str(n.get_meta("section")) == "realm_feats":
+				feats = n
+		var win_h = main.get_viewport().get_visible_rect().size.y
+		check(str(RpgUi.page) == "hero" and feats != null and feats.get_global_rect().position.y >= 0.0 and feats.get_global_rect().position.y < win_h * 0.5,
+			"the feats row goes to the Hero page with the feats in view (at %s)" % (str(feats.get_global_rect().position.y) if feats != null else "?"))
+		await ShotHelper.snap(tree, "steady_0_feats_in_view")
+
 	# --- Learn, three times at one point -----------------------------------------------------------
 	await _page("skills")
 	var key = _one("node_learn")

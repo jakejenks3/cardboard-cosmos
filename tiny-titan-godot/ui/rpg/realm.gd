@@ -290,13 +290,37 @@ func _build_hub(rpg: Dictionary) -> void:
 
 
 ## Another page of the hub (also for the pages themselves: `screen.go_page("gear")`).
-func go_page(page: String) -> void:
+## `focus`: a section of that page to bring to the top of the view (the feats, from the row that says one is
+## done: they are four sections down the Hero page).
+func go_page(page: String, focus: String = "") -> void:
 	if RpgUi.page == page:
 		return
 	RpgSfx.play("select")
 	RpgUi.page = page
 	_page_fresh = true
 	rebuild()
+	# Another page begins at its top, wherever the key that led to it was (a row half way down the front
+	# page: "A skill can be learned", a feat that is done). The tabs are the first thing on the screen, so a
+	# tap on one of them was at the top already and they stay under the finger.
+	scroll_to_top.call_deferred()
+	if focus != "":
+		_show_section.call_deferred(focus)
+
+
+## Scroll so that the section `id` of the page on screen begins at the top of the view (two frames after the
+## page was drawn: its sections have their places then).
+func _show_section(id: String) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	var scroll = _scroll_parent()
+	if scroll == null:
+		return
+	for n in find_children("*", "Control", true, false):
+		if n.has_meta("section") and str(n.get_meta("section")) == id and n.is_visible_in_tree():
+			scroll.scroll_vertical = int(maxf(0.0, n.global_position.y - global_position.y - 8.0))
+			return
 
 
 ## The page's own builder fills `box`. A page whose file has no `fill` yet says so in one line.
@@ -552,7 +576,7 @@ func _feat_row(rpg: Dictionary):
 	var n = RpgFeats.ready(rpg, RpgUi.sheet())
 	if n <= 0:
 		return null
-	var row = Kit.row(go_page.bind("hero"), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
+	var row = Kit.row(go_page.bind("hero", "realm_feats"), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
 	row.set_meta("realm_feat_notice", n)
 	row.set_meta("anchor_id", "realm_feat_notice")
 	if Kit.fingers:

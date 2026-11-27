@@ -1785,6 +1785,10 @@ is the Windows handoff.
       (`BattleFx.at` returns null), no flash, no shake, the air and the sky are hidden; numbers, words,
       cut-ins and the fighters' own moves stay. It is there for a phone that stutters: nobody has measured
       a fight on the iPhone.
+    - `RealmScreen.go_page(page, focus = "")`: another page always begins at its top (`scroll_to_top`,
+      deferred after the rebuild: the key that led there may be a row half way down the front page), and
+      with `focus` the section of that id is brought to the top of the view (`_show_section`: the feats row
+      goes to the Hero page's FEATS).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
