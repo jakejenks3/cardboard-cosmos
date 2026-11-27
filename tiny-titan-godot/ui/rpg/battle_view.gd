@@ -81,7 +81,8 @@ const LOW_HP = 0.3
 ## its own band; the rest of what a fight can do is met later, one thing at a time). The caller says which
 ## were given before (opts "hints": {id: true}) and is told when one is (opts "on_hint": Callable(id)).
 const HINTS = {
-	"charge": "It is winding up a big hit. Guard on your next turn, or break its guard to stop it.",
+	"charge": "It is winding up a big hit. Guard it for a perfect guard, or break its guard to stop it.",
+	"perfect": "A perfect guard: you guarded a charged blow. The foe loses a guard pip and your gauge fills.",
 	"count": "A countdown: when it runs out the blow lands. Finish the foe first, or guard in time.",
 	"danger": "An intent that beats red is a quarter of your HP or more. Guard cuts it by half.",
 	"break": "Its guard is broken: it loses its next action and takes more. Hit hard now.",
@@ -1769,6 +1770,28 @@ func _show(e: Dictionary) -> float:
 				nd2.plate.set_guard(int(e.get("guard", 0)), int(nd2.unit.get("guard_max", 0)))
 				_snd("chip", 1.0, 0.05)
 			return 0.12
+		"perfect":
+			# A perfect guard: the Guard took a charged blow. The foe reels and its guard cracks.
+			var who5 = str(e.get("src", ""))
+			var nd5 = _foes.get(who5)
+			if nd5 != null:
+				nd5.unit["guard"] = int(e.get("guard", 0))
+				nd5.plate.set_guard(int(e.get("guard", 0)), int(nd5.unit.get("guard_max", 0)))
+				nd5.view.hit()
+				_knock(who5, 10.0)
+				_fx("stars", _head(who5), Pal.ACCENT, 0.7)
+				if not instant:
+					Kit.pop(nd5.plate, 1.04, 0.2)
+			if not instant:
+				BattleWidgets.banner(_fx_layer, "PERFECT GUARD", Pal.ACCENT, 0.5 / float(speed), 2)
+			_fx("ring", _mid("hero") + Vector2(14, 0), Pal.ACCENT, 0.45, {"u": 4.0, "half": 14.0})
+			_fx("sparkle", _mid("hero"), Color(1, 1, 1), 0.6, {"n": 8, "half": 22.0})
+			_snd("perfect")
+			_hit_stop("crit")
+			RpgSfx.buzz(2)
+			_teach("perfect")
+			_say("Perfect guard! %s is thrown off and its guard cracks." % _name(who5))
+			return 0.5
 		"ko":
 			if _ko_done.has(str(e.get("dst", ""))):
 				_ko_done.erase(str(e.get("dst", "")))

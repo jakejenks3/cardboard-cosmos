@@ -135,6 +135,10 @@ const GAUGE_MAX = 100.0
 const GAUGE_ACT = 6.0
 const GAUGE_WEAK = 4.0
 const GAUGE_BREAK = 20.0
+## A PERFECT GUARD (RPG_PLAN.md 4.3): the hero's Guard takes a blow the foe had charged, or a bomb going off.
+## The foe loses this many guard pips (which can break it) and the gauge fills by this much.
+const PERFECT_CHIP = 1
+const GAUGE_PERFECT = 12.0
 const GAUGE_HURT = 60.0
 const GRIT_GAUGE = 200.0
 const FLOW_HEAL = 100.0

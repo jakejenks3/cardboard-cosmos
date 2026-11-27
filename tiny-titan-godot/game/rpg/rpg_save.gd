@@ -63,6 +63,7 @@ static func empty() -> Dictionary:
 		"feats": {},
 		"hints": {},
 		"prefs": {},
+		"tally": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
@@ -186,6 +187,11 @@ static func parse(raw) -> Dictionary:
 			if RpgDefs.STATS.has(str(k)) and _int(stats_seen[k]) > 0:
 				out.statsSeen[str(k)] = clampi(_int(stats_seen[k]), 1, 99)
 	out.hints = _flags(raw.get("hints"))
+	var tally = raw.get("tally")
+	if tally is Dictionary:
+		for k in TALLY:
+			if _int(tally.get(k)) > 0:
+				out.tally[k] = _int(tally.get(k))
 	var prefs = raw.get("prefs")
 	if prefs is Dictionary:
 		for k in PREFS:
@@ -400,6 +406,13 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 		return _no(rpg, "That battle was for another stage.")
 	var out = copy(rpg)
 	_merge_seen(out, summary.get("learned"))
+	# what was done in the fight counts whether it was won or lost (the feats read it)
+	if not (out.get("tally") is Dictionary):
+		out["tally"] = {}
+	for k in TALLY:
+		var more = maxi(0, _int(summary.get(k)))
+		if more > 0:
+			out.tally[k] = _int(out.tally.get(k)) + more
 	if not bool(summary.get("win", false)):
 		return _yes(out)
 	match kind:
@@ -520,6 +533,10 @@ static func claim_chest(rpg: Dictionary, chest) -> Dictionary:
 	out.chests[date] = int(pay.kinds)
 	return _yes(out)
 
+
+## Deeds counted over every fight (saved.rpg.tally = {key: how many}; a key is only there once it is above 0):
+## perfect guards and guard breaks, from the fight's summary.
+const TALLY = ["perfect", "breaks"]
 
 ## How the player likes a fight (saved.rpg.prefs; each is kept only while it is on): "auto" (the hero plays by
 ## himself), "fast" (x2), "light" (no particle effects, no flashes, no shakes: for a phone that stutters).

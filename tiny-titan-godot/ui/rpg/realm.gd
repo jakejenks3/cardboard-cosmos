@@ -502,8 +502,9 @@ func _note_stats() -> void:
 
 ## What is new since the Realm was first shown, said once: a card with a "Got it" key (kept among the hints
 ## as NEWS_ID, so it never comes back). A new batch of news gets a new id.
-const NEWS_ID = "news_1"
+const NEWS_ID = "news_2"
 const NEWS = [
+	["guard", "Perfect guard: Guard a blow a foe has charged up. Its guard cracks and your gauge fills."],
 	["music", "Music, and a sound for every move. The note key (here and in a fight) switches the music off."],
 	["sword", "AUTO in a fight: the hero plays by himself until you tap it again."],
 	["book", "Tap the message line in a fight: what happened, how fights work, and Effects: Light if a fight stutters."],

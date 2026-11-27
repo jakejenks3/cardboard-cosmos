@@ -194,7 +194,8 @@ extends RefCounted
 ##   intent {who, intent} · learn {key, school} · phase {who, say, phase} · summon {units, by} · wave {n, of,
 ##   units} · say {text} · end {win}
 ##   and, beyond the plan's list: no {why} · survive {dst, hp} · chip {dst, chip, guard} · interrupt {dst} ·
-##   delay {dst, stun?} · adapt {dst, school} · charge {v}
+##   delay {dst, stun?} · adapt {dst, school} · charge {v} · perfect {src, chip, guard} (a perfect guard: the
+##   hero's Guard took the charged blow or the bomb of `src`, which lost `chip` pips; a break may follow)
 ##
 ## A UNIT in B (RPG_PLAN.md 11.3) also carries what the engine keeps: "agg" (aggregate of its fx), "turns", "flags",
 ##   and a foe "n" (its difficulty index), "slot" (its place, 0..2), "moves", "pattern", "rules", "phases".
@@ -544,7 +545,8 @@ static func summary(B: Dictionary) -> Dictionary:
 	for k in B.learned:
 		learned[k] = B.learned[k].duplicate()
 	return _norm({"win": won(B), "turns": _i(s, "turns"), "dealt": _i(s, "dealt"), "taken": _i(s, "taken"),
-		"breaks": _i(s, "breaks"), "items": _i(s, "items"), "guards": _i(s, "guards"), "schools": s.schools.duplicate(),
+		"breaks": _i(s, "breaks"), "items": _i(s, "items"), "guards": _i(s, "guards"), "perfect": _i(s, "perfect"),
+		"schools": s.schools.duplicate(),
 		"worst_share": _f(s, "worst"), "hp_share": _share(h), "learned": learned, "used": s.used.duplicate(),
 		"fled": bool(B.fled), "kos": _i(s, "kos"), "waves": _i(s, "waves"),
 		"reward": {"ore": _f(h.agg, "reward:ore"), "xp": _f(h.agg, "reward:xp"), "luck": _f(h.agg, "reward:luck")}})
@@ -2346,6 +2348,16 @@ static func _foe_act(B: Dictionary, ev: Array, f: Dictionary) -> Dictionary:
 			_foe_hit(B, ev, f, power / float(hits), run)
 		if not bool(run.hit):
 			touched = []            # nothing landed: what rides on the hit does not either
+		# A PERFECT GUARD: the hero's Guard took a blow this foe had charged (or its bomb going off). The foe is
+		# thrown off: a pip of its guard goes, which can break it, and the gauge fills a little.
+		var told = bool(it.get("charged", false)) or int(mv.get("count", 0)) > 0
+		if told and bool(run.hit) and bool(B.hero.get("guarding", false)) and f.alive and int(B.hero.hp) > 0:
+			B.sum["perfect"] = _i(B.sum, "perfect") + 1
+			var off = _chip(f, RpgDefs.PERFECT_CHIP)
+			ev.append({"t": "perfect", "src": str(f.id), "chip": off, "guard": _i(f, "guard")})
+			_gauge(B, ev, RpgDefs.GAUGE_PERFECT, false)
+			if off > 0 and _i(f, "guard") <= 0:
+				_break(B, ev, f)
 	var ctx = {"src": f, "targets": touched, "status_to": "target", "help_to": "self" if aim == "hero" else "target",
 		"off": 0.0, "dealt": int(run.dealt), "killed": false, "move_id": id}
 	for e in mv.get("fx", []):

@@ -289,6 +289,9 @@ Exactly one of:
   stat; never chips, never weak or resisted).
 - **Guard**: until the hero's next turn damage taken x `(0.5 - core / 400.0)` (core 40: x0.4), +2
   energy, rank 0.7.
+  A **perfect guard**: a Guard that takes a blow the foe had charged (a wind-up) or a bomb going off.
+  The foe loses `PERFECT_CHIP` (1) guard pip, which can break it, and the gauge gains
+  `GAUGE_PERFECT` (12). Event `perfect {src, chip, guard}`; `summary.perfect` counts them.
 - **An item** from the belt (rank 0.6).
 - **The ultimate** when the gauge is 100 (uses all of it; rank 1.0).
 - **Flee**: the battle ends as a loss; nothing is lost.

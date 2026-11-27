@@ -1818,6 +1818,14 @@ is the Windows handoff.
       light effects. Nothing else in the game may set `Engine.time_scale`.
     - The result's picture grows into the room its page does not need (`BattleResult._fit_tableau`,
       `TABLEAU_MORE` 110): on a phone the whole scene shows, and there is less of a hole over the keys.
+    - PERFECT GUARD (2026-11-27, gameplay; RPG_PLAN.md 4.3): a Guard that takes a blow the foe had CHARGED (a
+      wind-up) or a bomb going off. The foe loses `RpgDefs.PERFECT_CHIP` (1) guard pip, which can break it,
+      and the gauge gains `GAUGE_PERFECT` (12). Engine: in `RpgBattle._foe_act`, event `perfect {src, chip,
+      guard}`, `summary.perfect`. Screen: a "PERFECT GUARD" banner, sound "perfect", a hit stop, hint
+      "perfect". AUTO (the heuristic) was NOT taught to go for it: playing by hand is worth a little more.
+      The balance bands (rpg_sim_test) did not move. `saved.rpg.tally` = {perfect, breaks} (`RpgSave.TALLY`,
+      added up by `RpgSave.finish`, won or lost) feeds two more feats: Stone Wall and Breaker (14 ladders).
+      Walkthrough `tests/shots/perfect.gd` (year data). The news card is `NEWS_ID` "news_2".
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
