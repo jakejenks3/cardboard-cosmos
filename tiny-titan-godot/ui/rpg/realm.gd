@@ -62,6 +62,7 @@ func _ready() -> void:
 	super._ready()
 	App.rpg_changed.connect(rebuild)
 	RpgSfx.hold(1)
+	RpgUi.use_prefs()
 
 
 func _exit_tree() -> void:
@@ -481,7 +482,7 @@ const NEWS_ID = "news_1"
 const NEWS = [
 	["music", "Music, and a sound for every move. The note key (here and in a fight) switches the music off."],
 	["sword", "AUTO in a fight: the hero plays by himself until you tap it again."],
-	["book", "Tap the message line in a fight to read back what happened, and how fights work."],
+	["book", "Tap the message line in a fight: what happened, how fights work, and Effects: Light if a fight stutters."],
 	["trophy", "Feats on the Hero page pay ore. The Bestiary is at the foot of the Map."],
 ]
 

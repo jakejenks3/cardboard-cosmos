@@ -59,6 +59,26 @@ func _play(bv, limit_ms: int = 120000) -> void:
 	await ShotHelper.wait(tree, 0.2)
 
 
+## Leave a fight whatever state it is in: Back from its result when it is over (the one move of the test
+## may have won it), else flee.
+func _end_fight(bv) -> void:
+	if not is_instance_valid(bv):
+		return
+	var t0 = Time.get_ticks_msec()
+	while is_instance_valid(bv) and bv.busy() and Time.get_ticks_msec() - t0 < 8000:
+		bv.skip()
+		await ShotHelper.wait(tree, 0.1)
+	if is_instance_valid(bv) and bv.result() != null:
+		bv.result().skip()
+		_press_result(bv, "back")
+	elif is_instance_valid(bv):
+		bv._do({"t": "flee"})
+	await ShotHelper.wait(tree, 1.5)
+	if is_instance_valid(bv) and not bv._closed:
+		bv.close()
+		await ShotHelper.wait(tree, 0.5)
+
+
 func _press_result(bv, what: String) -> bool:
 	if not is_instance_valid(bv) or bv.result() == null:
 		return false
@@ -228,6 +248,52 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 			_press_result(bv6, "back")
 			await ShotHelper.wait(tree, 0.8)
 	check(_battle() == null and _one("realm_continue") == null, "at the end no fight is open and none is offered")
+	# --- how the player likes a fight is kept: light effects, AUTO, the speed ---------------------------
+	RpgUi.fight({"kind": "stage", "id": "r1s1"})
+	await ShotHelper.wait(tree, 1.4)
+	var bvp = _battle()
+	if bvp != null:
+		bvp.skip()
+		print("DBG light %s scene %s ambient %s instant %s" % [str(BattleFx.light), str(bvp._opts.get("scene", "?")), str(bvp._ambient), str(bvp.instant)])
+		check(not BattleFx.light and bvp._ambient != null and bvp._ambient.visible, "effects are full to begin with: the scene has its air")
+		bvp._open_log()
+		await ShotHelper.wait(tree, 0.5)
+		var light_key = _one("bv_fx", "light", Kit.overlay_root)
+		check(light_key != null, "the fight's log has the Effects switch")
+		await ShotHelper.snap(tree, "flows_3_effects_switch")
+		if light_key != null:
+			light_key.pressed.emit()
+			await ShotHelper.wait(tree, 0.6)
+			check(BattleFx.light and bool(App.rpg().prefs.get("light", false)) and bvp._ambient != null and not bvp._ambient.visible, "Light: it is kept, and the air stands still")
+			var before_n = bvp._fx_layer.get_child_count()
+			bvp._do(RpgAi.hero_action(bvp.B, "heuristic"))
+			await ShotHelper.wait(tree, 0.5)
+			var sprs = 0
+			for c in bvp._fx_layer.get_children():
+				if c is BattleFx.Spr:
+					sprs += 1
+			check(sprs == 0, "on Light a move makes no particle effect (%d)" % sprs)
+			bvp.skip()
+		for k in _all("bv_key", bvp):
+			if str(k.get_meta("bv_key")) == "speed":
+				k.pressed.emit()
+		await ShotHelper.frames(tree, 3)
+		check(bool(App.rpg().prefs.get("fast", false)), "x2 is kept too")
+		await _end_fight(bvp)
+		RpgUi.fight({"kind": "stage", "id": "r1s1"})
+		await ShotHelper.wait(tree, 1.2)
+		var bvq = _battle()
+		check(bvq != null and BattleFx.light and bvq.speed == 2, "the next fight opens the same way: light, x2")
+		if bvq != null:
+			bvq.skip()
+			bvq._set_light(false)
+			for k in _all("bv_key", bvq):
+				if str(k.get_meta("bv_key")) == "speed":
+					k.pressed.emit()
+			await ShotHelper.frames(tree, 3)
+			check(not BattleFx.light and App.rpg().prefs.is_empty(), "switched back, nothing is kept")
+			await _end_fight(bvq)
+
 	# --- the music belongs to the Realm: it goes when the tab is left, and comes back with it ------------
 	var m = RpgSfx.music()
 	check(m != null and RpgSfx.music_on() and str(m.current()) == "hub" and RpgSfx._holders == 1, "in the Realm, out of a fight, the hub's tune is the one asked for (%s, %d holding)" % [str(m.current()) if m != null else "none", RpgSfx._holders])

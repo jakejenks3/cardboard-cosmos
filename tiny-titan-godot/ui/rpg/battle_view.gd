@@ -440,6 +440,11 @@ func _build_arena() -> void:
 		_tip.modulate.a = 0.0
 		_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_arena.add_child(_tip)
+	if BattleFx.light:
+		if _ambient != null:
+			_ambient.visible = false
+		if _sky_fx != null:
+			_sky_fx.visible = false
 	var given = _opts.get("hints")
 	if given is Dictionary:
 		for k in given:
@@ -592,7 +597,7 @@ func _layout() -> void:
 	if _sky_fx != null:
 		# The band of plain sky over the picture (none when the arena is as low as the picture).
 		var band = arena_h - float(RealmScenes.H * _arena.k())
-		_sky_fx.visible = band >= 24.0
+		_sky_fx.visible = band >= 24.0 and not BattleFx.light
 		_rect(_sky_fx, 0, 0, w, maxf(0.0, band))
 	_rect(_vignette, 0, 0, w, arena_h)
 	_place_hero()
@@ -1059,6 +1064,30 @@ func _on_act(what: String) -> void:
 				_do({"t": "ult", "target": target})
 
 
+## Effects full or light (BattleFx.light): light makes no particles, flashes or shakes and stills the air and
+## the sky. The caller is told (opts "on_pref": Callable(key, on)), so it is kept for the next fight.
+func _set_light(on: bool) -> void:
+	BattleFx.light = on
+	if _ambient != null:
+		_ambient.visible = not on
+	if _sky_fx != null:
+		_sky_fx.visible = (not on) and _sky_fx.size.y >= 24.0
+	if on:
+		for key in _status_nodes.keys():
+			if is_instance_valid(_status_nodes[key]):
+				_status_nodes[key].queue_free()
+		_status_nodes = {}
+	else:
+		_status_fx(true)
+	_tell_pref("light", on)
+
+
+func _tell_pref(key: String, on: bool) -> void:
+	var cb = _opts.get("on_pref")
+	if cb is Callable and cb.is_valid():
+		cb.call(key, on)
+
+
 ## The music on or off (it does not skip what is playing either).
 func _on_music() -> void:
 	if _closed:
@@ -1077,6 +1106,7 @@ func _on_auto() -> void:
 		return
 	_set_auto(not auto)
 	auto_kept = auto
+	_tell_pref("auto", auto)
 	Sfx.tap()
 	_say("Auto: the hero fights by himself. Tap AUTO again to take over." if auto else "Your move.")
 	if auto and not _busy:
@@ -1120,6 +1150,7 @@ func _auto_step() -> void:
 func _on_speed() -> void:
 	speed = 1 if speed >= 2 else 2
 	speed_kept = speed
+	_tell_pref("fast", speed >= 2)
 	BattleFx.speed = float(speed)
 	_speed_key.text = "x%d" % speed
 	speed_changed.emit(speed)
@@ -1325,6 +1356,16 @@ func _say(text: String) -> void:
 			_log.remove_at(0)
 
 
+func _pick_light(on: bool, sheet) -> void:
+	if BattleFx.light == on:
+		return
+	Sfx.tap()
+	_set_light(on)
+	_say("Effects: light." if on else "Effects: full.")
+	if sheet != null and is_instance_valid(sheet):
+		sheet.close()
+
+
 func _on_line_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		_line_box.accept_event()
@@ -1344,6 +1385,18 @@ func _open_log() -> void:
 		var l = Kit.para(str(_log[i]), 13, Pal.TEXT if i == _log.size() - 1 else Pal.MUTED, i == _log.size() - 1)
 		l.set_meta("bv_log_line", i)
 		s.box.add_child(l)
+	# Effects: Full | Light (for a phone that stutters in a fight).
+	var fx_row = Kit.hbox(8)
+	fx_row.add_child(Kit.vcenter(Kit.label("Effects", 13, Pal.MUTED, true)))
+	var full_key = Kit.choice("Full", not BattleFx.light, func(): _pick_light(false, s), RpgUi.color("realm"), 13)
+	full_key.set_meta("bv_fx", "full")
+	var light_key = Kit.choice("Light", BattleFx.light, func(): _pick_light(true, s), RpgUi.color("realm"), 13)
+	light_key.set_meta("bv_fx", "light")
+	var track = Kit.choice_track([full_key, light_key])
+	track.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fx_row.add_child(track)
+	s.box.add_child(fx_row)
+	s.box.add_child(Kit.muted_para("Light: no particles, flashes or shakes. Try it if a fight stutters on your phone.", 11))
 	var help = Kit.button("How fights work", "secondary", RealmHelp.open, "lg", "book" if Icons.has_icon("book") else "")
 	help.set_meta("bv_help", true)
 	s.box.add_child(help)
@@ -1422,7 +1475,7 @@ func _pose_rest() -> void:
 func _shake(power: float = 1.0) -> void:
 	_kill(_shake_tw)
 	_arena.position = _arena_home
-	if instant:
+	if instant or BattleFx.light:
 		return
 	_shake_tw = create_tween()
 	for off in [Vector2(-6, 2), Vector2(5, -3), Vector2(-4, 3), Vector2(3, -2), Vector2(-2, 1)]:

@@ -408,13 +408,32 @@ static func fight(what: Dictionary, resume_b = null):
 	var opts = {"title": str(st.get("name", "")), "scene": str(st.get("scene", "rustyard")), "tutorial": id == "r1s1" and first_time,
 		"hero": hero_look(), "next": nxt != "",
 		"hints": save().get("hints", {}).duplicate(), "on_hint": func(hint_id): RpgUi._hint_given(hint_id),
+		"on_pref": func(key, on): RpgUi._pref_set(key, on),
 		"store": func(B): RpgUi._store(what, B),
 		"result": func(B, summary): return RpgUi.finish(B, what, summary)}
 	if resume_b is Dictionary:
 		opts["resume"] = resume_b
+	use_prefs()
 	var bv = BattleView.open(setup, opts)
 	bv.finished.connect(func(_b, _summary): RpgUi._after(bv, what, nxt))
 	return bv
+
+
+## How the player likes a fight, from the save to where a fight reads it (BattleView's statics, BattleFx.light).
+static func use_prefs() -> void:
+	var p = save().get("prefs", {})
+	if not (p is Dictionary):
+		p = {}
+	BattleView.auto_kept = bool(p.get("auto", false))
+	BattleView.speed_kept = 2 if bool(p.get("fast", false)) else 1
+	BattleFx.light = bool(p.get("light", false))
+
+
+## ... and back: a key of a fight changed one (quietly: nothing is redrawn for it).
+static func _pref_set(key: String, on: bool) -> void:
+	var res = RpgSave.set_pref(save(), key, on)
+	if bool(res.get("ok", false)) and bool(res.get("changed", false)):
+		commit_quiet(res.rpg)
 
 
 ## A fight gave one of its once-only hints: it is remembered, quietly (nothing is redrawn).

@@ -1777,6 +1777,14 @@ is the Windows handoff.
       as picked last, for the next fight of the visit.
     - A win that brought skill points (a level, a boss, enough stars) says so in the result (`info.points`
       from `RpgUi.finish`, a row with meta `br_points` between LEVEL UP and the loot).
+    - How the player likes a fight is kept in the Realm's own save: `saved.rpg.prefs` = {"auto", "fast",
+      "light"}, each only while on (`RpgSave.PREFS`, `set_pref`; kept by `parse`). `RpgUi.use_prefs()` hands
+      them to a fight (`BattleView.auto_kept`, `speed_kept`, `BattleFx.light`), a fight tells of a change
+      through `opts.on_pref` (`RpgUi._pref_set`, a quiet commit). LIGHT (`BattleFx.light`; the switch
+      "Effects: Full | Light" is in the fight's log sheet, meta `bv_fx`): no particle effect is made at all
+      (`BattleFx.at` returns null), no flash, no shake, the air and the sky are hidden; numbers, words,
+      cut-ins and the fighters' own moves stay. It is there for a phone that stutters: nobody has measured
+      a fight on the iPhone.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

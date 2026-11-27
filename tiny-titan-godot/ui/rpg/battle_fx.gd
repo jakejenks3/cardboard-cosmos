@@ -29,13 +29,16 @@ const SCHOOL_FX = {"push": "impact", "pull": "slash", "legs": "stomp", "speed": 
 const THROWN = ["mind"]
 
 static var speed: float = 1.0
+## Light: no particle effects and no flashes are made at all (for a phone that stutters). Numbers, words,
+## cut-ins and the fighters' own moves stay: they say what happens.
+static var light: bool = false
 
 
 ## One effect of KINDS, centred on `pos` (in `layer`'s own pixels). opts: "u"
 ## (pixel size), "flip" (mirror left / right), "loop" (it goes round until freed),
 ## "n" (how many parts), "delay" (seconds before it starts), "seed".
 static func at(layer: Control, kind: String, pos: Vector2, color: Color, dur: float = 0.36, opts: Dictionary = {}) -> Spr:
-	if layer == null or not is_instance_valid(layer) or not layer.is_inside_tree():
+	if light or layer == null or not is_instance_valid(layer) or not layer.is_inside_tree():
 		return null
 	var s = Spr.new()
 	s.kind = kind
@@ -163,7 +166,7 @@ static func flash(over: Control, color: Color, peak: float = 0.5, secs: float = 
 	if over == null or not is_instance_valid(over) or not over.is_inside_tree():
 		return
 	var now = Time.get_ticks_msec()
-	if now - _flash_at < FLASH_GAP_MS:
+	if light or now - _flash_at < FLASH_GAP_MS:
 		return
 	_flash_at = now
 	var c = ColorRect.new()

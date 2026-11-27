@@ -62,6 +62,7 @@ static func empty() -> Dictionary:
 		"statsSeen": {},
 		"feats": {},
 		"hints": {},
+		"prefs": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
@@ -185,6 +186,11 @@ static func parse(raw) -> Dictionary:
 			if RpgDefs.STATS.has(str(k)) and _int(stats_seen[k]) > 0:
 				out.statsSeen[str(k)] = clampi(_int(stats_seen[k]), 1, 99)
 	out.hints = _flags(raw.get("hints"))
+	var prefs = raw.get("prefs")
+	if prefs is Dictionary:
+		for k in PREFS:
+			if prefs.get(k) is bool and prefs[k]:
+				out.prefs[k] = true
 	var feats = raw.get("feats")
 	if feats is Dictionary:
 		for k in feats:
@@ -513,6 +519,26 @@ static func claim_chest(rpg: Dictionary, chest) -> Dictionary:
 			out.chests.erase(k)
 	out.chests[date] = int(pay.kinds)
 	return _yes(out)
+
+
+## How the player likes a fight (saved.rpg.prefs; each is kept only while it is on): "auto" (the hero plays by
+## himself), "fast" (x2), "light" (no particle effects, no flashes, no shakes: for a phone that stutters).
+const PREFS = ["auto", "fast", "light"]
+
+static func set_pref(rpg: Dictionary, key: String, on: bool) -> Dictionary:
+	if not PREFS.has(key):
+		return _no(rpg, "No such preference.")
+	var out = copy(rpg)
+	if not (out.get("prefs") is Dictionary):
+		out["prefs"] = {}
+	var was = bool(out.prefs.get(key, false))
+	if on:
+		out.prefs[key] = true
+	else:
+		out.prefs.erase(key)
+	var res = _yes(out)
+	res["changed"] = was != on
+	return res
 
 
 ## A hint of a fight was given (BattleView.HINTS): it is not given again. {"ok", "why", "rpg", "changed"}.
