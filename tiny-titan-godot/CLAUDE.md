@@ -1678,7 +1678,7 @@ is the Windows handoff.
       either (the test checks the layout right after a press).
     - Lasting statuses stay drawn on a fighter (`BattleView.STATUS_LOOPS`, `_status_fx`, meta `bv_status_fx`):
       flames while it burns, drops while it bleeds, stars round a stunned or broken head, a faint bubble for a
-      shield, green motes for regeneration.
+      shield, green motes for regeneration; a foe winding up a blow gathers red motes, a charged one blazes.
     - The hub's sub-tabs are the FIRST thing on the Realm's screen (they never move when a page is picked; a
       test checks it). Under them the Map page has the banner, the notices and the boosts; the other pages
       have one slim line (`RealmScreen._slim`, section `realm_slim`: level, its bar, points, ore), so a page
@@ -1730,6 +1730,11 @@ is the Windows handoff.
       result was left (the hub had been drawn while the draft was still kept): `RpgUi._after` now emits
       `rpg_changed` once the draft is cleared. With the Nov 23 backup: first fights 1 to 2 turns, the first
       boss won on AUTO in 9 turns with 61% of the HP lost and nothing learned yet.
+    - After a LOST fight the result has "What would help" (`RpgUi.tips(B, stage, summary)`, at most
+      `TIPS_MAX` 4, in `info.tips`; `BattleResult._tips`, meta `br_tips`): a weakness not found yet, or found
+      and no move of that school in the build; skill points unspent; power under the stage's `rec`; never
+      guarded; an untouched belt; no boost today; the lowest body stat when it is far under the others and
+      what it is for (`STAT_GIVES`: for a low Core, "it is your armour and your guard").
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
@@ -1978,6 +1983,8 @@ bands (a band instead of a weight in the Log tab, the band picker, the PT key on
 realm (the Realm: first visit, hub, training chest, the five pages, map, prep sheet, cache; year data),
 battle (a fight played by its keys to the result, a pack, the first boss; year data),
 realm_own (the Realm with the player's own log, from the file in REALM_OWN_SAVE; see THE REALM),
+flows (the Realm's fights as a player goes through them: win and Next stage, the app closed mid-fight and
+  Continue, flee, lose and Again, with the hub's state checked after each; year data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 

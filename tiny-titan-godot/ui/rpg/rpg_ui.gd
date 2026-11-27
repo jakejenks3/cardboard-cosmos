@@ -434,8 +434,73 @@ static func finish(B: Dictionary, what: Dictionary, summary: Dictionary) -> Dict
 	var info = {"win": win, "title": str(st.get("name", "")) if st is Dictionary else "", "stars": stars, "objectives": objectives,
 		"rewards": rewards if win else null, "level_before": before, "level_after": RpgDefs.level_of(int(save().get("xp", 0))),
 		"learned": learned, "next": win and nxt != "" and RpgWorld.is_open(save(), nxt)}
+	if not win:
+		info["tips"] = tips(B, st, summary)
 	_store(what, B, info)
 	return info
+
+
+## What a body stat is to a fighter, in a few words (for a tip after a lost fight).
+const STAT_GIVES = {"chest": "your Push moves hit with it", "shoulders": "your Push moves hit with it", "arms": "your Push moves hit with it",
+	"back": "your Pull moves hit with it", "legs": "your Legs moves hit with it", "core": "it is your armour and your guard"}
+const TIPS_MAX = 4
+
+
+## After a lost fight: what would help, the most telling first (at most TIPS_MAX lines). It looks at the
+## fight (which weaknesses were found and whether the build can hit them, whether a guard or an item was
+## used), at the save (skill points left, power against the stage's) and at the log (a boost, the lowest stat).
+static func tips(B: Dictionary, st, summary: Dictionary) -> Array:
+	var out = []
+	var mine = {}
+	for id in B.hero.get("moves", []):
+		var row = RpgBattle.move_row(B, str(id))
+		if row != null:
+			mine[str(row.get("school", ""))] = true
+	var named = {}
+	for f in B.get("foes", []):
+		if not (f is Dictionary) or named.has(str(f.get("name", ""))):
+			continue
+		named[str(f.get("name", ""))] = true
+		var kn = RpgBattle.known(B, str(f.get("id", "")))
+		var weak = kn.get("weak", []) if kn is Dictionary else []
+		var total = f.get("weak", []).size() if f.get("weak") is Array else 0
+		if not weak.is_empty():
+			var can = false
+			for sc in weak:
+				if mine.has(str(sc)):
+					can = true
+			if not can:
+				var words = []
+				for sc in weak:
+					words.append(str(RpgDefs.SCHOOL_NAMES.get(str(sc), str(sc))))
+				out.append("%s is weak to %s, and your build has no such move: put one in (Moves)." % [str(f.name), " and ".join(words)])
+		elif total > 0 and (bool(f.get("boss", false)) or bool(f.get("elite", false)) or out.is_empty()):
+			out.append("You have not found what %s is weak to: a weak hit does more and chips its guard. Try a move of each school." % str(f.name))
+	var left = int(points().left)
+	if left > 0:
+		out.append("You have %d skill point%s to spend: new moves and passives (Skills)." % [left, "" if left == 1 else "s"])
+	var rec = float(st.get("rec", 0.0)) if st is Dictionary else 0.0
+	var power = RpgHero.power(hero())
+	if rec > 0.0 and power < rec * 0.95:
+		out.append("Recommended power %s, yours %s: upgrade your gear with ore, learn skills, train." % [Xp.fmt_int(int(round(rec))), Xp.fmt_int(int(round(power)))])
+	if int(summary.get("guards", 0)) == 0:
+		out.append("You never guarded. When a foe's intent beats red, Guard cuts the hit by half or more and gives %d energy." % RpgDefs.EN_GUARD)
+	var belt_left = 0
+	for it in B.hero.get("belt", []):
+		if it is Dictionary and str(it.get("id", "")) != "":
+			belt_left += 1
+	if int(summary.get("items", 0)) == 0 and belt_left > 0:
+		out.append("Your belt was not touched: an item can turn a fight (Item).")
+	if boosts().is_empty():
+		out.append("No boost today. A workout gives one for that day and the next.")
+	var sh = sheet()
+	var low = ""
+	for id in RpgDefs.BODY:
+		if low == "" or float(sh.stats[id].raw) < float(sh.stats[low].raw):
+			low = str(id)
+	if low != "" and float(sh.stats[low].raw) < 0.6 * float(sh.get("might", 0.0)):
+		out.append("%s is your lowest stat (%d): %s. Train it and it rises; a stat never falls." % [str(sh.stats[low].name), int(sh.stats[low].v), str(STAT_GIVES.get(low, "it carries its moves"))])
+	return out.slice(0, TIPS_MAX)
 
 
 static func _after(bv, what: Dictionary, nxt: String) -> void:

@@ -13,6 +13,7 @@ extends Control
 ##                     "scroll": move id or "", "first": bool} or null,
 ##         "level_before": {"lvl", "into", "need"}, "level_after": the same,
 ##         "learned": ["Dust Bunny is weak to Legs", ...], "next": bool,
+##         "tips": [lines] (after a loss: what would help, RpgUi.tips),
 ##         "scene": a RealmScenes id, "hero": {"state", "profile", "loadout"}, "hero_fit": {"top", "low", "mid"}}
 ## Every part may be left out: what is not given is not shown. With a hero the
 ## head of the result is a picture (the tableau): the hero where the fight was,
@@ -143,6 +144,11 @@ func _build() -> void:
 		var loot = _loot(info.rewards)
 		_late.append(loot)
 		body.add_child(loot)
+	var tips = info.get("tips") if info.get("tips") is Array else []
+	if not win and not tips.is_empty():
+		var tb = _tips(tips)
+		_late.append(tb)
+		body.add_child(tb)
 	var learned = info.get("learned") if info.get("learned") is Array else []
 	if not learned.is_empty():
 		var lb = _learned(learned)
@@ -326,6 +332,20 @@ func _loot_row(icon_name: String, title: String, words: String) -> Control:
 	row.set_meta("br_rare", ["rune", "relic", "scroll"].has(icon_name) or title.begins_with("Scroll"))
 	_loot_rows.append(row)
 	return row
+
+
+## After a loss: what would help, a line each.
+func _tips(lines: Array) -> Control:
+	var sec = Kit.section("br_tips", "What would help", "bolt", Pal.SECOND)
+	sec.set_meta("br_tips", lines.size())
+	for i in range(lines.size()):
+		var row = Kit.hbox(8)
+		var dot = Kit.label(str(i + 1), 13, Pal.SECOND, true)
+		dot.custom_minimum_size = Vector2(14, 0)
+		row.add_child(dot)
+		row.add_child(Kit.para(str(lines[i]), 13))
+		sec.add(row)
+	return sec
 
 
 func _learned(lines: Array) -> Control:

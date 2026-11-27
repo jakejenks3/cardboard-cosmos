@@ -67,7 +67,8 @@ const STEP_IN = 26.0
 ## Under this share of his HP the arena's edge beats red.
 const LOW_HP = 0.3
 ## Statuses that stay drawn on a fighter while it has them: [the effect, seconds a round].
-const STATUS_LOOPS = {"burn": ["flame", 1.0], "bleed": ["drops", 1.3], "stun": ["stars", 1.2], "shield": ["shield", 1.9], "regen": ["heal", 1.7]}
+const STATUS_LOOPS = {"burn": ["flame", 1.0], "bleed": ["drops", 1.3], "stun": ["stars", 1.2], "shield": ["shield", 1.9], "regen": ["heal", 1.7],
+	"charge": ["gather", 0.9], "charged": ["rays", 1.3]}
 ## The air of each scene (BattleFx.Ambient): [what drifts, its colour, how many].
 const AMBIENT = {
 	"rustyard": ["dust", "#e0c296", 14], "greenmile": ["leaves", "#c9e88f", 10], "chalk": ["snow", "#f4f1e6", 12],
@@ -746,6 +747,10 @@ func _status_fx(fresh: bool = false) -> void:
 					want[str(id) + "|" + str(st.id)] = true
 			if bool(nd.unit.get("broken", false)):
 				want[str(id) + "|stun"] = true
+			# A foe winding up a blow gathers it for all to see; once it is charged, it blazes.
+			var it = nd.unit.get("intent", {})
+			if it is Dictionary and bool(it.get("windup", false)) and not bool(nd.unit.get("broken", false)):
+				want[str(id) + ("|charged" if bool(it.get("charged", false)) else "|charge")] = true
 	for key in _status_nodes.keys():
 		var node = _status_nodes[key]
 		if fresh or not want.has(key) or not is_instance_valid(node):
@@ -777,9 +782,16 @@ func _status_fx(fresh: bool = false) -> void:
 			"regen":
 				col = Pal.GOOD
 				opts["n"] = 4
+			"charge":
+				col = Pal.DANGER
+				opts["n"] = 8
+			"charged":
+				col = Pal.DANGER
+				opts["n"] = 10
+				opts["half"] = 22.0
 		var node2 = BattleFx.at(_fx_layer, str(row[0]), at, col, float(row[1]) * float(speed), opts)
 		if node2 != null:
-			node2.modulate.a = 0.45 if sid == "shield" else 0.8
+			node2.modulate.a = 0.45 if sid == "shield" else (0.55 if sid == "charged" else 0.8)
 			node2.set_meta("bv_status_fx", key)
 			_status_nodes[key] = node2
 
@@ -1628,6 +1640,7 @@ func _show(e: Dictionary) -> float:
 			if nd3 != null and e.get("intent") is Dictionary:
 				nd3.unit["intent"] = e.intent
 				nd3.plate.set_intent(e.intent)
+				_status_fx()
 			return 0.0
 		"learn":
 			return _show_learn(e)

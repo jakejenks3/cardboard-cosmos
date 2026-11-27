@@ -768,5 +768,17 @@ func _run() -> void:
 	ok(secs == ["realm_tabs", "realm_banner", "realm_notices", "realm_boosts", "realm_map"] or secs == ["realm_tabs", "realm_banner", "realm_boosts", "realm_map"], "an empty log: the hub still stands", secs)
 	ok(_with(realm, "realm_chest").is_empty() and _one(realm, "realm_no_boost") != null and _with(realm, "realm_boost").is_empty() and _too_wide() == "", "with no chest, and one line on what earns a boost")
 
+	# --- after a lost fight: what would help (the empty log: no boost, nothing learned, a build of starters) ---
+	var tip_stage = RpgWorld.stage("r1s10")
+	var tip_setup = RpgWorld.setup({"kind": "stage", "id": "r1s10"}, rpg_ui.save(), rpg_ui.hero(), null, 5, str(app.today))
+	var tip_b = RpgBattle.start(tip_setup)
+	var tips = rpg_ui.tips(tip_b, tip_stage, {"guards": 0, "items": 0, "schools": []})
+	ok(tips.size() >= 2 and tips.size() <= rpg_ui.TIPS_MAX and tips.all(func(t): return t is String and t.length() > 20 and not t.contains("%")), "a lost fight gets two to four tips, whole sentences", tips)
+	ok(tips.any(func(t): return t.contains("weak to")) and tips.any(func(t): return t.contains("skill point") or t.contains("power") or t.contains("guard")), "among them: its weakness is still to find, and something to do about it", tips)
+	var no_guard = rpg_ui.tips(tip_b, tip_stage, {"guards": 0, "items": 1, "schools": []})
+	var guarded = rpg_ui.tips(tip_b, tip_stage, {"guards": 3, "items": 1, "schools": []})
+	ok(no_guard.any(func(t): return t.contains("never guarded")) or no_guard.size() == rpg_ui.TIPS_MAX, "never guarding is named (when there is room for it)", no_guard)
+	ok(not guarded.any(func(t): return t.contains("never guarded")), "and not when the hero did guard", guarded)
+
 	print("RPG HUB: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
