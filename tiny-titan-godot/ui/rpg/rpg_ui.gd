@@ -365,6 +365,9 @@ static func _full(what: Dictionary) -> Dictionary:
 	var w = {"kind": str(what.get("kind", "")), "id": str(what.get("id", ""))}
 	w["boosts"] = boosts()
 	w["state"] = App.state
+	if str(w.kind) == "dare":
+		# (a dare stands at the hero's own strength)
+		w["power"] = RpgHero.power(hero())
 	return w
 
 

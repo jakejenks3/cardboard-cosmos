@@ -713,7 +713,8 @@ push, marsh mind and grip, stormspine and titans_rest spread evenly); at most on
   floor; a fixed pack seeded by the floor, an elite every fifth floor, a boss every tenth; no
   end. Floors are climbed in order; each pays once; `saved.rpg.spire.best`.
 - **Dares** (added 2026-11-27; `RpgWorld.dare(stage_id, rpg) -> stage or null`): a road stage that is
-  won, again: its own foes at `max(its n, best n + DARE_OVER)` with one rule (by its place, as an
+  won, again: its own foes at `max(its n, best n + DARE_OVER, n_for_power(the hero's power))`, at most
+  `DARE_TOP`, with one rule (by its place, as an
   echo's). Stage id `dare:r3s5`, kind "dare", no stars. A win adds to `saved.rpg.stages[id].dares`;
   the first pays `first` (ore `60 * 1.15^(n/10)`; an elite's or a boss's also a rune) and puts a flame
   on the stage.

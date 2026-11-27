@@ -1839,8 +1839,11 @@ is the Windows handoff.
       result (`info.mastery` from `RpgUi.finish`, rows `br_mastery`), the help sheet, the news card.
       Walkthrough `tests/shots/mastery.gd` (year data).
     - DARES (2026-11-27, gameplay; RPG_PLAN.md 8.4): a road stage that is WON can be fought again as a dare:
-      its own foes raised to the player's reach (`RpgWorld.best_n` + `DARE_OVER` 2, never under the stage's own
-      index) and one rule of `RULES` (by the stage's place, `_echo_rule`). `RpgWorld.dare(stage_id, rpg)` makes
+      its own foes raised to the HERO'S OWN STRENGTH (the highest of the stage's index, `RpgWorld.best_n` +
+      `DARE_OVER` 2 and `n_for_power(power)`: the highest index whose recommended power the hero has; at
+      most `DARE_TOP` 110; `RpgUi._full` puts the hero's power into `what` for a dare, so the prep sheet says
+      "even") and one rule of `RULES` (by the stage's place, `_echo_rule`). `RpgWorld.dare(stage_id, rpg,
+      power)` makes
       the stage ({"id": "dare:<id>", "kind": "dare", "of", "of_kind", "rule", "first": ore, and a rune for an
       elite's or a boss's}); `stage_of` / `is_open` know "dare:"; `RpgLoot.is_first` and `RpgSave.finish` have
       a "dare" branch: a win adds 1 to `saved.rpg.stages[of].dares` (kept by `parse` and by a later win of

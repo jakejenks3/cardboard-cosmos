@@ -82,7 +82,10 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	_tap(row)
 	await ShotHelper.wait(tree, 0.9)
 	sh = _sheet()
-	var dare = RpgWorld.dare("r1s2", App.rpg())
+	var dare = RpgUi.stage_of({"kind": "dare", "id": "dare:r1s2"})
+	var mine = RpgHero.power(RpgUi.hero())
+	check(float(dare.rec) <= mine and (float(dare.n) >= RpgWorld.DARE_TOP or RpgWorld.rec_of(float(dare.n) + 1.0) > mine) and float(dare.n) > float(RpgWorld.stage("r1s2").n),
+		"the dare stands at the hero's own strength (power %s: foes at index %s, recommended %s; the stage itself %s)" % [str(mine), str(dare.n), str(dare.rec), str(RpgWorld.stage("r1s2").n)])
 	check(sh != null and str(sh.box.get_meta("prep_sheet", "")) == "dare:r1s2" and _one("prep_rule", dare.rule, sh) != null and _one("prep_dare", null, sh) == null,
 		"its tap opens the dare's own sheet, with its rule")
 	var first_chips = _one("prep_first", null, sh)

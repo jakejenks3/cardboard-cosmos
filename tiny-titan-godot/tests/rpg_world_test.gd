@@ -71,6 +71,14 @@ func _init() -> void:
 	ok(bool(again.ok) and RpgWorld.dared(again.rpg, "r1s1") and int(again.rpg.stages.r1s1.wins) == 2 and RpgWorld.dared(RpgSave.parse(again.rpg), "r1s1"), "the seal stays when the stage is won again, and in the save file")
 	ok(not bool(RpgSave.finish(RpgSave.first_open(RpgSave.empty(), {}, ""), {"kind": "dare", "id": "dare:r1s1"}, d1, {}, {"win": true, "turns": 4}, "2026-01-05").ok), "a dare of a stage not won cannot be paid")
 	ok(int(RpgFeats.counts(dwin.rpg).dares) == 1, "the feats count the dares won")
+	# --- a dare stands at the strength of the hero ---------------------------------------------------------
+	var strong = RpgWorld.rec_of(30.0) + 0.5
+	var dp = RpgWorld.dare("r1s1", drpg, strong)
+	ok(dp is Dictionary and float(dp.n) >= 30.0 and RpgWorld.rec_of(float(dp.n)) <= strong and RpgWorld.rec_of(float(dp.n) + 1.0) > strong and float(dp.waves[0][0].n) == float(dp.n) and int(dp.first.ore) > int(d1.first.ore),
+		"with the power of the hero given, the foes of a dare are the strongest he is a match for", [dp.n if dp is Dictionary else null, strong])
+	ok(float(RpgWorld.dare("r1s1", drpg, 1.0).n) == float(d1.n) and float(RpgWorld.dare("r1s1", drpg, 999999.0).n) == RpgWorld.DARE_TOP and RpgWorld.n_for_power(0.0, 7.0) == 7.0,
+		"never under the reach of the road, never over DARE_TOP", [RpgWorld.dare("r1s1", drpg, 1.0).n, RpgWorld.dare("r1s1", drpg, 999999.0).n])
+	ok(float(RpgWorld.stage_of({"kind": "dare", "id": "dare:r1s1", "power": strong}, drpg).n) == float(dp.n), "the power comes with what is fought")
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

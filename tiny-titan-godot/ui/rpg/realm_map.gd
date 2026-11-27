@@ -608,7 +608,7 @@ static func _dare_row(dr: Dictionary, rpg: Dictionary, sh) -> Control:
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(Kit.clip("Dare: %s" % str(rule.get("name", "")), 14, null, true))
 	v.add_child(Kit.clip(str(rule.get("text", "")), 12, Pal.TEXT))
-	v.add_child(Kit.clip("Foes at your level · recommended power %s" % Xp.fmt_int(int(round(float(dr.get("rec", 0.0))))), 11, Pal.MUTED))
+	v.add_child(Kit.clip("Foes as strong as you · recommended power %s" % Xp.fmt_int(int(round(float(dr.get("rec", 0.0))))), 11, Pal.MUTED))
 	h.add_child(v)
 	if won:
 		h.add_child(Kit.vcenter(Kit.tag("WON", Pal.GOOD)))
@@ -868,7 +868,7 @@ static func open_prep(what: Dictionary) -> void:
 
 	# A stage that is won can be dared: the same place at the player's own level, with a rule.
 	if str(what.get("kind", "stage")) == "stage":
-		var dr = RpgWorld.dare(id, rpg)
+		var dr = RpgUi.stage_of({"kind": "dare", "id": "dare:" + id})
 		if dr is Dictionary:
 			sh.box.add_child(_dare_row(dr, rpg, sh))
 

@@ -487,19 +487,34 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 
 
 ## A DARE (RPG_PLAN.md 8.4, added 2026-11-27): a road stage that is already won, fought again with its foes
-## raised to the player's own reach (the highest index won + DARE_OVER, never under the stage's own) and one
-## rule of RULES (the stage's own, by its place: the echo's). Null for a stage not won, a cache, an echo.
-## Its id is "dare:<stage id>", its kind "dare", "of" the stage. No stars. The first win pays `first` and
-## leaves a seal on the stage (saved.rpg.stages[id].dares counts the wins).
+## raised to the PLAYER'S OWN STRENGTH and one rule of RULES (the stage's own, by its place: the echo's).
+## Its foes stand at the highest of: the stage's own index, the highest index won + DARE_OVER, and (when the
+## hero's `power` is given) the highest index whose recommended power the hero has (`n_for_power`): a hero
+## whose real training is far ahead of his place on the road gets an even fight, not another walk.
+## Null for a stage not won, a cache, an echo. Its id is "dare:<stage id>", its kind "dare", "of" the stage.
+## No stars. The first win pays `first` and leaves a seal on the stage (saved.rpg.stages[id].dares counts).
 const DARE_OVER = 2.0
+## No dare stands higher than this index.
+const DARE_TOP = 110.0
 
-static func dare(stage_id: String, rpg: Dictionary) -> Variant:
+## The highest whole index from `lo` up whose recommended power (`rec_of`) is at most `power`.
+static func n_for_power(power: float, lo: float) -> float:
+	var n = lo
+	while n + 1.0 <= DARE_TOP and rec_of(n + 1.0) <= power:
+		n += 1.0
+	return n
+
+
+static func dare(stage_id: String, rpg: Dictionary, power: float = 0.0) -> Variant:
 	var src = stage(stage_id)
 	if not (src is Dictionary) or not stage_id.begins_with("r") or str(src.kind) == "cache" or not done(rpg, stage_id):
 		return null
 	var r = int(src.r)
 	var s = int(src.s)
 	var n = maxf(float(src.n), best_n(rpg) + DARE_OVER)
+	if power > 0.0:
+		n = maxf(n, n_for_power(power, float(src.n)))
+	n = minf(n, maxf(DARE_TOP, float(src.n)))
 	var lists = []
 	for wave in src.waves:
 		lists.append(wave.map(func(en): return str(en.foe)))
@@ -510,7 +525,7 @@ static func dare(stage_id: String, rpg: Dictionary) -> Variant:
 	if str(src.kind) != "battle":
 		first["rune"] = true
 	return {"id": "dare:" + stage_id, "of": stage_id, "region": str(src.region), "r": r, "s": s, "n": n,
-		"name": "%s: Dare" % str(src.name), "text": "A dare: the same place with foes at your own level. %s" % str(RULES[rule].text),
+		"name": "%s: Dare" % str(src.name), "text": "A dare: the same place with foes as strong as you are. %s" % str(RULES[rule].text),
 		"kind": "dare", "of_kind": str(src.kind), "dare": true, "scene": str(src.scene),
 		"waves": waves, "rules": [rule], "rule": rule, "stars": [], "par": 0, "first": first, "rec": rec_of(n)}
 
@@ -823,7 +838,7 @@ static func stage_of(what: Dictionary, rpg: Dictionary) -> Variant:
 			var st = stage(id)
 			return st if (st is Dictionary and (id.begins_with("r") or id.begins_with("e"))) else null
 		"dare":
-			return dare(id.substr(5), rpg) if id.begins_with("dare:") else null
+			return dare(id.substr(5), rpg, float(what.get("power", 0.0))) if id.begins_with("dare:") else null
 		"spire":
 			var f = int(id.substr(6)) if id.begins_with("spire:") else int(what.get("floor", 0))
 			return spire(f) if f >= 1 else null
