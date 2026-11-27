@@ -1,0 +1,447 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#18244a">
+<title>Tiny Titan</title>
+<style>
+:root { --bg:#18244a; --bg2:#1f2e5e; --panel:#27386f; --panel2:#33488c; --line:#465da3; --text:#fff6ea; --muted:#b6c2ea;
+  --accent:#ffd23f; --lift:#ff6b35; --climb:#23c29b; --run:#3d9bff; --ride:#ffb21f; --pt:#b9e769; --good:#3ddc6d; --bad:#ff4d6d; --read:#f1dfae; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 600 16px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { padding: 0 0 120px; overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action: manipulation; }
+input, textarea { font: inherit; user-select: text; -webkit-user-select: text; }
+header { position: sticky; top: 0; z-index: 5; background: linear-gradient(var(--bg2), var(--bg)); padding: 12px 14px 10px; border-bottom: 2px solid var(--line); }
+.top { display: flex; align-items: center; gap: 10px; }
+.brand { font: 800 13px/1 system-ui; letter-spacing: .12em; color: var(--accent); }
+.day { font-size: 22px; font-weight: 800; }
+.date { color: var(--muted); font-size: 14px; }
+.grow { flex: 1; }
+.ring { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font: 800 15px system-ui;
+  background: conic-gradient(var(--good) calc(var(--p) * 1%), var(--panel2) 0); position: relative; }
+.ring::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--bg); }
+.ring span { position: relative; z-index: 1; }
+.feel { display: flex; gap: 8px; margin-top: 10px; }
+.feel button { flex: 1; padding: 8px 0; border-radius: 10px; background: var(--panel); border: 2px solid var(--line); font-size: 14px; }
+.feel button.on { background: var(--accent); color: #18244a; border-color: var(--accent); }
+main { padding: 12px; display: grid; gap: 12px; }
+.card { background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: 0 3px 0 #0b1126; scroll-margin-top: 150px; }
+.card.done { border-color: var(--good); }
+.card.pt { border-left: 6px solid var(--pt); }
+.card.lift { border-left: 6px solid var(--lift); }
+.head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.name { font-size: 20px; font-weight: 800; }
+.chip { font-size: 13px; padding: 3px 9px; border-radius: 99px; background: var(--panel2); color: var(--text); }
+.chip.pt { background: var(--pt); color: #18244a; }
+.tick { margin-left: auto; width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 18px; }
+.done .tick { background: var(--good); border-color: var(--good); color: #0b1126; }
+.aim { color: var(--muted); font-size: 14px; margin-top: 6px; }
+.aim b { color: var(--accent); }
+.sets { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 2px; min-height: 8px; }
+.set { background: var(--bg2); border: 2px solid var(--line); border-radius: 10px; padding: 5px 10px; font-size: 16px; font-weight: 800; }
+.set small { color: var(--muted); font-weight: 600; }
+.set.pending { opacity: .5; }
+.set.new { animation: pop .35s ease-out; }
+@keyframes pop { 0% { transform: scale(.6); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+.ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.step { display: grid; grid-template-columns: 48px 1fr 48px; align-items: center; background: var(--bg2); border-radius: 12px; border: 2px solid var(--line); overflow: hidden; }
+.step button { height: 52px; font-size: 26px; font-weight: 800; background: var(--panel2); }
+.step button:active { background: var(--line); }
+.val { text-align: center; line-height: 1.05; }
+.val b { display: block; font-size: 22px; }
+.val small { color: var(--muted); font-size: 12px; }
+.log { width: 100%; margin-top: 10px; height: 60px; border-radius: 14px; background: var(--accent); color: #18244a; font-size: 20px; font-weight: 900;
+  box-shadow: 0 4px 0 #c98a12; }
+.log:active { transform: translateY(3px); box-shadow: 0 1px 0 #c98a12; }
+.card.done .log { background: var(--good); box-shadow: 0 4px 0 #1f9c48; }
+.warm { color: var(--muted); font-size: 13px; margin-top: 6px; }
+.lines { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.quick button { height: 64px; border-radius: 14px; background: var(--panel); border: 2px solid var(--line); font-size: 15px; font-weight: 800; display: grid; place-items: center; }
+.quick button span { font-size: 22px; line-height: 1; }
+.add { width: 100%; height: 56px; border-radius: 14px; background: var(--panel2); border: 2px dashed var(--muted); font-size: 18px; font-weight: 800; }
+h2 { font-size: 13px; letter-spacing: .1em; color: var(--muted); margin: 6px 2px 0; }
+footer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--bg2); border-top: 2px solid var(--line); padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); display: none; }
+footer.on { display: block; }
+.timer { display: flex; align-items: center; gap: 10px; }
+.timer .t { font: 900 30px/1 system-ui; min-width: 86px; font-variant-numeric: tabular-nums; }
+.timer .grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; color: var(--muted); }
+.timer button { height: 46px; padding: 0 14px; border-radius: 12px; background: var(--panel2); font-size: 16px; font-weight: 800; }
+.bar { height: 8px; background: var(--panel2); border-radius: 9px; overflow: hidden; margin-top: 8px; }
+.bar i { display: block; height: 100%; background: var(--accent); width: 100%; transition: width 1s linear; }
+footer.go { background: var(--good); color: #0b1126; }
+footer.go .bar i { background: #0b1126; }
+.sheet { position: fixed; inset: 0; z-index: 9; background: rgba(5,9,25,.6); display: none; align-items: flex-end; }
+.sheet.on { display: flex; }
+.box { background: var(--bg2); width: 100%; max-height: 86vh; overflow: auto; border-radius: 18px 18px 0 0; border-top: 2px solid var(--line); padding: 16px 14px calc(20px + env(safe-area-inset-bottom)); }
+.box h3 { margin: 0 0 12px; font-size: 20px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.grid button, .opt { height: 52px; border-radius: 12px; background: var(--panel); border: 2px solid var(--line); font-size: 18px; font-weight: 800; }
+.grid button.on { background: var(--climb); color: #0b1126; border-color: var(--climb); }
+.big2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.big2 button { height: 64px; border-radius: 14px; font-size: 20px; font-weight: 900; }
+.send { background: var(--climb); color: #0b1126; }
+.try { background: var(--panel2); }
+.field { width: 100%; height: 56px; border-radius: 12px; border: 2px solid var(--line); background: var(--bg); color: var(--text); padding: 0 14px; font-size: 20px; }
+textarea.field { height: 110px; padding: 12px 14px; }
+.list button { display: flex; width: 100%; text-align: left; align-items: center; gap: 8px; padding: 12px; margin-top: 8px; border-radius: 12px; background: var(--panel); border: 2px solid var(--line); font-size: 17px; }
+.list small { color: var(--muted); margin-left: auto; }
+.go-btn { width: 100%; height: 58px; border-radius: 14px; background: var(--accent); color: #18244a; font-size: 19px; font-weight: 900; margin-top: 12px; }
+.close { float: right; background: var(--panel2); border-radius: 10px; padding: 6px 12px; }
+.toast { position: fixed; left: 12px; right: 12px; top: 12px; z-index: 10; background: var(--panel2); border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
+.toast.on { display: block; animation: pop .25s; }
+.toast.bad { background: var(--bad); }
+.saving { position: fixed; right: 12px; top: 14px; z-index: 7; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); opacity: 0; transition: opacity .2s; }
+.saving.on { opacity: 1; animation: blink .8s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div class="grow"><div class="brand">TINY TITAN</div><div class="day" id="day">Today</div><div class="date" id="date"></div></div>
+    <div class="ring" id="ring" style="--p:0"><span id="ringText">0/0</span></div>
+  </div>
+  <div class="feel" id="feel">
+    <button data-f="1">Tired</button><button data-f="2">Okay</button><button data-f="3">Strong</button>
+  </div>
+</header>
+<div class="saving" id="saving"></div>
+<main>
+  <div id="list"></div>
+  <button class="add" id="addEx">+ Add exercise</button>
+  <h2>QUICK ADD</h2>
+  <div class="quick">
+    <button data-q="climb"><span>&#9650;</span>Climb</button>
+    <button data-q="read"><span>&#9638;</span>Pages</button>
+    <button data-q="weigh"><span>&#9878;</span>Weigh-in</button>
+    <button data-q="run"><span>&#10148;</span>Run</button>
+    <button data-q="ride"><span>&#9711;</span>Ride</button>
+    <button data-q="note"><span>&#9998;</span>Note</button>
+  </div>
+  <h2 id="linesHead" style="display:none">ALSO TODAY</h2>
+  <div class="lines" id="lines"></div>
+</main>
+<footer id="timer">
+  <div class="timer">
+    <div class="t" id="tLeft">1:30</div><div class="grow" id="tWhat">Rest</div>
+    <button id="tMinus">-15</button><button id="tPlus">+15</button><button id="tSkip">Skip</button>
+  </div>
+  <div class="bar"><i id="tBar"></i></div>
+</footer>
+<div class="sheet" id="sheet"><div class="box" id="box"></div></div>
+<div class="toast" id="toast"></div>
+<script>
+const TOKEN = '%TOKEN%';
+const $ = (s) => document.querySelector(s);
+let S = null;            // today in the note (apiToday)
+const ui = {};           // per exercise row: {w, reps}
+let queue = Promise.resolve();
+let busy = 0;
+
+// --- talking to the note -------------------------------------------------------------------
+function call(fn, ...rest) {
+  const args = [TOKEN, ...rest];
+  busy++; $('#saving').classList.add('on');
+  const done = (x) => { busy--; if (!busy) $('#saving').classList.remove('on'); return x; };
+  const p = new Promise((ok, bad) => {
+    if (window.google && google.script && google.script.run) {
+      const name = 'api' + fn.charAt(0).toUpperCase() + fn.slice(1);
+      google.script.run.withSuccessHandler(ok).withFailureHandler(bad)[name](...args);
+    } else {
+      fetch('exec?token=' + encodeURIComponent(TOKEN) + '&api=' + fn + '&args=' + encodeURIComponent(JSON.stringify(args)))
+        .then((r) => r.json()).then(ok, bad);
+    }
+  });
+  return p.then(done, (e) => { done(); throw e; });
+}
+// Writes go one after another; the page then reads the note again.
+function write(fn, ...rest) {
+  queue = queue.then(() => call(fn, ...rest)).then((res) => {
+    if (res && res.ok === false) toast(res.error || 'Could not save', true);
+    return refresh();
+  }).catch((e) => { toast('No connection: ' + (e && e.message || e), true); return refresh(); });
+  return queue;
+}
+function refresh() {
+  return call('today').then((res) => {
+    if (!res || !res.ok) { toast(res && res.error || 'Could not read the note', true); return; }
+    S = res; render();
+  });
+}
+
+// --- little helpers ------------------------------------------------------------------------------
+const info = () => (S && S.info) || {};
+const unit = () => info().unit || 'lb';
+const step = () => Number(info().step) || (unit() === 'kg' ? 2.5 : 5);
+const key = (it) => (it.ex + (it.vr ? ' - ' + it.vr : '')).toLowerCase().replace(/^\(pt\)\s*/, '');
+const aimOf = (it) => (info().aims || {})[key(it)] || {};
+const num = (s) => { const m = String(s || '').match(/-?\d+(\.\d+)?/); return m ? Number(m[0]) : null; };
+const isHold = (it) => /["”″]|''/.test(it.rows.map((r) => r.w).join(' ')) || !!aimOf(it).hold;
+const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms || 12); } catch (e) {} };
+const fmt = (n) => (Math.round(n * 10) / 10).toString();
+function allSets(it) { const out = []; it.rows.forEach((r) => r.sets.forEach((s) => out.push({r: r.r, c: s.c, v: s.v, w: r.w}))); return out; }
+function toast(text, bad) { const t = $('#toast'); t.textContent = text; t.className = 'toast on' + (bad ? ' bad' : ''); clearTimeout(t._h); t._h = setTimeout(() => t.className = 'toast', 2600); }
+
+// What the steppers start at: the last set logged, else the plan, else last time.
+function startValues(it) {
+  const sets = allSets(it);
+  const last = sets[sets.length - 1];
+  const a = aimOf(it);
+  if (isHold(it)) return {w: num(last ? last.w : it.w) || a.hold || 30, reps: 1};
+  let w = last ? num(last.w) : (num(it.w) !== null ? num(it.w) : (a.weight || 0));
+  const reps = last ? num(last.v) : (a.reps || 10);
+  return {w: w || 0, reps: reps || 10};
+}
+
+// --- drawing ---------------------------------------------------------------------------------------
+function render() {
+  stopRepeat();
+  const items = S.items || [];
+  $('#day').textContent = info().kind || 'Today';
+  $('#date').textContent = S.date ? 'Today, ' + S.date : '';
+  document.querySelectorAll('#feel button').forEach((b) => b.classList.toggle('on', Number(b.dataset.f) === Number(S.feel)));
+  let done = 0;
+  const list = $('#list');
+  list.innerHTML = items.length ? '' : '<div class="empty">Nothing planned in the note for today yet.<br>Add an exercise below.</div>';
+  items.forEach((it) => {
+    if (!ui[it.r]) ui[it.r] = startValues(it);
+    const v = ui[it.r];
+    const a = aimOf(it);
+    const sets = allSets(it);
+    const target = a.sets || 3;
+    const isDone = sets.length >= target;
+    if (isDone) done++;
+    const pt = /^\(pt\)/i.test(it.ex);
+    const hold = isHold(it);
+    const card = document.createElement('div');
+    card.className = 'card ' + (pt ? 'pt' : 'lift') + (isDone ? ' done' : '');
+    const name = it.ex.replace(/^\(pt\)\s*/i, '');
+    const lastW = (s, i) => i === 0 || sets[i - 1].w !== s.w;
+    card.innerHTML =
+      '<div class="head"><span class="name"></span>' + (it.vr ? '<span class="chip vr"></span>' : '') + (pt ? '<span class="chip pt">PT</span>' : '') +
+      '<span class="tick">' + (isDone ? '&#10003;' : '') + '</span></div>' +
+      (a.text ? '<div class="aim">Aim <b></b>' + (a.last ? ' &middot; last ' + esc(a.last) : '') + '</div>' : '') +
+      (a.warm ? '<div class="warm">Warm-up: ' + esc(a.warm) + (a.plates ? ' &middot; ' + esc(a.plates) : '') + '</div>' : (a.plates ? '<div class="warm">' + esc(a.plates) + '</div>' : '')) +
+      '<div class="sets">' + sets.map((s, i) => '<span class="set" data-r="' + s.r + '" data-c="' + s.c + '" data-v="' + esc(s.v) + '">' +
+        (hold ? (s.v !== '1' ? esc(s.v) + ' &times; ' : '') + esc(num(s.w)) + 's' : esc(s.v) + (lastW(s, i) && s.w ? ' <small>@' + esc(s.w) + '</small>' : '')) +
+        '</span>').join('') + '</div>' +
+      '<div class="ctl">' +
+        stepper('w', hold ? fmt(v.w) : (v.w > 0 ? fmt(v.w) : 'BW'), hold ? 'sec hold' : (v.w > 0 ? unit() : 'bodyweight')) +
+        (hold ? stepper('n', String(v.reps), 'times') : stepper('n', String(v.reps), 'reps')) +
+      '</div>' +
+      '<button class="log">' + (hold ? 'LOG HOLD' : 'LOG SET') + (sets.length ? ' ' + (sets.length + 1) : '') + '</button>';
+    card.querySelector('.name').textContent = name;
+    if (it.vr) card.querySelector('.vr').textContent = it.vr;
+    if (a.text) card.querySelector('.aim b').textContent = a.text;
+    const showW = () => {
+      card.querySelector('[data-k="w"] .val b').textContent = hold || v.w > 0 ? fmt(v.w) : 'BW';
+      card.querySelector('[data-k="w"] .val small').textContent = hold ? 'sec hold' : (v.w > 0 ? unit() : 'bodyweight');
+    };
+    const showN = () => { card.querySelector('[data-k="n"] .val b').textContent = String(v.reps); };
+    wireStepper(card, 'w', (d) => { v.w = Math.max(0, v.w + d * (hold ? 5 : step())); }, showW);
+    wireStepper(card, 'n', (d) => { v.reps = Math.max(1, v.reps + d); }, showN);
+    card.querySelector('[data-k="w"] .val').onclick = () => askNumber(hold ? 'Seconds held' : 'Weight (' + unit() + ')', v.w, (x) => { v.w = x; render(); });
+    card.querySelector('[data-k="n"] .val').onclick = () => askNumber(hold ? 'Times' : 'Reps', v.reps, (x) => { v.reps = Math.max(1, Math.round(x)); render(); });
+    card.querySelector('.log').onclick = () => logSet(it, card, hold);
+    card.querySelectorAll('.set').forEach((el) => el.onclick = () => undoSet(el));
+    card.dataset.r = it.r;
+    list.appendChild(card);
+  });
+  if (scrollAfter !== null) {
+    const cards = Array.from(list.children);
+    const at = cards.findIndex((c) => Number(c.dataset.r) === scrollAfter);
+    scrollAfter = null;
+    const next = cards[at + 1] || $('#addEx');
+    if (at >= 0) setTimeout(() => next.scrollIntoView({behavior: 'smooth', block: 'start'}), 250);
+  }
+  const n = items.length;
+  $('#ring').style.setProperty('--p', n ? Math.round(done / n * 100) : 0);
+  $('#ringText').textContent = done + '/' + n;
+  const lines = (S.lines || []);
+  $('#linesHead').style.display = lines.length ? '' : 'none';
+  $('#lines').innerHTML = lines.map((l) => '<span class="set" data-r="' + l.r + '" data-c="-1" data-v="' + esc(l.text) + '">' + esc(l.text) + '</span>').join('');
+  document.querySelectorAll('#lines .set').forEach((el) => el.onclick = () => undoSet(el));
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function stepper(k, value, cap) {
+  return '<div class="step" data-k="' + k + '"><button data-d="-1">&minus;</button><div class="val"><b>' + esc(value) + '</b><small>' + cap + '</small></div><button data-d="1">+</button></div>';
+}
+// Tap to step; hold to keep stepping. Only the number is redrawn (a redrawn
+// button would never hear the finger lift); lifting anywhere stops a repeat.
+let held = null, repeat = null;
+function stopRepeat() { clearTimeout(held); clearInterval(repeat); held = repeat = null; }
+['pointerup', 'pointercancel', 'blur'].forEach((ev) => window.addEventListener(ev, stopRepeat));
+function wireStepper(card, k, change, show) {
+  card.querySelectorAll('[data-k="' + k + '"] button').forEach((b) => {
+    const d = Number(b.dataset.d);
+    b.onpointerdown = (e) => {
+      e.preventDefault(); buzz(); stopRepeat();
+      change(d); show();
+      held = setTimeout(() => { repeat = setInterval(() => { change(d); show(); }, 110); }, 420);
+    };
+    b.onpointerleave = stopRepeat;
+  });
+}
+
+// --- logging -------------------------------------------------------------------------------------------
+let scrollAfter = null;   // the row whose card was just finished: show the next one
+function logSet(it, card, hold) {
+  buzz(25);
+  keepAwake();
+  if (allSets(it).length + 1 >= (aimOf(it).sets || 3)) scrollAfter = it.r;
+  const v = ui[it.r];
+  const w = hold ? fmt(v.w) + '"' : (v.w > 0 ? fmt(v.w) : 'bw');
+  const reps = v.reps;
+  const chip = document.createElement('span');
+  chip.className = 'set pending new';
+  chip.textContent = hold ? String(reps) + ' x ' + fmt(v.w) + 's' : String(reps);
+  card.querySelector('.sets').appendChild(chip);
+  startRest(it.ex);
+  write('logSet', it.r, w, reps);
+}
+function undoSet(el) {
+  const r = Number(el.dataset.r), c = Number(el.dataset.c), was = el.dataset.v;
+  askYes('Remove "' + was + '"?', () => { buzz(); write('clearCell', r, c, c < 0 ? undefined : was); });
+}
+
+// The screen stays on while the logger is open (rest timers would sleep it).
+let lock = null;
+function keepAwake() {
+  try { if (navigator.wakeLock && !lock) navigator.wakeLock.request('screen').then((l) => { lock = l; l.addEventListener('release', () => lock = null); }).catch(() => {}); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
+document.addEventListener('pointerdown', keepAwake, {once: true});
+
+// --- rest timer -------------------------------------------------------------------------------------
+let rest = Number(localGet('rest') || 90), left = 0, tick = null, total = 0;
+function localGet(k) { try { return localStorage.getItem('tt.' + k); } catch (e) { return null; } }
+function localSet(k, v) { try { localStorage.setItem('tt.' + k, v); } catch (e) {} }
+function startRest(what) {
+  total = left = rest;
+  $('#tWhat').textContent = 'Rest · ' + what;
+  $('#timer').className = 'on';
+  clearInterval(tick);
+  drawTimer();
+  tick = setInterval(() => { left--; drawTimer(); if (left <= 0) restDone(); }, 1000);
+}
+function drawTimer() {
+  const m = Math.floor(Math.max(0, left) / 60), s = Math.max(0, left) % 60;
+  $('#tLeft').textContent = m + ':' + String(s).padStart(2, '0');
+  $('#tBar').style.width = (total ? Math.max(0, left) / total * 100 : 0) + '%';
+}
+function restDone() {
+  clearInterval(tick);
+  $('#timer').className = 'on go';
+  $('#tWhat').textContent = 'GO! Next set';
+  buzz([200, 100, 200, 100, 300]);
+  beep(); setTimeout(beep, 260);
+  setTimeout(() => { if (left <= 0) $('#timer').className = ''; }, 6000);
+}
+function beep() {
+  try {
+    const ac = window._ac || (window._ac = new (window.AudioContext || window.webkitAudioContext)());
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 880; o.type = 'square'; g.gain.value = 0.08;
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.18);
+  } catch (e) {}
+}
+$('#tMinus').onclick = () => { left = Math.max(1, left - 15); rest = Math.max(15, rest - 15); localSet('rest', rest); drawTimer(); };
+$('#tPlus').onclick = () => { left += 15; total += 15; rest += 15; localSet('rest', rest); drawTimer(); };
+$('#tSkip').onclick = () => { clearInterval(tick); left = 0; $('#timer').className = ''; };
+
+// --- sheets ------------------------------------------------------------------------------------------
+function open(html, wire) { $('#box').innerHTML = '<button class="close" id="x">Close</button>' + html; $('#sheet').className = 'sheet on'; $('#x').onclick = shut; wire && wire(); }
+function shut() { $('#sheet').className = 'sheet'; }
+$('#sheet').onclick = (e) => { if (e.target.id === 'sheet') shut(); };
+function askNumber(title, value, done) {
+  open('<h3>' + esc(title) + '</h3><input class="field" id="n" type="number" inputmode="decimal" step="any" value="' + value + '"><button class="go-btn" id="ok">Set</button>', () => {
+    const n = $('#n'); n.focus(); n.select();
+    const go = () => { const x = Number(n.value); if (!isNaN(x)) done(x); shut(); };
+    $('#ok').onclick = go; n.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  });
+}
+function askYes(title, yes) {
+  open('<h3>' + esc(title) + '</h3><div class="big2"><button class="try" id="no">Keep</button><button class="send" id="yes">Remove</button></div>', () => {
+    $('#no').onclick = shut; $('#yes').onclick = () => { shut(); yes(); };
+  });
+}
+$('#addEx').onclick = () => {
+  const lifts = info().lifts || [];
+  open('<h3>Add exercise</h3><input class="field" id="q" placeholder="Search or type a new one" autocomplete="off"><div class="list" id="res"></div>', () => {
+    const q = $('#q');
+    const draw = () => {
+      const words = q.value.toLowerCase().split(/\s+/).filter(Boolean);
+      const hits = lifts.filter((l) => words.every((w) => l.n.toLowerCase().includes(w))).slice(0, 30);
+      let html = hits.map((l, i) => '<button data-i="' + lifts.indexOf(l) + '">' + esc(l.n) + (l.w ? '<small>' + esc(l.w) + ' ' + unit() + '</small>' : '') + '</button>').join('');
+      if (q.value.trim()) html += '<button data-new="1">+ New: "' + esc(q.value.trim()) + '"</button>';
+      $('#res').innerHTML = html;
+      $('#res').querySelectorAll('button').forEach((b) => b.onclick = () => {
+        buzz();
+        let n = q.value.trim(), w = '';
+        if (!b.dataset.new) { const l = lifts[Number(b.dataset.i)]; n = l.n; w = l.w || ''; }
+        const cut = n.indexOf(' - ');
+        shut();
+        write('addRow', cut > 0 ? n.slice(0, cut) : n, cut > 0 ? n.slice(cut + 3) : '', w);
+      });
+    };
+    q.oninput = draw; draw(); setTimeout(() => q.focus(), 50);
+  });
+};
+document.querySelectorAll('.quick button').forEach((b) => b.onclick = () => { buzz(); quick[b.dataset.q](); });
+const quick = {
+  climb() {
+    let g = Number(localGet('grade') || 3);
+    const grades = Array.from({length: 11}, (_, i) => i);
+    open('<h3>Climb</h3><div class="grid" id="g">' + grades.map((x) => '<button data-g="' + x + '">V' + x + '</button>').join('') + '</div>' +
+      '<div class="big2"><button class="try" id="att">Attempt</button><button class="send" id="snd">SEND</button></div>' +
+      '<div class="lines" id="today" style="margin-top:12px"></div>', () => {
+      const draw = () => {
+        document.querySelectorAll('#g button').forEach((b) => b.classList.toggle('on', Number(b.dataset.g) === g));
+        $('#today').innerHTML = (S.lines || []).filter((l) => /^v\d/i.test(l.text)).map((l) => '<span class="set">' + esc(l.text) + '</span>').join('');
+      };
+      document.querySelectorAll('#g button').forEach((b) => b.onclick = () => { g = Number(b.dataset.g); localSet('grade', g); buzz(); draw(); });
+      const add = (what) => { buzz(25); write('addLine', 'v' + g + ' ' + what).then(draw); toast('V' + g + ' ' + what); };
+      $('#snd').onclick = () => add('send'); $('#att').onclick = () => add('attempt');
+      draw();
+    });
+  },
+  read() {
+    open('<h3>Pages read</h3><div class="grid">' + [5, 10, 20, 30, 40, 50, 75, 100].map((n) => '<button data-n="' + n + '">' + n + '</button>').join('') + '</div>', () => {
+      document.querySelectorAll('.grid button').forEach((b) => b.onclick = () => { shut(); buzz(); write('addLine', 'read ' + b.dataset.n + ' pages'); toast('+' + b.dataset.n + ' pages'); });
+    });
+  },
+  weigh() {
+    askNumber('Weigh-in (' + unit() + ')', Number(localGet('bw') || 0) || '', (x) => { localSet('bw', x); write('addLine', 'weight ' + fmt(x)); toast('Weight ' + fmt(x) + ' ' + unit()); });
+  },
+  run() { distance('run'); },
+  ride() { distance('ride'); },
+  note() {
+    open('<h3>Note</h3><textarea class="field" id="t" placeholder="How it went"></textarea><button class="go-btn" id="ok">Add</button>', () => {
+      $('#t').focus();
+      $('#ok').onclick = () => { const t = $('#t').value.trim(); shut(); if (t) write('addLine', 'note: ' + t); };
+    });
+  },
+};
+function distance(kind) {
+  const du = info().dunit || 'mi';
+  open('<h3>' + (kind === 'run' ? 'Run' : 'Ride') + '</h3><input class="field" id="d" type="number" inputmode="decimal" step="any" placeholder="Distance (' + du + ')">' +
+    '<input class="field" id="m" type="number" inputmode="numeric" placeholder="Minutes (optional)" style="margin-top:10px"><button class="go-btn" id="ok">Add</button>', () => {
+    $('#d').focus();
+    $('#ok').onclick = () => {
+      const d = Number($('#d').value), m = Number($('#m').value);
+      if (!d) return;
+      shut(); buzz();
+      write('addLine', kind + ' ' + fmt(d) + ' ' + du + (m ? ' ' + Math.round(m) + ':00' : ''));
+    };
+  });
+}
+document.querySelectorAll('#feel button').forEach((b) => b.onclick = () => { buzz(); write('feel', Number(b.dataset.f)); });
+refresh();
+setInterval(() => { if (!busy && !document.hidden && $('#sheet').className !== 'sheet on') refresh(); }, 45000);
+</script>
+</body>
+</html>

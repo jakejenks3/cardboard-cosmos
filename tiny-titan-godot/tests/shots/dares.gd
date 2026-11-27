@@ -1,0 +1,204 @@
+extends RefCounted
+## A dare on screen (run with the "year" data): a stage that is won offers its
+## dare on its sheet; the dare has a sheet of its own (its rule, its foes at
+## the player's level, its prize); it is fought and won; the prize is paid
+## once, the stage keeps a flame on the road, and the sheet says the dare is
+## won. Prints CHECK lines.
+
+var main: Node
+var tree: SceneTree
+var fails = 0
+
+
+func check(cond: bool, what: String) -> void:
+	if not cond:
+		fails += 1
+	print("CHECK %s  %s" % ["ok  " if cond else "FAIL", what])
+
+
+func _all(meta: String, root = null) -> Array:
+	var out = []
+	for n in ShotHelper.walk(main if root == null else root):
+		if n.has_meta(meta) and not n.is_queued_for_deletion():
+			out.append(n)
+	return out
+
+
+func _one(meta: String, value = null, root = null):
+	for n in _all(meta, root):
+		if value == null or str(n.get_meta(meta)) == str(value):
+			return n
+	return null
+
+
+func _sheet():
+	var top = null
+	for c in Kit.overlay_root.get_children():
+		if c is Sheet and not c._closing and not c.is_queued_for_deletion():
+			top = c
+	return top
+
+
+func _battle():
+	var top = null
+	for c in Kit.overlay_root.get_children():
+		if c is BattleView and not c.is_queued_for_deletion() and not c._closed:
+			top = c
+	return top
+
+
+func _tap(c) -> bool:
+	if c == null or not is_instance_valid(c):
+		return false
+	if c is BaseButton:
+		c.pressed.emit()
+		return true
+	if c.get("_tap") is Callable and c._tap.is_valid():
+		c._tap.call()
+		return true
+	return false
+
+
+func run(p_main: Node, p_tree: SceneTree) -> void:
+	main = p_main
+	tree = p_tree
+	await ShotHelper.wait(tree, 1.0)
+	var rpg = RpgSave.first_open(App.rpg(), App.loadout(), App.active_pet()).duplicate(true)
+	for s in range(1, 6):
+		rpg.stages["r1s%d" % s] = {"stars": [true, true, false], "wins": 1, "best": 3}
+	App.set_rpg(rpg)
+	App.go("realm")
+	await ShotHelper.wait(tree, 1.0)
+	LootPop.close_all()
+	await ShotHelper.wait(tree, 0.4)
+
+	# --- a won stage offers its dare; one not won does not ---------------------------------------------
+	RealmMap.open_prep({"kind": "stage", "id": "r1s2"})
+	await ShotHelper.wait(tree, 0.7)
+	var sh = _sheet()
+	var row = _one("prep_dare", "r1s2", sh) if sh != null else null
+	check(row != null and not bool(row.get_meta("prep_dare_won")), "the sheet of a won stage offers its dare")
+	await ShotHelper.snap(tree, "dares_1_offer")
+	_tap(row)
+	await ShotHelper.wait(tree, 0.9)
+	sh = _sheet()
+	var dare = RpgUi.stage_of({"kind": "dare", "id": "dare:r1s2"})
+	var mine = RpgHero.power(RpgUi.hero())
+	check(float(dare.rec) <= mine and (float(dare.n) >= RpgWorld.DARE_TOP or RpgWorld.rec_of(float(dare.n) + 1.0) > mine) and float(dare.n) > float(RpgWorld.stage("r1s2").n),
+		"the dare stands at the hero's own strength (power %s: foes at index %s, recommended %s; the stage itself %s)" % [str(mine), str(dare.n), str(dare.rec), str(RpgWorld.stage("r1s2").n)])
+	check(sh != null and str(sh.box.get_meta("prep_sheet", "")) == "dare:r1s2" and _one("prep_rule", dare.rule, sh) != null and _one("prep_dare", null, sh) == null,
+		"its tap opens the dare's own sheet, with its rule")
+	var first_chips = _one("prep_first", null, sh)
+	check(first_chips != null and bool(first_chips.get_meta("prep_first")), "and its prize for the first win")
+	await ShotHelper.snap(tree, "dares_2_sheet")
+	var ore0 = int(App.rpg().ore)
+	_tap(_one("prep_fight", "dare:r1s2", sh))
+	await ShotHelper.wait(tree, 1.5)
+	var bv = _battle()
+	check(bv != null and bv.B.what == {"kind": "dare", "id": "dare:r1s2"} and bv.B.rules == dare.rules and absf(float(bv.B.foes[0].n) - float(dare.n)) < 0.001, "the dare is fought: its rule, its foes at the dare's level")
+	if bv == null:
+		print("DARES 1 FAILED")
+		return
+	bv.skip()
+	bv.B.hero["hp_max"] = 99999
+	bv.B.hero["hp"] = 99999
+	bv._sync()
+	await ShotHelper.snap(tree, "dares_3_fight")
+	var t0 = Time.get_ticks_msec()
+	while is_instance_valid(bv) and bv.result() == null and Time.get_ticks_msec() - t0 < 90000:
+		if not bv.busy() and not RpgBattle.over(bv.B):
+			for f in bv.B.foes:
+				if bool(f.get("alive", false)):
+					f["hp"] = 1
+			bv._do(RpgAi.hero_action(bv.B, "heuristic"))
+		elif bv.busy():
+			bv.skip()
+		await ShotHelper.wait(tree, 0.06)
+	check(is_instance_valid(bv) and bv.result() != null and RpgBattle.won(bv.B), "it is won")
+	if is_instance_valid(bv) and bv.result() != null:
+		bv.result().skip()
+		await ShotHelper.wait(tree, 0.4)
+		check(_one("br_key", "next", bv.result()) == null and _one("br_key", "again", bv.result()) != null, "its result offers Again, and no next stage")
+		await ShotHelper.snap(tree, "dares_4_result")
+		_tap(_one("br_key", "back", bv.result()))
+	await ShotHelper.wait(tree, 1.0)
+	LootPop.close_all()
+	await ShotHelper.wait(tree, 0.4)
+	var now = App.rpg()
+	check(RpgWorld.dared(now, "r1s2") and int(now.ore) >= ore0 + int(dare.first.ore) and int(now.stages.r1s2.wins) == 1, "the dare is kept on its stage and its prize is paid (%d -> %d ore)" % [ore0, int(now.ore)])
+	var place = _one("map_stage", "r1s2")
+	check(place != null and bool(place.get_meta("map_stage_dare", false)) and not bool(_one("map_stage", "r1s3").get_meta("map_stage_dare", false)), "the road shows a flame on that stage, and on no other")
+	if place != null:
+		ShotHelper.reveal(place)
+		await ShotHelper.wait(tree, 0.4)
+	await ShotHelper.snap(tree, "dares_5_road")
+	RealmMap.open_prep({"kind": "stage", "id": "r1s2"})
+	await ShotHelper.wait(tree, 0.7)
+	sh = _sheet()
+	row = _one("prep_dare", "r1s2", sh) if sh != null else null
+	check(row != null and bool(row.get_meta("prep_dare_won")), "and the stage's sheet says its dare is won")
+	if sh != null:
+		sh.close()
+	await ShotHelper.wait(tree, 0.5)
+	RealmMap.open_prep({"kind": "stage", "id": "r1s7"})
+	await ShotHelper.wait(tree, 0.7)
+	sh = _sheet()
+	check(sh != null and _one("prep_dare", null, sh) == null, "a stage that is not won has no dare")
+	if sh != null:
+		sh.close()
+	await ShotHelper.wait(tree, 0.5)
+	# --- the region's dares in one row, a key to the next one --------------------------------------------
+	var drow = _one("map_dares", "rustyard")
+	check(drow != null and int(drow.get_meta("map_dares_won")) == 1 and ShotHelper.all_text(drow).contains("Dares 1 of 9"), "the region's card counts its dares (1 of 9)")
+	var nxt = _one("dare_next")
+	check(nxt != null and str(nxt.get_meta("dare_next")) == "r1s1", "with a key to the next one: the first stage won and not dared (%s)" % (str(nxt.get_meta("dare_next")) if nxt != null else "?"))
+	if nxt != null:
+		ShotHelper.reveal(nxt)
+		await ShotHelper.wait(tree, 0.5)
+		await ShotHelper.snap(tree, "dares_6_region_row")
+		_tap(_one("dare_next"))
+		await ShotHelper.wait(tree, 0.8)
+		sh = _sheet()
+		check(sh != null and str(sh.box.get_meta("prep_sheet", "")) == "dare:r1s1", "which opens that dare's sheet")
+		if sh != null:
+			sh.close()
+		await ShotHelper.wait(tree, 0.5)
+
+	# --- every dare of the region won: its dare chest --------------------------------------------------
+	var all_in = App.rpg().duplicate(true)
+	for s2 in range(1, 11):
+		if s2 != 6:
+			all_in.stages["r1s%d" % s2] = {"stars": [true, true, false], "wins": 1, "best": 3, "dares": 1}
+	all_in.caches["r1s6"] = true
+	# (the road has gone on to the next region: the card of the Rustyard is looked at again)
+	RealmMap.region_id = "rustyard"
+	App.set_rpg(all_in)
+	await ShotHelper.wait(tree, 0.8)
+	LootPop.close_all()
+	await ShotHelper.wait(tree, 0.4)
+	if _one("dare_chest", "rustyard") == null:
+		_tap(_one("map_region", "rustyard"))
+		await ShotHelper.wait(tree, 0.8)
+		LootPop.close_all()
+		await ShotHelper.wait(tree, 0.4)
+	var ck = _one("dare_chest", "rustyard")
+	check(ck != null and str(ck.get_meta("dare_chest_state")) == "ready" and int(_one("map_dares", "rustyard").get_meta("map_dares_won")) == 9, "with all nine dares won the dare chest is ready")
+	var ore1 = int(App.rpg().ore)
+	if ck != null:
+		ShotHelper.reveal(ck)
+		await ShotHelper.wait(tree, 0.5)
+		await ShotHelper.snap(tree, "dares_7_chest_ready")
+		_tap(ck)
+		await ShotHelper.wait(tree, 1.0)
+		check(_one("loot_pop", null, Kit.overlay_root) != null, "opening it is a moment of its own")
+		await ShotHelper.snap(tree, "dares_8_chest_open")
+		LootPop.close_all()
+		await ShotHelper.wait(tree, 0.6)
+		ck = _one("dare_chest", "rustyard")
+		check(int(App.rpg().ore) > ore1 and bool(App.rpg().starChests.get("rustyard:dare", false)) and ck != null and str(ck.get_meta("dare_chest_state")) == "opened", "it pays once and says Taken (%d -> %d ore)" % [ore1, int(App.rpg().ore)])
+		var ore2 = int(App.rpg().ore)
+		_tap(ck)
+		await ShotHelper.wait(tree, 0.6)
+		LootPop.close_all()
+		check(int(App.rpg().ore) == ore2, "a second tap pays nothing")
+	print("DARES %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

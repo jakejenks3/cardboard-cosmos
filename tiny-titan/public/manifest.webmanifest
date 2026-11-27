@@ -1,0 +1,13 @@
+{
+  "name": "Tiny Titan",
+  "short_name": "Tiny Titan",
+  "description": "A pixel RPG fitness tracker. Lift, climb, run and ride to level up your hero.",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14102a",
+  "theme_color": "#14102a",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
