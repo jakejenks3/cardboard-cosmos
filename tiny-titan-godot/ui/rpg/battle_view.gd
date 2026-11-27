@@ -160,6 +160,7 @@ var _word_counts: Dictionary = {}
 var _ko_done: Dictionary = {}
 var _gauge_full: bool = false
 var _ambient: BattleFx.Ambient = null
+var _sky_fx: BattleFx.SkyBand = null
 var _vignette: BattleFx.Vignette = null
 ## Where in the arena's children something "behind the fighters" goes.
 var _back_index: int = 0
@@ -310,6 +311,11 @@ func _build_top() -> void:
 func _build_arena() -> void:
 	_arena = BattleWidgets.Arena.new(str(_opts.get("scene", "")))
 	add_child(_arena)
+	if not instant:
+		_sky_fx = BattleFx.SkyBand.new()
+		_sky_fx.sky = _arena._sky
+		_arena.add_child(_sky_fx)
+		_back_index = 1
 	var amb = AMBIENT.get(RealmScenes.scene_of(str(_opts.get("scene", ""))))
 	if amb != null and not instant:
 		_ambient = BattleFx.Ambient.new()
@@ -318,7 +324,7 @@ func _build_arena() -> void:
 		_ambient.count = int(amb[2])
 		_ambient.set_meta("bv_ambient", str(amb[0]))
 		_arena.add_child(_ambient)
-		_back_index = 1
+		_back_index += 1
 	var hero = _opts.get("hero")
 	if hero is Dictionary and hero.get("state") is Dictionary and hero.get("profile") is Dictionary:
 		_hero_view = HeroView.new()
@@ -495,6 +501,11 @@ func _layout() -> void:
 	_rect(_fx_layer, 0, arena_h - ARENA_H, w, ARENA_H)
 	if _ambient != null:
 		_rect(_ambient, 0, 0, w, arena_h)
+	if _sky_fx != null:
+		# The band of plain sky over the picture (none when the arena is as low as the picture).
+		var band = arena_h - float(RealmScenes.H * _arena.k())
+		_sky_fx.visible = band >= 24.0
+		_rect(_sky_fx, 0, 0, w, maxf(0.0, band))
 	_rect(_vignette, 0, 0, w, arena_h)
 	_place_hero()
 	_place_foes()
@@ -683,6 +694,23 @@ func _sync() -> void:
 	_refresh_keys()
 	_refresh_timeline()
 	_refresh_hint()
+	_mark_danger()
+
+
+## A foe about to hit hard says so: its intent beats red (a quarter of the hero's HP or more in one action,
+## or a blow it has finished charging).
+func _mark_danger() -> void:
+	var most = float(B.hero.hp_max)
+	for id in _foes:
+		var nd = _foes[id]
+		if nd.plate == null:
+			continue
+		var it = nd.unit.get("intent", {})
+		var hard = false
+		if it is Dictionary and not it.is_empty() and bool(nd.unit.get("alive", true)):
+			var total = float(it.get("dmg", 0)) * float(maxi(1, int(it.get("hits", 1))))
+			hard = total >= 0.25 * most or (bool(it.get("windup", false)) and bool(it.get("charged", false)))
+		nd.plate.set_danger(hard and not instant)
 
 
 ## A foe that is down keeps its place (its plate fades) until another one
@@ -814,7 +842,7 @@ func _on_foe(id: String) -> void:
 	target = id
 	Sfx.tap()
 	_mark()
-	if nd.plate != null:
+	if nd.plate != null and not instant:
 		Kit.pop(nd.plate, 1.06, 0.16)
 	_refresh_keys()
 	_refresh_hint()
@@ -828,13 +856,24 @@ func _on_move(id: String) -> void:
 		return
 	if not key.usable:
 		_refuse(_why(key.why, {"t": "move", "id": id}))
+		if str(key.why) == "energy":
+			_hero_plate.deny_energy()
 		return
+	if not instant:
+		# (A blink, not a pop: a key never changes its size or its place, not even for a moment.)
+		Sfx.click()
+		BattleFx.tint(key, Color(1.6, 1.6, 1.6), 0.22)
+		Kit.burst(key, RpgUi.color(str(key.school)), 8)
 	_do({"t": "move", "id": id, "target": target})
 
 
 func _on_act(what: String) -> void:
 	if _tap_guard():
 		return
+	if not instant and _act.has(what):
+		Sfx.click()
+		if what != "ult":
+			BattleFx.tint(_act[what], Color(1.6, 1.6, 1.6), 0.22)
 	match what:
 		"strike":
 			_do({"t": "strike", "target": target})
@@ -876,6 +915,8 @@ func _on_flee() -> void:
 func _refuse(text: String) -> void:
 	_say(text)
 	Sfx.error()
+	if not instant and _line_box != null:
+		BattleFx.knock(_line_box, _line_box.position, 5.0, 0.18)
 
 
 ## Why an action cannot be done, in words.
@@ -1914,8 +1955,6 @@ func _show_learn(e: Dictionary) -> float:
 		if not nd.known.weak.has(school):
 			nd.known.weak.append(school)
 			nd.plate.set_known(nd.unit.get("weak", []).size(), nd.known)
-			if not instant:
-				Kit.pop(nd.plate, 1.06, 0.22)
 	if who == "":
 		return 0.0
 	var line = "%s is weak to %s" % [who, _schools([school])]

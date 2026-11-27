@@ -1669,6 +1669,24 @@ is the Windows handoff.
       picture, the hero where the fight was beside the words (`_tableau`, meta `br_tableau`); stars slam in
       a step higher each, the three numbers count up, the loot comes one piece after the other.
     - The hub's boosts are two across (a tap opens a boost in full), so the tabs and the map come up.
+    - More of the same day: the arena's plain sky has clouds by day and stars at night (`BattleFx.SkyBand`,
+      only where the arena is taller than its picture); a foe about to hit for a quarter of the hero's HP or
+      with a charged blow has an intent that beats red (`BattleView._mark_danger`, `FoePlate.set_danger`,
+      meta `bv_danger`); a move or action key blinks and clicks when pressed (a blink, never a pop: a key
+      must not change its size even for a moment, and the test checks it), a move refused for energy
+      blinks the pips red; the timeline's tiles slide one place on. In an `instant` playback no plate pops
+      either (the test checks the layout right after a press).
+    - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
+      old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
+      a row, every other row right to left, the boss alone at the end; the path swings out round the names
+      at a row's end; walked stones are green, the stretch to the next place marches in gold, a marker hops
+      over it. `RoadMap._seen` / `_fresh` (static): a place that changed since the road was last drawn
+      lights up (coming back from a win). The ground takes its colour from the region's picture.
+    - `ui/rpg/loot_pop.gd` (`LootPop.open(title, icon, lines, colour, sound)`): whatever is opened (a
+      training chest, a star chest, a cache, a hunt's prize, a NEW REGION: `RealmMap._greet_new_region`) gets
+      the whole screen: it drops in, rattles, opens in light, its lines come one at a time; a tap shows all,
+      the next closes. It takes every tap while it is up: a walkthrough that makes real clicks calls
+      `LootPop.close_all()` first (`_pops_off` in realm.gd). What was won is in the save before it opens.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

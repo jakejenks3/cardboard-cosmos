@@ -457,7 +457,12 @@ func _run() -> void:
 	for s in range(1, 11):
 		want_ids.append("r1s%d" % s)
 	ok(nodes.map(func(n): return str(n.get_meta("map_stage"))) == want_ids and str(nodes[0].get_meta("map_state")) == "open" and nodes.slice(1).all(func(n): return str(n.get_meta("map_state")) == "locked"), "ten stage nodes: r1s1 open, the rest locked", nodes.map(func(n): return str(n.get_meta("map_state"))))
-	ok(nodes.all(func(n): return n.size == nodes[0].size) and nodes[0].size.y >= 40.0 and absf(nodes[1].global_position.x - nodes[0].global_position.x) > 100.0 and nodes[2].global_position.y > nodes[0].global_position.y, "the nodes are tiles of one size, two across", nodes.map(func(n): return n.size))
+	# (2026-11-26: the stages are places on a winding road, three to a row, the boss alone at its end.)
+	ok(nodes.slice(0, 9).all(func(n): return n.size == nodes[0].size) and nodes[0].size.y >= 40.0 and nodes[9].size.y >= nodes[0].size.y
+		and nodes[1].global_position.x - nodes[0].global_position.x > 100.0 and is_equal_approx(nodes[2].global_position.y, nodes[0].global_position.y)
+		and nodes[3].global_position.y > nodes[0].global_position.y and nodes[3].global_position.x > nodes[5].global_position.x
+		and nodes[9].global_position.y > nodes[8].global_position.y and _one(realm, "map_road_path") != null,
+		"the stages are places of one size on a road that winds, three to a row, the boss alone at the end", nodes.map(func(n): return [n.global_position.round(), n.size]))
 	ok(int(_one(realm, "map_stars").get_meta("map_stars")) == 0 and _metas(realm, "star_chest") == ["rustyard:8", "rustyard:16", "rustyard:24"] and _metas(realm, "star_chest_state") == ["locked", "locked", "locked"], "no stars yet; three star chests, locked", _metas(realm, "star_chest_state"))
 	ok(_words(_one(realm, "map_region_card")).contains("The Rustyard") and _words(_one(realm, "map_region_card")).contains("Weaknesses and the guard break"), "the region's card: its name and what it teaches")
 	ok(str(_one(realm, "map_spire").get_meta("map_spire")) == "locked" and _one(realm, "map_spire_fight") == null and _words(_one(realm, "section", "map_spire")).contains("The Pacer"), "the Spire is locked and says what opens it", _words(_one(realm, "section", "map_spire")))

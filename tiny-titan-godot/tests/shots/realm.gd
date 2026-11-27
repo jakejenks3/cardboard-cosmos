@@ -53,6 +53,12 @@ func _battle():
 
 
 ## Bring a control into view and click it for real.
+## A loot pop takes every tap while it is up: off with it before the walkthrough goes on.
+func _pops_off() -> void:
+	LootPop.close_all()
+	await ShotHelper.frames(tree, 3)
+
+
 func _click(c) -> void:
 	if c == null or not is_instance_valid(c):
 		return
@@ -132,6 +138,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.25)
 		await ShotHelper.snap(tree, "realm_5_chest_opening")
 		await ShotHelper.wait(tree, 1.6)
+		check(_all("loot_pop").size() == 1 and _all("loot_line").size() >= 1, "the chest opens over the whole screen and says what was in it")
+		await ShotHelper.snap(tree, "realm_5b_chest_open")
+		await _pops_off()
 		var row = _one("realm_chest", App.today)
 		check(int(App.rpg().ore) > ore0 and row != null and str(row.get_meta("realm_chest_state")) == "opened", "opening it pays ore; its row stays and says what came out")
 		check(row != null and absf(row.get_global_rect().get_center().y - mid_y) < 12.0, "and its row is where the key was: nothing jumped")
@@ -195,6 +204,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await _click(_one("star_chest", "rustyard:8"))
 	await ShotHelper.wait(tree, 0.8)
 	check(bool(App.rpg().starChests.get("rustyard:8", false)), "the star chest opens")
+	await _pops_off()
 	await _click(_one("map_stage", "r1s6"))
 	var cache = _sheet()
 	check(cache != null and _all("cache_pick", cache).size() == 3, "the cache node: three finds to pick one from")
@@ -202,6 +212,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	if cache != null and _one("cache_pick", 2, cache) != null:
 		await ShotHelper.click(tree, _one("cache_pick", 2, cache))
 		await ShotHelper.wait(tree, 1.0)
+		await _pops_off()
 	check(bool(App.rpg().caches.get("r1s6", false)) and str(_one("map_stage", "r1s7").get_meta("map_state")) == "open", "a pick is taken and the next stage opens")
 	await _close_sheets()
 	await _click(_one("map_stage", "r1s2"))

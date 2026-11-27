@@ -48,8 +48,25 @@ static var region_id = ""
 static var echo = false
 
 
+## How many regions were open the last time the map was drawn (-1: not yet in this visit).
+static var _open_seen = -1
+
+
+## A region that has opened since the map was last drawn gets its moment (not at the first drawing of a visit).
+static func _greet_new_region(rpg: Dictionary) -> void:
+	var open = []
+	for r in RpgWorld.regions():
+		if region_open(rpg, r, false):
+			open.append(r)
+	if _open_seen >= 0 and open.size() > _open_seen and not open.is_empty():
+		var reg = open[open.size() - 1]
+		LootPop.open("New region", "map", [str(reg.name), str(reg.get("blurb", "")), "Teaches: %s" % str(reg.get("teaches", ""))], RpgUi.color("realm"), "unlock")
+	_open_seen = open.size()
+
+
 static func fill(box: VBoxContainer, screen) -> void:
 	var rpg = RpgUi.save()
+	_greet_new_region(rpg)
 	box.add_child(_hunts(rpg))
 	box.add_child(_road(rpg, screen))
 	box.add_child(_spire(rpg))
@@ -131,17 +148,13 @@ static func option_pack(option: Dictionary) -> Dictionary:
 	return {}
 
 
-## Sparks from `key` and the lines rising one after another from the middle of `row`.
-static func loot_fx(row: Control, key: Control, lines: Array) -> void:
+## Something was opened: sparks from `key`, then the moment itself over the whole screen (LootPop), what was
+## in it a line at a time.
+static func loot_fx(row: Control, key: Control, lines: Array, title: String = "Loot", icon: String = "chest_wood") -> void:
 	var from = key if (key != null and is_instance_valid(key)) else row
 	Kit.burst(from, Pal.ACCENT, 26)
-	Kit.pop(from, 1.12, 0.26)
 	RpgSfx.buzz(2)
-	for i in range(mini(lines.size(), 4)):
-		var words = str(lines[i]).to_upper()
-		if words.length() > 28:
-			words = words.substr(0, 27) + "."
-		Kit.floater(row, words, Pal.ACCENT if i == 0 else Pal.TEXT, 0.4 * float(i))
+	LootPop.open(title, icon, lines)
 
 
 static func _say(why: String) -> void:
@@ -368,12 +381,11 @@ static func _road(rpg: Dictionary, screen) -> Control:
 
 	sec.add(_region_card(reg, rpg, stars))
 
-	var grid = Kit.grid(2, 8)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var list = stages_of(reg, echo)
-	for i in range(list.size()):
-		grid.add_child(_node(list[i], list[i - 1] if i > 0 else null, rpg))
-	sec.add(grid)
+	# The stages as places on a winding path (RoadMap), the boss alone at its end.
+	var road = RoadMap.new()
+	road.setup(stages_of(reg, echo), rpg, RealmMap._tap_node, RealmScenes.scene_of(str(reg.get("scene", reg.id))))
+	road.set_meta("map_road_path", str(reg.id))
+	sec.add(road)
 	return sec
 
 
@@ -471,8 +483,7 @@ static func _open_star_chest(reg_id: String, n: int, row: Control, key: Control)
 	var contents = RpgLoot.star_chest(reg_id, n, CHEST_SEED, rpg)
 	var res = RpgSave.open_star_chest(rpg, reg_id, n, contents)
 	if bool(res.get("ok", false)):
-		RpgSfx.play("chest")
-		loot_fx(row, key, pack_lines(contents))
+		loot_fx(row, key, pack_lines(contents), "Star chest", str(STAR_CHEST_ICONS[clampi(int(n / 8.0) - 1, 0, 2)]))
 	RpgUi.apply(res)
 
 
@@ -480,62 +491,6 @@ static func stage_state(rpg: Dictionary, stage_id: String) -> String:
 	if RpgWorld.done(rpg, stage_id):
 		return "done"
 	return "open" if RpgWorld.is_open(rpg, stage_id) else "locked"
-
-
-## One stage of the path: a tile of one size whatever its state.
-static func _node(st: Dictionary, before, rpg: Dictionary) -> Control:
-	var id = str(st.id)
-	var kind = str(st.get("kind", "battle"))
-	var state = stage_state(rpg, id)
-	var col = Pal.GOOD if state == "done" else (Pal.ACCENT if state == "open" else Pal.LINE)
-	var tint = col
-	if state != "locked" and kind == "boss":
-		tint = Pal.DANGER
-	elif state != "locked" and kind == "elite":
-		tint = Pal.BOUNTY
-	var tile = Kit.row(_tap_node.bind(id, str(before.name) if before is Dictionary else ""), col, tint, 6, 2, 0.16)
-	tile.custom_minimum_size = Vector2(0, 56)
-	tile.set_meta("map_stage", id)
-	tile.set_meta("map_state", state)
-	tile.set_meta("anchor_id", "map_stage:" + id)
-	var h = Kit.hbox(6)
-	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var badge = PanelContainer.new()
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.custom_minimum_size = Vector2(28, 28)
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	badge.add_theme_stylebox_override("panel", Kit.sbox(col if state != "locked" else Pal.PANEL2, 4, col.darkened(0.4), 2, 0, 0))
-	var num = Kit.label(str(int(st.get("s", 0))), 14, Pal.INK if state != "locked" else Pal.MUTED, true)
-	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.add_child(num)
-	h.add_child(badge)
-	var v = Kit.vbox(1)
-	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.clip(str(st.get("name", "")), 13, null, true))
-	var line = Kit.hbox(3)
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.add_child(Kit.vcenter(Icons.rect("lock" if state == "locked" else str(KIND_ICONS.get(kind, "sword")), 16)))
-	if kind == "cache":
-		line.add_child(Kit.vcenter(Kit.clip("Taken" if state == "done" else "Pick 1 of 3", 11, Pal.MUTED)))
-	else:
-		var got = rpg.get("stages", {}).get(id, {}).get("stars", [])
-		var have = 0
-		for i in range(3):
-			var on = got is Array and i < got.size() and bool(got[i])
-			if on:
-				have += 1
-			line.add_child(Kit.vcenter(Icons.rect("star_on" if on else "star_off", 16)))
-		tile.set_meta("map_stage_stars", have)
-	v.add_child(line)
-	h.add_child(v)
-	tile.add(h)
-	if state == "locked":
-		tile.modulate.a = 0.55
-	return tile
 
 
 static func _tap_node(id: String, before_name: String) -> void:
@@ -937,8 +892,7 @@ static func open_cache(stage_id: String) -> void:
 static func _take_cache(stage_id: String, option: Dictionary, card: Control, sh) -> void:
 	var res = RpgSave.take_cache(RpgUi.save(), stage_id, option)
 	if bool(res.get("ok", false)):
-		RpgSfx.play("chest")
-		loot_fx(card, card, pack_lines(option_pack(option)))
+		loot_fx(card, card, pack_lines(option_pack(option)), "Cache", "chest_iron")
 		if sh != null and is_instance_valid(sh):
 			sh.close()
 	RpgUi.apply(res)
@@ -966,8 +920,7 @@ static func open_prizes() -> void:
 static func _take_prize(date: String, option: Dictionary, card: Control, sh) -> void:
 	var res = RpgSave.take_hunt_prize(RpgUi.save(), date, option)
 	if bool(res.get("ok", false)):
-		RpgSfx.play("chest")
-		loot_fx(card, card, pack_lines(option_pack(option)))
+		loot_fx(card, card, pack_lines(option_pack(option)), "Hunt prize", "hunt")
 		if sh != null and is_instance_valid(sh):
 			sh.close()
 	RpgUi.apply(res)

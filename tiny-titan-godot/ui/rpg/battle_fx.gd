@@ -712,6 +712,55 @@ class Ambient extends Control:
 			draw_rect(Rect2(0, 0, w, h), Color(1, 1, 1, 0.28 * (_bolt / 0.22)))
 
 
+## The sky over a scene, where the arena is taller than its picture: clouds that drift by day, stars that
+## blink where the sky is dark. `sky` is the picture's own top colour.
+class SkyBand extends Control:
+	var sky: Color = Color(0.5, 0.6, 0.8)
+	var _age: float = 0.0
+	var _since: float = 0.0
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		clip_contents = true
+
+	func _process(delta: float) -> void:
+		if not is_visible_in_tree():
+			return
+		_age += delta
+		_since += delta
+		if _since >= 0.1:
+			_since = 0.0
+			queue_redraw()
+
+	func _draw() -> void:
+		var w = size.x
+		var h = size.y
+		if w <= 0.0 or h < 24.0:
+			return
+		var s = 4.0
+		if sky.get_luminance() < 0.3:
+			for i in range(26):
+				var a = 0.25 + 0.75 * maxf(0.0, sin(_age * (0.6 + BattleFx._rand(i, 5)) + float(i) * 2.1))
+				var x = floor(BattleFx._rand(i, 1) * w / s) * s
+				var y = floor(BattleFx._rand(i, 2) * (h - 8.0) / s) * s
+				var big = i % 6 == 0
+				draw_rect(Rect2(x, y, s if big else 2.0, s if big else 2.0), Color(1, 1, 0.92, a * (0.9 if big else 0.6)))
+			return
+		var lit = sky.lightened(0.3)
+		var body = sky.lightened(0.16)
+		for i in range(5):
+			var speed = 5.0 + 6.0 * BattleFx._rand(i, 3)
+			var span = w + 140.0
+			var x2 = fmod(_age * speed + BattleFx._rand(i, 4) * span, span) - 110.0
+			var y2 = floor((0.08 + 0.7 * BattleFx._rand(i, 6)) * maxf(1.0, h - 30.0) / s) * s
+			var k = 1.0 + floor(BattleFx._rand(i, 8) * 2.0) * 0.5
+			x2 = floor(x2 / s) * s
+			draw_rect(Rect2(x2 + 8.0 * k, y2, 36.0 * k, s), lit)
+			draw_rect(Rect2(x2, y2 + s, 64.0 * k, s * 2.0), body)
+			draw_rect(Rect2(x2 + 4.0 * k, y2 + s, 28.0 * k, s), lit)
+			draw_rect(Rect2(x2 + 12.0 * k, y2 + 3.0 * s, 44.0 * k, s), body.darkened(0.06))
+
+
 ## A red edge that beats while the hero is nearly down.
 class Vignette extends Control:
 	var color: Color = Color(1.0, 0.2, 0.25)

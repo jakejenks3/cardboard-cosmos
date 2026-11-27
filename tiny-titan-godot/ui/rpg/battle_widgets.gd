@@ -222,6 +222,8 @@ class WeakRow extends Control:
 ## turns of a countdown, or a word.
 class IntentTag extends HBoxContainer:
 	var wide: bool = false
+	var _danger: bool = false
+	var _beat = null
 	var _icon: TextureRect
 	var _label: Label
 
@@ -257,6 +259,21 @@ class IntentTag extends HBoxContainer:
 		if dmg > 0:
 			return str(dmg)
 		return str(intent.get("name", "")) if long else ""
+
+	## A hard hit is coming: the tag beats red until told otherwise.
+	func set_danger(on: bool) -> void:
+		if on == _danger:
+			return
+		_danger = on
+		if _beat != null and _beat.is_valid():
+			_beat.kill()
+		_beat = null
+		modulate = Color.WHITE
+		set_meta("bv_danger", on)
+		if on and is_inside_tree():
+			_beat = create_tween().set_loops()
+			_beat.tween_property(self, "modulate", Color(1.9, 0.55, 0.55), 0.32).set_trans(Tween.TRANS_SINE)
+			_beat.tween_property(self, "modulate", Color.WHITE, 0.32).set_trans(Tween.TRANS_SINE)
 
 	func set_intent(intent: Dictionary) -> void:
 		var icon_name = str(intent.get("icon", ""))
@@ -396,6 +413,9 @@ class FoePlate extends Button:
 	func set_statuses(list: Array, broken: bool = false) -> void:
 		_statuses.set_statuses(list, broken)
 
+	func set_danger(on: bool) -> void:
+		_intent.set_danger(on)
+
 	func set_known(weak_total: int, known: Dictionary) -> void:
 		_weak.set_known(weak_total, known)
 
@@ -493,6 +513,16 @@ class HeroPlate extends Button:
 		_hp_label.text = "%d / %d" % [hp, hp_max]
 		_hp_label.set_meta("bv_hp_hero", hp)
 
+	## Not enough energy for that: the pips blink red.
+	func deny_energy() -> void:
+		if not is_inside_tree():
+			return
+		_pips.modulate = Color(2.0, 0.5, 0.5)
+		var tw = _pips.create_tween()
+		tw.tween_property(_pips, "modulate", Color.WHITE, 0.12)
+		tw.tween_property(_pips, "modulate", Color(2.0, 0.5, 0.5), 0.08)
+		tw.tween_property(_pips, "modulate", Color.WHITE, 0.2)
+
 	func set_energy(now: int, most: int) -> void:
 		var popped = now != energy
 		energy = now
@@ -522,6 +552,8 @@ class Timeline extends Control:
 	const HEAD_W = 52.0
 	const TILE_H = 22.0
 	var tiles: Array = []
+	var _slide: float = 0.0
+	var _slide_tw = null
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -532,11 +564,23 @@ class Timeline extends Control:
 
 	## `list`: [{"id", "kind": "hero"|"pet"|"foe", "slot"}], the next first.
 	func set_tiles(list: Array) -> void:
+		var was = str(get_meta("bv_timeline", ""))
 		tiles = list
 		var ids = []
 		for t in list:
 			ids.append(str(t.get("id", "")))
 		set_meta("bv_timeline", ",".join(ids))
+		# The order moved on: the tiles slide in from the right, one place.
+		if was != "" and was != ",".join(ids) and is_inside_tree():
+			if _slide_tw != null and _slide_tw.is_valid():
+				_slide_tw.kill()
+			_slide = 1.0
+			_slide_tw = create_tween()
+			_slide_tw.tween_method(_set_slide, 1.0, 0.0, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		queue_redraw()
+
+	func _set_slide(v: float) -> void:
+		_slide = v
 		queue_redraw()
 
 	func _draw() -> void:
@@ -550,7 +594,7 @@ class Timeline extends Control:
 			var kind = str(t.get("kind", "foe"))
 			var col = Pal.ACCENT if kind == "hero" else (Pal.GOOD if kind == "pet" else BattleWidgets.slot_color(int(t.get("slot", 0))))
 			var text = "YOU" if kind == "hero" else ("PET" if kind == "pet" else str(int(t.get("slot", 0)) + 1))
-			var r = Rect2(HEAD_W + float(i) * (w + 4.0), y, w, TILE_H)
+			var r = Rect2(floor(HEAD_W + (float(i) + _slide * 0.6) * (w + 4.0)), y, w, TILE_H)
 			draw_rect(r, Pal.TEXT if i == 0 else Pal.OUTLINE)
 			draw_rect(r.grow(-2.0), col if i == 0 else col.darkened(0.3))
 			var g = PixelFont.tex(text, Pal.INK, false)

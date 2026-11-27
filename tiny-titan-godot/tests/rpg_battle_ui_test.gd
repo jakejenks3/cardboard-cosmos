@@ -232,7 +232,7 @@ func _layout_wrong(v) -> Array:
 			if ch is Container and (ch.get_combined_minimum_size().x > ch.size.x + 0.5 or ch.get_combined_minimum_size().y > ch.size.y + 0.5):
 				bad.append("%s: its content needs %s of %s" % [str(c.get_meta("anchor_id")), str(ch.get_combined_minimum_size()), str(ch.size)])
 			if c.has_meta("bv_plate") and not own.encloses(Rect2(ch.global_position, ch.size)):
-				bad.append("%s: %s hangs out of the plate: %s in %s" % [str(c.get_meta("anchor_id")), ch.get_class(), str(Rect2(ch.position, ch.size)), str(c.size)])
+				bad.append("%s: %s hangs out of the plate: %s in %s (scale %s, child scale %s)" % [str(c.get_meta("anchor_id")), ch.get_class(), str(Rect2(ch.position, ch.size)), str(c.size), str(c.scale), str(ch.scale)])
 	for slot in [[v._top, v._top_h], [v._timeline, v._tl_h], [v._hero_plate, v._plate_h], [v._line_box, v._line_h], [v._acts, v._act_h]]:
 		if absf(slot[0].size.y - float(slot[1])) > 0.5 or slot[0].size.x > host.size.x - 15.5:
 			bad.append("a slot is %s, meant %s high" % [str(slot[0].size), str(slot[1])])

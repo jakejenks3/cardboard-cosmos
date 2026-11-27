@@ -265,6 +265,7 @@ func _build_hub(rpg: Dictionary) -> void:
 func go_page(page: String) -> void:
 	if RpgUi.page == page:
 		return
+	RpgSfx.play("select")
 	RpgUi.page = page
 	rebuild()
 
@@ -464,8 +465,8 @@ func _open_chest(date: String, row: Control, key: Control) -> void:
 	var pack = {"ore": int(pay.ore), "items": pay.items, "runes": RealmMap.new_runes(rpg, res.rpg)}
 	var lines = RealmMap.pack_lines(pack)
 	_opened_now[date] = " · ".join(PackedStringArray(lines))
-	RpgSfx.play("chest")
-	RealmMap.loot_fx(row, key, lines)
+	var chest_icon = "chest_" + str(c.get("tier", "wood")).to_lower()
+	RealmMap.loot_fx(row, key, lines, "%s training chest" % str(c.get("tier", "Wood")).capitalize(), chest_icon if Icons.has_icon(chest_icon) else "chest_wood")
 	RpgUi.apply(res)
 
 
