@@ -57,6 +57,7 @@ var _late: Array = []
 var _loot_rows: Array = []
 var _first_tag: Control = null
 var _fact_labels: Array = []
+var _facts_tw: Tween = null
 var _head: Control = null
 var _tab: Control = null
 var _tab_arena = null
@@ -152,7 +153,7 @@ func _build() -> void:
 		pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		pv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		pv.add_child(Kit.clip("+%d skill point%s" % [pts, "" if pts == 1 else "s"], 15, Pal.ACCENT, true))
-		pv.add_child(Kit.clip("Spend it on the Skills page: a new move or a passive.", 11, Pal.MUTED))
+		pv.add_child(Kit.clip("Spend %s on the Skills page: a new move or a passive." % ("it" if pts == 1 else "them"), 11, Pal.MUTED))
 		ph.add_child(pv)
 		prow.add(ph)
 		_late.append(prow)
@@ -465,8 +466,8 @@ func _run() -> void:
 		if not _alive(gen):
 			return
 	# How the fight went, counted up.
-	var tw = create_tween()
-	tw.tween_method(_count_facts, 0.0, 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_facts_tw = create_tween()
+	_facts_tw.tween_method(_count_facts, 0.0, 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await _wait(0.3)
 	if not _alive(gen):
 		return
@@ -567,6 +568,9 @@ func _finish() -> void:
 		c.modulate.a = 1.0
 	for r in _loot_rows:
 		r.modulate.a = 1.0
+	# (the count-up may be running: it would go on writing its half-way numbers over the final ones)
+	if _facts_tw != null and _facts_tw.is_valid():
+		_facts_tw.kill()
 	_count_facts(1.0)
 	done = true
 
