@@ -2041,6 +2041,9 @@ tour (the elite and the boss of every region on AUTO at x2 for a while, every ef
   fall: the rarer events drawn and sounded once, "TOUR ..." lines say which; needs G_TIMEOUT 560; year data),
 events (the daily hunt with its prize, the week's rival and a floor of the Spire, each opened from the
   map's own row, won, and the hub checked after; year data),
+steady (nothing moves under the finger on the Realm's pages: Learn, Buy three times at one point, the build
+  keys, the school chips, a feat claimed; year data. A click right after a redraw is dropped on purpose
+  for 350 ms, so it waits; where the Learn key was, a learned node has "Equip it now"),
 flows (the Realm's fights as a player goes through them: win and Next stage, the app closed mid-fight and
   Continue, flee, lose and Again, with the hub's state checked after each; year data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
