@@ -243,6 +243,16 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(prep != null and _all("prep_star", prep).all(func(s): return bool(s.get_meta("prep_star_on"))), "a won stage's prep sheet shows its stars earned and what was learned of its foes")
 	await ShotHelper.snap(tree, "realm_16_prep_won")
 	await _close_sheets()
+	# --- how fights work -----------------------------------------------------------------------
+	var help = _one("realm_help")
+	check(help != null, "the Map ends in a link to how fights work")
+	if help != null:
+		RealmHelp.open()
+		await ShotHelper.wait(tree, 0.6)
+		var hs = _sheet()
+		check(hs != null and _all("help_point", hs).size() == RealmHelp.POINTS.size() and not ShotHelper.all_text(hs).contains("{"), "its sheet has every point, with the game's own numbers filled in")
+		await ShotHelper.snap(tree, "realm_19_help")
+		await _close_sheets()
 	# --- the bestiary ------------------------------------------------------------------------
 	var beast = _one("map_bestiary")
 	check(beast != null and int(beast.get_meta("map_bestiary")) >= 3, "the Map ends in the bestiary: the foes met so far (%s)" % (str(beast.get_meta("map_bestiary")) if beast != null else "none"))

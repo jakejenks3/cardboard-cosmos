@@ -48,6 +48,15 @@ static var region_id = ""
 static var echo = false
 
 
+## The furthest region of the road that is open (where the hero is on his way).
+static func furthest(rpg: Dictionary) -> Dictionary:
+	var out = RpgWorld.regions()[0]
+	for r in RpgWorld.regions():
+		if region_open(rpg, r, false):
+			out = r
+	return out
+
+
 ## How many regions were open the last time the map was drawn (-1: not yet in this visit).
 static var _open_seen = -1
 
@@ -71,6 +80,7 @@ static func fill(box: VBoxContainer, screen) -> void:
 	box.add_child(_road(rpg, screen))
 	box.add_child(_spire(rpg))
 	box.add_child(RealmBestiary.card(rpg))
+	box.add_child(RealmHelp.link())
 
 
 ## Is there something to pick up on the map: a star chest that can be opened, or the hunt's prize?
@@ -730,6 +740,8 @@ static func open_prep(what: Dictionary) -> void:
 	var rpg = RpgUi.save()
 	var id = str(st.id)
 	var kind = str(st.get("kind", "battle"))
+	# The fight is a tap away: its music is made ready now, so it is there when the fight opens.
+	RpgSfx.tune_ready("boss" if kind == "boss" else "battle", RpgSfx.region_of_scene(str(st.get("scene", "rustyard"))))
 	var sh = Kit.sheet(str(st.get("name", "")))
 	sh.box.set_meta("prep_sheet", id)
 	var head = Kit.hbox(8)

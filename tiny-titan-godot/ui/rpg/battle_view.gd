@@ -162,6 +162,7 @@ var _ev_i: int = 0
 var _act_kind: String = ""
 var _act_who: String = ""
 var _act_first: bool = true
+var _act_heavy: bool = false
 var _hit_counts: Dictionary = {}
 var _word_counts: Dictionary = {}
 ## Foes whose fall was already shown with the blow that felled them.
@@ -1255,6 +1256,9 @@ func _open_log() -> void:
 		var l = Kit.para(str(_log[i]), 13, Pal.TEXT if i == _log.size() - 1 else Pal.MUTED, i == _log.size() - 1)
 		l.set_meta("bv_log_line", i)
 		s.box.add_child(l)
+	var help = Kit.button("How fights work", "secondary", RealmHelp.open, "lg", "book" if Icons.has_icon("book") else "")
+	help.set_meta("bv_help", true)
+	s.box.add_child(help)
 	s.box.add_child(Kit.button("Close", "ghost", s.close, "lg"))
 	_sheet_up(s)
 
@@ -1730,6 +1734,7 @@ func _show_act(e: Dictionary) -> float:
 	_act_kind = kind
 	_act_who = who
 	_act_first = true
+	_act_heavy = false
 	_hit_counts = {}
 	_word_counts = {}
 	if who == "hero":
@@ -1766,6 +1771,8 @@ func _show_act(e: Dictionary) -> float:
 				return 0.5
 		var school = str(e.get("school", "plain"))
 		var row = RpgBattle.move_row(B, str(e.get("id", ""))) if kind != "strike" else null
+		# A move that costs three energy or more, or is slow and heavy by its rank, lands like one.
+		_act_heavy = row != null and (int(row.get("cost", 0)) >= 3 or float(row.get("rank", 1.0)) >= 1.35)
 		var aim = "foe" if row == null else str(row.get("target", "foe"))
 		var aimed = aim == "foe"
 		var to = (" on %s" % _name(on)) if (aimed and on != "" and on != "hero" and _foes.has(on)) else ""
@@ -1959,7 +1966,7 @@ func _show_dmg(e: Dictionary) -> float:
 			nd.plate.set_known(nd.unit.get("weak", []).size(), nd.known)
 	var fx_school = school if school != "" else "plain"
 	if not instant:
-		BattleFx.strike(_fx_layer, fx_school, _mid(dst), _feet(dst), RpgUi.color(fx_school), crit or ult)
+		BattleFx.strike(_fx_layer, fx_school, _mid(dst), _feet(dst), RpgUi.color(fx_school), crit or ult or _act_heavy)
 		Kit.burst(nd.view, RpgUi.color(fx_school), 14 if crit else 6)
 	_knock(dst, 5.0 if resist else (12.0 if crit or ult else 8.0))
 	var wait = 0.34
@@ -1986,6 +1993,10 @@ func _show_dmg(e: Dictionary) -> float:
 			if not instant:
 				BattleFx.flash(_arena, Color(1, 1, 1), 0.3, 0.14)
 			wait = 0.44
+		elif _act_heavy and _act_who == "hero":
+			_shake(0.8)
+			RpgSfx.buzz(1)
+			wait = 0.4
 		elif weak:
 			_shake(0.45)
 	# The blow that fells a foe fells it NOW, not a beat later after whatever else the blow set off.

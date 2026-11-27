@@ -318,9 +318,20 @@ func _banner(rpg: Dictionary) -> Control:
 	well.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": null, "lip": 0, "inset": true, "pad_h": 4, "pad_v": 4}))
 	well.custom_minimum_size = Vector2(WELL_W, 0)
 	well.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var stage = Stage.new()
-	stage.setup(realm, 2)
-	well.add_child(stage)
+	# He stands where the road has taken him: the picture and the air of the furthest region reached.
+	var here = RealmMap.furthest(rpg)
+	var scene = RealmScenes.scene_of(str(here.get("scene", here.id)))
+	var place = BattleWidgets.Arena.new(scene)
+	place.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	place.set_meta("realm_place", str(here.id))
+	well.add_child(place)
+	var amb = BattleView.AMBIENT.get(scene)
+	if amb != null:
+		var air = BattleFx.Ambient.new()
+		air.mode = str(amb[0])
+		air.color = Color(str(amb[1]))
+		air.count = maxi(4, int(int(amb[2]) / 2.0))
+		well.add_child(air)
 	var look = RpgUi.hero_look()
 	if look.get("profile") is Dictionary:
 		var hero = HeroView.new()
@@ -329,7 +340,16 @@ func _banner(rpg: Dictionary) -> Control:
 		hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		hero.size_flags_vertical = Control.SIZE_SHRINK_END
 		hero.set_meta("realm_hero", true)
-		well.add_child(hero)
+		# (His feet on the picture's ground line: 8 picture rows up at twice their size, less the 2 rows under
+		# his feet on his own canvas.)
+		var stand = Kit.pad(hero, 0, 10, 0, 12)
+		stand.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		well.add_child(stand)
+	var where = Kit.tag(str(here.name), realm, true, 10)
+	where.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	where.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	where.set_meta("realm_where", str(here.id))
+	well.add_child(where)
 	if look.get("pet") is String and str(look.pet) != "":
 		var pv = PetView.new()
 		pv.setup(str(look.pet), 40.0, true)

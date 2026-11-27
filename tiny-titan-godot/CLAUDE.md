@@ -1716,6 +1716,12 @@ is the Windows handoff.
       `RpgUi.commit_quiet` = `App.set_rpg(d, true)`, which emits nothing): a stat that has reached a new whole
       point since the last visit gets a "Stronger" LootPop when the hub is drawn (`RealmScreen._note_stats`,
       deferred; never the first time, never during a battle).
+    - `ui/rpg/realm_help.gd` (`RealmHelp.link()` at the foot of the Map, meta `realm_help`; `open()` the
+      sheet "How fights work": `POINTS`, their numbers filled in from RpgDefs; also a key in a fight's log).
+      The hub banner's hero stands in the furthest region the road has reached (`RealmMap.furthest`,
+      `BattleWidgets.Arena` + `BattleFx.Ambient` in the well, a tag with its name; metas `realm_place`,
+      `realm_where`). A move of three energy or more (or rank 1.35+) lands heavier (`_act_heavy`). A fight's
+      music is made ready when its prep sheet opens (`RpgSfx.tune_ready`).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
