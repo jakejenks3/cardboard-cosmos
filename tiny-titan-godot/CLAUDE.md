@@ -2151,7 +2151,7 @@ godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
 godot --headless --path . --script res://tests/rpg_art_test.gd
 godot --headless --path . --script res://tests/rpg_icons_test.gd
-(and rpg_sfx_test, realm_music_test, rpg_feats_test, rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
+(set TINY_TITAN_CLIPS=1 for a walkthrough to list cut-off titles; and rpg_sfx_test, realm_music_test, rpg_feats_test, rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
  rpg_content_test, rpg_sim_test, rpg_battle_ui_test, rpg_hub_test, rpg_pages_test, discipline_sheet_test)
 ```
 
@@ -2203,6 +2203,12 @@ steady (nothing moves under the finger on the Realm's pages: Learn, Buy three ti
   for 350 ms, so it waits; where the Learn key was, a learned node has "Equip it now"),
 flows (the Realm's fights as a player goes through them: win and Next stage, the app closed mid-fight and
   Continue, flee, lose and Again, with the hub's state checked after each; year data),
+perfect (a boss's charged blow guarded: the perfect guard; year data),
+mastery (a move's stars on the Moves page, on a fight's keys and in the result; the hardest hit, the top move; year data),
+dares (a won stage's dare, the region's dares row and its dare chest; year data),
+mole (the Ore Mole: left alone it digs away, felled it pays; year data),
+yard (the practice yard: a perfect guard, and nothing kept; year data),
+prep (a stage's sheet: the build's moves against known weaknesses; year data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
