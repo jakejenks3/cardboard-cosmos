@@ -408,7 +408,7 @@ static func fight(what: Dictionary, resume_b = null):
 	var id = str(st.get("id", ""))
 	var first_time = int(save().stages.get(id, {}).get("wins", 0)) == 0
 	var nxt = RpgWorld.next_stage(id) if ["battle", "elite", "boss"].has(str(st.get("kind", ""))) else ""
-	var opts = {"title": str(st.get("name", "")), "scene": str(st.get("scene", "rustyard")), "tutorial": id == "r1s1" and first_time,
+	var opts = {"title": str(st.get("title", st.get("name", ""))), "scene": str(st.get("scene", "rustyard")), "tutorial": id == "r1s1" and first_time,
 		"hero": hero_look(), "next": nxt != "",
 		"hints": save().get("hints", {}).duplicate(), "on_hint": func(hint_id): RpgUi._hint_given(hint_id),
 		"on_pref": func(key, on): RpgUi._pref_set(key, on),

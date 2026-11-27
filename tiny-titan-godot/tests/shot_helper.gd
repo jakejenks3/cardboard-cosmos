@@ -5,6 +5,28 @@ extends RefCounted
 
 
 ## Save a PNG of the whole window into $TINY_TITAN_SHOTS (or user://shots). Returns the path.
+## Labels on screen whose text does not fit their width (they show an ellipsis, or are cut), of `min_px`
+## font size or more: ["<text> (<shown> of <needed> px, <size> px font)"].
+static func clipped(root: Node, min_px: int = 13) -> Array:
+	var out = []
+	var win = root.get_viewport().get_visible_rect() if root.get_viewport() != null else Rect2()
+	for n in walk(root):
+		if not (n is Label) or not n.is_visible_in_tree() or str(n.text) == "" or n.autowrap_mode != TextServer.AUTOWRAP_OFF:
+			continue
+		if not (n.clip_text or n.text_overrun_behavior != TextServer.OVERRUN_NO_TRIMMING):
+			continue
+		var r = n.get_global_rect()
+		if r.size.y < 6.0 or not win.intersects(r) or n.modulate.a < 0.05:
+			continue
+		var px = n.get_theme_font_size("font_size")
+		if px < min_px:
+			continue
+		var need = n.get_theme_font("font").get_string_size(str(n.text), HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+		if need > n.size.x + 1.0:
+			out.append("\"%s\" (%d of %d px, %d px font)" % [str(n.text), int(n.size.x), int(need), px])
+	return out
+
+
 static func snap(tree: SceneTree, shot_name: String) -> String:
 	await tree.process_frame
 	await tree.process_frame
@@ -23,6 +45,11 @@ static func snap(tree: SceneTree, shot_name: String) -> String:
 		DirAccess.make_dir_recursive_absolute(dir)
 		img.save_png(path)
 		print("SHOT ", path)
+	# With TINY_TITAN_CLIPS set: every label of 13 px or more whose words are cut off ("Dai…") is listed
+	# (an audit to read, not a failure: a subtitle may be cut on purpose).
+	if OS.get_environment("TINY_TITAN_CLIPS") != "":
+		for line in clipped(tree.root, 13):
+			print("CLIP %s: %s" % [shot_name, line])
 	# Every screenshot is also a layout check: nothing may be wider than the
 	# column it scrolls in (a too-long line would push the screen off the right edge).
 	# A column whose content is too wide simply grows: so the column itself must

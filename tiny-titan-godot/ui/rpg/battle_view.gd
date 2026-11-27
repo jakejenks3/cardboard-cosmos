@@ -371,7 +371,8 @@ func _build_top() -> void:
 	_wave_label.set_meta("bv_wave", "")
 	_top.add_child(_wave_label)
 	_turn_label = Kit.label("", 11, Pal.MUTED, true)
-	_turn_label.custom_minimum_size = Vector2(58, 0)
+	# (with a wave counter beside it the turn is said short, "T4": the title needs the room)
+	_turn_label.custom_minimum_size = Vector2(30 if B.get("waves", []).size() > 1 else 58, 0)
 	_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_turn_label.clip_text = true
 	_turn_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -936,7 +937,7 @@ func _show_wave(n: int, of: int) -> void:
 
 
 func _show_turn(n: int) -> void:
-	_turn_label.text = "TURN %d" % maxi(1, n)
+	_turn_label.text = ("T%d" if B.get("waves", []).size() > 1 else "TURN %d") % maxi(1, n)
 	_turn_label.set_meta("bv_turn", maxi(1, n))
 
 

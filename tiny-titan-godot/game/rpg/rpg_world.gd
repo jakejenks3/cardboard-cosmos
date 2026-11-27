@@ -529,7 +529,7 @@ static func gauntlet(week: String, rpg: Dictionary, power: float = 0.0) -> Varia
 	first["rune"] = true
 	first["items"] = [{"id": str(REGION_ITEMS[reach - 1]), "n": 2}]
 	var elite = RpgFoes.by_id(str(reg.elite))
-	var out = {"id": "gauntlet:" + week, "region": "", "r": 0, "s": 0, "n": n, "name": "Weekly Gauntlet",
+	var out = {"id": "gauntlet:" + week, "region": "", "r": 0, "s": 0, "n": n, "name": "Weekly Gauntlet", "title": "Gauntlet",
 		"text": "Three waves, back to back: two packs, then %s. Your HP carries over from wave to wave. One prize a week." % (str(elite.name) if elite != null else "an elite"),
 		"kind": "gauntlet", "echo": false, "scene": str(reg.scene), "waves": waves, "rules": [], "stars": [], "par": 0,
 		"first": first, "rec": rec_of(n), "week": week, "elite": str(reg.elite)}
@@ -718,7 +718,7 @@ static func dare(stage_id: String, rpg: Dictionary, power: float = 0.0) -> Varia
 	if str(src.kind) != "battle":
 		first["rune"] = true
 	return {"id": "dare:" + stage_id, "of": stage_id, "region": str(src.region), "r": r, "s": s, "n": n,
-		"name": "%s: Dare" % str(src.name), "text": "A dare: the same place with foes as strong as you are. %s" % str(RULES[rule].text),
+		"name": "%s: Dare" % str(src.name), "title": str(src.name), "text": "A dare: the same place with foes as strong as you are. %s" % str(RULES[rule].text),
 		"kind": "dare", "of_kind": str(src.kind), "dare": true, "scene": str(src.scene),
 		"waves": waves, "rules": [rule], "rule": rule, "stars": [], "par": 0, "first": first, "rec": rec_of(n)}
 

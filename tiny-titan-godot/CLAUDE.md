@@ -1919,6 +1919,12 @@ is the Windows handoff.
       simulator wins it 95 to 100% of the time in 13 to 23 turns with a quarter to four fifths of his HP
       left. Row in the HUNTS section (`RealmMap._gauntlet_row`, metas `map_gauntlet`, `map_gauntlet_state`).
       The events walkthrough covers it.
+    - CUT-OFF TITLES: with the environment variable `TINY_TITAN_CLIPS` set, every `ShotHelper.snap` also lists the
+      labels of 13 px or more whose words do not fit ("CLIP <shot>: "Dai…" (56 of 114 px...)", from
+      `ShotHelper.clipped`). It is an audit to read, not a failure. It found the hunt row's title squeezed by
+      a tag, and the fight's title squeezed by the wave counter (a multi-wave fight now says its turn as
+      "T4"; a stage may carry a short `title` for the fight's top bar: a dare's is its stage's name, the
+      gauntlet's "Gauntlet"). Run it after adding a tag or a key to a row that has a title.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
