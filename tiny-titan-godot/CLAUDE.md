@@ -1811,6 +1811,11 @@ is the Windows handoff.
       `_draw_floor`: the colour of the picture's lowest row, speckled, darker towards the edge), so they
       stand in the middle of the arena. `Arena.ground()` and the effects' layer go up with it. Before,
       more than half of a phone's arena was empty sky with the fight at its foot.
+    - HIT STOP (`BattleView._hit_stop(kind)`, `STOP_MS`: crit 70, heavy 60, ult 120, ko 80, hurt 70 ms; half
+      at x2): a blow that matters stops everything for a blink. It sets `Engine.time_scale` to `STOP_SCALE`
+      (the WHOLE game's clock; sound is not touched) `STOP_LEAD` ms after the blow, and `_process` sets it
+      back by the REAL clock (`_stop_end`, also in `_exit_tree`). Never in an instant playback or with
+      light effects. Nothing else in the game may set `Engine.time_scale`.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

@@ -133,4 +133,5 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	if is_instance_valid(bv):
 		bv.close()
 	await ShotHelper.wait(tree, 0.5)
+	check(Engine.time_scale == 1.0 and BattleView.stops_made >= 1, "the blows that fell a foe stopped the clock for a blink (%d times), and it runs as it should after the fights (%s)" % [BattleView.stops_made, str(Engine.time_scale)])
 	print("BATTLE %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

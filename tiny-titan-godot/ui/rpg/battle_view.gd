@@ -62,6 +62,11 @@ const MOVE_H_MAX = 72.0
 const ACT_H_MAX = 56.0
 const LINE_H_TWO = 42.0
 const HERO_SCALE = 2
+## A blow that matters stops everything for a blink ("hit stop"): the game's clock runs at STOP_SCALE for the
+## blow's milliseconds, beginning STOP_LEAD ms after it lands (so its burst is on screen while all stands still).
+const STOP_SCALE = 0.04
+const STOP_LEAD = 34
+const STOP_MS = {"crit": 70, "heavy": 60, "ult": 120, "ko": 80, "hurt": 70}
 const HERO_X = -6.0
 const PET_X = 94.0
 const PET_PX = 40.0
@@ -202,6 +207,11 @@ var _act_kind: String = ""
 var _act_who: String = ""
 var _act_first: bool = true
 var _act_heavy: bool = false
+## How many hit stops there have been (a walkthrough reads it).
+static var stops_made: int = 0
+## A hit stop under way: the real time (ms) it begins and ends at; 0 = none.
+var _stop_from: int = 0
+var _stop_until: int = 0
 ## The tags of the hero's move being shown ("multi", "all", "finisher"...), and how many of its hits have landed.
 var _act_tags: Array = []
 var _act_hits: int = 0
@@ -2034,6 +2044,27 @@ func _show_act(e: Dictionary) -> float:
 	return 0.3
 
 
+## Stop everything for a blink (STOP_MS[kind]; shorter at x2). Never in an instant playback or with light
+## effects. The clock is set right again by _process (by the real clock) and when the view leaves the tree.
+func _hit_stop(kind: String) -> void:
+	if instant or BattleFx.light or _closed or not is_inside_tree():
+		return
+	var now = Time.get_ticks_msec()
+	var until = now + STOP_LEAD + int(float(int(STOP_MS.get(kind, 60))) / float(maxi(1, speed)))
+	if until <= _stop_until:
+		return
+	if _stop_until == 0:
+		_stop_from = now + STOP_LEAD
+	_stop_until = until
+
+
+func _stop_end() -> void:
+	if _stop_until > 0 or Engine.time_scale == STOP_SCALE:
+		Engine.time_scale = 1.0
+	_stop_until = 0
+	_stop_from = 0
+
+
 func _show_dmg(e: Dictionary) -> float:
 	var dst = str(e.get("dst", ""))
 	var src = str(e.get("src", ""))
@@ -2097,6 +2128,7 @@ func _show_dmg(e: Dictionary) -> float:
 			Kit.pop(_hero_plate, 1.03, 0.18)
 		if big:
 			_shake(1.3 if crit else 1.0)
+			_hit_stop("hurt")
 			RpgSfx.buzz(2)
 			if not instant:
 				BattleFx.flash(_arena, Pal.DANGER, 0.22, 0.2)
@@ -2146,6 +2178,7 @@ func _show_dmg(e: Dictionary) -> float:
 	if ult and first:
 		_snd("ult_hit")
 		_shake(1.6)
+		_hit_stop("ult")
 		RpgSfx.buzz(3)
 		if not instant:
 			BattleFx.flash(_arena, Color(1, 1, 1), 0.6, 0.3)
@@ -2164,12 +2197,14 @@ func _show_dmg(e: Dictionary) -> float:
 			_act_hits += 1
 		if crit:
 			_shake(0.9)
+			_hit_stop("crit")
 			RpgSfx.buzz(1)
 			if not instant:
 				BattleFx.flash(_arena, Color(1, 1, 1), 0.3, 0.14)
 			wait = 0.44
 		elif _act_heavy and _act_who == "hero":
 			_shake(0.8)
+			_hit_stop("heavy")
 			RpgSfx.buzz(1)
 			wait = 0.4
 		elif weak:
@@ -2177,6 +2212,7 @@ func _show_dmg(e: Dictionary) -> float:
 	# The blow that fells a foe fells it NOW, not a beat later after whatever else the blow set off.
 	if int(e.get("hp", 1)) <= 0 and _ko_ahead(dst):
 		_ko_done[dst] = true
+		_hit_stop("ko")
 		if src == "hero" and _act_tags.has("finisher"):
 			_word(dst, "FINISHED!", Pal.ACCENT, 2, 0.1)
 		var line = _line.text if _line != null else ""
@@ -2402,6 +2438,7 @@ func _has_boss() -> bool:
 
 
 func _exit_tree() -> void:
+	_stop_end()
 	if _held:
 		_held = false
 		RpgSfx.hold(-1, true)
@@ -2570,6 +2607,14 @@ func _warm() -> void:
 
 
 func _process(delta: float) -> void:
+	if _stop_until > 0:
+		# (by the real clock: the game's own is the thing that is stopped)
+		var now = Time.get_ticks_msec()
+		if now >= _stop_until:
+			_stop_end()
+		elif now >= _stop_from and Engine.time_scale != STOP_SCALE:
+			Engine.time_scale = STOP_SCALE
+			stops_made += 1
 	if not _built or _closed:
 		return
 	# While a finger scrolls a page (a sheet over the fight) the hero and the companion stand still too.
