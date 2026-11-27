@@ -169,6 +169,8 @@ func _tableau(hero: Dictionary, head: Control) -> Control:
 	_tab = box
 	var arena = BattleWidgets.Arena.new(str(info.get("scene", "")))
 	arena.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if info.get("light") is Color:
+		arena.self_modulate = info.light
 	box.add_child(arena)
 	_tab_arena = arena
 	if win:

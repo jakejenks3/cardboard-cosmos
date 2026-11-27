@@ -743,7 +743,7 @@ class SkyBand extends Control:
 		if w <= 0.0 or h < 24.0:
 			return
 		var s = 4.0
-		if sky.get_luminance() < 0.3:
+		if sky.get_luminance() < 0.36:
 			for i in range(26):
 				var a = 0.25 + 0.75 * maxf(0.0, sin(_age * (0.6 + BattleFx._rand(i, 5)) + float(i) * 2.1))
 				var x = floor(BattleFx._rand(i, 1) * w / s) * s

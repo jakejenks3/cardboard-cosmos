@@ -66,6 +66,9 @@ const POSES = ["strike", "kick", "guard", "cast", "hurt", "pull", "flex"]
 const STEP_IN = 26.0
 ## Under this share of his HP the arena's edge beats red.
 const LOW_HP = 0.3
+## The hour of a stage, by its place on its region's road: the light the picture is seen in (it is multiplied
+## into the backdrop and its sky, never into the fighters). Ten fights in one region do not all look the same.
+const HOURS = {"day": Color(1, 1, 1), "dusk": Color(1.0, 0.8, 0.66), "night": Color(0.5, 0.56, 0.86), "boss": Color(0.78, 0.6, 0.66)}
 ## Statuses that stay drawn on a fighter while it has them: [the effect, seconds a round].
 const STATUS_LOOPS = {"burn": ["flame", 1.0], "bleed": ["drops", 1.3], "stun": ["stars", 1.2], "shield": ["shield", 1.9], "regen": ["heal", 1.7],
 	"charge": ["gather", 0.9], "charged": ["rays", 1.3]}
@@ -340,9 +343,12 @@ func _build_top() -> void:
 func _build_arena() -> void:
 	_arena = BattleWidgets.Arena.new(str(_opts.get("scene", "")))
 	add_child(_arena)
+	var light = HOURS.get(hour(), Color(1, 1, 1))
+	_arena.self_modulate = light
+	_arena.set_meta("bv_hour", hour())
 	if not instant:
 		_sky_fx = BattleFx.SkyBand.new()
-		_sky_fx.sky = _arena._sky
+		_sky_fx.sky = _arena._sky * light
 		_arena.add_child(_sky_fx)
 		_back_index = 1
 	var amb = AMBIENT.get(RealmScenes.scene_of(str(_opts.get("scene", ""))))
@@ -2193,6 +2199,24 @@ func _foe_dust(id: String) -> void:
 		_fx("dust", _feet(id) + Vector2(0, -2.0), Pal.MUTED, 0.3)
 
 
+## The hour this fight is fought at: "day" | "dusk" | "night" | "boss". A stage of a road goes by its number
+## (1 to 3 by day, 4 to 6 at dusk, 7 to 9 at night, the boss at its own dark hour); everything else by day,
+## but a fight with a boss in it is always the boss's hour.
+func hour() -> String:
+	if _has_boss():
+		return "boss"
+	var what = B.get("what", {})
+	var id = str(what.get("id", "")) if what is Dictionary else ""
+	var at = id.rfind("s")
+	if (str(what.get("kind", "")) == "stage" or str(what.get("kind", "")) == "echo") and at > 0 and id.substr(at + 1).is_valid_int():
+		var n = int(id.substr(at + 1))
+		if n >= 7:
+			return "night"
+		if n >= 4:
+			return "dusk"
+	return "day"
+
+
 ## Does a boss wait in any wave of this battle (its music is the boss's from the start)?
 func _has_boss() -> bool:
 	for f in B.get("foes", []):
@@ -2523,6 +2547,8 @@ func _show_result() -> void:
 	# The result's own picture: the hero where the fight was (BattleResult's tableau).
 	if not info.has("scene"):
 		info["scene"] = str(_opts.get("scene", ""))
+	# (the hour the fight was fought at: the result's picture is seen in the same light)
+	info["light"] = HOURS.get(hour(), Color(1, 1, 1))
 	if not info.has("hero") and _hero_view != null:
 		info["hero"] = _opts.get("hero")
 		info["hero_fit"] = {"top": _hero_top, "low": _hero_low, "mid": _hero_mid}

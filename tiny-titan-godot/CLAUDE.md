@@ -1735,6 +1735,11 @@ is the Windows handoff.
       and no move of that school in the build; skill points unspent; power under the stage's `rec`; never
       guarded; an untouched belt; no boost today; the lowest body stat when it is far under the others and
       what it is for (`STAT_GIVES`: for a low Core, "it is your armour and your guard").
+    - The hours of a road (`BattleView.HOURS`, `hour()`, meta `bv_hour` on the arena): stages 1 to 3 by day,
+      4 to 6 at dusk, 7 to 9 at night (the sky band shows stars when the lit sky is dark), a fight with a boss
+      at the boss's own dark hour; hunts, the rival and the Spire by day. The light is the arena's
+      `self_modulate` (its backdrop, sky and shadows; never the fighters) and goes to the result's picture
+      as `info.light`.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
