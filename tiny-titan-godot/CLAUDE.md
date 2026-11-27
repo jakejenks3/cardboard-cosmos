@@ -1826,8 +1826,10 @@ is the Windows handoff.
       the gauge gains `GAUGE_PERFECT` (12) and the hero gets `PERFECT_FOCUS` (1) stack of Focus (the riposte:
       his next hit is a sure crit). Engine: in `RpgBattle._foe_act`, event `perfect {src, chip,
       guard}`, `summary.perfect`. Screen: a "PERFECT GUARD" banner, sound "perfect", a hit stop, hint
-      "perfect". AUTO (the heuristic) was not changed: it guards a charged blow only when the blow is
-      dangerous, so it lands some perfect guards and a hand-played fight more.
+      "perfect". AUTO (the heuristic) was not changed: it guards a charged blow when the blow is
+      dangerous, and so lands about two perfect guards in a boss fight (simulated, the reference hero, all
+      eight bosses: wins 70 to 98%, ending on 16 to 31% HP). A hero made to guard EVERY charged blow does no
+      better and on two bosses worse: the perfect guard is a bonus for reading the fight, not a winning trick.
       The balance bands (rpg_sim_test) did not move. `saved.rpg.tally` = {perfect, breaks} (`RpgSave.TALLY`,
       added up by `RpgSave.finish`, won or lost) feeds two more feats: Stone Wall and Breaker (14 ladders).
       Walkthrough `tests/shots/perfect.gd` (year data). The news card is `NEWS_ID` "news_2".
