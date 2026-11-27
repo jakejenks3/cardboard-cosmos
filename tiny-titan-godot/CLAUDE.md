@@ -1790,7 +1790,9 @@ is the Windows handoff.
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
       at a row's end; walked stones are green, the stretch to the next place marches in gold, a marker hops
       over it. `RoadMap._seen` / `_fresh` (static): a place that changed since the road was last drawn
-      lights up (coming back from a win). The ground takes its colour from the region's picture.
+      lights up (coming back from a win). The ground takes its colour from the region's picture. A few small
+      things of the region lie on it (`PROPS`, `SCENE_PROPS`, never on a place or its name). Wearing a piece of
+      gear makes the Gear page's doll hop and glint (`RealmGear.just_wore`).
     - `ui/rpg/loot_pop.gd` (`LootPop.open(title, icon, lines, colour, sound)`): whatever is opened (a
       training chest, a star chest, a cache, a hunt's prize, a NEW REGION: `RealmMap._greet_new_region`) gets
       the whole screen: it drops in, rattles, opens in light, its lines come one at a time; a tap shows all,

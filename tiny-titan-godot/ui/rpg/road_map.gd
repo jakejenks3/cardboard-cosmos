@@ -22,6 +22,29 @@ const MEDAL = 44.0
 const BOSS_MEDAL = 56.0
 const BOSS_ROW_H = 108.0
 const ICONS = {"battle": "", "elite": "skull", "cache": "chest_wood", "boss": "crown"}
+## Small things lying about the road, by region: each a few rects on a grid of 2 pixels,
+## [x, y, w, h, colour (0 light, 1 dark, 2 the region's accent)].
+const PROPS = {
+	"tuft": [[0, 2, 1, 2, 0], [2, 0, 1, 4, 0], [4, 1, 1, 3, 0]],
+	"flower": [[1, 0, 1, 1, 2], [0, 1, 3, 1, 2], [1, 2, 1, 1, 2], [1, 3, 1, 2, 0]],
+	"nut": [[0, 0, 3, 1, 0], [0, 1, 1, 1, 0], [2, 1, 1, 1, 0], [0, 2, 3, 1, 1]],
+	"plate": [[1, 0, 3, 1, 0], [0, 1, 5, 2, 0], [1, 3, 3, 1, 1], [2, 1, 1, 2, 1]],
+	"book": [[0, 0, 5, 1, 2], [0, 1, 5, 2, 0], [0, 3, 5, 1, 1]],
+	"gear": [[1, 0, 1, 3, 0], [0, 1, 3, 1, 0], [1, 1, 1, 1, 1]],
+	"reed": [[0, 0, 1, 2, 2], [0, 2, 1, 4, 0], [2, 2, 1, 4, 0], [2, 1, 1, 1, 2]],
+	"rock": [[1, 0, 3, 1, 0], [0, 1, 5, 2, 0], [0, 3, 5, 1, 1]],
+	"snow": [[0, 0, 6, 1, 2], [1, 1, 4, 1, 2]],
+	"pillar": [[0, 0, 4, 1, 0], [1, 1, 2, 4, 0], [0, 5, 4, 1, 1]],
+	"pebble": [[0, 0, 2, 1, 0], [0, 1, 2, 1, 1]],
+	"hold": [[0, 0, 3, 1, 2], [0, 1, 4, 2, 2], [1, 3, 2, 1, 1]],
+}
+## [the props of a region, its accent].
+const SCENE_PROPS = {
+	"rustyard": [["nut", "plate", "pebble"], "#c9793f"], "greenmile": [["tuft", "flower", "tuft"], "#ff9ad5"],
+	"chalk": [["hold", "pebble", "hold"], "#ffd23d"], "stacks": [["book", "book", "pebble"], "#c94a4a"],
+	"ironworks": [["gear", "nut", "pebble"], "#ff9a3c"], "marsh": [["reed", "tuft", "pebble"], "#8a5a3c"],
+	"stormspine": [["rock", "snow", "rock"], "#f1f5ff"], "titans_rest": [["pillar", "pebble", "rock"], "#ffe9a6"],
+}
 ## Redraws a second while something on the road moves.
 const FPS = 12.0
 
@@ -196,6 +219,7 @@ func _draw() -> void:
 		var ry = _rand(i, 7)
 		var c = base.lightened(0.12) if i % 3 == 0 else base.darkened(0.18)
 		draw_rect(Rect2(floor(rx * w / s) * s, floor(ry * h / s) * s, s * (2.0 if i % 5 == 0 else 1.0), s), c)
+	_draw_props(w, h, base)
 	draw_rect(Rect2(0, 0, w, 2), Pal.OUTLINE)
 	draw_rect(Rect2(0, h - 2, w, 2), Pal.OUTLINE)
 	# The path, place to place. Along a row it runs straight; down to the next row it swings out round the
@@ -224,6 +248,33 @@ func _draw() -> void:
 			var half = float(3 - r) * 2.0 + 1.0
 			draw_rect(Rect2(x - half - 1.0, y - float(3 - r) * 2.0 - 3.0, half * 2.0 + 2.0, 2), Pal.OUTLINE)
 			draw_rect(Rect2(x - half, y - float(3 - r) * 2.0 - 2.0, half * 2.0, 2), Pal.ACCENT)
+
+
+## A dozen small things of the region on the ground, in the same places every time, never on a place, its
+## stars or its name.
+func _draw_props(w: float, h: float, base: Color) -> void:
+	var row = SCENE_PROPS.get(_scene)
+	if row == null:
+		return
+	var kinds = row[0]
+	var cols = [base.lightened(0.3), base.darkened(0.3), Color(str(row[1]))]
+	var put = 0
+	for i in range(60):
+		if put >= 14:
+			break
+		var x = floor((10.0 + _rand(i, 21) * (w - 30.0)) / 2.0) * 2.0
+		var y = floor((8.0 + _rand(i, 23) * (h - 24.0)) / 2.0) * 2.0
+		var clear = true
+		for b in _places:
+			if absf(x - b.center.x) < 66.0 and y > b.center.y - 40.0 and y < b.center.y + 66.0:
+				clear = false
+				break
+		if not clear:
+			continue
+		for r in PROPS[str(kinds[i % kinds.size()])]:
+			var c = cols[int(r[4])]
+			draw_rect(Rect2(x + float(r[0]) * 2.0, y + float(r[1]) * 2.0, float(r[2]) * 2.0, float(r[3]) * 2.0), Color(c.r, c.g, c.b, 0.8))
+		put += 1
 
 
 ## A path of square stones along `pts`, leaving `lead` and `tail` free at its ends (the medals): bright

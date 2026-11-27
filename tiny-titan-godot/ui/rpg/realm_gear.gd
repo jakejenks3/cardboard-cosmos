@@ -38,6 +38,10 @@ const SHORT = {"head": "HEAD", "face": "FACE", "body": "BODY", "hands": "HANDS",
 const TILE_BOX = Vector2(46, 34)
 
 
+## A piece was put on a moment ago: the doll of the next drawing says so.
+static var just_wore = false
+
+
 static func fill(box: VBoxContainer, _screen) -> void:
 	var rpg = RpgUi.save()
 	var have = RpgUi.owned()
@@ -112,8 +116,16 @@ static func _worn(rpg: Dictionary, have: Dictionary) -> Control:
 	var stage = Stage.new()
 	stage.setup(col, 3)
 	well.add_child(stage)
-	well.add_child(RealmHero.hero_view(3))
+	var doll = RealmHero.hero_view(3)
+	well.add_child(doll)
 	row.add_child(well)
+	if just_wore:
+		# Something was just put on: he hops, and it glints.
+		just_wore = false
+		var cheer = func():
+			doll.hop()
+			BattleFx.at(well, "sparkle", well.size / 2.0, Color(1, 1, 1), 0.8, {"n": 10, "half": 24.0})
+		doll.ready.connect(cheer, CONNECT_DEFERRED | CONNECT_ONE_SHOT)
 
 	var right = Kit.vbox(4)
 	for s in RIGHT:
@@ -372,6 +384,7 @@ static func _item_card(sh, slot: String, id: String, rpg: Dictionary, b: Diction
 static func _wear(sh, slot: String, id: String) -> void:
 	if RpgUi.apply(RpgSave.equip_gear(RpgUi.save(), slot, id, RpgUi.owned().items)) and is_instance_valid(sh):
 		RpgSfx.play("equip")
+		just_wore = true
 		_fill_slot(sh, slot)
 
 
