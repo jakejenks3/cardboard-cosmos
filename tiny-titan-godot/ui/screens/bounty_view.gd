@@ -70,11 +70,22 @@ static func card(big: bool = false) -> Control:
 	main.add_child(kick)
 	var top = Kit.hbox(8)
 	top.add_child(Kit.clip(mon.name, 16 if not big else 18, null, true))
+	var pills = []
 	if cur.weak != null and not cur.defeated:
-		top.add_child(weak_pill(cur.weak))
+		pills.append(weak_pill(cur.weak))
 	if cur.get("weakPart") != null and not cur.defeated:
-		top.add_child(part_pill(str(cur.weakPart)))
-	main.add_child(top)
+		pills.append(part_pill(str(cur.weakPart)))
+	if pills.size() >= 2:
+		# Two weaknesses beside the name cut it short ("Snack Gob…"): they go on a line of their own.
+		main.add_child(top)
+		var under = Kit.hbox(8)
+		for pl in pills:
+			under.add_child(pl)
+		main.add_child(under)
+	else:
+		for pl in pills:
+			top.add_child(pl)
+		main.add_child(top)
 	if cur.defeated:
 		var done = Kit.hbox(6)
 		done.add_child(Kit.coin_pill(cur.coins, "Coins this bounty paid"))
