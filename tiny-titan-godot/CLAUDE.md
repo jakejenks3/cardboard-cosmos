@@ -1740,6 +1740,16 @@ is the Windows handoff.
       at the boss's own dark hour; hunts, the rival and the Spire by day. The light is the arena's
       `self_modulate` (its backdrop, sky and shadows; never the fighters) and goes to the result's picture
       as `info.light`.
+    - FEATS (`game/rpg/rpg_feats.gd`, `RpgFeats`, pure): `LADDERS` = 12 ladders of steps over one count each
+      (stars, stages, bosses, foes met = `RpgFeats.met`, weaknesses found, fighter level, skills learned, gear
+      upgrades, relics, the Spire's best floor, days trained and Might from the stat sheet). Nothing is
+      counted specially; only the steps claimed are stored: `saved.rpg.feats` = {ladder: steps claimed}
+      (kept by `RpgSave.parse`). `rows(rpg, sheet)` (the ones ready first, done ones last), `ready`, `tally`;
+      `RpgSave.claim_feat(rpg, id, sheet)` pays the step's ore once. Screens: the Hero page's FEATS section
+      (`realm_feats`; rows `feat` / `feat_state`, key `feat_claim`), a dot on the Hero tab and a row on the
+      front page (`realm_feat_notice`) while one can be claimed. Test: `tests/rpg_feats_test.gd`.
+    - The fight's top bar: Flee, the stage's name, the wave (only when there is more than one), the turn,
+      AUTO, x1 / x2, and the music's switch (`bv_key` "music", the same setting as the banner's key).
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names
@@ -1947,7 +1957,7 @@ godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
 godot --headless --path . --script res://tests/rpg_art_test.gd
 godot --headless --path . --script res://tests/rpg_icons_test.gd
-(and rpg_sfx_test, realm_music_test, rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
+(and rpg_sfx_test, realm_music_test, rpg_feats_test, rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
  rpg_content_test, rpg_sim_test, rpg_battle_ui_test, rpg_hub_test, rpg_pages_test, discipline_sheet_test)
 ```
 

@@ -60,6 +60,7 @@ static func empty() -> Dictionary:
 		"stages": {}, "starChests": {}, "caches": {},
 		"seen": {},
 		"statsSeen": {},
+		"feats": {},
 		"chests": {}, "hunt": {"date": "", "won": false}, "rival": {"week": "", "won": false},
 		"spire": {"best": 0},
 	}
@@ -182,6 +183,12 @@ static func parse(raw) -> Dictionary:
 		for k in stats_seen:
 			if RpgDefs.STATS.has(str(k)) and _int(stats_seen[k]) > 0:
 				out.statsSeen[str(k)] = clampi(_int(stats_seen[k]), 1, 99)
+	var feats = raw.get("feats")
+	if feats is Dictionary:
+		for k in feats:
+			var lad = RpgFeats.ladder(str(k))
+			if lad != null and _int(feats[k]) > 0:
+				out.feats[str(k)] = clampi(_int(feats[k]), 1, lad[4].size())
 	var chests = raw.get("chests")
 	if chests is Dictionary:
 		for k in chests:
@@ -504,6 +511,30 @@ static func claim_chest(rpg: Dictionary, chest) -> Dictionary:
 			out.chests.erase(k)
 	out.chests[date] = int(pay.kinds)
 	return _yes(out)
+
+
+## The next step of a feat's ladder is claimed: its ore is paid, once. `sheet` is the stat sheet (the days
+## trained and Might are counted from the log). Returns also "ore" (what was paid) and "name" (the step's).
+static func claim_feat(rpg: Dictionary, ladder_id: String, sheet = null) -> Dictionary:
+	if RpgFeats.ladder(ladder_id) == null:
+		return _no(rpg, "There is no such feat.")
+	for r in RpgFeats.rows(rpg, sheet):
+		if str(r.id) != ladder_id:
+			continue
+		if bool(r.done):
+			return _no(rpg, "Every step of this feat is claimed.")
+		if not bool(r.ready):
+			return _no(rpg, "Not yet: %d of %d." % [int(r.have), int(r.need)])
+		var out = copy(rpg)
+		if not (out.get("feats") is Dictionary):
+			out["feats"] = {}
+		out.feats[ladder_id] = int(r.step)
+		_give(out, {"ore": int(r.ore)})
+		var res = _yes(out)
+		res["ore"] = int(r.ore)
+		res["name"] = str(r.name)
+		return res
+	return _no(rpg, "There is no such feat.")
 
 
 ## A skill is learned (RpgSkills.can_learn says whether it may be, and why not).

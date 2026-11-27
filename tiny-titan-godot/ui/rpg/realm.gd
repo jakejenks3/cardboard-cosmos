@@ -259,6 +259,9 @@ func _build_hub(rpg: Dictionary) -> void:
 		var grew = _gains_row()
 		if grew != null:
 			add_child(grew)
+		var feat = _feat_row(rpg)
+		if feat != null:
+			add_child(feat)
 		var notices = _notices(rpg, can_learn)
 		if notices != null:
 			add_child(notices)
@@ -458,6 +461,27 @@ func _note_stats() -> void:
 	LootPop.open("Stronger", "muscle", lines, Pal.GOOD, "level")
 
 
+## A feat's step can be claimed: say so, and go to where it is (the Hero page). null when none can.
+func _feat_row(rpg: Dictionary):
+	var n = RpgFeats.ready(rpg, RpgUi.sheet())
+	if n <= 0:
+		return null
+	var row = Kit.row(go_page.bind("hero"), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
+	row.set_meta("realm_feat_notice", n)
+	row.set_meta("anchor_id", "realm_feat_notice")
+	if Kit.fingers:
+		row.custom_minimum_size.y = 44
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect("trophy" if Icons.has_icon("trophy") else "star", 16)))
+	h.add_child(Kit.vcenter(Kit.clip("%d feat%s done: claim the ore" % [n, "" if n == 1 else "s"], 14, null, true)))
+	var go = Kit.clip("Hero", 12, Pal.MUTED)
+	go.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	h.add_child(Kit.vcenter(go))
+	row.add(h)
+	return row
+
+
 ## The banner in one line, over the pages that are not the Map: the level and its bar, the ore.
 func _slim(rpg: Dictionary) -> Control:
 	var realm = RpgUi.color("realm")
@@ -642,6 +666,8 @@ static func page_dot(page: String, rpg: Dictionary, can_learn: Array) -> bool:
 	match page:
 		"skills":
 			return not can_learn.is_empty()
+		"hero":
+			return RpgFeats.ready(rpg, RpgUi.sheet()) > 0
 		"map":
 			return RealmMap.something_waits(rpg)
 	return false

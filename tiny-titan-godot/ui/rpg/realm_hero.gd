@@ -27,6 +27,7 @@ static func fill(box: VBoxContainer, _screen) -> void:
 	box.add_child(_traits(sheet))
 	box.add_child(_fight())
 	box.add_child(_boosts())
+	box.add_child(_feats(_screen))
 	box.add_child(_journey())
 
 
@@ -283,6 +284,81 @@ static func _num_tile(id: String, title: String, icon: String, col: Color, value
 	t.add(head)
 	t.add(Kit.muted_para(from, 11))
 	return t
+
+
+# ---------------------------------------------------------------------------
+# FEATS: the long goals (RpgFeats), each step claimed for ore
+# ---------------------------------------------------------------------------
+
+static func _feats(screen) -> Control:
+	var rpg = RpgUi.save()
+	var rows = RpgFeats.rows(rpg, RpgUi.sheet())
+	var tally = RpgFeats.tally(rpg)
+	var count = Kit.label("%d of %d" % [int(tally.claimed), int(tally.of)], 12, Pal.TEXT, true)
+	var sec = Kit.section("realm_feats", "FEATS", "trophy" if Icons.has_icon("trophy") else "star", Pal.ACCENT, count, Callable(), 6, 10)
+	sec.set_meta("feats_ready", RpgFeats.ready(rpg, RpgUi.sheet()))
+	for r in rows:
+		var ready = bool(r.ready)
+		var done = bool(r.done)
+		var col = Pal.GOOD if done else (Pal.ACCENT if ready else Pal.LINE)
+		var row = Kit.row(Callable(), col, col if (ready or done) else null, 7, 2, 0.14)
+		row.set_meta("feat", str(r.id))
+		row.set_meta("feat_state", "done" if done else ("ready" if ready else "open"))
+		var h = Kit.hbox(8)
+		h.add_child(Kit.vcenter(Icons.rect(str(r.icon) if Icons.has_icon(str(r.icon)) else "star", 24)))
+		var v = Kit.vbox(1)
+		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		v.add_child(Kit.clip(str(r.name), 13, null if not done else Pal.MUTED, true))
+		v.add_child(Kit.clip(str(r.words) if not done else "Every step claimed", 11, Pal.MUTED))
+		if not done:
+			var line = Kit.hbox(6)
+			var bar = Kit.bar(float(int(r.have)) / float(maxi(1, int(r.need))), col if ready else Pal.SECOND, 6)
+			bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.add_child(Kit.vcenter(bar))
+			line.add_child(Kit.vcenter(Kit.label("%s / %s" % [Xp.fmt_int(int(r.have)), Xp.fmt_int(int(r.need))], 11, Pal.MUTED, true)))
+			v.add_child(line)
+		h.add_child(v)
+		# The key's place is there whatever the state, so the rows are of one shape.
+		var slot = Control.new()
+		slot.custom_minimum_size = Vector2(92, 40 if Kit.fingers else 34)
+		slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		if ready:
+			var key = Kit.button("+%s ore" % Xp.fmt_int(int(r.ore)), "primary", Callable(), "sm")
+			key.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			key.set_meta("feat_claim", str(r.id))
+			key.set_meta("anchor_id", "feat_claim:" + str(r.id))
+			key.pressed.connect(RealmHero._claim_feat.bind(str(r.id), key))
+			slot.add_child(key)
+		elif not done:
+			var pay = RpgUi.ore_pill(int(r.ore))
+			pay.modulate.a = 0.6
+			var cc = CenterContainer.new()
+			cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			cc.add_child(pay)
+			slot.add_child(cc)
+		else:
+			var tick = CenterContainer.new()
+			tick.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tick.add_child(Kit.tick_box(true))
+			slot.add_child(tick)
+		h.add_child(slot)
+		row.add(h)
+		sec.add(row)
+	sec.add(Kit.muted_para("Long goals. Each step pays ore once; the next one is harder.", 11))
+	return sec
+
+
+static func _claim_feat(id: String, at) -> void:
+	var res = RpgSave.claim_feat(RpgUi.save(), id, RpgUi.sheet())
+	if bool(res.get("ok", false)) and at is Control and is_instance_valid(at):
+		Kit.burst(at, Pal.ACCENT, 22)
+		Kit.floater(at, "+%s ORE" % Xp.fmt_int(int(res.get("ore", 0))), Pal.ACCENT)
+		RpgSfx.play("first_clear")
+		RpgSfx.buzz(2)
+	RpgUi.apply(res, "%s claimed" % str(res.get("name", "Feat")) if bool(res.get("ok", false)) else "")
 
 
 # ---------------------------------------------------------------------------

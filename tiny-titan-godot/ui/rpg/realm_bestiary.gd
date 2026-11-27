@@ -15,28 +15,9 @@ const COLS = 3
 const TILE_W = 122
 
 
-## The ids of the foes met: {id: true}.
+## The ids of the foes met: {id: true} (RpgFeats.met: the same count as the Field Guide feat's).
 static func met(rpg: Dictionary) -> Dictionary:
-	var out = {}
-	var seen = rpg.get("seen", {})
-	if seen is Dictionary:
-		for k in seen:
-			out[str(k).split("#")[0]] = true
-	var stages = rpg.get("stages", {})
-	if stages is Dictionary:
-		for sid in stages:
-			if not RpgWorld.done(rpg, str(sid)):
-				continue
-			var st = RpgWorld.stage(str(sid))
-			if not (st is Dictionary):
-				continue
-			for wave in st.get("waves", []):
-				if not (wave is Array):
-					continue
-				for en in wave:
-					if en is Dictionary and str(en.get("foe", "")) != "":
-						out[str(en.foe)] = true
-	return out
+	return RpgFeats.met(rpg)
 
 
 ## The catalog in the order of the road: [{"region": id, "name", "foes": [rows]}], then what belongs to none.

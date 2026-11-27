@@ -120,6 +120,7 @@ var _top: HBoxContainer
 static var auto_kept: bool = false
 var auto: bool = false
 var _auto_key: Button = null
+var _music_key: Button = null
 var _auto_tw: Tween = null
 var _wave_label: Label
 var _turn_label: Label
@@ -313,7 +314,8 @@ func _build_top() -> void:
 	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_top.add_child(title)
 	_wave_label = Kit.label("", 11, Pal.MUTED, true)
-	_wave_label.custom_minimum_size = Vector2(64, 0)
+	# (A fight of one wave does not say "WAVE 1/1": its place goes to the stage's name.)
+	_wave_label.custom_minimum_size = Vector2(64 if B.get("waves", []).size() > 1 else 0, 0)
 	_wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_wave_label.clip_text = true
 	_wave_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -338,6 +340,12 @@ func _build_top() -> void:
 	_speed_key.set_meta("bv_key", "speed")
 	_speed_key.set_meta("anchor_id", "bv_key:speed")
 	_top.add_child(_speed_key)
+	# The music's own switch (the same one as on the Realm's banner).
+	_music_key = Kit.icon_button("music" if RpgSfx.music_on() else "music_off", _on_music, "Music", 40 if Kit.fingers else 32)
+	_music_key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_music_key.set_meta("bv_key", "music")
+	_music_key.set_meta("anchor_id", "bv_key:music")
+	_top.add_child(_music_key)
 
 
 func _build_arena() -> void:
@@ -840,7 +848,7 @@ func _fix_target() -> void:
 
 
 func _show_wave(n: int, of: int) -> void:
-	_wave_label.text = "WAVE %d/%d" % [maxi(1, n), maxi(1, of)]
+	_wave_label.text = ("WAVE %d/%d" % [maxi(1, n), maxi(1, of)]) if of > 1 else ""
 	_wave_label.set_meta("bv_wave", "%d/%d" % [maxi(1, n), maxi(1, of)])
 
 
@@ -1000,6 +1008,18 @@ func _on_act(what: String) -> void:
 				_refuse(_why("gauge", {"t": "ult"}))
 			else:
 				_do({"t": "ult", "target": target})
+
+
+## The music on or off (it does not skip what is playing either).
+func _on_music() -> void:
+	if _closed:
+		return
+	RpgSfx.set_music(not RpgSfx.music_on())
+	var on = RpgSfx.music_on()
+	_music_key.icon = Icons.tex("music" if on else "music_off", null, 2 if _music_key.custom_minimum_size.x >= 40 else 1)
+	if on and _held:
+		RpgSfx.tune("result" if _result != null else ("boss" if _has_boss() else "battle"), RpgSfx.region_of_scene(str(_opts.get("scene", ""))))
+	_say("Music on." if on else "Music off.")
 
 
 ## AUTO on or off. It does not skip what is playing: the hero's next move is simply his own, or the player's.
@@ -1868,6 +1888,9 @@ func _show_act(e: Dictionary) -> float:
 			Kit.pop(nd.view, 1.1, 0.26)
 			_fx("gather", _mid(who), Pal.DANGER if kind == "debuff" or kind == "summon" else Pal.GOOD, 0.4, {"n": 8})
 			_snd("foe_cast", 1.0, 0.06)
+			if kind == "debuff" and on == "hero":
+				# What it does to the hero is seen crossing the arena.
+				BattleFx.bolt(_fx_layer, _mid(who) + Vector2(-14, -6), _mid("hero"), Pal.ACCENT2, 0.24)
 		else:
 			var far = -38.0 if kind == "heavy" or kind == "bomb" else -26.0
 			var tw = nd.view.create_tween()
