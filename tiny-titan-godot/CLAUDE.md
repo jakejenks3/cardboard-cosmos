@@ -2023,6 +2023,8 @@ bands (a band instead of a weight in the Log tab, the band picker, the PT key on
 realm (the Realm: first visit, hub, training chest, the five pages, map, prep sheet, cache; year data),
 battle (a fight played by its keys to the result, a pack, the first boss; year data),
 realm_own (the Realm with the player's own log, from the file in REALM_OWN_SAVE; see THE REALM),
+realm_touch (the Realm under real finger events, as a phone sends them: tabs, the chest's moment, Go, Fight,
+  a move, the log, AUTO, the music key, a fight won by taps; year data, run it with --fingers),
 flows (the Realm's fights as a player goes through them: win and Next stage, the app closed mid-fight and
   Continue, flee, lose and Again, with the hub's state checked after each; year data),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
