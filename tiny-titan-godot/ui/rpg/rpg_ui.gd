@@ -116,6 +116,31 @@ static func ore_pill(amount) -> PanelContainer:
 	return p
 
 
+## The ore the player has, on the Realm's banner: it COUNTS UP from what it last showed when there is more
+## (a chest was opened, a feat claimed, a fight won), with a pop and a chime, so what was earned is seen
+## arriving. What it last showed is kept while a fight covers the page: the count is for when it is seen.
+static var _ore_shown = -1
+
+static func purse_pill(amount) -> PanelContainer:
+	var now = int(round(float(amount)))
+	var p = ore_pill(now)
+	if RpgSfx.battles > 0:
+		return p
+	var from = int(_ore_shown)
+	_ore_shown = now
+	if from >= 0 and now > from and not Kit.intro():
+		var labels = p.find_children("*", "Label", true, false)
+		if not labels.is_empty():
+			var l: Label = labels[0]
+			l.text = Xp.fmt_int(from)
+			var tw = p.create_tween()
+			tw.tween_interval(0.25)
+			tw.tween_method(func(v): l.text = Xp.fmt_int(int(round(v))), float(from), float(now), 0.7).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			tw.tween_callback(Kit.pop.bind(p, 1.2, 0.3))
+			tw.parallel().tween_callback(RpgSfx.play.bind("ore"))
+	return p
+
+
 ## A stat and its value as a chip in the colour of the school it feeds.
 static func stat_chip(stat_id: String, value) -> PanelContainer:
 	var school = str(RpgDefs.STAT_SCHOOL.get(stat_id, "plain"))

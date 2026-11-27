@@ -1771,6 +1771,10 @@ is the Windows handoff.
       (`saved.rpg.hints[NEWS_ID]`). For a later batch of news: new lines and a new id.
     - `BattleFx.flash` never strobes: at most one flash in `FLASH_GAP_MS` 450 and none past `FLASH_MAX`
       0.45 (flashing light several times a second is unpleasant for anyone and unsafe for some). Keep it so.
+    - `RpgUi.purse_pill(amount)` (the banner's and the slim line's ore): counts up from what it last
+      showed when there is more, not while a fight covers the page (`RpgSfx.battles`). A page of the Realm
+      fades in only when its tab was just picked (`_page_fresh`). `BattleView.speed_kept` (static): x1 / x2
+      as picked last, for the next fight of the visit.
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

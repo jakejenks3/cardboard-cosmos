@@ -53,6 +53,7 @@ static var _opened_now = {}
 var _count_rows = []
 var _count_tail = []
 var _count_said = -1
+var _page_fresh = false
 
 
 func _ready() -> void:
@@ -108,6 +109,8 @@ func build() -> void:
 	if not bool(rpg.get("opened", false)):
 		_build_first()
 		set_process(true)
+		if RpgSfx.battles == 0:
+			RpgSfx.tune("hub")
 		return
 	set_process(false)
 	_build_hub(rpg)
@@ -279,6 +282,10 @@ func _build_hub(rpg: Dictionary) -> void:
 	box.set_meta("section", "realm_" + str(RpgUi.page))
 	_fill_page(box, str(RpgUi.page))
 	add_child(box)
+	if _page_fresh:
+		# A page just picked comes in softly (only then: a redraw of the same page must not blink).
+		_page_fresh = false
+		Kit.fade_in(box, 0.18)
 
 
 ## Another page of the hub (also for the pages themselves: `screen.go_page("gear")`).
@@ -287,6 +294,7 @@ func go_page(page: String) -> void:
 		return
 	RpgSfx.play("select")
 	RpgUi.page = page
+	_page_fresh = true
 	rebuild()
 
 
@@ -319,7 +327,7 @@ static func has_fill(sc) -> bool:
 
 func _banner(rpg: Dictionary) -> Control:
 	var realm = RpgUi.color("realm")
-	var sec = Kit.section("realm_banner", "THE IRONWILD", "realm", realm, RpgUi.ore_pill(int(rpg.get("ore", 0))), Callable(), 8, 10)
+	var sec = Kit.section("realm_banner", "THE IRONWILD", "realm", realm, RpgUi.purse_pill(int(rpg.get("ore", 0))), Callable(), 8, 10)
 	var h = Kit.hbox(10)
 
 	var well = PanelContainer.new()
@@ -576,7 +584,7 @@ func _slim(rpg: Dictionary) -> Control:
 	var left = int(RpgUi.points().left)
 	if left > 0 and str(RpgUi.page) != "skills":
 		h.add_child(Kit.vcenter(Kit.pill("sp", str(left), Pal.ACCENT)))
-	h.add_child(Kit.vcenter(RpgUi.ore_pill(int(rpg.get("ore", 0)))))
+	h.add_child(Kit.vcenter(RpgUi.purse_pill(int(rpg.get("ore", 0)))))
 	row.add(h)
 	return row
 

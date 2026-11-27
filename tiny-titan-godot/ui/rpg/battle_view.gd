@@ -137,6 +137,8 @@ var _top: HBoxContainer
 ## AUTO: the hero plays by himself (RpgAi's heuristic) until the key is tapped again. It is kept from one
 ## fight to the next while the game is open (a stage run again, the next hunt).
 static var auto_kept: bool = false
+## The speed picked last (x1 or x2): the next fight of the visit opens at it.
+static var speed_kept: int = 1
 var auto: bool = false
 var _auto_key: Button = null
 var _music_key: Button = null
@@ -219,7 +221,7 @@ var _events: Array = []
 static func open(setup: Dictionary, opts: Dictionary = {}) -> BattleView:
 	var v = BattleView.new()
 	v._opts = opts
-	v.speed = 2 if int(opts.get("speed", 1)) >= 2 else 1
+	v.speed = 2 if int(opts.get("speed", speed_kept)) >= 2 else 1
 	v.instant = bool(opts.get("instant", false))
 	var stored = opts.get("resume")
 	v._resumed = stored is Dictionary and not stored.is_empty()
@@ -1115,6 +1117,7 @@ func _auto_step() -> void:
 
 func _on_speed() -> void:
 	speed = 1 if speed >= 2 else 2
+	speed_kept = speed
 	BattleFx.speed = float(speed)
 	_speed_key.text = "x%d" % speed
 	speed_changed.emit(speed)
