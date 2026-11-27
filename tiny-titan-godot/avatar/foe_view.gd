@@ -39,7 +39,7 @@ const CYCLE_MS = 920.0
 const BEAT_MS = 280.0
 ## A frame of a foe that hovers (half a round).
 const FRAME_MS = 460.0
-const HIT_MS = 450.0
+const HIT_MS = 380.0
 const FAINT_MS = 620.0
 ## How far a fainting foe sinks, in art pixels.
 const FAINT_SINK = 5.0
@@ -365,8 +365,10 @@ static func _hit_shake(t: float) -> float:
 	return lerpf(float(keys[i]), float(keys[i + 1]), f - float(i))
 
 
-## ... and its brightness: 4 -> 2 at the halfway point -> 1.
+## ... and its brightness: a white blink (3.2 for the first fifth), then 1.8 -> 1.
+## (It used to be 4 -> 2 -> 1 over 450 ms: the foe stood there as a white shape
+## for a quarter of a second and covered the hit drawn on it.)
 static func _hit_brightness(t: float) -> float:
-	if t < 0.5:
-		return lerpf(4.0, 2.0, t / 0.5)
-	return lerpf(2.0, 1.0, (t - 0.5) / 0.5)
+	if t < 0.2:
+		return 3.2
+	return lerpf(1.8, 1.0, (t - 0.2) / 0.8)

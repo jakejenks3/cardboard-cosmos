@@ -395,7 +395,7 @@ func _run() -> void:
 	var boosts = rpg_ui.boosts()
 	ok(not boosts.is_empty() and _metas(realm, "realm_boost") == boosts.map(func(b): return str(b.id)), "a row for every boost of the day (%d)" % boosts.size(), _metas(realm, "realm_boost"))
 	var b_row = _with(realm, "realm_boost")[0]
-	ok(_words(b_row).contains(str(boosts[0].name)) and _words(b_row).contains(str(boosts[0].text)) and (_words(b_row).contains("today") or _words(b_row).contains("until tomorrow")), "with its name, its effect and how long it lasts", _words(b_row))
+	ok(_words(b_row).contains(str(boosts[0].name)) and _words(b_row).contains(str(boosts[0].text)), "with its name and its effect (how long it lasts is in its sheet)", _words(b_row))
 	_tap(b_row)
 	await _frames(3)
 	var b_sheet = _sheet("realm_boost_sheet")

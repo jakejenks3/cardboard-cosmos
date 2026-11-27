@@ -325,6 +325,7 @@ class FoePlate extends Button:
 			_hp_label.clip_text = true
 			_put(_hp_label, w - 4.0 - num_w, 2, num_w, 15)
 		_bar = Bar.new(1.0, Pal.GOOD, 7)
+		_bar.ghost = true
 		_bar.size_flags_vertical = Control.SIZE_FILL
 		_put(_bar, 4, 19, inner, 10)
 		_pips = Pips.new(Pal.SECOND, 7, 9)
@@ -459,6 +460,7 @@ class HeroPlate extends Button:
 		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		top.add_child(Icons.rect("heart", 16))
 		_hp_bar = Bar.new(1.0, Pal.GOOD, 12)
+		_hp_bar.ghost = true
 		top.add_child(_hp_bar)
 		_hp_label = Kit.label("", 13, Pal.TEXT, true)
 		_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -815,8 +817,9 @@ class Arena extends Control:
 		return maxi(1, int(ceil((size.x - 0.5) / float(RealmScenes.W))))
 
 	## The y of the ground line the fighters stand on.
+	## (round(): a shake moves the arena by parts of a pixel, and Godot then keeps its height a hair off whole.)
 	func ground() -> float:
-		return size.y - float((RealmScenes.H - RealmScenes.ground_y(scene_id)) * k())
+		return round(size.y) - float((RealmScenes.H - RealmScenes.ground_y(scene_id)) * k())
 
 	func _draw() -> void:
 		var kk = float(k())

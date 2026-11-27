@@ -60,6 +60,21 @@ func _ready() -> void:
 	guard_shifts = true
 	super._ready()
 	App.rpg_changed.connect(rebuild)
+	RpgSfx.hold(1)
+
+
+func _exit_tree() -> void:
+	super._exit_tree()
+	RpgSfx.hold(-1)
+
+
+func _toggle_music() -> void:
+	RpgSfx.set_music(not RpgSfx.music_on())
+	if RpgSfx.music_on():
+		RpgSfx.tune("hub")
+		App.toast("Music on", "info", "music")
+	else:
+		App.toast("Music off", "info", "music_off")
 
 
 ## What the stat engine reads (plain data from App; nothing is changed).
@@ -96,6 +111,8 @@ func build() -> void:
 		return
 	set_process(false)
 	_build_hub(rpg)
+	if RpgSfx.battles == 0:
+		RpgSfx.tune("hub")
 
 
 # =============================================================================
@@ -186,7 +203,7 @@ func _paint_count() -> void:
 		e.row.modulate.a = 0.3 + 0.7 * minf(1.0, t * 2.5)
 	if not _count_over and at > _count_said:
 		_count_said = at
-		Sfx.tick()
+		RpgSfx.play("stat", 1.0 + 0.035 * float(at))
 	for c in _count_tail:
 		if is_instance_valid(c):
 			c.modulate.a = 1.0 if done else 0.0
@@ -330,7 +347,18 @@ func _banner(rpg: Dictionary) -> Control:
 	var power = int(round(RpgHero.power(RpgUi.hero())))
 	var pw = Kit.pill("power", "Power %s" % Xp.fmt_int(power), Pal.LIFT)
 	pw.set_meta("realm_power", power)
-	side.add_child(pw)
+	var prow = Kit.hbox(6)
+	prow.add_child(Kit.vcenter(pw))
+	var gap = Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prow.add_child(gap)
+	var on = RpgSfx.music_on()
+	var mk = Kit.icon_button("music" if on else "music_off", _toggle_music, "Music", 40 if Kit.fingers else 34)
+	mk.set_meta("realm_music", on)
+	mk.set_meta("anchor_id", "realm_music")
+	prow.add_child(mk)
+	side.add_child(prow)
 	var left = int(RpgUi.points().left)
 	var words = "%d skill point%s to spend" % [left, "" if left == 1 else "s"] if left > 0 else "Skills"
 	var sp = Kit.button(words, "primary" if left > 0 else "ghost", go_page.bind("skills"), "sm", "sp")
@@ -436,7 +464,7 @@ func _open_chest(date: String, row: Control, key: Control) -> void:
 	var pack = {"ore": int(pay.ore), "items": pay.items, "runes": RealmMap.new_runes(rpg, res.rpg)}
 	var lines = RealmMap.pack_lines(pack)
 	_opened_now[date] = " · ".join(PackedStringArray(lines))
-	Sfx.claim()
+	RpgSfx.play("chest")
 	RealmMap.loot_fx(row, key, lines)
 	RpgUi.apply(res)
 
@@ -452,15 +480,18 @@ func _boost_section(boosts: Array) -> Control:
 		none.set_meta("realm_no_boost", true)
 		sec.add(none)
 		return sec
-	var today = RpgUi.today()
+	# Two across, so the map under them is not a scroll away (a list of five rows took a third of the
+	# screen). A tile says the boost and what it does; a tap opens it in full, with how long it lasts.
+	var grid = Kit.grid(2, 6)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for b in boosts:
 		var col = color_of(str(b.get("school", "")))
-		var row = Kit.row(_open_boost.bind(b), col, col, 7, 0, 0.12)
+		var row = Kit.row(_open_boost.bind(b), col, col, 6, 0, 0.12)
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.set_meta("realm_boost", str(b.get("id", "")))
 		row.set_meta("anchor_id", "realm_boost:" + str(b.get("id", "")))
-		if Kit.fingers:
-			row.custom_minimum_size.y = 44
-		var h = Kit.hbox(8)
+		row.custom_minimum_size.y = 44 if Kit.fingers else 40
+		var h = Kit.hbox(6)
 		h.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		var icon_name = str(b.get("icon", "bolt"))
 		h.add_child(Kit.vcenter(Icons.rect(icon_name if Icons.has_icon(icon_name) else "bolt", 24)))
@@ -468,12 +499,12 @@ func _boost_section(boosts: Array) -> Control:
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(Kit.clip(str(b.get("name", "")), 14, null, true))
-		v.add_child(Kit.clip(str(b.get("text", "")), 12, Pal.MUTED))
+		v.add_child(Kit.clip(str(b.get("name", "")), 13, null, true))
+		v.add_child(Kit.clip(str(b.get("text", "")), 11, Pal.MUTED))
 		h.add_child(v)
-		h.add_child(Kit.vcenter(Kit.tag("until tomorrow" if str(b.get("until", "")) > today else "today", col, true, 10)))
 		row.add(h)
-		sec.add(row)
+		grid.add_child(row)
+	sec.add(grid)
 	return sec
 
 

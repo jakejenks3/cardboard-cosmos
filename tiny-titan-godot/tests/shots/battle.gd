@@ -36,8 +36,9 @@ func _open(stage_id: String, seed: int):
 
 func _wait_idle(bv) -> void:
 	var n = 0
+	# By the clock, not by frames: with no vsync a PC draws a thousand frames a second.
 	while is_instance_valid(bv) and bv.busy() and n < 400:
-		await ShotHelper.frames(tree, 3)
+		await ShotHelper.wait(tree, 0.05)
 		n += 1
 
 

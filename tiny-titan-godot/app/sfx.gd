@@ -224,6 +224,12 @@ func error() -> void:
 	buzz(2)
 
 
+## A sound of another catalog (the Realm's, ui/rpg/rpg_sfx.gd): rendered once
+## under `key`, played at `pitch` times its own.
+func play_notes(key: String, notes: Array, pitch: float = 1.0) -> void:
+	_play(key, notes, pitch)
+
+
 func _play(key: String, notes: Array, pitch: float = 1.0) -> void:
 	if not enabled or _players.is_empty():
 		return
@@ -239,7 +245,11 @@ func _play(key: String, notes: Array, pitch: float = 1.0) -> void:
 ## notes: [[frequency_hz, start_sec, duration_sec, wave, gain, opts?], ...]
 ## opts: {"to": the frequency the note glides to (a pop rises, a drop falls),
 ## "glide": the seconds the glide takes (the note's length when not given),
-## "attack": seconds to full level (0.01 when not given)}.
+## "attack": seconds to full level (0.01 when not given), "lp": for the wave
+## "noise" the cut-off of its low-pass in Hz (1800 when not given)}.
+## "noise" is a hiss made soft: white noise through a one-pole low-pass, the
+## same every time (its own little generator, no randf), for a thud, a whoosh,
+## a puff of dust. Its frequency is not used.
 func _render(notes: Array) -> AudioStreamWAV:
 	var total = 0.0
 	for n in notes:
@@ -259,6 +269,10 @@ func _render(notes: Array) -> AudioStreamWAV:
 		var glide = maxf(0.001, float(opts.get("glide", dur)))
 		var length = int((dur + 0.02) * RATE)
 		var ph = 0.0
+		var noisy = wave == "noise"
+		var nz = 22695477 + first * 7 + int(gain * 100000.0)
+		var lp_a = 1.0 - exp(-TAU * float(opts.get("lp", 1800.0)) / RATE)
+		var lp_y = 0.0
 		for i in range(length):
 			var idx = first + i
 			if idx >= count:
@@ -273,6 +287,11 @@ func _render(notes: Array) -> AudioStreamWAV:
 				env = gain * pow(0.0001 / gain, minf(1.0, (t - attack) / maxf(0.001, dur - attack)))
 			# The pitch glides from `freq` to `freq_to` (a ratio a second, so it
 			# sounds even); the phase is added up sample by sample.
+			if noisy:
+				nz = (nz * 1103515245 + 12345) & 0x7fffffff
+				lp_y += lp_a * ((float(nz) / 1073741824.0 - 1.0) - lp_y)
+				mix[idx] += lp_y * env
+				continue
 			var f = freq if freq_to == freq else freq * pow(freq_to / freq, minf(1.0, t / glide))
 			ph = fmod(ph + f / RATE, 1.0)
 			var w

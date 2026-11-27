@@ -338,13 +338,15 @@ static func _learn(id: String, at) -> bool:
 	var res = RpgSave.learn(RpgUi.save(), id, RpgUi.sheet(), RpgUi.days())
 	var ok = bool(res.get("ok", false))
 	if ok and at is Control and is_instance_valid(at):
-		Kit.burst(at, RpgUi.color(str(node.board)), 18)
+		Kit.burst(at, RpgUi.color(str(node.board)), 26)
+		Kit.pop(at, 1.2, 0.3)
 		Kit.floater(at, "LEARNED", Pal.ACCENT)
+		RpgSfx.buzz(2)
 	var before = fresh
 	if ok:
 		fresh = id
 	if RpgUi.apply(res, "Learned %s" % _ref_name(node)):
-		Sfx.level_up()
+		RpgSfx.play("learn")
 		return true
 	fresh = before
 	return false

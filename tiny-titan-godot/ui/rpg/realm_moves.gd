@@ -323,6 +323,7 @@ static func _equip(kind: String, slot: int, id: String, sh) -> void:
 		_:
 			res = RpgSave.equip_move(rpg, slot, id)
 	if RpgUi.apply(res) and sh != null and is_instance_valid(sh):
+		RpgSfx.play("equip")
 		sh.close()
 
 

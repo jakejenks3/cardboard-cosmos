@@ -256,7 +256,7 @@ func _layout_wrong(v) -> Array:
 		var fv = v._foes[id].view
 		# (where it stands, not where a lunge or a pop has it for a moment)
 		if absf(arena_box.position.y + v._foes[id].home.y + fv.feet_y() - ground_y) > 0.5:
-			bad.append("%s is not on the ground line" % str(id))
+			bad.append("%s is not on the ground line (home %s, size %s, feet %s, ground %s, arena %s)" % [str(id), str(v._foes[id].home), str(fv.size), str(fv.feet_y()), str(arena.ground()), str(arena.size)])
 	if v._hero_plate.get_global_rect().position.y < v._timeline.get_global_rect().end.y - 0.5 or v._timeline.global_position.y < arena_box.end.y - 0.5:
 		bad.append("the slots under the arena overlap")
 	return bad
@@ -487,7 +487,8 @@ func _run() -> void:
 	var nx = _one(r2, "br_key", "next")
 	ok(nx != null and Rect2(_one(r2, "br_key", "again").global_position, _one(r2, "br_key", "again").size).is_equal_approx(again_rect) and Rect2(_one(r2, "br_key", "back").global_position, _one(r2, "br_key", "back").size).is_equal_approx(back_rect)
 		and nx.global_position.x > again_rect.end.x and nx.get_global_rect().end.x <= W + 0.5, "Next stage in the third place; Again and Back where they are without it", [again_rect, back_rect])
-	ok(_all(r2).filter(func(c): return c is Control and c.is_visible_in_tree() and (c.global_position.x < -0.5 or c.global_position.x + c.size.x > W + 0.5)).is_empty(), "the result is no wider than the column")
+	var wide2 = _all(r2).filter(func(c): return c is Control and c.is_visible_in_tree() and (c.global_position.x < -0.5 or c.global_position.x + c.size.x > W + 0.5))
+	ok(wide2.is_empty(), "the result is no wider than the column", wide2.map(func(c): return "%s %s %d..%d" % [c.get_class(), str(c.get_script().resource_path.get_file()) if c.get_script() != null else "", int(c.global_position.x), int(c.global_position.x + c.size.x)]))
 	await _leave(v, "next", "three foes")
 	await _shut(null)
 

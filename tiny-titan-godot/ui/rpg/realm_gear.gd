@@ -371,16 +371,19 @@ static func _item_card(sh, slot: String, id: String, rpg: Dictionary, b: Diction
 
 static func _wear(sh, slot: String, id: String) -> void:
 	if RpgUi.apply(RpgSave.equip_gear(RpgUi.save(), slot, id, RpgUi.owned().items)) and is_instance_valid(sh):
+		RpgSfx.play("equip")
 		_fill_slot(sh, slot)
 
 
 static func _upgrade(sh, slot: String, id: String, at) -> void:
 	var res = RpgSave.upgrade(RpgUi.save(), id, "", RpgUi.owned().items)
 	if bool(res.get("ok", false)) and at is Control and is_instance_valid(at):
-		Kit.burst(at, Pal.ACCENT, 12)
+		Kit.burst(at, Pal.ACCENT, 18)
+		Kit.pop(at, 1.15, 0.26)
 		Kit.floater(at, "+%d" % (_plus_of(RpgUi.save(), id) + 1), Pal.ACCENT)
+		RpgSfx.buzz(2)
 	if RpgUi.apply(res) and is_instance_valid(sh):
-		Sfx.claim()
+		RpgSfx.play("upgrade")
 		_fill_slot(sh, slot)
 
 
@@ -395,6 +398,7 @@ static func open_runes(item_id: String, parent, slot: String) -> void:
 	var in_it = str(rpg.get("socket", {}).get(item_id, ""))
 	var done = func(rune_id: String):
 		if RpgUi.apply(RpgSave.socket(RpgUi.save(), item_id, rune_id)):
+			RpgSfx.play("socket")
 			sh.close()
 			if parent != null and is_instance_valid(parent):
 				RealmGear._fill_slot(parent, slot)
@@ -511,6 +515,7 @@ static func open_relics(slot: int) -> void:
 	sh.box.set_meta("relic_sheet", slot)
 	var done = func(id: String):
 		if RpgUi.apply(RpgSave.equip_relic(RpgUi.save(), slot, id)):
+			RpgSfx.play("equip")
 			sh.close()
 	var found = _found_relics(rpg)
 	if found.is_empty():
@@ -633,6 +638,7 @@ static func _pet_tiles(mine: Array, picked: String, after: Callable) -> Control:
 
 static func _pick_pet(id: String, after: Callable) -> void:
 	if RpgUi.apply(RpgSave.equip_pet(RpgUi.save(), id, RpgUi.owned().pets)) and after.is_valid():
+		RpgSfx.play("pet")
 		after.call()
 
 
@@ -724,6 +730,7 @@ static func open_belt(slot: int) -> void:
 	sh.box.set_meta("belt_sheet", slot)
 	var done = func(id: String):
 		if RpgUi.apply(RpgSave.set_belt(RpgUi.save(), slot, id)):
+			RpgSfx.play("equip")
 			sh.close()
 	var items = RpgItems.all().duplicate()
 	var stocked = items.filter(func(it): return RealmGear._stock(rpg, str(it.id)) > 0)
@@ -790,7 +797,8 @@ static func _ask_scrap(rune_id: String) -> void:
 		return
 	var pay = RpgLoot.scrap_ore(rune)
 	var go = func():
-		RpgUi.apply(RpgSave.scrap_rune(RpgUi.save(), rune_id), "+%d ore" % pay)
+		if RpgUi.apply(RpgSave.scrap_rune(RpgUi.save(), rune_id), "+%d ore" % pay):
+			RpgSfx.play("ore")
 	Kit.confirm("Scrap this rune?", "%s. It is gone for good and pays %d ore." % [RpgGear.rune_words(rune), pay], "Scrap it", go, true)
 
 
@@ -837,4 +845,6 @@ static func _buy(id: String, at) -> void:
 	var res = RpgSave.buy_item(RpgUi.save(), id, 1)
 	if bool(res.get("ok", false)) and at is Control and is_instance_valid(at):
 		Kit.floater(at, "+1", Pal.GOOD)
+		Kit.pop(at, 1.12, 0.2)
+		RpgSfx.play("buy")
 	RpgUi.apply(res)

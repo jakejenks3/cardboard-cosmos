@@ -14,6 +14,11 @@ var _tween = null
 ## Every few seconds a glint runs along the filled part (set by Kit.bar on thick bars).
 var glint: bool = false
 var _glint_wait: float = 2.0
+## A pale trail lingers where the bar just was when the value drops, then
+## drains after it (a fighter's HP in the Realm: how much one hit took).
+var ghost: bool = false
+var _ghost: float = 0.0
+var _ghost_tw = null
 var _glint_age: float = -1.0
 const GLINT_EVERY = 4.2
 const GLINT_TIME = 0.5
@@ -61,6 +66,17 @@ func set_value(v: float, animate: bool = true, dur: float = 0.6) -> void:
 	value = clampf(v, 0.0, 1.0)
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
+	if ghost:
+		if _ghost_tw != null and _ghost_tw.is_valid():
+			_ghost_tw.kill()
+		if animate and is_inside_tree() and value < _shown - 0.001:
+			_ghost = maxf(_ghost, _shown)
+			_ghost_tw = create_tween()
+			_ghost_tw.tween_interval(0.3)
+			_ghost_tw.tween_method(_set_ghost, _ghost, value, 0.34).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			dur = minf(dur, 0.1)
+		else:
+			_ghost = 0.0
 	if animate and is_inside_tree():
 		_tween = create_tween()
 		_tween.tween_method(_set_shown, _shown, value, dur).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -80,6 +96,11 @@ func shown() -> float:
 
 func _set_shown(v: float) -> void:
 	_shown = v
+	queue_redraw()
+
+
+func _set_ghost(v: float) -> void:
+	_ghost = v
 	queue_redraw()
 
 
@@ -105,6 +126,10 @@ func _draw() -> void:
 		var ew = minf(floor(inner.size.x * clampf(extra, 0.0, 1.0) / s) * s, inner.size.x - fw)
 		if ew > 0.0:
 			draw_rect(Rect2(inner.position + Vector2(fw, 0), Vector2(ew, inner.size.y)), Pal.with_alpha(color, 0.42))
+	if ghost and _ghost > _shown + 0.001:
+		var gw = clampf(floor(inner.size.x * _ghost / s) * s, 0.0, inner.size.x)
+		if gw > fw:
+			draw_rect(Rect2(inner.position + Vector2(fw, 0), Vector2(gw - fw, inner.size.y)), Pal.with_alpha(Pal.TEXT, 0.9))
 	if mark >= 0.0:
 		var mx = clampf(floor(inner.size.x * mark / s) * s, 0.0, inner.size.x - s)
 		draw_rect(Rect2(inner.position.x + mx, 0, s, h), Pal.TEXT)

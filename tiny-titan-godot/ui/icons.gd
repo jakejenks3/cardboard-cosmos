@@ -266,6 +266,48 @@ const EMOJI = {
 }
 
 const DATA = {
+	"music": {
+		"pal": {"a": "#36d6f2", "b": "#b8f3ff"},
+		"rows": [
+			"................",
+			"......ooooooooo.",
+			".....oaaaaaaaao.",
+			".....oabbbbbbao.",
+			".....oaoooooaao.",
+			".....oao...oaao.",
+			".....oao...oaao.",
+			".....oao...oaao.",
+			".....oao...oaao.",
+			"..ooooao.oooaao.",
+			".oaaaaaooaaaaao.",
+			".oabaaaooabaaao.",
+			".oaaaaaooaaaaao.",
+			"..oaaao..oaaao..",
+			"...ooo....ooo...",
+			"................",
+		],
+	},
+	"music_off": {
+		"pal": {"a": "#7d86a8", "b": "#a9b1cc", "r": "#ff5a6e"},
+		"rows": [
+			"..............o.",
+			"......ooooooooro",
+			".....oaaaaaaoro.",
+			".....oabbbboroo.",
+			".....oaooooroao.",
+			".....oao.oroaao.",
+			".....oaoorooaao.",
+			".....oaoro.oaao.",
+			".....ooro..oaao.",
+			"..ooooro.oooaao.",
+			".oaaoroooaaaaao.",
+			".oaoroaooabaaao.",
+			".ooroaaooaaaaao.",
+			".oroaao..oaaao..",
+			"oroooo....ooo...",
+			".o..............",
+		],
+	},
 	"lift": {
 		"pal": {"a": "#d95926", "b": "#ff9a66", "c": "#963613", "s": "#aab4d0", "t": "#e6ecfa"},
 		"rows": [

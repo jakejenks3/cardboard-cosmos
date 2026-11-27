@@ -62,6 +62,17 @@ const PET_PX = 40.0
 ## Where the foes' part of the arena begins.
 const FOE_X0 = 124.0
 const POSES = ["strike", "kick", "guard", "cast", "hurt", "pull", "flex"]
+## How far the hero steps in to strike (never under a foe's plate).
+const STEP_IN = 26.0
+## Under this share of his HP the arena's edge beats red.
+const LOW_HP = 0.3
+## The air of each scene (BattleFx.Ambient): [what drifts, its colour, how many].
+const AMBIENT = {
+	"rustyard": ["dust", "#e0c296", 14], "greenmile": ["leaves", "#c9e88f", 10], "chalk": ["snow", "#f4f1e6", 12],
+	"stacks": ["dust", "#f0dfa8", 12], "ironworks": ["embers", "#ff9a3c", 16], "marsh": ["fireflies", "#d8f57a", 12],
+	"stormspine": ["rain", "#bcd3f2", 26], "titans_rest": ["stars", "#ffe9a6", 12], "spire": ["stars", "#d6e4ff", 16],
+	"hunt": ["leaves", "#f2b46a", 8], "rival": ["embers", "#ff7ad9", 12],
+}
 ## Statuses whose name says what a unit IS ("is Exposed"); the others it HAS ("has Bleed").
 const STATES = ["pumped", "weakened", "braced", "exposed", "hasted", "slowed", "stun", "steady", "marked"]
 
@@ -103,6 +114,7 @@ var _turn_label: Label
 var _speed_key: Button
 var _arena: BattleWidgets.Arena
 var _arena_home: Vector2 = Vector2.ZERO
+var _arena_size: Vector2 = Vector2.ZERO
 var _foe_layer: Control
 var _fx_layer: Control
 var _hero_view: HeroView = null
@@ -135,6 +147,25 @@ var _act_dmg: int = 0
 var _pose_tw: Tween = null
 var _shake_tw: Tween = null
 var _moving: Array = []
+## The effects' own bookkeeping: the hero's body tween, the event being shown, what the action is, how many
+## numbers have risen from each unit in it, whether the gauge was already full.
+var _hero_tw: Tween = null
+var _ev_i: int = 0
+var _act_kind: String = ""
+var _act_who: String = ""
+var _act_first: bool = true
+var _hit_counts: Dictionary = {}
+var _word_counts: Dictionary = {}
+## Foes whose fall was already shown with the blow that felled them.
+var _ko_done: Dictionary = {}
+var _gauge_full: bool = false
+var _ambient: BattleFx.Ambient = null
+var _vignette: BattleFx.Vignette = null
+## Where in the arena's children something "behind the fighters" goes.
+var _back_index: int = 0
+var _shadow_at: Vector2 = Vector2(-9999, -9999)
+## True while this battle holds the Realm's music.
+var _held: bool = false
 var _pulse: float = 0.0
 var _still: bool = false
 var _events: Array = []
@@ -169,12 +200,21 @@ func _ready() -> void:
 		_battle_over()
 		return
 	_say("Your move." if _resumed else "The fight begins.")
+	BattleFx.speed = float(speed)
+	if not instant:
+		_held = true
+		RpgSfx.hold(1, true)
+		RpgSfx.tune("boss" if _has_boss() else "battle", RpgSfx.region_of_scene(str(_opts.get("scene", ""))))
 	if not _resumed:
 		var first = RpgBattle.opening(B)
 		if not first.is_empty():
 			var h = B.hero
 			_hero_plate.set_hp(_hp_before(first, "hero", int(h.hp)), int(h.hp_max), false)
-			_play(first)
+		if instant:
+			if not first.is_empty():
+				_play(first)
+		else:
+			_intro(first)
 	if _hero_view != null:
 		_warm()
 
@@ -270,6 +310,15 @@ func _build_top() -> void:
 func _build_arena() -> void:
 	_arena = BattleWidgets.Arena.new(str(_opts.get("scene", "")))
 	add_child(_arena)
+	var amb = AMBIENT.get(RealmScenes.scene_of(str(_opts.get("scene", ""))))
+	if amb != null and not instant:
+		_ambient = BattleFx.Ambient.new()
+		_ambient.mode = str(amb[0])
+		_ambient.color = Color(str(amb[1]))
+		_ambient.count = int(amb[2])
+		_ambient.set_meta("bv_ambient", str(amb[0]))
+		_arena.add_child(_ambient)
+		_back_index = 1
 	var hero = _opts.get("hero")
 	if hero is Dictionary and hero.get("state") is Dictionary and hero.get("profile") is Dictionary:
 		_hero_view = HeroView.new()
@@ -292,6 +341,10 @@ func _build_arena() -> void:
 	_fx_layer = Control.new()
 	_fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_arena.add_child(_fx_layer)
+	_vignette = BattleFx.Vignette.new()
+	_vignette.color = Pal.DANGER
+	_vignette.set_process(false)
+	_arena.add_child(_vignette)
 	if bool(_opts.get("tutorial", false)):
 		_hint = Kit.clip("", 12, Pal.TEXT, true)
 		_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -420,6 +473,7 @@ func _layout() -> void:
 	_kill(_shake_tw)
 	_rect(_arena, 0, y, w, arena_h)
 	_arena_home = _arena.position
+	_arena_size = _arena.size
 	y += arena_h + GAP
 	_rect(_timeline, PAD, y, inner, _tl_h)
 	y += _tl_h + GAP
@@ -439,6 +493,9 @@ func _layout() -> void:
 		_rect(_hint, 6, arena_h - 22.0, w - 12.0, 20)
 	# Banners stay over the fighters, however much sky is above them.
 	_rect(_fx_layer, 0, arena_h - ARENA_H, w, ARENA_H)
+	if _ambient != null:
+		_rect(_ambient, 0, 0, w, arena_h)
+	_rect(_vignette, 0, 0, w, arena_h)
 	_place_hero()
 	_place_foes()
 
@@ -453,8 +510,7 @@ func _place_hero() -> void:
 		_hero_home = Vector2(HERO_X, floor(ground - float(_hero_low) * k))
 		_hero_view.position = _hero_home
 		var cx = HERO_X + _hero_mid * k
-		_arena.shadows = [Rect2(cx - 14.0, ground - k, 28.0, k), Rect2(cx - 16.0, ground, 32.0, k)]
-		_arena.queue_redraw()
+		_hero_shadow()
 		_rect(_hero_mark, cx - 20.0, _hero_home.y + float(_hero_top) * k - 8.0, 40, 8)
 	if _pet_view != null:
 		_pet_view.size = Vector2(PET_PX, PET_PX)
@@ -464,6 +520,20 @@ func _place_hero() -> void:
 		var tall = (float(art.get("h", 0)) + 2.0) * pk
 		var feet = floor((PET_PX - tall) / 2.0) + tall - pk
 		_pet_view.position = Vector2(PET_X if _hero_view != null else 30.0, floor(ground - feet))
+
+
+## The hero's shadow lies under him wherever he is (he steps in to strike), smaller while he is in the air.
+func _hero_shadow() -> void:
+	if _hero_view == null:
+		return
+	_shadow_at = _hero_view.position
+	var k = float(HERO_SCALE)
+	var ground = _arena.ground()
+	var cx = _hero_view.position.x + _hero_mid * k
+	var up = clampf((_hero_home.y - _hero_view.position.y) / 24.0, 0.0, 1.0)
+	var half = floor(14.0 - 5.0 * up)
+	_arena.shadows = [Rect2(cx - half, ground - k, half * 2.0, k), Rect2(cx - half - 2.0, ground, half * 2.0 + 4.0, k)]
+	_arena.queue_redraw()
 
 
 ## Every foe on its column (its place, 0 to 2), standing on the ground line,
@@ -597,6 +667,8 @@ func _sync() -> void:
 	_hero_plate.set_hp(int(h.hp), int(h.hp_max), false)
 	_hero_plate.set_energy(int(h.en), int(h.en_max))
 	_hero_plate.set_gauge(float(h.get("gauge", 0.0)), false)
+	_gauge_full = float(h.get("gauge", 0.0)) >= RpgDefs.GAUGE_MAX
+	_low_hp(int(h.hp))
 	_hero_plate.set_statuses(_hero_statuses)
 	_show_wave(int(B.get("wave", 0)) + 1, B.get("waves", []).size())
 	_show_turn(int(h.get("turns", 0)))
@@ -788,6 +860,7 @@ func _on_act(what: String) -> void:
 
 func _on_speed() -> void:
 	speed = 1 if speed >= 2 else 2
+	BattleFx.speed = float(speed)
 	_speed_key.text = "x%d" % speed
 	speed_changed.emit(speed)
 
@@ -867,7 +940,11 @@ func _play(events: Array) -> void:
 	_events = events
 	_act_head = ""
 	_act_dmg = 0
-	for e in events:
+	_ko_done = {}
+	_dim_keys(true)
+	for i in range(events.size()):
+		var e = events[i]
+		_ev_i = i
 		if not (e is Dictionary):
 			continue
 		var secs = _show(e)
@@ -933,9 +1010,15 @@ func _end_playback() -> void:
 	_kill_moving()
 	_kill(_shake_tw)
 	_arena.position = _arena_home
+	if _arena_size.x > 0.0:
+		_arena.size = _arena_size
+	_foe_layer.modulate.a = 1.0
+	_dim_keys(false)
 	_sync()
 	if RpgBattle.over(B):
 		_battle_over()
+	elif bool(B.get("wait", false)):
+		_snd("turn")
 
 
 func _battle_over() -> void:
@@ -956,8 +1039,10 @@ func _kill_moving() -> void:
 	_moving = []
 	if _hero_view != null:
 		_hero_view.position = _hero_home
+		_hero_view.modulate = Color.WHITE
 	for id in _foes:
 		_foes[id].view.position = _foes[id].home
+		_foes[id].view.modulate = Color.WHITE
 
 
 func _say(text: String) -> void:
@@ -1033,13 +1118,191 @@ func _pose_rest() -> void:
 	_hero_view.animate = pose == ""
 
 
-func _shake() -> void:
+func _shake(power: float = 1.0) -> void:
 	_kill(_shake_tw)
 	_arena.position = _arena_home
+	if instant:
+		return
 	_shake_tw = create_tween()
 	for off in [Vector2(-6, 2), Vector2(5, -3), Vector2(-4, 3), Vector2(3, -2), Vector2(-2, 1)]:
-		_shake_tw.tween_property(_arena, "position", _arena_home + off, 0.035)
+		_shake_tw.tween_property(_arena, "position", _arena_home + (off * power).round(), 0.035)
 	_shake_tw.tween_property(_arena, "position", _arena_home, 0.05)
+
+
+# -----------------------------------------------------------------------------
+# Effects and sounds (BattleFx, RpgSfx). Nothing of this in an `instant` playback.
+# -----------------------------------------------------------------------------
+
+func _snd(name: String, pitch: float = 1.0, drift: float = 0.0) -> void:
+	if not instant:
+		RpgSfx.play(name, pitch, drift)
+
+
+## Where a unit's middle is, in the effect layer's own pixels (a fighter stands at its home there).
+func _mid(id: String) -> Vector2:
+	var off = _fx_layer.position
+	if id == "pet" and _pet_view != null:
+		return _pet_view.position + _pet_view.size / 2.0 - off
+	if id == "hero" or id == "pet":
+		if _hero_view == null:
+			return Vector2(58.0, _arena.ground() - 56.0) - off
+		var k = float(HERO_SCALE)
+		return Vector2(_hero_home.x + _hero_mid * k, _hero_home.y + float(_hero_top + _hero_low) * 0.5 * k) - off
+	var nd = _foes.get(id)
+	if nd == null:
+		return _fx_layer.size / 2.0
+	var lay = nd.view.layout()
+	return nd.home + lay.sprite.get_center() - off
+
+
+## The ground under a unit.
+func _feet(id: String) -> Vector2:
+	return Vector2(_mid(id).x, _arena.ground() - _fx_layer.position.y)
+
+
+## Just over a unit's head: its numbers start there.
+func _head(id: String) -> Vector2:
+	var off = _fx_layer.position
+	if id == "hero" or id == "pet":
+		if id == "pet" and _pet_view != null:
+			return _pet_view.position + Vector2(_pet_view.size.x / 2.0, -6.0) - off
+		if _hero_view == null:
+			return _mid(id) + Vector2(0, -50)
+		return Vector2(_hero_home.x + _hero_mid * float(HERO_SCALE), _hero_home.y + float(_hero_top) * float(HERO_SCALE) - 12.0) - off
+	var nd = _foes.get(id)
+	if nd == null:
+		return _fx_layer.size / 2.0
+	var lay = nd.view.layout()
+	return nd.home + Vector2(lay.sprite.get_center().x, lay.sprite.position.y + 6.0) - off
+
+
+func _fx(kind: String, pos: Vector2, color: Color, dur: float = 0.36, opts: Dictionary = {}):
+	if instant:
+		return null
+	return BattleFx.at(_fx_layer, kind, pos, color, dur, opts)
+
+
+func _num(id: String, text: String, color: Color, px: int = 2, big: bool = false) -> void:
+	if instant:
+		return
+	var n = int(_hit_counts.get(id, 0))
+	_hit_counts[id] = n + 1
+	# The hero's rise over his head (sky is there); a foe stands right under its plate, so its numbers start on
+	# its body and hop to the side.
+	var at = _head(id) if id == "hero" or id == "pet" else _mid(id) + Vector2(0, -12.0)
+	BattleFx.number(_fx_layer, at, text, color, px, n, big)
+
+
+## A word at a unit ("WEAK", a status): over the hero's head, across a foe's feet. Words of one action stack.
+func _word(id: String, text: String, color: Color, px: int = 1, delay: float = 0.0, _up: float = 0.0) -> void:
+	if instant:
+		return
+	var n = int(_word_counts.get(id, 0))
+	_word_counts[id] = n + 1
+	if id == "hero" or id == "pet":
+		BattleFx.word(_fx_layer, _head(id) + Vector2(0, -14.0 - 12.0 * float(n)), text, color, px, delay)
+	else:
+		BattleFx.word(_fx_layer, _mid(id) + Vector2(0, 20.0 - 12.0 * float(n)), text, color, px, delay, 12.0)
+
+
+## Something behind the fighters (over the backdrop and its motes): an ultimate's rays, the dark of a wind-up.
+func _behind(node) -> void:
+	if node != null and is_instance_valid(node) and node.get_parent() == _arena:
+		_arena.move_child(node, _back_index)
+
+
+func _dim_back(alpha: float, hold: float) -> void:
+	if not instant:
+		_behind(BattleFx.dim(_arena, alpha, hold))
+
+
+## A foe (or the hero, dx < 0) knocked back and returning.
+func _knock(id: String, dx: float) -> void:
+	if instant:
+		return
+	if id == "hero":
+		if _hero_view != null:
+			_kill(_hero_tw)
+			_hero_tw = BattleFx.knock(_hero_view, _hero_home, dx, 0.24)
+			if _hero_tw != null:
+				_moving.append(_hero_tw)
+		return
+	var nd = _foes.get(id)
+	if nd != null:
+		var tw = BattleFx.knock(nd.view, nd.home, dx, 0.22)
+		if tw != null:
+			_moving.append(tw)
+
+
+## True when the events still to come in this action have `dst` going down.
+func _ko_ahead(dst: String) -> bool:
+	for i in range(_ev_i + 1, _events.size()):
+		var e = _events[i]
+		if not (e is Dictionary):
+			continue
+		var t = str(e.get("t", ""))
+		if t == "act" or t == "turn":
+			return false
+		if t == "ko" and str(e.get("dst", "")) == dst:
+			return true
+	return false
+
+
+## How many hits of the action being shown are still to come on screen.
+func _hits_ahead(src: String) -> int:
+	var n = 0
+	for i in range(_ev_i + 1, _events.size()):
+		var e = _events[i]
+		if not (e is Dictionary):
+			continue
+		var t = str(e.get("t", ""))
+		if t == "act" or t == "turn":
+			break
+		if t == "dmg" and str(e.get("src", "")) == src and not bool(e.get("counter", false)):
+			n += 1
+	return n
+
+
+## The hero's body in an attack: a step in (a hop for a stomp, a blur for speed), a hold while the hits land,
+## and back. A thrown attack stays where it is.
+func _hero_attack(school: String, hits: int, thrown: bool) -> void:
+	if _hero_view == null or instant:
+		return
+	_kill(_hero_tw)
+	var k = float(speed)
+	var hold = minf(1.1, 0.26 + 0.3 * float(maxi(0, hits - 1))) / k
+	var home = _hero_home
+	_hero_view.position = home
+	var tw = _hero_view.create_tween()
+	if thrown:
+		tw.tween_property(_hero_view, "position", home + Vector2(-5, 0), 0.07 / k)
+		tw.tween_property(_hero_view, "position", home + Vector2(6, 0), 0.06 / k).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_interval(hold)
+	elif school == "legs":
+		tw.tween_property(_hero_view, "position", home + Vector2(STEP_IN * 0.55, -22.0), 0.1 / k).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(_hero_view, "position", home + Vector2(STEP_IN, 0), 0.07 / k).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(_hero_dust.bind(STEP_IN))
+		tw.tween_interval(hold)
+	elif school == "speed":
+		tw.tween_callback(_hero_blur)
+		tw.tween_property(_hero_view, "position", home + Vector2(STEP_IN + 8.0, 0), 0.05 / k)
+		tw.tween_interval(hold * 0.8)
+	else:
+		tw.tween_property(_hero_view, "position", home + Vector2(-6, 0), 0.05 / k)
+		tw.tween_property(_hero_view, "position", home + Vector2(STEP_IN, 0), 0.08 / k).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_interval(hold)
+	tw.tween_property(_hero_view, "position", home, 0.16 / k).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	_hero_tw = tw
+	_moving.append(tw)
+
+
+func _hero_dust(dx: float = 0.0) -> void:
+	_fx("dust", _feet("hero") + Vector2(dx, -2.0), Pal.MUTED, 0.3)
+
+
+func _hero_blur() -> void:
+	var at = _mid("hero")
+	_fx("streaks", at + Vector2(10, 0), RpgUi.color("speed"), 0.22, {"flip": true})
 
 
 ## The HP `id` had before the first of these events touched it.
@@ -1069,16 +1332,22 @@ func _show(e: Dictionary) -> float:
 		"dmg":
 			return _show_dmg(e)
 		"miss":
-			_float(_anchor(str(e.get("dst", ""))), "MISS", Pal.MUTED, 2)
+			var md = str(e.get("dst", ""))
+			_word(md, "MISS", Pal.MUTED, 2)
+			_knock(md, -10.0 if md == "hero" else 10.0)
+			_snd("miss", 1.0, 0.05)
 			_say("%s: a miss." % _act_head if _act_head != "" else "A miss.")
 			return 0.3
 		"heal":
 			var dst = str(e.get("dst", ""))
 			_set_hp(dst, int(e.get("hp", 0)))
 			if int(e.get("amount", 0)) > 0:
-				_float(_anchor(dst), "+%d" % int(e.amount), Pal.GOOD, 2)
+				_num(dst, "+%d" % int(e.amount), Pal.GOOD, 2)
+				_fx("heal", _mid(dst), Pal.GOOD, 0.6)
+				_tint(dst, Color(0.6, 1.5, 0.7))
+				_snd("heal")
 				_say("%s heal%s %d." % [_name(dst), "" if dst == "hero" else "s", int(e.amount)])
-				return 0.3
+				return 0.34
 			return 0.0
 		"status":
 			return _show_status(e)
@@ -1086,10 +1355,21 @@ func _show(e: Dictionary) -> float:
 			var dst2 = str(e.get("dst", ""))
 			_set_hp(dst2, int(e.get("hp", 0)))
 			var burn = str(e.get("id", "")) == "burn"
-			_float(_anchor(dst2), str(int(e.get("amount", 0))), Pal.ACCENT2 if burn else Pal.DANGER, 2)
-			var word = "burn" if burn else ("bleed" if str(e.get("id", "")) == "bleed" else "pay")
+			var bleed = str(e.get("id", "")) == "bleed"
+			_num(dst2, str(int(e.get("amount", 0))), Pal.ACCENT2 if burn else Pal.DANGER, 2)
+			if burn:
+				_fx("flame", _mid(dst2) + Vector2(0, 6), Pal.ACCENT2, 0.5)
+				_snd("burn", 1.0, 0.06)
+			else:
+				_fx("drops", _mid(dst2), Pal.DANGER, 0.45)
+				_snd("bleed", 1.0, 0.06)
+			if dst2 != "hero":
+				var tnd = _foes.get(dst2)
+				if tnd != null:
+					tnd.view.hit()
+			var word = "burn" if burn else ("bleed" if bleed else "pay")
 			_say("%s %s%s: %d." % [_name(dst2), word, "" if dst2 == "hero" else "s", int(e.get("amount", 0))])
-			return 0.28
+			return 0.3
 		"break":
 			return _show_break(str(e.get("dst", "")))
 		"recover":
@@ -1099,20 +1379,35 @@ func _show(e: Dictionary) -> float:
 				nd.unit["guard"] = int(e.get("guard", 0))
 				nd.plate.set_guard(int(e.get("guard", 0)), int(nd.unit.get("guard_max", 0)))
 				nd.plate.set_statuses(nd.unit.get("statuses", []), false)
+				_fx("up", _mid(str(e.get("dst", ""))), Pal.MUTED, 0.4)
+				_snd("recover")
 			return 0.0
 		"chip":
 			var nd2 = _foes.get(str(e.get("dst", "")))
 			if nd2 != null:
 				nd2.unit["guard"] = int(e.get("guard", 0))
 				nd2.plate.set_guard(int(e.get("guard", 0)), int(nd2.unit.get("guard_max", 0)))
+				_snd("chip", 1.0, 0.05)
 			return 0.12
 		"ko":
+			if _ko_done.has(str(e.get("dst", ""))):
+				_ko_done.erase(str(e.get("dst", "")))
+				return 0.0
 			return _show_ko(str(e.get("dst", "")))
 		"energy":
 			_hero_plate.set_energy(int(e.get("v", 0)), int(B.hero.en_max))
 			return 0.0
 		"gauge":
-			_hero_plate.set_gauge(float(e.get("v", 0.0)), true)
+			var gv = float(e.get("v", 0.0))
+			_hero_plate.set_gauge(gv, true)
+			var full = gv >= RpgDefs.GAUGE_MAX
+			if full and not _gauge_full and str(B.hero.get("ult", "")) != "":
+				_word("hero", "ULTIMATE READY", Pal.ACCENT, 1, 0.1, 10.0)
+				_fx("sparkle", _mid("hero"), Pal.ACCENT, 0.6, {"n": 8})
+				_snd("gauge_full")
+				if _act.has("ult") and not instant:
+					Kit.pop(_act["ult"], 1.12, 0.3)
+			_gauge_full = full
 			return 0.0
 		"intent":
 			var nd3 = _foes.get(str(e.get("who", "")))
@@ -1131,47 +1426,89 @@ func _show(e: Dictionary) -> float:
 				var now = RpgBattle.unit(B, who)
 				nd4.plate.set_known(now.get("weak", []).size() if now != null else 2, nd4.known)
 				nd4.view.hit()
+				_fx("ring", _mid(who), Pal.DANGER, 0.5)
+				_fx("gather", _mid(who), Pal.DANGER, 0.7)
 			var say = str(e.get("say", ""))
-			BattleWidgets.banner(_fx_layer, "IT CHANGES", Pal.DANGER, 0.6 / float(speed))
+			if not instant:
+				BattleWidgets.banner(_fx_layer, "IT CHANGES", Pal.DANGER, 0.6 / float(speed))
+				BattleFx.flash(_arena, Pal.DANGER, 0.3, 0.3)
+			_dim_back(0.5, 0.6)
+			_shake(1.2)
 			_say(say if say != "" else "%s changes." % _name(who))
-			Sfx.stage()
-			return 0.8
+			_snd("phase")
+			return 0.9
 		"summon":
+			var fresh = []
 			for u in e.get("units", []):
 				if u is Dictionary:
 					_clear_place(int(u.get("slot", 0)), str(u.get("id", "")))
 					_add_foe(u)
+					fresh.append(str(u.get("id", "")))
 			_place_foes()
+			_enter_foes(fresh)
+			_snd("summon")
 			_say("%s calls for help." % _name(str(e.get("by", ""))) if str(e.get("by", "")) != "" else "More foes arrive.")
-			return 0.4
+			return 0.45
 		"wave":
 			return _show_new_wave(e)
 		"say":
 			_say(str(e.get("text", "")))
 			return 0.5
 		"survive":
-			_set_hp(str(e.get("dst", "")), int(e.get("hp", 1)))
-			_say("%s hang%s on!" % [_name(str(e.get("dst", ""))), "" if str(e.get("dst", "")) == "hero" else "s"])
-			return 0.4
+			var sd = str(e.get("dst", ""))
+			_set_hp(sd, int(e.get("hp", 1)))
+			_word(sd, "HANGS ON!", Pal.ACCENT, 2)
+			_fx("ring", _mid(sd), Pal.ACCENT, 0.5)
+			if not instant:
+				BattleFx.flash(_arena, Pal.ACCENT, 0.3, 0.3)
+			_snd("survive")
+			_say("%s hang%s on!" % [_name(sd), "" if sd == "hero" else "s"])
+			return 0.5
 		"interrupt":
-			_say("%s is interrupted." % _name(str(e.get("dst", ""))))
-			return 0.25
-		"adapt":
-			_say("%s adapts: it now resists %s." % [_name(str(e.get("dst", ""))), _schools([str(e.get("school", ""))])])
+			var idst = str(e.get("dst", ""))
+			_word(idst, "INTERRUPTED", Pal.ACCENT2, 1)
+			_fx("spark", _mid(idst), Pal.ACCENT2, 0.3)
+			_snd("interrupt")
+			_say("%s is interrupted." % _name(idst))
 			return 0.3
+		"adapt":
+			var adst = str(e.get("dst", ""))
+			_fx("shield", _mid(adst), RpgUi.color(str(e.get("school", ""))), 0.5)
+			_snd("adapt")
+			_say("%s adapts: it now resists %s." % [_name(adst), _schools([str(e.get("school", ""))])])
+			return 0.35
 		"end":
 			return _show_end(bool(e.get("win", false)))
 	return 0.0
 
 
+func _tint(id: String, color: Color) -> void:
+	if instant:
+		return
+	if id == "hero":
+		if _hero_view != null:
+			BattleFx.tint(_hero_view, color, 0.3)
+		return
+	var nd = _foes.get(id)
+	if nd != null:
+		BattleFx.tint(nd.view, color, 0.3)
+
+
 func _set_hp(id: String, hp: int) -> void:
 	if id == "hero":
 		_hero_plate.set_hp(hp, int(B.hero.hp_max), true)
+		_low_hp(hp)
 		return
 	var nd = _foes.get(id)
 	if nd != null:
 		nd.unit["hp"] = hp
 		nd.plate.set_hp(hp, int(nd.unit.get("hp_max", 1)), true)
+
+
+## The red edge that beats while the hero is nearly down.
+func _low_hp(hp: int) -> void:
+	if _vignette != null:
+		_vignette.set_on(hp > 0 and float(hp) < LOW_HP * float(B.hero.hp_max) and not RpgBattle.over(B))
 
 
 func _show_act(e: Dictionary) -> float:
@@ -1180,79 +1517,143 @@ func _show_act(e: Dictionary) -> float:
 	var move = str(e.get("name", ""))
 	var on = str(e.get("target", ""))
 	_act_dmg = 0
+	_act_kind = kind
+	_act_who = who
+	_act_first = true
+	_hit_counts = {}
+	_word_counts = {}
 	if who == "hero":
 		match kind:
 			"guard":
 				_guard_shown = true
 				_pose_rest()
 				_act_head = "You guard"
+				_fx("shield", _mid("hero") + Vector2(10, 0), RpgUi.color("grit"), 0.5)
+				_snd("guard")
 				_say("You guard: the next hits are cut down.")
-				return 0.3
+				return 0.34
 			"item":
 				_pose("cast", 0.4)
 				_act_head = "You use %s" % move
+				_fx("sparkle", _mid("hero"), Pal.ACCENT2, 0.5)
+				_snd("item")
 				_say(_act_head + ".")
-				return 0.3
+				return 0.34
 			"flee":
+				_snd("flee")
+				if _hero_view != null and not instant:
+					_kill(_hero_tw)
+					_hero_tw = _hero_view.create_tween()
+					_hero_tw.tween_property(_hero_view, "position", _hero_home + Vector2(-170, 0), 0.3 / float(speed)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+					_hero_dust()
 				_say("You get away.")
-				return 0.2
+				return 0.3
 			"lost":
 				_act_head = "You lose your turn"
+				_fx("stars", _head("hero") + Vector2(0, 6), Pal.ACCENT, 0.7, {"half": 12.0})
+				_snd("stun")
 				_say("You are %s and lose your turn." % move.to_lower() if move != "" else "You lose your turn.")
-				return 0.45
+				return 0.5
 		var school = str(e.get("school", "plain"))
-		_pose(str(RpgDefs.SCHOOL_POSE.get(school, "strike")), 0.42)
-		_lunge(_hero_view, _hero_home, 16.0)
 		var row = RpgBattle.move_row(B, str(e.get("id", ""))) if kind != "strike" else null
-		var aimed = row == null or str(row.get("target", "foe")) == "foe"
+		var aim = "foe" if row == null else str(row.get("target", "foe"))
+		var aimed = aim == "foe"
 		var to = (" on %s" % _name(on)) if (aimed and on != "" and on != "hero" and _foes.has(on)) else ""
+		var hits = _hits_ahead("hero")
+		var thrown = BattleFx.THROWN.has(school)
+		var color = RpgUi.color(school)
+		var wait = 0.28
+		if aim == "self" or hits <= 0:
+			# Nothing is struck: a call, a breath, a stance.
+			_pose(str(RpgDefs.SCHOOL_POSE.get(school, "cast")), 0.5)
+			_fx("gather", _mid("hero"), color, 0.45)
+			_fx("aura", _feet("hero"), color, 0.6, {"half": 30.0})
+			_snd("foe_cast", 1.4, 0.04)
+		else:
+			_pose(str(RpgDefs.SCHOOL_POSE.get(school, "strike")), 0.5 + 0.3 * float(maxi(0, hits - 1)))
+			_hero_attack(school, hits, thrown)
+			_snd("swing", 1.0, 0.07)
+			if thrown and not instant:
+				var from = _mid("hero") + Vector2(22, -12)
+				for id in _foes:
+					if bool(_foes[id].unit.get("alive", true)) and (not aimed or str(id) == on):
+						BattleFx.bolt(_fx_layer, from, _mid(str(id)), color, 0.2)
 		if kind == "strike":
 			_act_head = "You strike%s" % ((" " + _name(on)) if to != "" else "")
 		elif kind == "ult":
 			_act_head = "%s%s" % [move, to]
-			BattleWidgets.banner(_fx_layer, move, Pal.ACCENT, 0.5 / float(speed), 2)
-			Sfx.pr()
+			if not instant:
+				BattleFx.cutin(_fx_layer, move.to_upper(), Pal.ACCENT, 0.55, "ULTIMATE")
+				_behind(BattleFx.at(_arena, "rays", _mid("hero") + _fx_layer.position, Pal.ACCENT, 0.9, {"n": 12, "half": 24.0}))
+			_dim_back(0.62, 0.9)
+			_snd("ult_start")
+			RpgSfx.buzz(2)
+			wait = 0.8
 		else:
 			_act_head = "You use %s%s" % [move, to]
 		_say(_act_head + ".")
-		return 0.26
+		return wait
 	if who == "pet":
 		_act_head = "%s uses %s" % [_name("pet"), move]
 		_say(_act_head + ".")
+		_snd("pet")
 		if _pet_view != null:
 			_pet_view.hop()
-		return 0.24
+			_fx("sparkle", _mid("pet"), Pal.GOOD, 0.4, {"n": 4, "half": 10.0})
+		return 0.26
 	var nd = _foes.get(who)
 	var nm = _name(who)
 	match kind:
 		"lost":
 			_act_head = "%s loses its turn" % nm
+			_fx("stars", _head(who) + Vector2(0, 8), Pal.ACCENT, 0.7, {"half": 12.0})
+			_snd("stun", 0.9)
 			_say("%s is %s and loses its turn." % [nm, move.to_lower()] if move != "" else _act_head + ".")
-			return 0.4
+			return 0.45
 		"charge":
 			_act_head = "%s is charging %s" % [nm, move]
 			_say(_act_head + "!")
-			if nd != null:
+			_fx("gather", _mid(who), Pal.DANGER, 0.6, {"n": 14})
+			_word(who, "CHARGING", Pal.DANGER, 1)
+			_snd("charge")
+			if nd != null and not instant:
 				Kit.pop(nd.view, 1.08, 0.2)
-			return 0.4
+			return 0.5
 		"count":
 			_act_head = "%s counts down" % nm
+			_fx("ring", _mid(who), Pal.ACCENT2, 0.4)
+			_snd("count")
 			_say("%s: %s is coming." % [nm, move])
-			return 0.35
+			return 0.38
 	_act_head = "%s uses %s" % [nm, move]
 	_say(_act_head + ".")
-	if nd != null:
-		_lunge(nd.view, nd.home, -12.0)
+	if nd != null and not instant:
+		if ["debuff", "buff", "heal", "shield", "summon"].has(kind):
+			Kit.pop(nd.view, 1.1, 0.26)
+			_fx("gather", _mid(who), Pal.DANGER if kind == "debuff" or kind == "summon" else Pal.GOOD, 0.4, {"n": 8})
+			_snd("foe_cast", 1.0, 0.06)
+		else:
+			var far = -38.0 if kind == "heavy" or kind == "bomb" else -26.0
+			var tw = nd.view.create_tween()
+			nd.view.position = nd.home
+			tw.tween_property(nd.view, "position", nd.home + Vector2(8, 0), 0.07 / float(speed))
+			tw.tween_property(nd.view, "position", nd.home + Vector2(far, 0), 0.08 / float(speed)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			tw.tween_interval(0.14 / float(speed))
+			tw.tween_property(nd.view, "position", nd.home, 0.16 / float(speed)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+			_moving.append(tw)
+			_snd("foe_act", 0.8 if kind == "heavy" else 1.0, 0.08)
 	return 0.3
 
 
 func _show_dmg(e: Dictionary) -> float:
 	var dst = str(e.get("dst", ""))
+	var src = str(e.get("src", ""))
 	var amount = int(e.get("amount", 0))
 	var school = str(e.get("school", ""))
 	var crit = bool(e.get("crit", false))
 	var weak = bool(e.get("weak", false))
 	var resist = bool(e.get("resist", false))
+	var soaked = amount == 0 and int(e.get("absorbed", 0)) > 0
 	_act_dmg += amount
 	var tail = ""
 	if crit:
@@ -1261,23 +1662,58 @@ func _show_dmg(e: Dictionary) -> float:
 		tail = " Weak!"
 	elif resist:
 		tail = " Resisted."
-	elif amount == 0 and int(e.get("absorbed", 0)) > 0:
+	elif soaked:
 		tail = " The shield holds."
 	if bool(e.get("counter", false)):
-		_say("%s strike%s back: %d damage." % [_name(str(e.get("src", ""))), "" if str(e.get("src", "")) == "hero" else "s", amount])
+		_say("%s strike%s back: %d damage." % [_name(src), "" if src == "hero" else "s", amount])
 	else:
 		_say("%s: %d damage.%s" % [_act_head if _act_head != "" else "A hit", _act_dmg, tail])
+	var first = _act_first
+	_act_first = false
 	if dst == "hero":
 		var most = int(B.hero.hp_max)
 		_hero_plate.set_hp(int(e.get("hp", 0)), most, true)
-		_float(_anchor("hero"), str(amount) + ("!" if crit else ""), Pal.DANGER, 3 if crit else 2)
-		if not _guard_shown:
+		_low_hp(int(e.get("hp", 0)))
+		var big = float(amount) >= 0.15 * float(most)
+		var at = _mid("hero")
+		var col = RpgUi.color(school) if school != "" and school != "plain" else Pal.DANGER
+		if soaked:
+			_fx("shield", at, RpgUi.color("grit"), 0.45)
+			_word("hero", "SHIELD", RpgUi.color("grit"), 1)
+			_snd("absorb")
+			return 0.3
+		_num("hero", str(amount) + ("!" if crit else ""), Pal.DANGER, 3 if crit or big else 2, crit)
+		match _act_kind:
+			"multi":
+				_fx("bite", at, col, 0.3)
+			"heavy", "bomb":
+				_fx("impact", at, col, 0.34, {"n": 12})
+				_fx("dust", _feet("hero"), Pal.MUTED, 0.34)
+			"drain":
+				_fx("drops", at, col, 0.4)
+				_fx("ring", at, col, 0.4)
+			_:
+				_fx("slash", at, col, 0.28, {"flip": true})
+		if _guard_shown:
+			_fx("block", at + Vector2(14, 0), RpgUi.color("grit"), 0.3)
+			_word("hero", "BLOCK", RpgUi.color("grit"), 1, 0.05, 8.0)
+			_snd("block", 1.0, 0.05)
+			_knock("hero", -3.0)
+		else:
 			_pose("hurt", 0.36)
-		Sfx.hit()
-		if float(amount) >= 0.15 * float(most):
-			_shake()
-			Sfx.buzz(2)
-		return 0.34
+			_knock("hero", -12.0 if big else -7.0)
+			_tint("hero", Color(1.7, 0.55, 0.55))
+			_snd("hurt_big" if big else "hurt", 1.0, 0.05)
+		if not instant:
+			Kit.pop(_hero_plate, 1.03, 0.18)
+		if big:
+			_shake(1.3 if crit else 1.0)
+			RpgSfx.buzz(2)
+			if not instant:
+				BattleFx.flash(_arena, Pal.DANGER, 0.22, 0.2)
+		else:
+			_shake(0.4)
+		return 0.36
 	var nd = _foes.get(dst)
 	if nd == null:
 		return 0.0
@@ -1285,29 +1721,63 @@ func _show_dmg(e: Dictionary) -> float:
 	nd.unit["guard"] = int(e.get("guard", 0))
 	nd.plate.set_hp(int(e.get("hp", 0)), int(nd.unit.get("hp_max", 1)), true)
 	nd.plate.set_guard(int(e.get("guard", 0)), int(nd.unit.get("guard_max", 0)))
+	if soaked:
+		_fx("shield", _mid(dst), Pal.MUTED, 0.45)
+		_word(dst, "SHIELD", Pal.MUTED, 1)
+		_snd("absorb", 0.9)
+		return 0.3
 	nd.view.hit()
-	var col = Pal.TEXT
+	var ult = _act_kind == "ult" and _act_who == "hero"
+	var col2 = Pal.TEXT
 	var px = 2
 	if crit:
-		col = Pal.ACCENT
+		col2 = Pal.ACCENT
 		px = 3
 	elif weak:
-		col = RpgUi.color(school)
+		col2 = RpgUi.color(school)
 	elif resist:
-		col = Pal.MUTED
-	_float(nd.view, str(amount) + ("!" if crit else ""), col, px)
+		col2 = Pal.MUTED
+	_num(dst, str(amount) + ("!" if crit else ""), col2, px, crit or ult)
+	if crit:
+		_word(dst, "CRIT!", Pal.ACCENT, 1, 0.04, 12.0)
 	if weak:
-		_float(nd.plate, "WEAK", RpgUi.color(school), 2, 0.06)
+		_word(dst, "WEAK", RpgUi.color(school), 2 if not crit else 1, 0.08, 0.0 if not crit else 24.0)
 	elif resist:
-		_float(nd.plate, "RESIST", Pal.MUTED, 2, 0.06)
+		_word(dst, "RESIST", Pal.MUTED, 1, 0.06)
 		if not nd.known.resist.has(school):
 			nd.known.resist.append(school)
 			nd.plate.set_known(nd.unit.get("weak", []).size(), nd.known)
-	Kit.burst(nd.view, RpgUi.color(school if school != "" else "plain"), 18 if crit else 10)
-	Sfx.hit()
-	if crit:
-		Sfx.pr()
-	return 0.34
+	var fx_school = school if school != "" else "plain"
+	if not instant:
+		BattleFx.strike(_fx_layer, fx_school, _mid(dst), _feet(dst), RpgUi.color(fx_school), crit or ult)
+		Kit.burst(nd.view, RpgUi.color(fx_school), 14 if crit else 6)
+	_knock(dst, 5.0 if resist else (12.0 if crit or ult else 8.0))
+	var wait = 0.34
+	if ult and first:
+		_snd("ult_hit")
+		_shake(1.6)
+		RpgSfx.buzz(3)
+		if not instant:
+			BattleFx.flash(_arena, Color(1, 1, 1), 0.6, 0.3)
+		wait = 0.5
+	else:
+		if not instant:
+			RpgSfx.hit(fx_school, crit, weak, resist)
+		if crit:
+			_shake(0.9)
+			RpgSfx.buzz(1)
+			if not instant:
+				BattleFx.flash(_arena, Color(1, 1, 1), 0.3, 0.14)
+			wait = 0.44
+		elif weak:
+			_shake(0.45)
+	# The blow that fells a foe fells it NOW, not a beat later after whatever else the blow set off.
+	if int(e.get("hp", 1)) <= 0 and _ko_ahead(dst):
+		_ko_done[dst] = true
+		var line = _line.text if _line != null else ""
+		wait = maxf(wait, _show_ko(dst))
+		_say("%s %s is down." % [line, _name(dst)])
+	return wait
 
 
 func _show_status(e: Dictionary) -> float:
@@ -1316,8 +1786,10 @@ func _show_status(e: Dictionary) -> float:
 	var row = RpgDefs.STATUS.get(id, {})
 	var nm = str(row.get("name", id.capitalize()))
 	if bool(e.get("resisted", false)) or bool(e.get("bounced", false)):
+		_word(dst, "NO EFFECT", Pal.MUTED, 1)
+		_snd("resist", 1.2)
 		_say("%s shrug%s off %s." % [_name(dst), "" if dst == "hero" else "s", nm])
-		return 0.22
+		return 0.24
 	var on = bool(e.get("on", true))
 	var list = _hero_statuses
 	var nd = _foes.get(dst)
@@ -1338,12 +1810,31 @@ func _show_status(e: Dictionary) -> float:
 	if not on:
 		return 0.0
 	var good = str(row.get("kind", "debuff")) == "buff"
-	_float(_anchor(dst), nm.to_upper(), Pal.GOOD if good else Pal.ACCENT2, 1, 0.1)
+	# Good for the one who has it; a foe's gain is the hero's worry, so it is not drawn green.
+	var col = (Pal.GOOD if dst == "hero" else Pal.ACCENT2) if good else (Pal.ACCENT2 if dst == "hero" else RpgUi.color("mind"))
+	_word(dst, nm.to_upper(), col, 1, 0.1)
+	var at = _mid(dst)
+	match id:
+		"shield":
+			_fx("shield", at, RpgUi.color("grit") if dst == "hero" else Pal.MUTED, 0.5)
+			_snd("shield")
+		"stun":
+			_fx("stars", _head(dst) + Vector2(0, 8), Pal.ACCENT, 0.7, {"half": 12.0})
+			_snd("stun")
+		"burn":
+			_fx("flame", at + Vector2(0, 6), Pal.ACCENT2, 0.5)
+			_snd("burn")
+		"bleed":
+			_fx("drops", at, Pal.DANGER, 0.45)
+			_snd("bleed")
+		_:
+			_fx("up" if good else "down", at, col, 0.5)
+			_snd("buff" if good else "debuff", 1.0, 0.04)
 	if STATES.has(id):
 		_say("%s %s %s." % [_name(dst), "are" if dst == "hero" else "is", nm])
 	else:
 		_say("%s %s %s." % [_name(dst), "have" if dst == "hero" else "has", "a Shield" if id == "shield" else nm])
-	return 0.22
+	return 0.26
 
 
 func _show_break(dst: String) -> float:
@@ -1354,13 +1845,21 @@ func _show_break(dst: String) -> float:
 	nd.unit["guard"] = 0
 	nd.plate.set_guard(0, int(nd.unit.get("guard_max", 0)))
 	nd.plate.set_statuses(nd.unit.get("statuses", []), true)
-	_float(nd.view, "BREAK!", Pal.ACCENT, 3, 0.05)
-	Kit.burst(nd.view, Pal.ACCENT, 24)
-	Kit.pop(nd.plate, 1.1, 0.24)
-	Sfx.pr()
-	Sfx.buzz(1)
+	var at = _mid(dst)
+	_word(dst, "BREAK!", Pal.ACCENT, 3, 0.05, 10.0)
+	_fx("shards", at, Pal.ACCENT, 0.6, {"n": 16})
+	_fx("ring", at, Color(1, 1, 1), 0.4)
+	_fx("stars", _head(dst) + Vector2(0, 8), Pal.ACCENT, 1.2, {"half": 12.0, "delay": 0.3})
+	_knock(dst, 14.0)
+	_shake(1.1)
+	if not instant:
+		BattleFx.flash(_arena, Color(1, 1, 1), 0.4, 0.2)
+		Kit.burst(nd.view, Pal.ACCENT, 20)
+		Kit.pop(nd.plate, 1.1, 0.24)
+	_snd("break")
+	RpgSfx.buzz(2)
 	_say("%s's guard breaks: it loses its next action." % _name(dst))
-	return 0.5
+	return 0.6
 
 
 func _show_ko(dst: String) -> float:
@@ -1368,8 +1867,12 @@ func _show_ko(dst: String) -> float:
 		_end_pose = "hurt"
 		_kill(_pose_tw)
 		_pose_rest()
+		_low_hp(0)
+		_snd("down")
+		_shake(1.2)
+		_dim_back(0.5, 1.0)
 		_say("You are knocked down.")
-		return 0.5
+		return 0.6
 	var nd = _foes.get(dst)
 	if nd == null:
 		return 0.0
@@ -1382,29 +1885,103 @@ func _show_ko(dst: String) -> float:
 	nd.view.set_marked(false)
 	nd.view.faint()
 	nd.hit.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var big = bool(nd.unit.get("boss", false)) or bool(nd.unit.get("elite", false))
+	_fx("poof", _mid(dst), Pal.MUTED, 0.6, {"delay": 0.18})
+	_fx("sparkle", _mid(dst), Pal.ACCENT, 0.7, {"delay": 0.25, "n": 8 if big else 5})
+	_snd("ko", 0.8 if big else 1.0, 0.05)
+	if big:
+		_shake(1.4)
+		RpgSfx.buzz(3)
+		if not instant:
+			BattleFx.flash(_arena, Color(1, 1, 1), 0.55, 0.4)
+			Kit.burst(nd.view, Pal.ACCENT, 30)
 	_say("%s is down." % _name(dst))
-	return 0.45
+	return 0.7 if big else 0.45
 
 
 func _show_learn(e: Dictionary) -> float:
 	var key = str(e.get("key", ""))
 	var school = str(e.get("school", ""))
 	var who = ""
+	var who_id = ""
 	for id in _foes:
 		var nd = _foes[id]
 		if RpgBattle.seen_key(nd.unit) != key:
 			continue
 		who = str(nd.unit.get("name", ""))
+		if who_id == "" and bool(nd.unit.get("alive", true)):
+			who_id = str(id)
 		if not nd.known.weak.has(school):
 			nd.known.weak.append(school)
 			nd.plate.set_known(nd.unit.get("weak", []).size(), nd.known)
+			if not instant:
+				Kit.pop(nd.plate, 1.06, 0.22)
 	if who == "":
 		return 0.0
 	var line = "%s is weak to %s" % [who, _schools([school])]
 	if not _learned.has(line):
 		_learned.append(line)
+		if who_id != "":
+			_word(who_id, "WEAKNESS FOUND", RpgUi.color(school), 1, 0.2, 30.0)
+		_snd("learn_weak")
 	_say("Learned: %s." % line)
 	return 0.3
+
+
+## Foes that have just come step in from the right, one after the other.
+func _enter_foes(ids: Array) -> void:
+	if instant:
+		return
+	var i = 0
+	for id in ids:
+		var nd = _foes.get(str(id))
+		if nd == null:
+			continue
+		nd.view.position = nd.home + Vector2(110.0, 0)
+		nd.view.modulate.a = 0.0
+		var tw = nd.view.create_tween()
+		tw.tween_interval(0.08 * float(i) / float(speed))
+		tw.tween_property(nd.view, "position", nd.home, 0.22 / float(speed)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.parallel().tween_property(nd.view, "modulate:a", 1.0, 0.1 / float(speed))
+		tw.tween_callback(_foe_dust.bind(str(id)))
+		_moving.append(tw)
+		i += 1
+
+
+func _foe_dust(id: String) -> void:
+	if _foes.has(id):
+		_fx("dust", _feet(id) + Vector2(0, -2.0), Pal.MUTED, 0.3)
+
+
+## Does a boss wait in any wave of this battle (its music is the boss's from the start)?
+func _has_boss() -> bool:
+	for f in B.get("foes", []):
+		if f is Dictionary and bool(f.get("boss", false)):
+			return true
+	for wave in B.get("waves", []):
+		if not (wave is Array):
+			continue
+		for en in wave:
+			if not (en is Dictionary):
+				continue
+			var row = en.get("row") if en.get("row") is Dictionary else RpgBattle.foe_row(B, str(en.get("foe", "")))
+			if row != null and bool(row.get("boss", false)):
+				return true
+	return false
+
+
+func _exit_tree() -> void:
+	if _held:
+		_held = false
+		RpgSfx.hold(-1, true)
+
+
+## The boss of the wave on screen ("" when it has none).
+func _boss_here() -> String:
+	for id in _foes:
+		if bool(_foes[id].unit.get("boss", false)):
+			return str(id)
+	return ""
 
 
 func _show_new_wave(e: Dictionary) -> float:
@@ -1417,16 +1994,28 @@ func _show_new_wave(e: Dictionary) -> float:
 			_add_foe(u)
 	_fix_target()
 	_place_foes()
+	_foe_layer.modulate.a = 1.0
 	for id in _foes:
 		_foes[id].hit.mouse_filter = Control.MOUSE_FILTER_STOP
+	_enter_foes(_foes.keys())
 	_show_wave(n, of)
 	if n > 1:
 		_hero_statuses = []
 		_hero_plate.set_statuses(_hero_statuses)
-		Sfx.stage()
-	BattleWidgets.banner(_fx_layer, "FIGHT!" if of <= 1 else "WAVE %d/%d" % [n, of], Pal.TEXT, 0.4 / float(speed))
+	var boss = _boss_here()
+	if boss != "" and not instant:
+		# The boss steps out: the arena goes dark, its name crosses it.
+		_dim_back(0.6, 1.1)
+		BattleFx.cutin(_fx_layer, _name(boss).to_upper(), Pal.DANGER, 0.8, "BOSS")
+		_snd("boss")
+		RpgSfx.buzz(2)
+		_say("%s stands in your way." % _name(boss))
+		return 1.35
+	_snd("wave" if n > 1 else "enter")
+	if not instant:
+		BattleWidgets.banner(_fx_layer, "FIGHT!" if of <= 1 else "WAVE %d/%d" % [n, of], Pal.TEXT, 0.4 / float(speed))
 	_say("Wave %d of %d." % [n, of] if of > 1 else "The fight begins.")
-	return 0.6 if n > 1 else 0.3
+	return 0.65 if n > 1 else 0.45
 
 
 func _show_end(win: bool) -> float:
@@ -1436,13 +2025,66 @@ func _show_end(win: bool) -> float:
 	_guard_shown = false
 	_end_pose = "flex" if win else "hurt"
 	_pose_rest()
+	_low_hp(0)
 	if win:
-		BattleWidgets.banner(_fx_layer, "VICTORY", Pal.ACCENT, 0.6 / float(speed))
+		if not instant:
+			BattleWidgets.banner(_fx_layer, "VICTORY", Pal.ACCENT, 0.7 / float(speed))
+			BattleFx.flash(_arena, Pal.ACCENT, 0.3, 0.4)
+			for i in range(3):
+				_fx("sparkle", Vector2(_fx_layer.size.x * (0.25 + 0.25 * float(i)), _fx_layer.size.y * 0.35), Pal.ACCENT, 0.9, {"n": 8, "delay": 0.1 * float(i), "half": 26.0})
+			if _hero_view != null:
+				Kit.burst(_hero_view, Pal.ACCENT, 22)
 		_say("You win!")
-		Sfx.level_up()
-		return 0.8
+		_snd("victory")
+		RpgSfx.buzz(3)
+		return 1.0
+	if not instant:
+		BattleWidgets.banner(_fx_layer, "KNOCKED DOWN", Pal.MUTED, 0.7 / float(speed), 2)
 	_say("You are knocked down. Nothing is lost.")
-	return 0.7
+	_snd("defeat")
+	return 0.9
+
+
+## The fight opens: the screen comes up out of the dark and the hero runs in. The opening's own events (the
+## first wave among them) are played after it.
+func _intro(first: Array) -> void:
+	_gen += 1
+	var gen = _gen
+	_busy = true
+	_events = []
+	_dim_keys(true)
+	_foe_layer.modulate.a = 0.0
+	var cover = ColorRect.new()
+	cover.color = Color(0.02, 0.02, 0.05, 1.0)
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(cover)
+	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var ctw = cover.create_tween()
+	ctw.tween_property(cover, "color:a", 0.0, 0.3)
+	ctw.tween_callback(cover.queue_free)
+	if _hero_view != null:
+		_hero_view.position = _hero_home + Vector2(-120, 0)
+		_hero_tw = _hero_view.create_tween()
+		_hero_tw.tween_interval(0.08)
+		_hero_tw.tween_property(_hero_view, "position", _hero_home, 0.26).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		_hero_tw.tween_callback(_hero_dust)
+		_moving.append(_hero_tw)
+	await _wait(0.4)
+	if not _alive(gen):
+		return
+	if first.is_empty():
+		_end_playback()
+	else:
+		_play(first)
+
+
+## The keys go quiet while something plays (they still hear a tap: it skips).
+func _dim_keys(on: bool) -> void:
+	var c = Color(1, 1, 1, 0.62) if on and not instant else Color.WHITE
+	if _moves != null:
+		_moves.modulate = c
+	if _acts != null:
+		_acts.modulate = c
 
 
 ## The poses' textures are made once at the start, so the first strike does not stutter.
@@ -1465,6 +2107,8 @@ func _process(delta: float) -> void:
 			_hero_view.set_process(not _still)
 		if _pet_view != null:
 			_pet_view.set_process(not _still)
+	if _hero_view != null and _hero_view.position != _shadow_at:
+		_hero_shadow()
 	# The only looping decoration of the view itself: the ultimate's key glows when it is ready.
 	if _still or not is_visible_in_tree() or _result != null:
 		return
@@ -1634,6 +2278,14 @@ func _show_result() -> void:
 		info = cb.call(B, s)
 	if not (info is Dictionary):
 		info = _plain_info(s)
+	if _held:
+		RpgSfx.tune("result")
+	# The result's own picture: the hero where the fight was (BattleResult's tableau).
+	if not info.has("scene"):
+		info["scene"] = str(_opts.get("scene", ""))
+	if not info.has("hero") and _hero_view != null:
+		info["hero"] = _opts.get("hero")
+		info["hero_fit"] = {"top": _hero_top, "low": _hero_low, "mid": _hero_mid}
 	# What is under the result stands still (nothing in a hidden arena loops).
 	_arena.visible = false
 	_result = BattleResult.new()

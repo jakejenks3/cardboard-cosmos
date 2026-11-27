@@ -225,6 +225,7 @@ const SPIRE_AFTER_REGION = 2
 # --- icons the Realm adds (ui/icons.gd draws each; content may use these and the game's own names) ---
 
 const ICONS = [
+	"music", "music_off",
 	"sch_push", "sch_pull", "sch_legs", "sch_speed", "sch_grip", "sch_mind", "sch_flow", "sch_grit",
 	"st_chest", "st_shoulders", "st_arms", "st_back", "st_core", "st_legs", "st_endurance",
 	"fx_pumped", "fx_weakened", "fx_braced", "fx_exposed", "fx_hasted", "fx_slowed", "fx_burn", "fx_bleed", "fx_stun", "fx_regen",

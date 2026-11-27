@@ -134,7 +134,9 @@ static func option_pack(option: Dictionary) -> Dictionary:
 ## Sparks from `key` and the lines rising one after another from the middle of `row`.
 static func loot_fx(row: Control, key: Control, lines: Array) -> void:
 	var from = key if (key != null and is_instance_valid(key)) else row
-	Kit.burst(from, Pal.ACCENT, 20)
+	Kit.burst(from, Pal.ACCENT, 26)
+	Kit.pop(from, 1.12, 0.26)
+	RpgSfx.buzz(2)
 	for i in range(mini(lines.size(), 4)):
 		var words = str(lines[i]).to_upper()
 		if words.length() > 28:
@@ -469,7 +471,7 @@ static func _open_star_chest(reg_id: String, n: int, row: Control, key: Control)
 	var contents = RpgLoot.star_chest(reg_id, n, CHEST_SEED, rpg)
 	var res = RpgSave.open_star_chest(rpg, reg_id, n, contents)
 	if bool(res.get("ok", false)):
-		Sfx.claim()
+		RpgSfx.play("chest")
 		loot_fx(row, key, pack_lines(contents))
 	RpgUi.apply(res)
 
@@ -935,7 +937,7 @@ static func open_cache(stage_id: String) -> void:
 static func _take_cache(stage_id: String, option: Dictionary, card: Control, sh) -> void:
 	var res = RpgSave.take_cache(RpgUi.save(), stage_id, option)
 	if bool(res.get("ok", false)):
-		Sfx.claim()
+		RpgSfx.play("chest")
 		loot_fx(card, card, pack_lines(option_pack(option)))
 		if sh != null and is_instance_valid(sh):
 			sh.close()
@@ -964,7 +966,7 @@ static func open_prizes() -> void:
 static func _take_prize(date: String, option: Dictionary, card: Control, sh) -> void:
 	var res = RpgSave.take_hunt_prize(RpgUi.save(), date, option)
 	if bool(res.get("ok", false)):
-		Sfx.claim()
+		RpgSfx.play("chest")
 		loot_fx(card, card, pack_lines(option_pack(option)))
 		if sh != null and is_instance_valid(sh):
 			sh.close()

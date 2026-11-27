@@ -1600,7 +1600,7 @@ is the Windows handoff.
     screen; the rules still run, so parity and everything earned are untouched; true brings it all back;
     Adventure's first sub-tab keeps the id "campaign" and is labelled "Bounty"), the sixth tab
     (`main.TAB_STRETCH`: the Log key did not move; a dot while a training chest waits), `Pal.PUSH / PULL /
-    LEGS / GRIT / REALM`, the App plumbing above, 87 icons (`RpgDefs.ICONS`), five hero poses (strike,
+    LEGS / GRIT / REALM`, the App plumbing above, 89 icons (`RpgDefs.ICONS`), five hero poses (strike,
     kick, guard, cast, hurt; the game's look only).
   - Pure logic, `game/rpg/`: `RpgDefs` (every id, constant and formula: tune numbers THERE), `RpgStats`
     (twelve stats from the log, never falling), `RpgBoosts` (boosts of today and yesterday, training
@@ -1628,6 +1628,52 @@ is the Windows handoff.
     and `rally` share ids with moves and foe move `grind` with a starter (different catalogs, harmless);
     the hub's sub-tabs sit under the boosts, so a page starts a scroll down; nothing was tried on a real
     iPhone.
+  - HOW A FIGHT FEELS (2026-11-26, the user: "feels like stuff is missing. Not sure if it's combinations of
+    animations, sounds and visual effects... keep working on improvements"). Three modules, all optional to
+    the logic (nothing of them runs in an `instant` playback, which is what the headless tests use):
+    - `ui/rpg/rpg_sfx.gd` (`RpgSfx`): the Realm's own sounds, `SOUNDS` (about 75: a hit per school, crit,
+      weak, resist, miss, heal, buff, debuff, shield, guard, block, break, ko, hurt, charge, boss, victory,
+      defeat, star, loot, chest, learn, upgrade, equip...). `RpgSfx.play(name, pitch, drift)`, `hit(school,
+      crit, weak, resist)`, `star(n)`, `buzz(n)`. Rendered by `Sfx.play_notes` (app/sfx.gd got a "noise" wave:
+      white noise through a one-pole low-pass, opts `lp`, its own generator so a sound is the same every
+      time). Sine, triangle and soft noise only; `tests/rpg_sfx_test.gd` measures them and checks that every
+      sound a screen asks for by name exists (it reads the scripts in its `USERS` list: add a new screen there).
+    - `ui/rpg/battle_fx.gd` (`BattleFx`): pixel effects on a grid of 3 screen pixels that free themselves:
+      `at(layer, kind, pos, colour, secs, opts)` with `KINDS` (impact, slash, stomp, streaks, claw, ring,
+      spark, heal, up, down, shield, shards, poof, flame, drops, gather, rays, block, stars, dust, sparkle,
+      orb, bite, notes, aura), `strike(layer, school, mid, feet, colour, big)` (`SCHOOL_FX`), `bolt` (a thrown
+      orb), `number` (pops, hops aside, falls), `word`, `flash`, `dim`, `cutin` (an ultimate's or a boss's
+      name across the arena), `knock`, `tint`, and the classes `Ambient` (a scene's air: `BattleView.AMBIENT`
+      per scene: dust, leaves, snow, embers, fireflies, rain with lightning, stars) and `Vignette` (a red edge
+      that beats under `LOW_HP` 30%). `BattleFx.speed` is the battle's x1 / x2.
+    - `app/realm_music.gd` (`RealmMusic`, a Node made on demand under Sfx by `RpgSfx.music()`): synthesized
+      looping tunes, "hub", "result", "battle" / "boss" for regions 0..7, rendered a few ms a frame and
+      crossfaded. `RpgSfx.tune(theme, region)`, `tune_ready`, `hold(+1 / -1, battle)` (the Realm's screen and
+      a battle hold the music; with no holder it fades out), `music_on()` = Settings' sound AND
+      `settings.realmMusic` (on unless switched off; the key is on the hub's banner, meta `realm_music`,
+      icons `music` / `music_off`). In a browser a looping sound restarts with a small gap and every tune
+      played stays in memory (about 9 MB), so there the loop dies away at its end (`breath`), "result" plays
+      the hub's tune and at most `RpgSfx.WEB_TUNES` 5 different tunes are made per visit. Test:
+      `tests/realm_music_test.gd` (269 checks; `tools/realm_music_wav.gd` writes WAVs to REALM_MUSIC_OUT).
+      NOBODY HAS HEARD the music or the sounds: they were measured, not listened to.
+    - `BattleView`: `_intro` (the screen comes out of the dark, the hero runs in; the opening's events play
+      after it), `_hero_attack` (a step in of `STEP_IN` 26 px, never under a foe's plate: a hop for legs, a
+      blur for speed, a thrown orb for mind; self moves get an aura), foes lunge or cast by their move's
+      kind, `_show_dmg` (the school's effect, knockback, a number, WEAK / CRIT / BLOCK words, shake and flash
+      by size), a foe goes down WITH the blow that fells it (`_ko_ahead`, `_ko_done`), a boss gets a cut-in
+      and its own sound, the keys dim while something plays (`_dim_keys`) and a chime says it is the
+      player's turn, the gauge announces itself when full. The fighters' HP bars leave a pale trail where
+      the bar was (`Bar.ghost`, off for every other bar). A shake moves the arena by parts of a pixel, so
+      `_end_playback` sets its size again and `Arena.ground()` rounds (a foe was once 1 px off the ground).
+    - `BattleResult`: with `info.hero` / `info.scene` / `info.hero_fit` (BattleView adds them) its head is a
+      picture, the hero where the fight was beside the words (`_tableau`, meta `br_tableau`); stars slam in
+      a step higher each, the three numbers count up, the loot comes one piece after the other.
+    - The hub's boosts are two across (a tap opens a boost in full), so the tabs and the map come up.
+    - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
+      frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
+      effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough
+      that waits for a playback must wait by the clock, not by frames (a PC with no vsync draws a
+      thousand frames a second): `_wait_idle` in fx.gd and battle.gd.
 - Reading: the page of an EARLIER day (2026-11-27, "Allow me to go back to previous day to put what page I
   ended on... I can add pages but then game gets confused about the following day"). `Books.set_page_on(b,
   page, day)`: the day starts where the last logged day before it ended, and the next logged day after it
@@ -1819,7 +1865,7 @@ godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
 godot --headless --path . --script res://tests/rpg_art_test.gd
 godot --headless --path . --script res://tests/rpg_icons_test.gd
-(and rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
+(and rpg_sfx_test, realm_music_test, rpg_battle_test, rpg_moves_test, rpg_gear_test, rpg_foes_test, rpg_world_test, rpg_save_test,
  rpg_content_test, rpg_sim_test, rpg_battle_ui_test, rpg_hub_test, rpg_pages_test, discipline_sheet_test)
 ```
 
@@ -1859,6 +1905,7 @@ books (books pasted in, the page box on the reading card doing the page math, fi
 bands (a band instead of a weight in the Log tab, the band picker, the PT key on an exercise card, the band words on the lift page; year data),
 realm (the Realm: first visit, hub, training chest, the five pages, map, prep sheet, cache; year data),
 battle (a fight played by its keys to the result, a pack, the first boss; year data),
+fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
 To check the phone inbox against the user's real Google Doc, set `TINY_TITAN_INBOX_URL`

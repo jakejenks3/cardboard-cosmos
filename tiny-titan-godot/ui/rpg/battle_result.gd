@@ -12,8 +12,12 @@ extends Control
 ##         "rewards": {"xp", "ore", "items": [{id, n}], "runes": [rune rows or words], "relic": id or "",
 ##                     "scroll": move id or "", "first": bool} or null,
 ##         "level_before": {"lvl", "into", "need"}, "level_after": the same,
-##         "learned": ["Dust Bunny is weak to Legs", ...], "next": bool}
-## Every part may be left out: what is not given is not shown.
+##         "learned": ["Dust Bunny is weak to Legs", ...], "next": bool,
+##         "scene": a RealmScenes id, "hero": {"state", "profile", "loadout"}, "hero_fit": {"top", "low", "mid"}}
+## Every part may be left out: what is not given is not shown. With a hero the
+## head of the result is a picture (the tableau): the hero where the fight was,
+## arms up under falling light after a win, down on a darkened field after a
+## loss, the words over the sky.
 ##
 ## A win: the stars pop in one by one beside their objectives, the XP bar fills
 ## (XpBarAnim), "LEVEL UP" when the level rose, the loot, what was learned. A
@@ -30,6 +34,8 @@ signal chosen(what: String)
 
 const KIND_LINE = "Nothing is lost. Train, tune the build, try again."
 const KEY_H = 46
+const TABLEAU_H = 156.0
+const HERO_SCALE = 2
 
 var summary: Dictionary = {}
 var info: Dictionary = {}
@@ -45,6 +51,16 @@ var _xp: XpBarAnim = null
 var _level_up: Control = null
 var _rose: bool = false
 var _late: Array = []
+## The loot's rows, shown one after the other; the facts' numbers, counted up.
+var _loot_rows: Array = []
+var _first_tag: Control = null
+var _fact_labels: Array = []
+var _head: Control = null
+var _tab: Control = null
+var _tab_arena = null
+var _tab_hero: HeroView = null
+var _tab_rays = null
+var _tab_title: Label = null
 
 
 func setup(summary_in: Dictionary, info_in: Dictionary) -> void:
@@ -78,11 +94,17 @@ func _build() -> void:
 
 	var head_color = Pal.ACCENT if win else Pal.MUTED
 	var head = PixelFont.rect("VICTORY" if win else "KNOCKED DOWN", 4 if win else 3, head_color)
-	head.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	col.add_child(head)
-	var title = Kit.clip(str(info.get("title", "")), 15, Pal.MUTED, true)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(title)
+	_head = head
+	var hero = info.get("hero")
+	if hero is Dictionary and hero.get("state") is Dictionary and hero.get("profile") is Dictionary:
+		col.add_child(_tableau(hero, head))
+	else:
+		head.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		col.add_child(head)
+	if _tab == null:
+		var title = Kit.clip(str(info.get("title", "")), 15, Pal.MUTED, true)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(title)
 
 	var scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -130,6 +152,87 @@ func _build() -> void:
 	col.add_child(_keys())
 
 
+## The head as a picture: the backdrop of the fight, the hero on its ground, the words in its sky.
+func _tableau(hero: Dictionary, head: Control) -> Control:
+	var box = Control.new()
+	box.custom_minimum_size = Vector2(0, TABLEAU_H)
+	box.clip_contents = true
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	box.set_meta("br_tableau", "win" if win else "loss")
+	_tab = box
+	var arena = BattleWidgets.Arena.new(str(info.get("scene", "")))
+	arena.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(arena)
+	_tab_arena = arena
+	if win:
+		var air = BattleFx.Ambient.new()
+		air.mode = "stars"
+		air.color = Pal.ACCENT
+		air.count = 18
+		box.add_child(air)
+		air.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	else:
+		var dark = ColorRect.new()
+		dark.color = Color(0.02, 0.02, 0.06, 0.5)
+		dark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(dark)
+		dark.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_tab_hero = HeroView.new()
+	_tab_hero.min_scale = HERO_SCALE
+	_tab_hero.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tab_hero.setup(hero.state, hero.profile, hero.get("loadout", {}), null, false)
+	_tab_hero.animate = false
+	_tab_hero.forced_pose = "flex" if win else "hurt"
+	box.add_child(_tab_hero)
+	box.add_child(head)
+	_tab_title = Kit.clip(str(info.get("title", "")), 14, Pal.TEXT, true)
+	_tab_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tab_title.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	_tab_title.add_theme_constant_override("outline_size", 4)
+	box.add_child(_tab_title)
+	var edge = Panel.new()
+	edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	edge.add_theme_stylebox_override("panel", Kit.sbox(Color(0, 0, 0, 0), 0, Pal.ACCENT if win else Pal.OUTLINE, 2, 0, 0))
+	box.add_child(edge)
+	edge.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.resized.connect(_place_tableau)
+	return box
+
+
+func _place_tableau() -> void:
+	if _tab == null or _tab_hero == null:
+		return
+	var w = _tab.size.x
+	var h = _tab.size.y
+	_tab_arena.position = Vector2.ZERO
+	_tab_arena.size = Vector2(w, h)
+	var fit = info.get("hero_fit") if info.get("hero_fit") is Dictionary else {}
+	var k = float(HERO_SCALE)
+	var ground = _tab_arena.ground()
+	# The hero at the left, the words in the sky at his right: a poster.
+	var cx = floor(w * 0.22)
+	_tab_hero.size = _tab_hero.custom_minimum_size
+	_tab_hero.position = Vector2(floor(cx - float(fit.get("mid", 32.0)) * k), floor(ground - float(fit.get("low", 68)) * k))
+	_tab_arena.shadows = [Rect2(cx - 14.0, ground - k, 28.0, k), Rect2(cx - 16.0, ground, 32.0, k)]
+	_tab_arena.queue_redraw()
+	if _head != null and _head.get_parent() == _tab:
+		_head.size = _head.custom_minimum_size
+		_head.pivot_offset = _head.size / 2.0
+		var room = w - cx - 44.0
+		_head.position = Vector2(floor(cx + 44.0 + maxf(0.0, room - _head.size.x) / 2.0), 30.0)
+		if _tab_title != null:
+			_tab_title.size = Vector2(room - 8.0, 22.0)
+			_tab_title.position = Vector2(cx + 48.0, _head.position.y + _head.size.y + 6.0)
+	if win and _tab_rays == null and is_inside_tree() and w > 120.0:
+		_tab_rays = BattleFx.at(_tab, "rays", Vector2(cx, ground - 60.0), Pal.ACCENT, 6.0, {"loop": true, "n": 12, "half": 26.0})
+		if _tab_rays != null:
+			_tab.move_child(_tab_rays, 2)
+			_tab_rays.modulate.a = 0.5
+	if _tab_rays != null and is_instance_valid(_tab_rays):
+		_tab_rays.position = (Vector2(cx, ground - 60.0) - _tab_rays.size / 2.0).floor()
+
+
 func _level_info(l: Dictionary) -> Dictionary:
 	var need = maxi(1, int(l.get("need", 1)))
 	return {"level": int(l.get("lvl", 1)), "progress": clampf(float(l.get("into", 0)) / float(need), 0.0, 1.0), "toNext": need}
@@ -160,7 +263,10 @@ func _facts() -> Control:
 	for f in [["Turns", int(summary.get("turns", 0)), Pal.SECOND], ["Dealt", int(summary.get("dealt", 0)), Pal.ACCENT2], ["Taken", int(summary.get("taken", 0)), Pal.DANGER]]:
 		var t = Kit.row(Callable(), f[2], f[2], 8, 0)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		t.add(Kit.label(Xp.fmt_int(int(f[1])), 17, null, true))
+		var num = Kit.label(Xp.fmt_int(int(f[1])), 17, null, true)
+		num.set_meta("br_fact", int(f[1]))
+		_fact_labels.append(num)
+		t.add(num)
 		t.add(Kit.clip(str(f[0]), 11, Pal.MUTED, true))
 		row.add_child(t)
 	row.set_meta("br_facts", true)
@@ -168,8 +274,9 @@ func _facts() -> Control:
 
 
 func _loot(rw: Dictionary) -> Control:
-	var sec = Kit.section("br_loot", "Loot", "chest_gold" if Icons.has_icon("chest_gold") else "star", RpgUi.color("realm"),
-		Kit.tag("FIRST CLEAR", Pal.ACCENT) if bool(rw.get("first", false)) else null)
+	if bool(rw.get("first", false)):
+		_first_tag = Kit.tag("FIRST CLEAR", Pal.ACCENT)
+	var sec = Kit.section("br_loot", "Loot", "chest_gold" if Icons.has_icon("chest_gold") else "star", RpgUi.color("realm"), _first_tag)
 	sec.set_meta("br_loot", true)
 	var flow = Kit.flow(6)
 	var xp = int(round(float(rw.get("xp", 0))))
@@ -180,6 +287,8 @@ func _loot(rw: Dictionary) -> Control:
 		flow.add_child(RpgUi.ore_pill(ore))
 	if flow.get_child_count() > 0:
 		sec.add(flow)
+		flow.set_meta("br_rare", false)
+		_loot_rows.append(flow)
 	var items = rw.get("items") if rw.get("items") is Array else []
 	for it in items:
 		if not (it is Dictionary):
@@ -214,6 +323,8 @@ func _loot_row(icon_name: String, title: String, words: String) -> Control:
 		v.add_child(Kit.clip(words, 12, Pal.MUTED))
 	row.add_child(v)
 	row.set_meta("br_loot_row", title)
+	row.set_meta("br_rare", ["rune", "relic", "scroll"].has(icon_name) or title.begins_with("Scroll"))
+	_loot_rows.append(row)
 	return row
 
 
@@ -285,16 +396,41 @@ func _run() -> void:
 		return
 	for c in _late:
 		c.modulate.a = 0.0
-	await _wait(0.25)
+	for r in _loot_rows:
+		r.modulate.a = 0.0
+	for l in _fact_labels:
+		l.text = "0"
+	if _head != null:
+		Kit.pop(_head, 1.35, 0.4)
+	if win and _tab != null:
+		BattleFx.flash(_tab, Pal.ACCENT, 0.45, 0.5)
+	await _wait(0.3)
 	if not _alive(gen):
 		return
+	var lit = 0
 	for i in range(_stars.size()):
 		if not _earned[i]:
 			continue
-		_light(i, true)
-		await _wait(0.34)
+		_light(i, true, lit)
+		lit += 1
+		await _wait(0.36)
 		if not _alive(gen):
 			return
+	if lit == 3 and not _stars.is_empty():
+		# All three: one more flourish.
+		RpgSfx.play("first_clear")
+		for st in _stars:
+			Kit.pop(st, 1.3, 0.3)
+			Kit.burst(st, Pal.ACCENT, 10)
+		await _wait(0.3)
+		if not _alive(gen):
+			return
+	# How the fight went, counted up.
+	var tw = create_tween()
+	tw.tween_method(_count_facts, 0.0, 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await _wait(0.3)
+	if not _alive(gen):
+		return
 	if _xp != null:
 		if _rose:
 			_xp.level_up.connect(_on_level_up, CONNECT_ONE_SHOT)
@@ -307,19 +443,50 @@ func _run() -> void:
 		await _wait(0.18)
 		if not _alive(gen):
 			return
+		if c.has_meta("br_loot"):
+			if _first_tag != null:
+				Kit.pop(_first_tag, 1.4, 0.35)
+				Kit.burst(_first_tag, Pal.ACCENT, 10)
+			# The loot, one piece after the other.
+			var n = 0
+			for r in _loot_rows:
+				var rare = bool(r.get_meta("br_rare", false))
+				Kit.fade_in(r, 0.16)
+				Kit.pop(r, 1.05 if not rare else 1.08, 0.18)
+				if rare:
+					RpgSfx.play("loot_rare")
+					Kit.burst(r, RpgUi.color("realm"), 14)
+					Fx.shine(r, 3.0, 0.1, 0.5)
+				else:
+					RpgSfx.play("loot", 1.0 + 0.06 * float(n))
+				n += 1
+				await _wait(0.36 if rare else 0.22)
+				if not _alive(gen):
+					return
 	done = true
 
 
-func _light(i: int, lively: bool) -> void:
+func _light(i: int, lively: bool, nth: int = 0) -> void:
 	var star = _stars[i]
 	if bool(star.get_meta("br_on", false)):
 		return
 	star.texture = Icons.tex("star_on" if Icons.has_icon("star_on") else "star", null, 2)
 	star.set_meta("br_on", true)
 	if lively:
-		Kit.pop(star, 1.5, 0.3)
-		Kit.burst(star, Pal.ACCENT, 12)
-		Sfx.claim()
+		# It slams in from big, a step higher in pitch than the one before.
+		star.pivot_offset = star.size / 2.0
+		star.scale = Vector2(2.6, 2.6)
+		var tw = star.create_tween()
+		tw.tween_property(star, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		Kit.burst(star, Pal.ACCENT, 14)
+		RpgSfx.star(nth)
+		RpgSfx.buzz(1)
+
+
+func _count_facts(share: float) -> void:
+	for l in _fact_labels:
+		if is_instance_valid(l):
+			l.text = Xp.fmt_int(int(round(float(int(l.get_meta("br_fact", 0))) * share)))
 
 
 func _on_level_up(_level) -> void:
@@ -327,6 +494,10 @@ func _on_level_up(_level) -> void:
 		_level_up.modulate.a = 1.0
 		_level_up.set_meta("br_level_up", true)
 		Kit.pop(_level_up, 1.3, 0.3)
+		Kit.burst(_level_up, Pal.ACCENT, 26)
+		Fx.shine(_level_up, 2.2, 0.1, 0.6)
+		BattleFx.flash(self, Pal.ACCENT, 0.3, 0.4)
+		RpgSfx.buzz(3)
 
 
 ## Everything as it ends, at once.
@@ -348,6 +519,9 @@ func _finish() -> void:
 		_level_up.set_meta("br_level_up", true)
 	for c in _late:
 		c.modulate.a = 1.0
+	for r in _loot_rows:
+		r.modulate.a = 1.0
+	_count_facts(1.0)
 	done = true
 
 

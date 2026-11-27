@@ -46,7 +46,7 @@ const SHEETS = [
 	["icons_intents", ["in_attack", "in_heavy", "in_multi", "in_debuff", "in_buff", "in_heal", "in_shield", "in_summon", "in_bomb",
 		"in_stunned", "in_drain", "in_charge"]],
 	["icons_keys", ["realm", "ore", "energy", "gauge", "guard_pip", "power", "sp", "strike", "guard", "flee", "belt", "relic", "rune",
-		"scroll", "hunt", "spire", "rival", "chest_wood", "chest_iron", "chest_gold", "star_on", "star_off"]],
+		"scroll", "hunt", "spire", "rival", "chest_wood", "chest_iron", "chest_gold", "star_on", "star_off", "music", "music_off"]],
 	["icons_items_relics", ["it_shake", "it_mega", "it_electro", "it_salts", "it_chalk", "it_gel", "it_ice", "it_pre",
 		"rl_ring", "rl_bookmark", "rl_chain", "rl_tooth", "rl_band", "rl_whistle", "rl_tape", "rl_feather", "rl_bell", "rl_hourglass",
 		"rl_horn", "rl_anvil"]],
@@ -101,7 +101,7 @@ func _image(name: String) -> Image:
 
 func _init() -> void:
 	var names: Array = RpgDefs.ICONS
-	ok(names.size() == 87, "the Realm names 87 icons", names.size())
+	ok(names.size() == 89, "the Realm names 89 icons", names.size())
 
 	# --- every name is there, 16 rows of 16, only letters of its palette ------
 	var missing = []
