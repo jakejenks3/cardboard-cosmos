@@ -546,7 +546,7 @@ static func summary(B: Dictionary) -> Dictionary:
 		learned[k] = B.learned[k].duplicate()
 	return _norm({"win": won(B), "turns": _i(s, "turns"), "dealt": _i(s, "dealt"), "taken": _i(s, "taken"),
 		"breaks": _i(s, "breaks"), "items": _i(s, "items"), "guards": _i(s, "guards"), "perfect": _i(s, "perfect"),
-		"moves": h.get("flags", {}).get("uses", {}).duplicate(),
+		"moves": h.get("flags", {}).get("uses", {}).duplicate(), "unguarded": _i(s, "unguarded"),
 		"schools": s.schools.duplicate(),
 		"worst_share": _f(s, "worst"), "hp_share": _share(h), "learned": learned, "used": s.used.duplicate(),
 		"fled": bool(B.fled), "kos": _i(s, "kos"), "waves": _i(s, "waves"),
@@ -2359,6 +2359,9 @@ static func _foe_act(B: Dictionary, ev: Array, f: Dictionary) -> Dictionary:
 			_gauge(B, ev, RpgDefs.GAUGE_PERFECT, false)
 			if off > 0 and _i(f, "guard") <= 0:
 				_break(B, ev, f)
+		elif told and bool(run.hit) and not bool(B.hero.get("guarding", false)):
+			# (a blow that was announced and landed on an open hero: counted, for the tips after a lost fight)
+			B.sum["unguarded"] = _i(B.sum, "unguarded") + 1
 	var ctx = {"src": f, "targets": touched, "status_to": "target", "help_to": "self" if aim == "hero" else "target",
 		"off": 0.0, "dealt": int(run.dealt), "killed": false, "move_id": id}
 	for e in mv.get("fx", []):

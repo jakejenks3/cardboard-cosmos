@@ -892,7 +892,7 @@ func _intents() -> void:
 	ok(not pf.is_empty() and pf.get("src") == "f0" and int(pf.get("chip", 0)) == RpgDefs.PERFECT_CHIP and int(f.guard) == 3 - RpgDefs.PERFECT_CHIP and int(RpgBattle.summary(B).perfect) == 1
 		and float(B.hero.gauge) >= g_before + RpgDefs.GAUGE_PERFECT - 0.01 and at_of(ev, "perfect") > at_of(ev, "dmg", "dst", "hero"), "a Guard that takes a charged blow is a perfect guard: a pip goes and the gauge fills", [pf, f.guard, g_before, B.hero.gauge])
 	foe_turn(B, "f0", GUARD)
-	ok(first(foe_turn(B, "f0", STRIKE), "perfect").is_empty() and int(RpgBattle.summary(B).perfect) == 1, "the same blow taken without Guard is not one", RpgBattle.summary(B).perfect)
+	ok(first(foe_turn(B, "f0", STRIKE), "perfect").is_empty() and int(RpgBattle.summary(B).perfect) == 1 and int(RpgBattle.summary(B).unguarded) == 1, "the same blow taken without Guard is not one, and is counted as taken open", [RpgBattle.summary(B).perfect, RpgBattle.summary(B).unguarded])
 	B = tough(begin(hero(), [wave(["dummy"])]))
 	ok(first(foe_turn(B, "f0", GUARD), "perfect").is_empty(), "nor is a Guard against a blow that was not charged")
 	B = tough(begin(hero(), [wave(["charger"])]))

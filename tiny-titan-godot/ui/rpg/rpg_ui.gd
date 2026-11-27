@@ -551,7 +551,10 @@ static func tips(B: Dictionary, st, summary: Dictionary) -> Array:
 	var power = RpgHero.power(hero())
 	if rec > 0.0 and power < rec * 0.95:
 		out.append("Recommended power %s, yours %s: upgrade your gear with ore, learn skills, train." % [Xp.fmt_int(int(round(rec))), Xp.fmt_int(int(round(power)))])
-	if int(summary.get("guards", 0)) == 0:
+	var open_hits = int(summary.get("unguarded", 0))
+	if open_hits > 0:
+		out.append("%s landed on you unguarded. Guard the turn a foe has charged up: half the damage or less, and a perfect guard cracks its guard." % ("A charged blow" if open_hits == 1 else "%d charged blows" % open_hits))
+	elif int(summary.get("guards", 0)) == 0:
 		out.append("You never guarded. When a foe's intent beats red, Guard cuts the hit by half or more and gives %d energy." % RpgDefs.EN_GUARD)
 	var belt_left = 0
 	for it in B.hero.get("belt", []):
