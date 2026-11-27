@@ -491,7 +491,7 @@ static func treasure_rows() -> Dictionary:
 	var mv = {"name": "Dig Away", "kind": "buff", "power": 0.0, "count": RpgDefs.TREASURE_TURNS, "target": "self", "rank": 1.0,
 		"fx": [{"k": "flee"}], "icon": "in_bomb", "text": "It is digging its way out, ore and all. Fell it before the count runs out."}
 	var foe = {"id": RpgDefs.TREASURE_FOE, "name": "Ore Mole", "region": "", "role": "bomb", "weak": [], "resist": [], "guard": 2,
-		"moves": [RpgDefs.TREASURE_MOVE], "pattern": [RpgDefs.TREASURE_MOVE], "rules": [], "traits": [], "phases": [],
+		"moves": [RpgDefs.TREASURE_MOVE], "pattern": [RpgDefs.TREASURE_MOVE], "rules": [], "traits": [{"p": "hp_pct", "pct": 0.4}], "phases": [],
 		"text": "It carries ore in its cheeks and does no harm. It will not stay long."}
 	return {"foes": {RpgDefs.TREASURE_FOE: foe}, "foe_moves": {RpgDefs.TREASURE_MOVE: mv}}
 
