@@ -1750,6 +1750,9 @@ is the Windows handoff.
       front page (`realm_feat_notice`) while one can be claimed. Test: `tests/rpg_feats_test.gd`.
     - The fight's top bar: Flee, the stage's name, the wave (only when there is more than one), the turn,
       AUTO, x1 / x2, and the music's switch (`bv_key` "music", the same setting as the banner's key).
+    - What is learned on the Skills page goes straight into the build when a slot of its kind is EMPTY
+      (`RealmSkills._into_empty_slot`: the first ultimate, a passive once a slot is open, a move when one
+      stands free); nothing is ever pushed out for it (a full build keeps the tile's "Equip it now").
     - The map's stages are a ROAD: `ui/rpg/road_map.gd` (`RoadMap`, `RoadMap.Place` = a Button with the
       old metas `map_stage`, `map_state`, `map_stage_stars`; the road has `map_road_path`). Three places to
       a row, every other row right to left, the boss alone at the end; the path swings out round the names

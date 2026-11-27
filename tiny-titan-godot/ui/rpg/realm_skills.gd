@@ -347,9 +347,45 @@ static func _learn(id: String, at) -> bool:
 		fresh = id
 	if RpgUi.apply(res, "Learned %s" % _ref_name(node)):
 		RpgSfx.play("learn")
+		_into_empty_slot(node)
 		return true
 	fresh = before
 	return false
+
+
+## What was just learned goes straight into the build when a slot of its kind is EMPTY (the first ultimate, a
+## passive once a passive slot is open, a move when a fifth slot stands free): learning it should change
+## the next fight without a visit to the Moves page. Nothing is ever pushed out of a slot for it.
+static func _into_empty_slot(node: Dictionary) -> void:
+	var ref = str(node.get("ref", ""))
+	var row = _ref_row(node)
+	if ref == "" or not (row is Dictionary):
+		return
+	var rpg = RpgUi.save()
+	var b = RpgSave.build_of(rpg)
+	var level = RpgUi.level()
+	var res = null
+	if str(node.kind) == "passive":
+		var held = b.get("passives", [])
+		if held.has(ref):
+			return
+		for i in range(RpgDefs.passive_slots(level)):
+			if i >= held.size() or str(held[i]) == "":
+				res = RpgSave.equip_passive(rpg, i, ref)
+				break
+	elif bool(row.get("ult", false)):
+		if str(b.get("ult", "")) == "":
+			res = RpgSave.equip_ult(rpg, ref)
+	else:
+		var moves = b.get("moves", [])
+		if moves.has(ref):
+			return
+		for i in range(RpgDefs.move_slots(level)):
+			if i >= moves.size() or str(moves[i]) == "":
+				res = RpgSave.equip_move(rpg, i, ref)
+				break
+	if res is Dictionary and bool(res.get("ok", false)):
+		RpgUi.apply(res, "%s is in your build" % str(row.get("name", ref)))
 
 
 # ---------------------------------------------------------------------------

@@ -78,6 +78,32 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.8)
 	LootPop.close_all()
 
+	# --- what is learned goes into an empty slot of its kind, and never pushes anything out ----------
+	var ult_id = ""
+	for m in RpgMoves.all():
+		if bool(m.get("ult", false)) and ult_id == "":
+			ult_id = str(m.id)
+	var moves0 = RpgSave.build_of(App.rpg()).moves.duplicate()
+	check(str(RpgSave.build_of(App.rpg()).ult) == "" and ult_id != "", "a new build has no ultimate")
+	# (the nodes are marked learned as the Skills page would have: this is about what follows a lesson)
+	var ult_node = RpgSkills.node_of_ref(ult_id)
+	var other = ""
+	for m in RpgMoves.all():
+		if not bool(m.get("ult", false)) and not moves0.has(str(m.id)) and other == "" and RpgSkills.node_of_ref(str(m.id)) != null:
+			other = str(m.id)
+	var other_node = RpgSkills.node_of_ref(other)
+	var taught = App.rpg().duplicate(true)
+	taught.nodes[str(ult_node.id)] = true
+	taught.nodes[str(other_node.id)] = true
+	App.set_rpg(taught)
+	await ShotHelper.frames(tree, 3)
+	RealmSkills._into_empty_slot(ult_node)
+	await ShotHelper.frames(tree, 3)
+	check(str(RpgSave.build_of(App.rpg()).ult) == ult_id, "an ultimate just learned is the build's ultimate at once (%s)" % ult_id)
+	RealmSkills._into_empty_slot(other_node)
+	await ShotHelper.frames(tree, 3)
+	check(RpgSave.build_of(App.rpg()).moves == moves0, "a move learned with every slot full pushes nothing out (it waits on the Moves page)")
+
 	# --- win, and on to the next stage ---------------------------------------------------------
 	var xp0 = int(App.rpg().xp)
 	RpgUi.fight({"kind": "stage", "id": "r1s1"})
@@ -172,7 +198,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		_press_result(bv5, "again")
 		await ShotHelper.wait(tree, 1.2)
 		var bv6 = _battle()
-		check(bv6 != null and bv6 != bv5 and str(bv6.B.what.get("id", "")) == "r1s3" and int(bv6.B.hero.hp) == int(bv6.B.hero.hp_max), "Again opens the same stage anew, the hero whole")
+		# (a foe may act first and take a little off him: "whole" is most of his HP, not the one point he lost with)
+		check(bv6 != null and bv6 != bv5 and str(bv6.B.what.get("id", "")) == "r1s3" and float(bv6.B.hero.hp) > 0.6 * float(bv6.B.hero.hp_max) and int(bv6.B.sum.turns) <= 1, "Again opens the same stage anew, the hero whole")
 		if bv6 != null:
 			await _play(bv6)
 			_press_result(bv6, "back")

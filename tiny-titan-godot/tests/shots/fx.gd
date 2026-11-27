@@ -209,6 +209,24 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var names = ["PUSH", "PULL", "LEGS", "SPEED"]
 	for i in range(first.size()):
 		await _film(bv, "bv_move", str(first[i]), names[i], [0.16, 0.34, 0.5])
+	# An ultimate: the cut-in, the dark, the storm.
+	var ult_id = ""
+	for m in RpgMoves.all():
+		if bool(m.get("ult", false)) and ult_id == "":
+			ult_id = str(m.id)
+	_top_up(bv)
+	bv.B.hero["ult"] = ult_id
+	bv.B.hero["gauge"] = 100
+	bv._sync()
+	await ShotHelper.frames(tree, 2)
+	check(_press(bv, "bv_key", "ult"), "the ultimate's key can be pressed with a full gauge")
+	await ShotHelper.wait(tree, 0.3)
+	await _cut(bv, "ULT 1")
+	await ShotHelper.wait(tree, 0.4)
+	await _cut(bv, "ULT 2")
+	await ShotHelper.wait(tree, 0.25)
+	await _cut(bv, "ULT 3")
+	await _wait_idle(bv)
 	bv.close()
 	await ShotHelper.wait(tree, 0.5)
 	# --- the other schools, in another scene ---------------------------------------------------
