@@ -277,6 +277,11 @@ static func _hunt_row(hunt: Dictionary, rpg: Dictionary, today: String) -> Contr
 	var rule = RpgWorld.RULES.get(str(hunt.get("rule", "")))
 	if rule != null:
 		top.add_child(Kit.tag(str(rule.name), Pal.ACCENT2))
+	# Days in a row with the hunt won (alive while yesterday's or today's is).
+	var streak = RpgWorld.hunt_streak(rpg, today)
+	row.set_meta("map_hunt_streak", streak)
+	if streak >= 2:
+		top.add_child(Kit.tag("%d days" % streak, Pal.ACCENT))
 	mid.add_child(top)
 	mid.add_child(_weak_line(weak))
 	h.add_child(mid)
@@ -641,6 +646,56 @@ static func _spire(rpg: Dictionary) -> Control:
 	return sec
 
 
+## The build's moves against the foes of a stage: a chip a move, lit and marked WEAK when a foe here is KNOWN
+## to be weak to its school (a weakness found before, or one the stage shows). With weaknesses known and no
+## move that hits one, a line says so: that is what the Moves page is for.
+static func _moves_block(waves: Array, rpg: Dictionary) -> Variant:
+	var weak_n = {}
+	var any_known = false
+	var counted = {}
+	for wave in waves:
+		for en in wave:
+			var fid = str(en.get("foe", ""))
+			if counted.has(fid):
+				continue
+			counted[fid] = true
+			for sc in weak_marks(en, rpg).known:
+				weak_n[str(sc)] = int(weak_n.get(str(sc), 0)) + 1
+				any_known = true
+	var flow = Kit.flow(6)
+	flow.set_meta("prep_moves", true)
+	var hits = 0
+	for mid in RpgSave.build_of(rpg).get("moves", []):
+		var mv = RpgMoves.by_id(str(mid)) if str(mid) != "" else null
+		if mv == null:
+			continue
+		var school = str(mv.get("school", "plain"))
+		var strikes = str(mv.get("kind", "attack")) == "attack" and float(mv.get("power", 0.0)) > 0.0
+		var n = int(weak_n.get(school, 0)) if strikes else 0
+		var chip = Kit.tag("%s · WEAK" % str(mv.name) if n > 0 else str(mv.name), RpgUi.color(school) if n > 0 else Pal.PANEL2, n > 0)
+		chip.set_meta("prep_move", str(mid))
+		chip.set_meta("prep_move_weak", n)
+		flow.add_child(chip)
+		if n > 0:
+			hits += 1
+	if flow.get_child_count() == 0:
+		flow.free()
+		return null
+	var v = Kit.vbox(4)
+	var said = ""
+	if hits > 0:
+		said = "%d hit%s a weakness here" % [hits, "s" if hits == 1 else ""]
+	elif any_known:
+		said = "none hits a weakness here"
+	v.add_child(Kit.sub_head("YOUR MOVES", RpgUi.color("realm"), Kit.label(said, 11, Pal.GOOD if hits > 0 else Pal.ACCENT2) if said != "" else null))
+	v.add_child(flow)
+	if hits == 0 and any_known:
+		var tip = Kit.muted_para("You know what these foes are weak to, and no move of yours is of that school. Swap one in on the Moves page.", 11)
+		tip.set_meta("prep_moves_tip", true)
+		v.add_child(tip)
+	return v
+
+
 ## The dare of a won stage, as a row of its prep sheet: its rule, how strong its foes are, what the first win
 ## pays (or that it is won). A tap opens the dare's own sheet.
 static func _dare_row(dr: Dictionary, rpg: Dictionary, sh) -> Control:
@@ -901,6 +956,19 @@ static func open_prep(what: Dictionary) -> void:
 
 	var first_left = RpgLoot.is_first(st, rpg)
 	if kind == "hunt":
+		# The hunt streak: what a win today makes of it, and what that pays.
+		var s_next = RpgWorld.hunt_streak_next(rpg, str(st.get("date", "")))
+		var s_ore = RpgWorld.hunt_streak_ore(s_next)
+		var s_words = ""
+		if not first_left:
+			s_words = "Hunt streak: %d day%s. Come back tomorrow to keep it." % [s_next, "" if s_next == 1 else "s"]
+		elif s_next >= 2:
+			s_words = "Hunt streak: a win today makes it %d days in a row and pays %d ore more." % [s_next, s_ore]
+		else:
+			s_words = "Win the hunt on days in a row: every day after the first adds %d ore, up to %d." % [RpgWorld.HUNT_STREAK_ORE, RpgWorld.HUNT_STREAK_ORE * RpgWorld.HUNT_STREAK_MAX]
+		var s_line = Kit.muted_para(s_words, 12)
+		s_line.set_meta("prep_streak", s_next)
+		sh.box.add_child(s_line)
 		sh.box.add_child(Kit.sub_head("FIRST WIN TODAY", Pal.ACCENT))
 		var said = Kit.muted_para("Pick one of three prizes: ore, a stack of belt items or a rune." if RpgLoot.hunt_prize_left(rpg, str(st.get("date", ""))) else "Today's prize is picked. A win still pays experience and ore.", 12)
 		said.set_meta("prep_first", first_left)
@@ -922,13 +990,9 @@ static func open_prep(what: Dictionary) -> void:
 		if dr is Dictionary:
 			sh.box.add_child(_dare_row(dr, rpg, sh))
 
-	var names = []
-	for mid in RpgSave.build_of(rpg).get("moves", []):
-		var mv = RpgMoves.by_id(str(mid)) if str(mid) != "" else null
-		if mv != null:
-			names.append(str(mv.name))
-	if not names.is_empty():
-		sh.box.add_child(Kit.clip("Your moves: %s" % " · ".join(PackedStringArray(names)), 12, Pal.MUTED))
+	var my_moves = _moves_block(waves, rpg)
+	if my_moves != null:
+		sh.box.add_child(my_moves)
 
 	var go = Kit.button("Fight", "primary", _fight.bind({"kind": str(what.get("kind", "stage")), "id": id}, sh), "lg", "sword")
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL

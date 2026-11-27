@@ -130,6 +130,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 				rpg.caches[id] = true
 			else:
 				rpg.stages[id] = {"stars": [true, true, false], "wins": 1, "best": 5}
+	# (yesterday's hunt was won, the second day in a row: today's win makes it three)
+	rpg["hunt"] = {"date": Dates.add_days(str(App.today), -1), "won": true, "streak": 2, "best": 2}
 	App.set_rpg(rpg)
 	App.go("realm")
 	await ShotHelper.wait(tree, 1.0)
@@ -140,6 +142,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	# --- the daily hunt -------------------------------------------------------------------------------
 	var hunt = _one("map_hunt")
 	check(hunt != null and str(hunt.get_meta("map_hunt_state")) == "open", "the hunt of the day is open")
+	check(hunt != null and int(hunt.get_meta("map_hunt_streak")) == 2 and ShotHelper.all_text(hunt).contains("2 days"), "its row shows the hunt streak that is alive (2 days)")
 	var ore0 = int(App.rpg().ore)
 	var xp0 = int(App.rpg().xp)
 	_tap(hunt)
@@ -154,6 +157,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.4)
 		hunt = _one("map_hunt")
 		check(bool(App.rpg().hunt.won) and str(App.rpg().hunt.date) == str(App.today) and int(App.rpg().xp) > xp0, "the hunt's win is kept for today and paid")
+		check(int(App.rpg().hunt.streak) == 3 and int(App.rpg().hunt.best) == 3 and hunt != null and int(hunt.get_meta("map_hunt_streak")) == 3, "and it is the third day of the streak (%s)" % str(App.rpg().hunt))
 		check(hunt != null and ["prize", "won"].has(str(hunt.get_meta("map_hunt_state"))), "the map says the hunt is won (%s)" % (str(hunt.get_meta("map_hunt_state")) if hunt != null else "?"))
 		var prize_key = _one("map_hunt_prize")
 		if prize_key != null:

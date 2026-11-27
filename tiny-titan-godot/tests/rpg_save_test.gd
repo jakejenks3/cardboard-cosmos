@@ -183,7 +183,7 @@ func _finish() -> void:
 	var hw = {"kind": "hunt", "id": str(hunt.id)}
 	var hr = RpgLoot.rewards(hunt, summary(), fresh, 1, [], 2)
 	var h1 = run("hunt win", fresh, func(r): return RpgSave.finish(r, hw, hunt, hr, summary(), DAY)).rpg
-	ok(h1.hunt == {"date": DAY, "won": true} and RpgLoot.hunt_prize_left(h1, DAY) and hr.prizes.size() == 3, "a hunt won: marked for the day, the prize still to pick")
+	ok(h1.hunt == {"date": DAY, "won": true, "streak": 1, "best": 1} and RpgLoot.hunt_prize_left(h1, DAY) and hr.prizes.size() == 3, "a hunt won: marked for the day, the prize still to pick")
 	ok(not bool(run("prize early", fresh, func(r): return RpgSave.take_hunt_prize(r, DAY, hunt.prizes[0])).ok) and not bool(run("prize bad", h1, func(r): return RpgSave.take_hunt_prize(r, DAY, {"kind": "nothing"})).ok), "no prize before a win, or for a pick that is none")
 	var h2 = run("prize", h1, func(r): return RpgSave.take_hunt_prize(r, DAY, hunt.prizes[0])).rpg
 	ok(int(h2.ore) == int(h1.ore) + int(hunt.prizes[0].ore) and not RpgLoot.hunt_prize_left(h2, DAY) and not bool(run("prize twice", h2, func(r): return RpgSave.take_hunt_prize(r, DAY, hunt.prizes[1])).ok), "one prize a day")

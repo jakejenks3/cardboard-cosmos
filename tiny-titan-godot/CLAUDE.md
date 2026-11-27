@@ -1860,6 +1860,17 @@ is the Windows handoff.
       metas `dare_chest`, `dare_chest_state`). Walkthrough `tests/shots/dares.gd` (year data). Why:
       the player's real stats make the first regions a turn or two a fight; a dare gives a won stage a
       second life at his own level.
+    - THE STAGE SHEET'S "YOUR MOVES" (2026-11-27): `RealmMap._moves_block(waves, rpg)`: a chip a move of the build
+      (meta `prep_move`, `prep_move_weak`), lit and marked WEAK when a foe of the stage is KNOWN to be weak
+      to its school (`weak_marks`); with weaknesses known and no such move, a line sends the player to the
+      Moves page (meta `prep_moves_tip`). Walkthrough `tests/shots/prep.gd` (year data).
+    - THE HUNT STREAK (2026-11-27): days in a row with the day's hunt won. `saved.rpg.hunt` also keeps
+      `streak` (as of its `date`, the last hunt won) and `best`. `RpgWorld.hunt_streak(rpg, today)` (alive
+      while the last win was today's or yesterday's), `hunt_streak_next`, `hunt_streak_ore` (`HUNT_STREAK_ORE`
+      20 a day after the first, `HUNT_STREAK_MAX` 5 days' worth): `RpgLoot.rewards` adds it to the day's
+      first win (`rewards.streak`), `RpgSave.finish` keeps it. The hunt's row has an "N days" tag (meta
+      `map_hunt_streak`), its sheet a line (meta `prep_streak`); the feat Tracker reads `best`. A day
+      missed costs only the bonus.
     - Walkthrough `tests/shots/fx.gd` (year data): it does not snap screens but cuts the arena out of
       frames every few hundredths of a second into sheets (`fx_sheet_N.png`), plays a result, and draws every
       effect at three moments (`fx_catalogue_N.png`). Look at those when changing an effect. A walkthrough

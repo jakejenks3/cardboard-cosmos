@@ -486,6 +486,40 @@ static func is_open(rpg: Dictionary, stage_id: String) -> bool:
 	return before == "" or done(rpg, before)
 
 
+## THE HUNT STREAK (added 2026-11-27): days in a row on which the day's hunt was won. saved.rpg.hunt keeps
+## "streak" (as of its "date", the day of the last hunt won) and "best". A day missed ends it; nothing is
+## lost but the bonus: the first win of a day pays HUNT_STREAK_ORE more ore for every day of the streak
+## after the first, HUNT_STREAK_MAX days' worth at most.
+const HUNT_STREAK_ORE = 20
+const HUNT_STREAK_MAX = 5
+
+## The streak as it stands on `today`: alive while the last hunt won was today's or yesterday's.
+static func hunt_streak(rpg: Dictionary, today: String) -> int:
+	var h = rpg.get("hunt", {})
+	if not (h is Dictionary) or not bool(h.get("won", false)):
+		return 0
+	var last = str(h.get("date", ""))
+	if last == "" or today == "":
+		return 0
+	if last == today or last == Dates.add_days(today, -1):
+		return maxi(1, int(h.get("streak", 1)))
+	return 0
+
+
+## The streak a win of `today`'s hunt makes (the same again when today's is won already).
+static func hunt_streak_next(rpg: Dictionary, today: String) -> int:
+	var h = rpg.get("hunt", {})
+	var now = hunt_streak(rpg, today)
+	if h is Dictionary and str(h.get("date", "")) == today and bool(h.get("won", false)):
+		return maxi(1, now)
+	return now + 1
+
+
+## The ore a streak of that many days adds to the day's first win.
+static func hunt_streak_ore(streak: int) -> int:
+	return HUNT_STREAK_ORE * clampi(streak - 1, 0, HUNT_STREAK_MAX)
+
+
 ## A DARE (RPG_PLAN.md 8.4, added 2026-11-27): a road stage that is already won, fought again with its foes
 ## raised to the PLAYER'S OWN STRENGTH and one rule of RULES (the stage's own, by its place: the echo's).
 ## Its foes stand at the highest of: the stage's own index, the highest index won + DARE_OVER, and (when the

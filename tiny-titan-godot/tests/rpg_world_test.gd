@@ -95,6 +95,24 @@ func _init() -> void:
 	var opened = RpgSave.open_dare_chest(full, "rustyard", chest)
 	ok(bool(opened.ok) and int(opened.rpg.ore) == int(full.ore) + int(chest.ore) and bool(opened.rpg.starChests.get("rustyard:dare", false)) and not bool(RpgSave.open_dare_chest(opened.rpg, "rustyard", chest).ok)
 		and bool(RpgSave.parse(opened.rpg).starChests.get("rustyard:dare", false)), "with all nine won it opens once, pays, and is kept in the save file", opened.get("why", ""))
+	# --- the hunt streak -------------------------------------------------------------------------------------
+	var hs = RpgSave.first_open(RpgSave.empty(), {}, "")
+	ok(RpgWorld.hunt_streak(hs, "2026-01-10") == 0 and RpgWorld.hunt_streak_next(hs, "2026-01-10") == 1 and RpgWorld.hunt_streak_ore(1) == 0 and RpgWorld.hunt_streak_ore(3) == 2 * RpgWorld.HUNT_STREAK_ORE
+		and RpgWorld.hunt_streak_ore(99) == RpgWorld.HUNT_STREAK_ORE * RpgWorld.HUNT_STREAK_MAX, "no hunt won: no streak; a first win makes one day and adds nothing; the bonus has a ceiling")
+	var hday = RpgWorld.hunt("2026-01-10", hs, [])
+	var hw1 = RpgSave.finish(hs, {"kind": "hunt", "id": str(hday.id)}, hday, RpgLoot.rewards(hday, {"win": true, "turns": 3}, hs, 1, [], 4), {"win": true, "turns": 3}, "2026-01-10")
+	ok(bool(hw1.ok) and int(hw1.rpg.hunt.streak) == 1 and int(hw1.rpg.hunt.best) == 1 and RpgWorld.hunt_streak(hw1.rpg, "2026-01-10") == 1 and RpgWorld.hunt_streak(hw1.rpg, "2026-01-11") == 1 and RpgWorld.hunt_streak(hw1.rpg, "2026-01-12") == 0
+		and RpgWorld.hunt_streak_next(hw1.rpg, "2026-01-10") == 1 and RpgWorld.hunt_streak_next(hw1.rpg, "2026-01-11") == 2 and RpgWorld.hunt_streak_next(hw1.rpg, "2026-01-12") == 1, "a win is day one; it is alive the next day and gone the day after", hw1.rpg.get("hunt"))
+	var hday2 = RpgWorld.hunt("2026-01-11", hw1.rpg, [])
+	var plain2 = RpgLoot.rewards(hday2, {"win": true, "turns": 3}, hs, 1, [], 4)
+	var rew2 = RpgLoot.rewards(hday2, {"win": true, "turns": 3}, hw1.rpg, 1, [], 4)
+	var hw2 = RpgSave.finish(hw1.rpg, {"kind": "hunt", "id": str(hday2.id)}, hday2, rew2, {"win": true, "turns": 3}, "2026-01-11")
+	ok(int(rew2.streak) == 2 and int(rew2.ore) == int(plain2.ore) + RpgWorld.HUNT_STREAK_ORE and int(hw2.rpg.hunt.streak) == 2 and int(hw2.rpg.hunt.best) == 2, "the next day's win is day two and pays the streak's ore", [rew2.ore, plain2.ore, hw2.rpg.get("hunt")])
+	var again2 = RpgSave.finish(hw2.rpg, {"kind": "hunt", "id": str(hday2.id)}, hday2, RpgLoot.rewards(hday2, {"win": true, "turns": 3}, hw2.rpg, 1, [], 5), {"win": true, "turns": 3}, "2026-01-11")
+	ok(int(again2.rpg.hunt.streak) == 2 and not RpgLoot.rewards(hday2, {"win": true, "turns": 3}, hw2.rpg, 1, [], 5).has("streak"), "a second win the same day neither counts nor pays again", again2.rpg.get("hunt"))
+	var hday5 = RpgWorld.hunt("2026-01-15", hw2.rpg, [])
+	var hw5 = RpgSave.finish(hw2.rpg, {"kind": "hunt", "id": str(hday5.id)}, hday5, RpgLoot.rewards(hday5, {"win": true, "turns": 3}, hw2.rpg, 1, [], 6), {"win": true, "turns": 3}, "2026-01-15")
+	ok(int(hw5.rpg.hunt.streak) == 1 and int(hw5.rpg.hunt.best) == 2 and int(RpgSave.parse(hw5.rpg).hunt.best) == 2 and int(RpgFeats.counts(hw5.rpg).hunts) == 2, "days missed start it again at one; the best is kept, in the save file too, and the feats read it", hw5.rpg.get("hunt"))
 	print("RPG WORLD: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
 

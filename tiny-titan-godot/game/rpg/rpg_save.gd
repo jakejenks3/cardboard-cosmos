@@ -219,6 +219,10 @@ static func parse(raw) -> Dictionary:
 	var hunt = raw.get("hunt")
 	if hunt is Dictionary:
 		out.hunt = {"date": str(hunt.get("date", "")) if hunt.get("date") is String else "", "won": hunt.get("won") is bool and hunt.won}
+		if _int(hunt.get("streak")) > 0:
+			out.hunt["streak"] = _int(hunt.get("streak"))
+		if _int(hunt.get("best")) > 0:
+			out.hunt["best"] = _int(hunt.get("best"))
 	var rival = raw.get("rival")
 	if rival is Dictionary:
 		out.rival = {"week": str(rival.get("week", "")) if rival.get("week") is String else "", "won": rival.get("won") is bool and rival.won}
@@ -454,7 +458,9 @@ static func finish(rpg: Dictionary, what: Dictionary, stage: Dictionary, rewards
 			out.stages[of]["dares"] = _int(out.stages[of].get("dares")) + 1
 		"hunt":
 			var date = str(stage.get("date", today))
-			out.hunt = {"date": date, "won": true}
+			var streak = RpgWorld.hunt_streak_next(rpg, date)
+			var old_hunt = rpg.get("hunt", {})
+			out.hunt = {"date": date, "won": true, "streak": streak, "best": maxi(streak, _int(old_hunt.get("best")) if old_hunt is Dictionary else 0)}
 			if rewards.get("prize") is Dictionary and RpgLoot.hunt_prize_left(out, date):
 				var prize = _option_pack(rewards.prize)
 				if prize != null:

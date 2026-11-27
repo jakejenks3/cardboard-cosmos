@@ -28,6 +28,7 @@ const LADDERS = [
 	["relics", "Treasure Hunter", "relic", "Find %d relics", [[1, 50], [5, 150], [12, 300], [24, 600]]],
 	["spire", "Climber", "spire", "Reach floor %d of the Spire", [[5, 100], [10, 200], [20, 400]]],
 	["dares", "Daredevil", "flame", "Win the dare of %d stages", [[1, 40], [10, 150], [30, 400], [72, 900]]],
+	["hunts", "Tracker", "hunt", "Win the daily hunt %d days in a row", [[3, 60], [7, 150], [14, 300], [30, 600]]],
 	["mastery", "Craftsman", "star_on", "Earn %d mastery stars", [[1, 30], [6, 100], [15, 250], [30, 500]]],
 	["perfect", "Stone Wall", "guard", "Land %d perfect guards", [[1, 30], [10, 100], [40, 250], [100, 500]]],
 	["breaks", "Breaker", "fx_broken", "Break %d guards", [[5, 30], [25, 100], [100, 250], [300, 500]]],
@@ -109,6 +110,8 @@ static func counts(rpg: Dictionary, sheet = null) -> Dictionary:
 	var spire = rpg.get("spire", {})
 	out.spire = int(spire.get("best", 0)) if spire is Dictionary else 0
 	out.dares = RpgWorld.dare_count(rpg)
+	var hunt = rpg.get("hunt", {})
+	out.hunts = int(hunt.get("best", 0)) if hunt is Dictionary else 0
 	var mastery = rpg.get("mastery", {})
 	if mastery is Dictionary:
 		for mid in mastery:
