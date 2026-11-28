@@ -889,19 +889,92 @@ class TimelineBox extends VBoxContainer:
 # History: every session, newest first
 # ---------------------------------------------------------------------------
 
+## The Log sub-tab: a filter, then the workouts week by week (newest first), HIST_WEEKS weeks at a time
+## (2026-11-27, "look more clean and crisp": it was a date heading over every single workout).
+const HIST_WEEKS = 6
+const HIST_FILTERS = [["all", "All"], ["lift", "Lifting"], ["climb", "Climbing"], ["run", "Running"], ["other", "Other"]]
+static var hist_filter: String = "all"
+static var hist_weeks: int = HIST_WEEKS
+
+
+static func hist_match(x: Dictionary, f: String) -> bool:
+	var d = str(x.get("discipline", ""))
+	match f:
+		"all":
+			return true
+		"lift", "climb", "run":
+			return d == f
+	return not ["lift", "climb", "run"].has(d)
+
+
+## "THIS WEEK", "LAST WEEK", else "NOV 9 - 15" (or "OCT 27 - NOV 2").
+static func week_title(wk: String, today: String) -> String:
+	var this_wk = Dates.week_key(today)
+	if wk == this_wk:
+		return "THIS WEEK"
+	if wk == Dates.add_days(this_wk, -7):
+		return "LAST WEEK"
+	var end = Dates.add_days(wk, 6)
+	var a = Dates.format_date(wk, {"month": "short", "day": "numeric"})
+	var b = Dates.format_date(end, {"day": "numeric"}) if wk.substr(5, 2) == end.substr(5, 2) else Dates.format_date(end, {"month": "short", "day": "numeric"})
+	return ("%s - %s" % [a, b]).to_upper()
+
+
+func _set_hist_filter(id: String) -> void:
+	Sfx.tick()
+	hist_filter = id
+	hist_weeks = HIST_WEEKS
+	rebuild()
+
+
+func _more_weeks() -> void:
+	Sfx.tap()
+	hist_weeks += HIST_WEEKS
+	rebuild()
+
+
 func _build_history() -> void:
 	var sorted = App.sessions().duplicate()
 	TTUtil.stable_sort(sorted, func(a, b): return a.date > b.date or (a.date == b.date and a.createdAt > b.createdAt))
 	var xp_of = App.state.sessionXp
-	var day = ""
-	var list = null
-	for x in sorted:
-		if x.date != day:
-			day = x.date
-			var g = Kit.vbox(6)
-			var dl = PixelFont.rect(Dates.format_date(day, {"weekday": "short", "month": "short", "day": "numeric"}), 2, Pal.MUTED)
-			g.add_child(Kit.pad(dl, 2, 4, 0, 0))
-			list = Kit.vbox(6)
-			g.add_child(list)
-			add_child(g)
-		list.add_child(Parts.session_row(x, int(xp_of.get(x.id, 0))))
+	var keys = []
+	for f in HIST_FILTERS:
+		var k = Kit.choice(str(f[1]), hist_filter == str(f[0]), _set_hist_filter.bind(str(f[0])), Pal.tab("journey"), 12)
+		k.tooltip_text = "Show %s" % ("every workout" if f[0] == "all" else str(f[1]).to_lower())
+		k.set_meta("hist_filter", str(f[0]))
+		keys.append(k)
+	add_child(Kit.choice_track(keys))
+	var shown = sorted.filter(func(x): return hist_match(x, hist_filter))
+	if shown.is_empty():
+		add_child(Kit.para("Nothing of this kind logged yet.", 13, Pal.MUTED))
+		return
+	var oldest = Dates.add_days(Dates.week_key(App.today), -7 * (hist_weeks - 1))
+	var weeks = []
+	var by_week = {}
+	var more = false
+	for x in shown:
+		var wk = Dates.week_key(str(x.date))
+		if wk < oldest:
+			more = true
+			break
+		if not by_week.has(wk):
+			by_week[wk] = []
+			weeks.append(wk)
+		by_week[wk].append(x)
+	for wk in weeks:
+		var list = by_week[wk]
+		var xp = 0
+		for x in list:
+			xp += int(xp_of.get(x.id, 0))
+		var right = Kit.label("%d · +%s XP" % [list.size(), Xp.fmt_int(xp)], 11, Pal.MUTED, true)
+		var sec = Kit.section("week_" + wk, week_title(wk, App.today), "calendar", Pal.tab("journey"), right, Callable(), 6, 8)
+		sec.set_meta("hist_week", wk)
+		for x in list:
+			sec.add(Parts.session_row(x, int(xp_of.get(x.id, 0)), true))
+		add_child(sec)
+	if weeks.is_empty():
+		add_child(Kit.para("Nothing in the last %d weeks." % hist_weeks, 13, Pal.MUTED))
+	if more:
+		var b = Kit.button("Show older weeks", "secondary", _more_weeks, "md")
+		b.set_meta("hist_more", true)
+		add_child(b)

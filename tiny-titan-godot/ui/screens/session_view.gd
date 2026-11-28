@@ -196,6 +196,27 @@ static func _lift_row(lift: String, sets: Array, cmp: Dictionary, pt: bool, wu: 
 
 ## The detail sheet of a logged session: everything in it, the XP it earned,
 ## and an Edit key. A lift session lists its exercises (`lift_rows`).
+## A lift session's numbers as tiles: sets, reps, the weight moved, the time (only what it has).
+static func lift_tiles(session: Dictionary) -> Control:
+	var st = Xp.session_stats(session)
+	var wu = App.weight_unit()
+	var items = []
+	items.append([TTUtil.num_str(st.sets), "Sets"])
+	items.append([TTUtil.num_str(int(st.reps) + int(st.bwReps)), "Reps"])
+	if float(st.volumeKg) > 0.0:
+		var moved = JourneyScreen.split_unit(Fmt.fmt_big_kg(float(st.volumeKg), wu))
+		items.append([str(moved[0]), "%s moved" % str(moved[1]) if str(moved[1]) != "" else "Moved"])
+	var dur = int(TTUtil.get_or(session, "durationSec", 0))
+	if dur > 0:
+		items.append([TTUtil.num_str(TTUtil.jsround(dur / 60.0)), "Minutes"])
+	var g = Kit.grid(items.size(), 6)
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	g.set_meta("session_tiles", items.size())
+	for it in items:
+		g.add_child(JourneyScreen.well_tile(str(it[0]), str(it[1]), Pal.LIFT.lightened(0.2), 2))
+	return g
+
+
 static func open(session: Dictionary) -> void:
 	Sfx.tap()
 	var d = str(session.discipline)
@@ -204,7 +225,10 @@ static func open(session: Dictionary) -> void:
 	var title = session.get("title")
 	if title == null or str(title) == "":
 		title = Misc.title(session) if Misc.is_misc(session) else TT.DISCIPLINE_META[d].name
-	var sheet = Kit.sheet(Icons.strip_emoji(title))
+	# (2026-11-27, "clean and crisp": the date is the sheet's title, the session's name, kind and records on
+	# one line under it, a lift's numbers as tiles; it used to say "Lifting" twice)
+	var sheet = Kit.sheet(Dates.format_date(session.date, {"weekday": "long", "month": "short", "day": "numeric"}))
+	sheet.set_meta("session_sheet", str(session.get("id", "")))
 	var box = sheet.box
 
 	var head = Kit.hbox(10)
@@ -212,13 +236,29 @@ static func open(session: Dictionary) -> void:
 	var when = Kit.vbox(1)
 	when.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	when.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	when.add_child(Kit.clip(Dates.format_date(session.date, {"weekday": "long", "month": "short", "day": "numeric"}), 15, null, true))
-	var sub = Summary.summarize_session(session, App.settings())
-	if sub != "":
-		when.add_child(Kit.clip(sub, 12, Pal.MUTED))
+	var tl = Kit.hbox(6)
+	tl.add_child(Kit.clip(Icons.strip_emoji(title), 16, null, true))
+	var kind = Parts.day_kind_word(session)
+	if kind != "":
+		tl.add_child(Kit.vcenter(Kit.tag(kind, Pal.disc(d), true, 10)))
+	var prs = Parts.pr_count(session)
+	if prs > 0:
+		tl.add_child(Kit.vcenter(Kit.tag("%d PR" % prs if prs > 1 else "PR", Pal.ACCENT, true, 10)))
+	when.add_child(tl)
+	var sub = Dates.relative_day(session.date, App.today)
+	var dur = int(TTUtil.get_or(session, "durationSec", 0))
+	if d == "lift" and dur > 0:
+		sub += " · " + Fmt.fmt_duration_short(dur)
+	elif d != "lift":
+		var said = Summary.summarize_session(session, App.settings())
+		if said != "":
+			sub = said
+	when.add_child(Kit.clip(sub, 12, Pal.MUTED))
 	head.add_child(when)
 	head.add_child(Kit.vcenter(Parts.xp_chip(int(App.state.sessionXp.get(session.id, 0)), 13)))
 	box.add_child(head)
+	if d == "lift":
+		box.add_child(lift_tiles(session))
 
 	if d == "lift":
 		box.add_child(lift_rows(session))
@@ -260,17 +300,25 @@ static func open(session: Dictionary) -> void:
 		nc.add_child(Kit.para(Icons.strip_emoji(notes), 13, Pal.TEXT))
 		box.add_child(nc)
 
-	# Where the XP came from.
+	# Where the XP came from: a quiet list, label and amount (it was a flow of brown chips).
 	var earned = Xp.base_session_xp(session)
-	var parts = Kit.flow(6)
-	for p in earned.get("parts", []):
-		# The rules count in kg and km; the player may think in pounds and miles.
-		var label = Units.xp_label(session, Icons.strip_emoji(str(p.label)), App.settings())
-		parts.add_child(Kit.icon_chip("", "%s  +%s" % [label, Xp.fmt_int(p.xp)], Pal.deep(Pal.ACCENT), "", Pal.TEXT))
-	if parts.get_child_count() > 0:
-		box.add_child(parts)
-	else:
-		parts.queue_free()
+	var xp_parts = earned.get("parts", [])
+	if not xp_parts.is_empty():
+		var xw = PanelContainer.new()
+		xw.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		xw.add_theme_stylebox_override("panel", PixBox.well(10, 6))
+		xw.set_meta("xp_parts", xp_parts.size())
+		var xv = Kit.vbox(2)
+		xv.add_child(Kit.label("WHERE THE XP CAME FROM", 9, Pal.MUTED, true))
+		for p in xp_parts:
+			# The rules count in kg and km; the player may think in pounds and miles.
+			var label = Units.xp_label(session, Icons.strip_emoji(str(p.label)), App.settings())
+			var xr = Kit.hbox(8)
+			xr.add_child(Kit.clip(label, 12, Pal.TEXT))
+			xr.add_child(Kit.label("+" + Xp.fmt_int(p.xp), 12, Pal.ACCENT, true))
+			xv.add_child(xr)
+		xw.add_child(xv)
+		box.add_child(xw)
 
 	var keys = Kit.hbox(8)
 	var edit = Kit.button("Edit", "primary", SessionView._edit.bind(sheet, session), "lg", "edit")

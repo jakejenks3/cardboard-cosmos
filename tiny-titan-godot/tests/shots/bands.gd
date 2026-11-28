@@ -224,7 +224,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var ai = _index(form, "Pull-Apart")
 	var fi = _index(form, "Face Pull")
 	check(ai >= 0 and bool(form.lift.exercises[ai].get("band", false)) and _find("band_of", null, "%d:0" % ai) != null, "Pull-Apart starts with a band")
-	check(fi >= 0 and bool(form.lift.exercises[fi].get("band", false)) and str(form.lift.exercises[fi].sets[0].band) == "green" and ShotHelper.all_text(_card(fi)).contains("Last 15, 15, 12 · green band"), "the face pull comes back with last time's bands, said in words")
+	check(fi >= 0 and bool(form.lift.exercises[fi].get("band", false)) and str(form.lift.exercises[fi].sets[0].band) == "green" and ShotHelper.all_text(_card(fi)).contains("15, 15, 12 · green band"), "the face pull comes back with last time's bands, said in words")
 	if ai >= 0:
 		form.lift._on_set_text("20", ai, 0, "reps")
 	if fi >= 0:

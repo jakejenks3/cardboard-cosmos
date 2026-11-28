@@ -368,7 +368,7 @@ func build(parent: Control) -> void:
 		es = LogWidgets.big_input(ds, "00", "dur.s", 54, 20)
 	else:
 		eh = LogWidgets.num_input(dh, "0", "dur.h", 34)
-		em = LogWidgets.num_input(dm, "45", "dur.m", 38)
+		em = LogWidgets.num_input(dm, "00" if discipline == "lift" and editing == null else "45", "dur.m", 38)
 		es = LogWidgets.num_input(ds, "00", "dur.s", 38)
 	eh.tooltip_text = "Hours"
 	em.tooltip_text = "Minutes"
@@ -495,10 +495,42 @@ func _invalid_hint() -> String:
 	return "Enter a distance"
 
 
+## A new lift workout of today with no time typed is timed by itself (auto_duration, from the first tick):
+## the row says so, and the quick picks wait behind "Set time" (2026-11-27: a row of five time keys the
+## player no longer needs on every workout).
+var _show_picks: bool = false
+
+func _times_itself() -> bool:
+	return discipline == "lift" and editing == null and date == App.today and duration_sec() <= 0 and not _show_picks
+
+
+func _time_note() -> String:
+	if lift != null and lift.started > 0.0:
+		var mins = int((Time.get_unix_time_from_system() - lift.started) / 60.0)
+		return "Timing: %s since your first tick" % ("under a minute" if mins < 1 else Fmt.fmt_duration_short(mins * 60))
+	return "Time counts from your first ticked set"
+
+
+func _pick_times() -> void:
+	Sfx.tick()
+	_show_picks = true
+	screen.rebuild()
+
+
 func _fill_duration_chips() -> void:
 	if _chip_row == null or not is_instance_valid(_chip_row):
 		return
 	Kit.clear(_chip_row)
+	if _times_itself():
+		_chip_row.add_child(Kit.vcenter(Icons.rect("stopwatch", 16)))
+		var tl = Kit.clip(_time_note(), 12, Pal.MUTED)
+		tl.set_meta("time_note", true)
+		_chip_row.add_child(Kit.vcenter(tl))
+		var st = LogWidgets.mini_chip("Set time", false, _pick_times, Pal.disc(discipline), 8)
+		st.tooltip_text = "Type the time or pick one"
+		st.set_meta("set_time", true)
+		_chip_row.add_child(Kit.vcenter(st))
+		return
 	var last_min = 0
 	if last_same != null and last_same.get("durationSec") != null and int(last_same.durationSec) > 0:
 		last_min = TTUtil.jsround(float(last_same.durationSec) / 60.0)

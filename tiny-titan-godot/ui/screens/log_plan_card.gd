@@ -34,6 +34,7 @@ const KICKERS = {
 	"lift": "PROBABLY TODAY",
 	"new": "TRY SOMETHING NEW",
 	"pt": "PHYSICAL THERAPY",
+	"done": "DONE TODAY",
 }
 
 ## Folded away to its header (until the game is closed).
@@ -67,14 +68,60 @@ static func _head(plan: Dictionary, count: Control, last = null) -> Control:
 
 
 ## The rows, under their kickers.
+## Rows done today (and not in this workout) go last, short, under "DONE TODAY" (2026-11-27: they took as
+## much room as the lifts still to do, OR chips and all). A row only becomes done when a workout is saved,
+## so nothing moves while this one is being logged.
 static func _fill(c: Card, ctx: Dictionary, rows: Array, here: Dictionary) -> void:
-	var group = ""
+	var todo = []
+	var done = []
 	for r in rows:
-		var g = _group(r)
+		if _state(r, here) == "done":
+			done.append(r)
+		else:
+			todo.append(r)
+	var group = ""
+	for r in todo + done:
+		var g = "done" if _state(r, here) == "done" else _group(r)
 		if g != group:
 			group = g
-			c.add(Kit.label(str(KICKERS[g]), 10, Pal.MUTED, true))
-		c.add(_row(ctx, r, here))
+			var k = Kit.label(str(KICKERS[g]), 10, Pal.GOOD if g == "done" else Pal.MUTED, true)
+			if g == "done":
+				k.set_meta("plan_done_head", done.size())
+			c.add(k)
+		c.add(_done_row(ctx, r) if g == "done" else _row(ctx, r, here))
+
+
+static func _state(r: Dictionary, here: Dictionary) -> String:
+	if here.has(Xp.normalize_exercise(str(r.name))):
+		return "in"
+	return "done" if str(r.done) != "" else "add"
+
+
+## A lift of the plan done today: one quiet line, a tick, the lift that did it and its sets. Still a key
+## (it adds the lift to this workout, for a second go), with the same unseen name as before.
+static func _done_row(ctx: Dictionary, r: Dictionary) -> Control:
+	var sp = LiftNames.split(str(r.done))
+	var h = Kit.hbox(8)
+	h.add_child(Kit.vcenter(Kit.tick_box(true, 18)))
+	var top = Kit.squeeze(6)
+	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(Kit.soft_name(str(sp.move), 12, null, true, 150.0))
+	if str(sp.variation) != "":
+		top.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+	h.add_child(top)
+	var words = _words(ctx, r, "done")
+	var said = Kit.clip_fit(str(words.said), 11, Pal.MUTED, true, 130.0)
+	said.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	said.set_meta("plan_done_sets", str(words.said))
+	h.add_child(said)
+	Kit.passthrough(h)
+	var tap: Callable = ctx.tap
+	var b = LogWidgets.key("Plan: %s" % str(r.name), Pal.PANEL2.lerp(Pal.GOOD, 0.12), h, tap.bind(str(r.name)), 8, 4, 2, Pal.with_alpha(Pal.GOOD, 0.6))
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = "Done today. Tap to add it to this workout again"
+	b.set_meta("plan_pick", str(r.name))
+	b.set_meta("plan_state", "done")
+	return b
 
 
 ## The card of the lift form, or null when there is nothing to offer (another

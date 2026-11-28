@@ -265,20 +265,102 @@ static func session_row(session: Dictionary, xp, flat: bool = false) -> Control:
 	var main = Kit.vbox(1)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	card.set_meta("session_row", str(session.get("id", "")))
 	var title = session.get("title")
 	if title == null or str(title) == "":
 		title = Misc.title(session) if Misc.is_misc(session) else TT.DISCIPLINE_META[d].name
+	# (2026-11-27, "look more clean and crisp": the day's kind and its records as tags in the title line, a
+	# lift's movements named on a line of their own instead of "3 exercises", the numbers under them)
 	var head = Kit.hbox(6)
 	head.add_child(Kit.clip(Icons.strip_emoji(title), 15 if flat else 14, null, true))
-	head.add_child(Kit.muted(Dates.relative_day(session.date, App.today), 11))
+	var kind = day_kind_word(session)
+	if kind != "":
+		var kt = Kit.tag(kind, Pal.disc(d), true, 10)
+		kt.set_meta("session_kind", kind)
+		head.add_child(Kit.vcenter(kt))
+	var prs = pr_count(session)
+	if prs > 0:
+		var pt = Kit.tag("%d PR" % prs if prs > 1 else "PR", Pal.ACCENT, true, 10)
+		pt.set_meta("session_prs", prs)
+		head.add_child(Kit.vcenter(pt))
+	head.add_child(Kit.vcenter(Kit.muted(Dates.relative_day(session.date, App.today), 11)))
 	main.add_child(head)
-	var sub = Summary.summarize_session(session, App.settings())
+	if d == "lift":
+		var moves = lift_moves(session)
+		if moves != "":
+			var ml = Kit.clip(moves, 12, Pal.TEXT)
+			ml.set_meta("session_moves", moves)
+			main.add_child(ml)
+	var sub = session_numbers(session)
 	if sub != "":
 		main.add_child(Kit.clip(sub, 12, Pal.MUTED))
 	row.add_child(main)
 	row.add_child(Kit.vcenter(xp_chip(xp, 12)))
 	card.add(row)
 	return card
+
+
+## A lift session's movements in the order done ("Deadlift · Overhead Press · Row"), each once, without
+## their variations (the session's sheet has those).
+static func lift_moves(session: Dictionary) -> String:
+	var out = []
+	for e in session.get("exercises", []):
+		if LiftTrend.real_sets(e.get("sets", [])).is_empty():
+			continue
+		var mv = str(LiftNames.split(str(e.get("name", ""))).move).strip_edges()
+		if mv != "" and not out.has(mv):
+			out.append(mv)
+	return " · ".join(PackedStringArray(out))
+
+
+## The numbers of a session in one short line. A lift: sets, the weight moved, bodyweight reps, the time
+## (its movements are named above it); anything else as Summary says it.
+static func session_numbers(session: Dictionary) -> String:
+	if str(session.get("discipline", "")) != "lift":
+		return Summary.summarize_session(session, App.settings())
+	var st = Xp.session_stats(session)
+	var parts = []
+	parts.append("%s set%s" % [TTUtil.num_str(st.sets), "" if int(st.sets) == 1 else "s"])
+	if float(st.volumeKg) != 0.0:
+		parts.append(Fmt.fmt_big_kg(float(st.volumeKg), App.weight_unit()))
+	if int(st.bwReps) != 0:
+		parts.append("%s BW reps" % TTUtil.num_str(st.bwReps))
+	var dur = int(TTUtil.get_or(session, "durationSec", 0))
+	if dur > 0:
+		parts.append(Fmt.fmt_duration_short(dur))
+	return " · ".join(PackedStringArray(parts))
+
+
+## "PULL", "PUSH", "LEGS"... for a lift session when the player has a training split; else "".
+static func day_kind_word(session: Dictionary) -> String:
+	if str(session.get("discipline", "")) != "lift":
+		return ""
+	var cycle = Missions.split_cycle(str(App.settings().get("split", "auto")))
+	if cycle.is_empty():
+		return ""
+	var k = Missions.kind_of_day(session.get("exercises", []), cycle, App.pt())
+	match k:
+		"pull", "push", "legs", "upper", "lower":
+			return k.to_upper()
+	return ""
+
+
+static var _pr_key: String = ""
+static var _pr_days: Dictionary = {}
+
+## How many records the replay noted on this session's day for its discipline (the Story page's "pr"
+## moments, which carry no session id: two sessions of one kind on one day share them).
+static func pr_count(session: Dictionary) -> int:
+	var chron = App.state.get("chronicle", [])
+	var key = "%s:%d" % [str(App.saved.get("updatedAt", "")), chron.size()]
+	if key != _pr_key:
+		_pr_key = key
+		_pr_days = {}
+		for c in chron:
+			if str(c.get("kind", "")) == "pr":
+				var k = "%s|%s" % [str(c.get("date", "")), str(c.get("discipline", ""))]
+				_pr_days[k] = int(_pr_days.get(k, 0)) + 1
+	return int(_pr_days.get("%s|%s" % [str(session.get("date", "")), str(session.get("discipline", ""))], 0))
 
 
 ## Skin tone, hair style and hair colour pickers, and facial hair when

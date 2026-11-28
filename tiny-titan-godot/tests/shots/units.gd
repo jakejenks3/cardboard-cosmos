@@ -136,7 +136,12 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	await ShotHelper.wait(tree, 0.8)
 	var sh = _sheet()
 	var words = ShotHelper.all_text(sh)
-	check(words.contains("%s mi  +" % Units._short(miles, 2)) and words.contains("300 ft climbed  +") and not words.contains(" km  +") and not words.contains(" m climbed"), "the run's XP chips are in miles and feet")
+	# (since 2026-11-27 a plain list, a label and its amount on a line: the label is a Label of its own)
+	var labels = []
+	for n in ShotHelper.walk(sh):
+		if n is Label:
+			labels.append(str(n.text))
+	check(labels.has("%s mi" % Units._short(miles, 2)) and labels.has("300 ft climbed") and not labels.any(func(t): return t.ends_with(" km") or t.ends_with(" m climbed")), "the run's XP lines are in miles and feet")
 	await ShotHelper.snap(tree, "units_3_run_sheet")
 	await _close_sheets()
 

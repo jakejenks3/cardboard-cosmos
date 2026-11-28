@@ -138,11 +138,12 @@ func measure(what: String) -> void:
 	var top = -1.0
 	var bottom = -1.0
 	for i in range(f.lift.exercises.size()):
-		parts.append("%d sets: %d px" % [f.lift.exercises[i].sets.size(), int(card_height("ex%d.name" % i))])
-		var e = field("ex%d.name" % i)
-		var p = e
-		while p != null and not (p is Card):
-			p = p.get_parent()
+		# (a lift already in the log has its name as a title, not a box, since 2026-11-27: find the card itself)
+		var p = null
+		for n in ShotHelper.walk(screen()):
+			if n is Card and n.has_meta("exercise_card") and int(n.get_meta("exercise_card")) == i and n.is_visible_in_tree():
+				p = n
+		parts.append("%d sets: %d px" % [f.lift.exercises[i].sets.size(), int(p.size.y) if p != null else -1])
 		if p != null:
 			if top < 0.0:
 				top = p.global_position.y
@@ -439,7 +440,7 @@ func _year() -> void:
 	print("lb draft: ", draft_text(lift.exercises[0]))
 	# At finger sizes the badge drops its unit (the keys take the room).
 	check(ShotHelper.find_text(screen(), "+12.5" if Kit.fingers else "+12.5 lb") != null, "'+12.5 lb' badge shown")
-	no_overflow("ex0.name")
+	no_overflow("ex0.s0.reps")
 	App.update_settings({"weightUnit": "kg"})
 	App.open_log(null)
 	await ShotHelper.frames(tree, 3)

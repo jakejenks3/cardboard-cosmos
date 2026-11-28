@@ -58,6 +58,8 @@ var started: float = 0.0
 var _plates: Array = []  # [exercise] -> Label: what goes on the bar (barbell lifts)
 ## The superset label of each exercise ("A1", "A2", "B1"... or ""), worked out on every build.
 var _labels: Array = []
+## [exercise] -> built with its name as a title (_named), not a box
+var _titled: Array = []
 
 
 func _init(owner_form, edit_id = null) -> void:
@@ -196,6 +198,7 @@ func build(parent: Control) -> void:
 	for known in _own:
 		_have[Xp.normalize_exercise(str(known))] = true
 	_filed = []
+	_titled = []
 	_badges = []
 	_wsteps = []
 	_deltas = []
@@ -357,13 +360,17 @@ func _exercise_card(i: int) -> Card:
 		gt.set_meta("superset_tag", glabel)
 		gt.tooltip_text = "Superset: done in turn with the lift next to it"
 		head.add_child(Kit.vcenter(gt))
-	var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
-	name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
-	name_edit.set_meta("type_top", true)
-	name_edit.text_changed.connect(_on_name_typed.bind(i))
-	name_edit.focus_exited.connect(_on_name_done.bind(i))
-	name_edit.text_submitted.connect(func(_t): _on_name_done(i))
-	head.add_child(name_edit)
+	_titled.append(_named(i))
+	if _titled[i]:
+		head.add_child(_name_title(i))
+	else:
+		var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
+		name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
+		name_edit.set_meta("type_top", true)
+		name_edit.text_changed.connect(_on_name_typed.bind(i))
+		name_edit.focus_exited.connect(_on_name_done.bind(i))
+		name_edit.text_submitted.connect(func(_t): _on_name_done(i))
+		head.add_child(name_edit)
 	var eff = str(e.get("effort", ""))
 	if eff != "":
 		var et = Kit.tag(LogLiftMenu.effort_word(eff).to_upper(), LogLiftMenu.effort_color(eff), true, 10)
@@ -426,25 +433,11 @@ func _exercise_card(i: int) -> Card:
 		pth.set_meta("pt_hint", true)
 		c.add(Kit.pad(pth, 6, 0, 4, 0))
 
-	# Last time · best, one line (the date is in the tooltip)
-	var has_best = best != null and float(best.weightKg) > 0.0
-	if lp != null or has_best:
-		var ref = Kit.hbox(10)
-		ref.mouse_filter = Control.MOUSE_FILTER_PASS
-		if lp != null:
-			var last_words = "Last " + LiftHistory.describe_sets(lp.sets, _fmt_w)
-			# (done with a band before bands could be logged: it was no bodyweight lift)
-			if banded and Bands.top(lp.sets) == "":
-				last_words = last_words.replace(" bodyweight", "")
-			if both and Sides.side_words(lp.sets) != "":
-				last_words += " · " + Sides.side_words(lp.sets)
-			ref.add_child(Kit.clip(last_words, 12, Pal.MUTED))
-			ref.tooltip_text = "Last time: %s" % Dates.relative_day(lp.date, App.today)
-		else:
-			ref.add_child(Kit.spacer())
-		if has_best:
-			ref.add_child(Kit.label("Best " + _fmt_w(best.weightKg), 12, Pal.ACCENT, true))
-		c.add(Kit.pad(ref, 6, 0, 4, 1))
+	# Last time, the best and the aim in one sunken box: two columns, LAST and AIM, with Fill at the end
+	# (2026-11-27, "clean and crisp": they were three loose lines of different sizes).
+	var ref_box = _ref_block(i, lp, best, banded, both)
+	if ref_box != null:
+		c.add(ref_box)
 	var note = App.lift_note(str(e.name)) if str(e.name).strip_edges() != "" else ""
 	if note != "":
 		var nb = Kit.link("Note: " + note, LogLiftMenu.open.bind(self, i), 12, Pal.ACCENT2)
@@ -454,22 +447,6 @@ func _exercise_card(i: int) -> Card:
 		nb.set_meta("lift_note", note)
 		nb.tooltip_text = "Your note for %s (tap to change it)" % str(e.name).strip_edges()
 		c.add(Kit.pad(nb, 6, 0, 4, 0))
-	var aim = _aim_of(i)
-	if aim != null:
-		var ar = Kit.hbox(6)
-		var acap = Kit.label(str(aim.cap), 9, Pal.MUTED, true)
-		acap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		ar.add_child(acap)
-		var aw = Kit.clip(str(aim.words), 12, null, true)
-		aw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ar.add_child(aw)
-		var fk = LogWidgets.mini_chip("Fill", false, fill_aim.bind(i), Pal.LIFT, 8)
-		fk.tooltip_text = "%s: fill in the aim" % label_name_of(i)
-		fk.set_meta("fill_aim", i)
-		ar.add_child(Kit.vcenter(fk))
-		ar.set_meta("aim_line", str(aim.words))
-		c.add(Kit.pad(ar, 6, 0, 4, 0))
-
 	# Sets
 	var slots = []
 	var wsteps = []
@@ -481,6 +458,8 @@ func _exercise_card(i: int) -> Card:
 		var s = e.sets[j]
 		var ref_set = _ref_set(lp, j)
 		var row = Kit.hbox(3 if Kit.fingers else 4)
+		var row_bg = _set_bg(bool(s.get("done", false)))
+		row_bg.add_child(row)
 		row.add_child(_tick_key(i, j, label_name))
 		var reps_opts = {"placeholder": "–", "width": 32, "min": 0, "compact": true}
 		if ref_set != null:
@@ -546,7 +525,7 @@ func _exercise_card(i: int) -> Card:
 		slots.append(slot)
 		wsteps.append(ws if ws != null else rs)
 		row.add_child(LogWidgets.quiet_icon("close", remove_set.bind(i, j), "Remove set %d" % (j + 1), 26))
-		c.add(row)
+		c.add(row_bg)
 	_badges.append(slots)
 	_wsteps.append(wsteps)
 
@@ -638,7 +617,8 @@ func _refresh_filed(i: int) -> void:
 		return
 	var slot = _filed[i]
 	Kit.clear(slot)
-	var r = filed_as(str(exercises[i].name))
+	# (a settled name is the card's title already: the movement and its variation)
+	var r = null if (i < _titled.size() and bool(_titled[i])) else filed_as(str(exercises[i].name))
 	slot.get_parent().visible = r != null
 	slot.set_meta("filed_as", str(r.name) if r != null else "")
 	if r == null:
@@ -1325,6 +1305,8 @@ func _on_name_done(i: int) -> void:
 	if _building or i >= exercises.size():
 		return
 	var e = exercises[i]
+	var renamed = bool(e.get("_rename", false))
+	e.erase("_rename")
 	var lp = _last.get(Xp.normalize_exercise(e.name))
 	var pristine = true
 	for s in e.sets:
@@ -1333,7 +1315,7 @@ func _on_name_done(i: int) -> void:
 	if lp != null and pristine:
 		exercises[i] = draft_from_sets(str(e.name).strip_edges(), lp.sets, wu)
 		_changed(true)
-	elif i < _built_names.size() and str(e.name).strip_edges() != _built_names[i]:
+	elif renamed or (i < _built_names.size() and str(e.name).strip_edges() != _built_names[i]):
 		_changed(true)
 
 
@@ -1658,3 +1640,130 @@ func set_effort(i: int, id: String) -> void:
 	else:
 		exercises[i]["effort"] = id
 	_changed(true)
+
+
+# ---------------------------------------------------------------------------
+# The card's title, its reference box and its done sets (2026-11-27)
+# ---------------------------------------------------------------------------
+
+## Is the exercise's name settled: a lift that will be saved under the name shown (one of the player's, or
+## a lift of the library written as the library writes it), and not being renamed? Then the card's title
+## is the movement with its variation as a tag, like everywhere else, and a tap on it renames.
+func _named(i: int) -> bool:
+	var e = exercises[i]
+	var nm = str(e.name).strip_edges()
+	if nm == "" or bool(e.get("_rename", false)) or not _files_names:
+		return false
+	if _have.has(Xp.normalize_exercise(nm)):
+		return true
+	var r = filed_as(nm)
+	return r != null and str(r.name) == nm and str(r.kind) == "exact" and not bool(r.get("pt", false))
+
+
+func _name_title(i: int) -> Button:
+	var nm = str(exercises[i].name).strip_edges()
+	var sp = LiftNames.split(nm)
+	var b = Button.new()
+	b.flat = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(48, 30)
+	# (the tooltip names the lift and never changes: a rebuild finds the same key again)
+	b.tooltip_text = "Rename %s" % nm
+	b.set_meta("name_title", nm)
+	var h = Kit.squeeze(6)
+	h.set_anchors_preset(Control.PRESET_FULL_RECT)
+	h.offset_left = 6
+	h.add_child(Kit.soft_name(str(sp.move), 17, null, true, 230.0))
+	if str(sp.variation) != "":
+		h.add_child(SessionView.variation_tag(str(sp.variation), 11, true))
+	Kit.passthrough(h)
+	b.add_child(h)
+	b.pressed.connect(_rename.bind(i))
+	return b
+
+
+## The title tapped: the name box comes back for typing (a phone opens its keyboard on the next tap).
+func _rename(i: int) -> void:
+	if i >= exercises.size():
+		return
+	Sfx.tap()
+	exercises[i]["_rename"] = true
+	_set_focus_after("ex%d.name" % i)
+	_changed(true)
+
+
+## LAST (sets, when, the best as a gold word) and AIM (with Fill) side by side in a sunken box; either
+## alone when there is only one. Null when there is neither.
+func _ref_block(i: int, lp, best, banded: bool, both: bool):
+	var has_best = best != null and float(best.weightKg) > 0.0
+	var aim = _aim_of(i)
+	if lp == null and aim == null and not has_best:
+		return null
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.well(8, 5))
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.set_meta("ref_block", true)
+	var h = Kit.hbox(10)
+	if lp != null or has_best:
+		var lv = Kit.vbox(0)
+		lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var cap = Kit.hbox(6)
+		var when = ("LAST · " + Dates.relative_day(lp.date, App.today).to_upper()) if lp != null else "BEST"
+		cap.add_child(Kit.clip(when, 9, Pal.MUTED, true))
+		if has_best and lp != null:
+			var bt = Kit.label("BEST " + _fmt_w(best.weightKg), 9, Pal.ACCENT, true)
+			bt.set_meta("best_tag", true)
+			cap.add_child(bt)
+		lv.add_child(cap)
+		var words = ""
+		if lp != null:
+			words = LiftHistory.describe_sets(lp.sets, _fmt_w)
+			# (done with a band before bands could be logged: it was no bodyweight lift)
+			if banded and Bands.top(lp.sets) == "":
+				words = words.replace(" bodyweight", "")
+			if both and Sides.side_words(lp.sets) != "":
+				words += " · " + Sides.side_words(lp.sets)
+		else:
+			words = _fmt_w(best.weightKg)
+		var ll = Kit.clip(words, 12, Pal.TEXT, true)
+		ll.set_meta("last_line", words)
+		lv.add_child(ll)
+		lv.tooltip_text = ("Last time: %s" % Dates.relative_day(lp.date, App.today)) if lp != null else "Your best"
+		lv.mouse_filter = Control.MOUSE_FILTER_PASS
+		h.add_child(lv)
+	if aim != null:
+		if h.get_child_count() > 0:
+			var line = ColorRect.new()
+			line.color = Pal.LINE
+			line.custom_minimum_size = Vector2(2, 0)
+			line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			h.add_child(line)
+		var av = Kit.vbox(0)
+		av.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		av.add_child(Kit.clip(str(aim.cap), 9, Pal.ACCENT2, true))
+		av.add_child(Kit.clip(str(aim.words), 12, Pal.TEXT, true))
+		av.set_meta("aim_line", str(aim.words))
+		h.add_child(av)
+		var fk = LogWidgets.mini_chip("Fill", false, fill_aim.bind(i), Pal.LIFT, 8)
+		fk.tooltip_text = "%s: fill in the aim" % label_name_of(i)
+		fk.set_meta("fill_aim", i)
+		h.add_child(Kit.vcenter(fk))
+	p.add_child(h)
+	return p
+
+
+## The ground under a set's row: a green wash once the set is ticked, nothing before (no margins either
+## way, so a tick never changes the row's size).
+static func _set_bg(done: bool) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Pal.with_alpha(Pal.GOOD, 0.16) if done else Color(0, 0, 0, 0)
+	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
+		sb.set_content_margin(side, 0)
+	p.add_theme_stylebox_override("panel", sb)
+	p.set_meta("set_row_done", done)
+	return p

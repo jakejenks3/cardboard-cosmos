@@ -2102,6 +2102,39 @@ is the Windows handoff.
   - Tests: `tests/tracking_test.gd`; walkthroughs `tests/shots/logplus.gd` (year, also --fingers) and
     `tests/shots/tracking.gd` (year). picks.gd's "a moment later a tap counts again" now taps the second
     exercise's up key wherever the cards put it (the cards grew).
+- THE LOG AND THE HISTORY, TIDIED (2026-11-27, evening; the user: "Go through again and work on visual and QOL
+  changes for exercise logging, history sections. Want it continue to look more clean and crisp and easier to use").
+  - An exercise card's title: a lift that will be saved under the name shown (one of the player's, or a library
+    lift written as the library writes it: `LogLiftEditor._named`) is the movement with its variation as a tag
+    (`_name_title`, meta `name_title`, tooltip "Rename <lift>"); a tap brings the name box back (`_rename`: draft
+    field `_rename`, never saved) and leaving it puts the title back. A new name keeps the box and its "SAVED AS"
+    line. A walkthrough that needs a known lift's name box must tap the title first; find a card by its
+    `exercise_card` meta, not by the name box (tests/shots/log.gd does).
+  - Last time, the best and the aim in ONE sunken box (`_ref_block`, meta `ref_block`): LAST · <when> with the
+    best as a gold word (`best_tag`), the sets (`last_line`), a line, AIM (`aim_line`) and Fill (`fill_aim`).
+  - A ticked set's row sits on a green wash (`_set_bg`, meta `set_row_done`; no margins, so a tick never changes
+    the row's size).
+  - The time: a new lift workout of today with no time typed says "Time counts from your first ticked set" /
+    "Timing: 12 min since your first tick" (`LogSessionForm._times_itself`, `_time_note`, meta `time_note`) and
+    keeps the quick picks behind "Set time" (meta `set_time`, `_show_picks`). The minutes box's placeholder is
+    "00" there (it said 45).
+  - "From today's plan": the lifts done today go LAST under "DONE TODAY", one short line each with their sets
+    (`LogPlanCard._done_row`, metas `plan_done_head`, `plan_done_sets`; still a key, plan_state "done"), no OR
+    chips. A row only becomes done when a workout is saved, so nothing moves while one is logged.
+  - A workout's row (`Parts.session_row`, used by Journey -> Log, the Hero tab's Recent, the discipline sheets):
+    the title with the day's kind ("PULL", only with a training split: `Parts.day_kind_word`) and a "PR" / "2 PR"
+    tag (`Parts.pr_count`: the replay's "pr" moments of that day and discipline, cached), a lift's movements on a
+    line of their own (`Parts.lift_moves`, meta `session_moves`), then its numbers (`Parts.session_numbers`:
+    sets, weight moved, BW reps, time; `Summary.summarize_session` is untouched, parity reads it). Row meta
+    `session_row` = the session id.
+  - Journey -> Log: a filter track All / Lifting / Climbing / Running / Other (`JourneyScreen.HIST_FILTERS`,
+    `hist_filter`, meta `hist_filter`), then a section a week (`week_title`: THIS WEEK, LAST WEEK, "NOV 9 - 15";
+    meta `hist_week`; the count and XP at its end), `HIST_WEEKS` (6) at a time and "Show older weeks" (meta
+    `hist_more`). It used to be a date heading over every workout, all of them at once.
+  - A workout's sheet (`SessionView.open`): the date is the title (meta `session_sheet`), the name with its kind
+    and PR tags, number tiles for a lift (`SessionView.lift_tiles`: sets, reps, weight moved, minutes; meta
+    `session_tiles`), and "WHERE THE XP CAME FROM" as a plain list (meta `xp_parts`; it was brown chips).
+  - Walkthrough `tests/shots/tidy.gd` (year data, also --fingers).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2345,6 +2378,7 @@ logjump (a workout edited with finger events: + Set, a set's cross, a weight's +
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
+tidy (the exercise card's title, last / aim box and green done sets, the plan's done rows, Journey -> Log by week with a filter, a workout's sheet; year data, also --fingers),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.
 
