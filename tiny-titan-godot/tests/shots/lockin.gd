@@ -105,7 +105,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	ts.only_fingers = true
 	App.draft_store("lift", null)
 	var bench = "Bench Press - Barbell"
-	# A record picked as the bench's goal in today's prep (the Challenges flow): its set 1 is set up for it.
+	# A record picked as the bench's goal in today's prep (the Challenges flow): its LAST set is set up for it.
 	var goal = {}
 	for o in App.challenge_options(bench):
 		if str(o.type) in ["heavier", "reps", "ladder"]:
@@ -123,8 +123,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		print("LOCKIN FAILED")
 		return
 	var n_sets = ed.exercises[0].sets.size()
-	var goal_on = not goal.is_empty() and bool(ed.exercises[0].sets[0].get("goal", false))
-	check(goal.is_empty() or (goal_on and _one("goal_set", "0:0") != null), "the bench comes with its goal, set 1 set up for it (%s)" % str(goal.get("words", "no goal today")))
+	var gi = n_sets - 1
+	var goal_on = not goal.is_empty() and bool(ed.exercises[0].sets[gi].get("goal", false))
+	check(goal.is_empty() or (goal_on and _one("goal_set", "0:%d" % gi) != null), "the bench comes with its goal, its last set set up for it (%s)" % str(goal.get("words", "no goal today")))
 	var prog = _one("lock_progress")
 	check(prog != null and str(prog.get_meta("lock_progress")) == "0 of 3", "the form's head counts the exercises done (%s)" % (str(prog.get_meta("lock_progress")) if prog != null else "none"))
 	check(_one("lock_exercise", 0) != null and _one("lock_exercise", 0).disabled, "each card ends in Lock in, switched off while no set is locked in")
@@ -157,8 +158,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		check(t2 != null and bool(t2.get_meta("set_done")) and t2.get_global_rect().get_center().distance_to(at) < 3.0, "the green tick is where the number was (%s -> %s)" % [str(at), str(t2.get_global_rect().get_center()) if t2 != null else "none"])
 		var below2 = _row_of(0, j + 1) if j + 1 < n_sets else _one("lock_exercise", 0)
 		check(below2 != null and absf(below2.global_position.y - below_y) < 1.0, "nothing under it moved (%.0f -> %.0f)" % [below_y, below2.global_position.y if below2 != null else -1.0])
-		if j == 0 and goal_on:
-			var gt = _one("goal_set", "0:0")
+		if j == gi and goal_on:
+			var gt = _one("goal_set", "0:%d" % gi)
 			check(bool(line.get_meta("set_row_goal")) and gt != null and bool(gt.get_meta("goal_met")), "the goal set locked in: green and gold, GOAL MET")
 	check(_one("lock_exercise", 0) != null and not _one("lock_exercise", 0).disabled, "with a set locked in, Lock in can be pressed")
 	await ShotHelper.snap(tree, "lockin_1_two_locked")

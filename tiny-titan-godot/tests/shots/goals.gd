@@ -9,9 +9,9 @@ extends RefCounted
 ##      muscle map; three challenges or fewer, each a MISSION strip inside its lift's row (no CHALLENGES section
 ##      since 2026-11-28); Coming up has a Prep today key too;
 ##   3. another way of the bench row (dumbbells): today is prepped with it, the challenge names it;
-##   4. a record on that challenge's strip (heavier): it is the goal, in today's prep as set 1, picked on the
+##   4. a record on that challenge's strip (heavier): it is the goal, in today's prep as the last set, picked on the
 ##      strip, shown in gold on the Today row; a second tap takes it off, a third puts it back;
-##   5. Prep today opens today's prep with the goal record lit and set 1 marked (Coming up's key too);
+##   5. Prep today opens today's prep with the goal record lit and the last set marked (Coming up's key too);
 ##   6. Start workout: the Log tab's card has the MISSION banner and the goal set with the goal's numbers; its
 ##      reps changed with the stepper stay changed and marked;
 ##   7. Finish: the saved session holds no goal marks, and the challenge is done;
@@ -349,8 +349,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	print("GOALS goal: ", goal)
 	check(_type(goal) == otype and Challenges.same_option(goal, opt), "a tap makes it the goal: %s, %s" % [str(opt.get("title", "")), str(opt.get("words", ""))])
 	var px = Prep.lift_on(App.settings(), App.today, way)
-	var gs = px.sets[0] if px != null and not (px.get("sets", []) as Array).is_empty() else {}
-	check(px != null and _type(Prep.goal_of(px)) == otype and (otype == "day_reps" or (bool(gs.get("goal", false)) and int(gs.get("reps", 0)) == int(opt.reps))), "it is in today's prep, set 1 being the record")
+	var gs = px.sets[-1] if px != null and not (px.get("sets", []) as Array).is_empty() else {}
+	check(px != null and _type(Prep.goal_of(px)) == otype and (otype == "day_reps" or (bool(gs.get("goal", false)) and int(gs.get("reps", 0)) == int(opt.reps))), "it is in today's prep, its last set being the record")
 	var picked = _option_key(mid, otype)
 	check(picked != null and bool(picked.get_meta("challenge_picked", false)), "the record is marked as picked on its strip")
 	var lit = _all("challenge_picked", _section("today")).filter(func(n): return bool(n.get_meta("challenge_picked")))
@@ -386,7 +386,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(pcard != null, "with the %s in it" % way)
 	var pg = _one("prep_goal", null, pcard) if pcard != null else null
 	check(pg != null and str(pg.get_meta("prep_goal")) == otype, "its goal record is lit")
-	check(pcard != null and (otype == "day_reps" or _one("prep_goal_set", null, pcard) != null), "set 1 is marked as the goal set")
+	check(pcard != null and (otype == "day_reps" or _one("prep_goal_set", null, pcard) != null), "the last set is marked as the goal set")
 	check(pcard != null and _one("prep_goal_line", null, pcard) != null, "a GOAL line under the lift's name")
 	if pcard != null:
 		ShotHelper.reveal(pcard)
@@ -417,16 +417,18 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		_done()
 		return
 	var e = f.lift.exercises[idx]
+	# (the goal is the LAST set since 2026-11-28: the sets before it work up to it)
+	var gj = maxi(0, (e.sets as Array).size() - 1)
 	var ecard = _one("exercise_card", idx)
 	var banner = _one("goal_banner", null, ecard) if ecard != null else null
 	check(banner != null and str(banner.get_meta("goal_banner")) == otype, "its card has the MISSION banner")
-	check(otype == "day_reps" or _one("goal_set", "%d:0" % idx) != null, "and the goal set marked")
+	check(otype == "day_reps" or _one("goal_set", "%d:%d" % [idx, gj]) != null, "and the goal set marked")
 	var wu = App.weight_unit()
 	var want_w = Fmt.kg_to_unit(float(goal.get("kg", 0.0)), wu)
-	var reps0 = int(LogWidgets.num(str(e.sets[0].reps)))
-	var w0 = LogWidgets.num(str(e.sets[0].get("weight", "")))
-	check(otype == "day_reps" or (reps0 == int(goal.get("reps", 0)) and (float(goal.get("kg", 0.0)) <= 0.0 or absf(w0 - want_w) < 0.06)), "set 1 is the goal: %d reps at %s %s (the goal: %s)" % [reps0, TTUtil.num_str(w0), wu, str(goal.get("words", ""))])
-	check(_type(e.get("goal")) == otype and (otype == "day_reps" or bool(e.sets[0].get("goal", false))), "the exercise carries the goal, set 1 its mark")
+	var reps0 = int(LogWidgets.num(str(e.sets[gj].reps)))
+	var w0 = LogWidgets.num(str(e.sets[gj].get("weight", "")))
+	check(otype == "day_reps" or (reps0 == int(goal.get("reps", 0)) and (float(goal.get("kg", 0.0)) <= 0.0 or absf(w0 - want_w) < 0.06)), "the last set is the goal: %d reps at %s %s (the goal: %s)" % [reps0, TTUtil.num_str(w0), wu, str(goal.get("words", ""))])
+	check(_type(e.get("goal")) == otype and (otype == "day_reps" or bool(e.sets[gj].get("goal", false))), "the exercise carries the goal, its last set the mark")
 	check(_one("plan_goal") != null, "From today's plan tags the lift with its goal")
 	var try_row = _one("try_row", idx)
 	var trk = _one("try_key", otype, try_row) if try_row != null else null
@@ -438,7 +440,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	# Not reached, or better: the goal set is edited like any set, and stays marked.
 	var want_reps = reps0
 	if otype != "day_reps":
-		var fe = _field("ex%d.s0.reps" % idx)
+		var fe = _field("ex%d.s%d.reps" % [idx, gj])
 		var st = fe.get_parent() if fe != null else null
 		check(st is Stepper, "the goal set's reps have a stepper")
 		if st is Stepper:
@@ -450,14 +452,14 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 			want_reps = reps0 + 1
 			f = _form()
 			e = f.lift.exercises[idx]
-			check(int(LogWidgets.num(str(e.sets[0].reps))) == want_reps, "its + key changes the reps (%d -> %s)" % [reps0, str(e.sets[0].reps)])
+			check(int(LogWidgets.num(str(e.sets[gj].reps))) == want_reps, "its + key changes the reps (%d -> %s)" % [reps0, str(e.sets[gj].reps)])
 			# (and they are never forced back)
 			await ShotHelper.wait(tree, 0.8)
 			f = _form()
 			e = f.lift.exercises[idx]
-			var fe2 = _field("ex%d.s0.reps" % idx)
-			check(int(LogWidgets.num(str(e.sets[0].reps))) == want_reps and fe2 != null and int(LogWidgets.num(fe2.text)) == want_reps, "the change stays (%s)" % str(e.sets[0].reps))
-			check(bool(e.sets[0].get("goal", false)) and _one("goal_set", "%d:0" % idx) != null and _type(e.get("goal")) == otype, "the set is still the goal set, still marked")
+			var fe2 = _field("ex%d.s%d.reps" % [idx, gj])
+			check(int(LogWidgets.num(str(e.sets[gj].reps))) == want_reps and fe2 != null and int(LogWidgets.num(fe2.text)) == want_reps, "the change stays (%s)" % str(e.sets[gj].reps))
+			check(bool(e.sets[gj].get("goal", false)) and _one("goal_set", "%d:%d" % [idx, gj]) != null and _type(e.get("goal")) == otype, "the set is still the goal set, still marked")
 			await ShotHelper.snap(tree, "goals_5b_edited")
 
 	# --- 7. saved: no goal in the session, the challenge done ------------------------------------------------
@@ -489,7 +491,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 					marked = true
 			if Xp.normalize_exercise(str(ex.get("name", ""))) == Xp.normalize_exercise(way):
 				sx = ex
-	check(sx != null and not (sx.sets as Array).is_empty() and int(sx.sets[0].reps) == want_reps, "the %s is in it, set 1 as edited (%s reps)" % [way, str(sx.sets[0].reps) if sx != null and not (sx.sets as Array).is_empty() else "-"])
+	check(sx != null and not (sx.sets as Array).is_empty() and int(sx.sets[-1].reps) == want_reps, "the %s is in it, its last set as edited (%s reps)" % [way, str(sx.sets[-1].reps) if sx != null and not (sx.sets as Array).is_empty() else "-"])
 	check(not saved_today.is_empty() and not marked, "the goal and the set marks are not stored in the session")
 	var md = _mission_named(way)
 	check(md != null and bool(md.done) and (md.get("hit", []) as Array).has(otype), "the challenge is done by the goal (%s)" % (str(md.get("hit", [])) if md != null else "none"))
@@ -537,7 +539,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var rc = _one("prep_lift", rn, sh)
 	var pgk = _one("prep_goal", null, rc) if rc != null else null
 	check(pgk != null and str(pgk.get_meta("prep_goal")) == rt, "a tap on a record makes it %s's goal (%s)" % [rn, rt])
-	check(rc != null and (rt == "day_reps" or _one("prep_goal_set", null, rc) != null) and _one("prep_goal_line", null, rc) != null, "set 1 marked, a GOAL line under the name")
+	check(rc != null and (rt == "day_reps" or _one("prep_goal_set", null, rc) != null) and _one("prep_goal_line", null, rc) != null, "the last set marked, a GOAL line under the name")
 	# A tap on the goal takes it off, one more on the record puts it back.
 	await _press(pgk)
 	sh = _sheet()
@@ -559,7 +561,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var tg2 = App.goal_on(rn, tomorrow)
 	var tx = Prep.lift_on(App.settings(), tomorrow, rn)
 	check(_type(tg2) == rt, "Save keeps it as tomorrow's goal (%s: %s)" % [rn, str(tg2.get("words", ""))])
-	check(tx != null and (rt == "day_reps" or (not (tx.get("sets", []) as Array).is_empty() and bool(tx.sets[0].get("goal", false)))), "and set 1 of tomorrow's prep is the goal set")
+	check(tx != null and (rt == "day_reps" or (not (tx.get("sets", []) as Array).is_empty() and bool(tx.sets[-1].get("goal", false)))), "and the last set of tomorrow's prep is the goal set")
 	check(_type(App.goal_on(way)) == otype, "today's prep keeps its own goal")
 	App.go("home")
 	await ShotHelper.wait(tree, 1.0)

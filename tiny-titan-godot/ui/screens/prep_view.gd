@@ -17,7 +17,7 @@ extends RefCounted
 ## prep and then into my workout... click on the heavier challenge. This will add that rep/weight scheme with a
 ## twinkle or highlighted overlay or something to my prep"): any day, TODAY included (the Today card's "Prep
 ## today" key). A record under RECORDS TO BEAT is now a key that makes it the lift's GOAL (Prep.clean_goal on
-## the lift, Prep.apply_goal: set 1 becomes the record, marked "goal"); the same key again takes it off (set 1
+## the lift, Prep.apply_goal: the last set becomes the record, marked "goal"); the same key again takes it off (that set
 ## goes back to how it was when the goal was picked in this sheet and not edited since). The picked record is
 ## a gold key with a star and a twinkle (meta `prep_goal` = type), the card has a line under its name that
 ## says the goal (meta `prep_goal_line` = type; without one it says how to pick one, meta `prep_goal_none`),
@@ -31,7 +31,7 @@ const MAX_WAYS = 8
 
 static var _date: String = ""
 ## [{name, sets: [{reps: int, w: float (the player's unit; 0 = none)[, band][, holdSec][, goal: true]}], ss: int,
-## goal: {} or the goal (Prep.clean_goal)[, _ways: the WAY chips][, _pre: set 1 before the goal was picked]}]
+## goal: {} or the goal (Prep.clean_goal)[, _ways: the WAY chips][, _pre: the last set before the goal was picked]}]
 static var _lifts: Array = []
 static var _kind: String = ""
 static var _label: String = ""
@@ -146,7 +146,7 @@ static func _goal_index(x: Dictionary) -> int:
 	return -1
 
 
-## The lift loses its goal (its set marks too); set 1 keeps its numbers.
+## The lift loses its goal (its set marks too); the goal set keeps its numbers.
 static func _drop_goal(x: Dictionary) -> void:
 	x["goal"] = {}
 	x.erase("_pre")
@@ -173,7 +173,7 @@ static func _fill() -> void:
 		sh.box.remove_child(ch)
 		ch.queue_free()
 	var head = Kit.hbox(8)
-	var intro = Kit.para("Pick how you'll do each lift with what you'll have, its sets, and what to superset. Tap a record to beat to make it the lift's goal: set 1 goes for it. This becomes the day's plan; you can still change anything when you log it.", 12, Pal.MUTED)
+	var intro = Kit.para("Pick how you'll do each lift with what you'll have, its sets, and what to superset. Tap a record to beat to make it the lift's goal: the last set goes for it, the ones before work up to it. This becomes the day's plan; you can still change anything when you log it.", 12, Pal.MUTED)
 	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(intro)
 	if _label != "":
@@ -298,7 +298,7 @@ static func _lift_card(i: int, glabel: String) -> Control:
 		var il = Kit.clip(info, 11, Pal.MUTED, true)
 		il.set_meta("prep_last", info)
 		c.add(il)
-	# ## The records to beat that way: a tap makes one the lift's GOAL (set 1 becomes it), a tap on the goal
+	# ## The records to beat that way: a tap makes one the lift's GOAL (the last set becomes it), a tap on the goal
 	# takes it off. A key has the same words and width either way; the goal's is gold, with a star and a twinkle.
 	if not recs.is_empty():
 		var rr = Kit.flow(5)
@@ -316,7 +316,7 @@ static func _lift_card(i: int, glabel: String) -> Control:
 				rk.set_meta("prep_goal", str(o.type))
 				Fx.twinkle(rk, Pal.CREAM, 3)
 			else:
-				rk.tooltip_text = "%s: %s, %s (%s). Tap to make it the goal: set 1 goes for it." % [str(x.name), str(o.get("title", "")), str(o.get("words", "")), str(o.get("sub", ""))]
+				rk.tooltip_text = "%s: %s, %s (%s). Tap to make it the goal: the last set goes for it." % [str(x.name), str(o.get("title", "")), str(o.get("words", "")), str(o.get("sub", ""))]
 			rk.set_meta("prep_record", str(o.type))
 			rk.pressed.connect(PrepView._tap_record.bind(rk, i, o))
 			rr.add_child(rk)
@@ -432,7 +432,7 @@ static func _goal_line(x: Dictionary, has_recs: bool, done_before: bool) -> Cont
 		w.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		line.add_child(w)
 		line.set_meta("prep_goal_line", str(g.get("type", "")))
-		line.tooltip_text = "%s: the goal. Set 1 goes for it; you can still change it when you log it." % str(x.name)
+		line.tooltip_text = "%s: the goal. The last set goes for it; you can still change it when you log it." % str(x.name)
 		line.mouse_filter = Control.MOUSE_FILTER_PASS
 		return line
 	var text = "No goal yet: tap a record to beat below"
@@ -541,7 +541,7 @@ static func _changed(rebuild: bool = true) -> void:
 
 
 ## (The goal set keeps its mark when its numbers are changed: the player may aim a little off the record.
-## Once changed, taking the goal off leaves set 1 as it is.)
+## Once changed, taking the goal off leaves that set as it is.)
 static func _on_reps(text: String, i: int, j: int) -> void:
 	if i < _lifts.size() and j < _lifts[i].sets.size():
 		_lifts[i].sets[j].reps = int(LogWidgets.num(text))
@@ -617,8 +617,8 @@ static func _set_way(i: int, way: String) -> void:
 	_changed()
 
 
-## ## A record to beat, tapped: it becomes the lift's goal (set 1 becomes the record, marked), or, when it is
-## the goal already, the goal comes off (set 1 back to how it was before, unless it was changed since).
+## ## A record to beat, tapped: it becomes the lift's goal (the last set becomes the record, marked), or, when it
+## is the goal already, the goal comes off (that set back to how it was before, unless it was changed since).
 static func _tap_record(key: Control, i: int, o: Dictionary) -> void:
 	if i < 0 or i >= _lifts.size():
 		return
@@ -636,16 +636,16 @@ static func _tap_record(key: Control, i: int, o: Dictionary) -> void:
 		_changed()
 		return
 	if had.is_empty():
-		# (set 1 as it is, to put back if this goal is taken off again)
+		# (the last set as it is, to put back if this goal is taken off again)
 		if not x.sets.is_empty():
-			x["_pre"] = (x.sets[0] as Dictionary).duplicate()
+			x["_pre"] = (x.sets[x.sets.size() - 1] as Dictionary).duplicate()
 		else:
 			x.erase("_pre")
 	var stored = []
 	for s in x.sets:
 		stored.append(_set_to_store(s, wu))
 	var sets = []
-	for one in Prep.apply_goal(stored, o):
+	for one in Prep.apply_goal(stored, o, Missions._step_kg(wu)):
 		sets.append(_set_to_edit(one, wu))
 	x["sets"] = sets
 	x["goal"] = Prep.clean_goal(o)

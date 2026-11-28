@@ -17,7 +17,8 @@ extends RefCounted
 ## equipment I have, and then click on the heavier challenge. This will add that rep/weight scheme with a
 ## twinkle or highlighted overlay... to my prep and then to my workout"): a record to go for (one of
 ## Challenges.options) picked for a prepped lift. Stored on the lift as "goal" = the option (type, title,
-## words, kg / reps / band / sec), and its first set becomes that record, marked "goal": true. It is the
+## words, kg / reps / band / sec), and its LAST set becomes that record, marked "goal": true (the sets before it
+## work up to it). It is the
 ## day's challenge mission for that lift (Missions.daily puts the lifts with a goal first), the Log tab brings
 ## the goal set in highlighted (LogLiftEditor), and anything can still be changed there. `with_goal`,
 ## `with_way` (another variation of a prepped lift, for the equipment there is) and `goal_of` do it.
@@ -278,9 +279,12 @@ static func clean_goal(o: Dictionary) -> Dictionary:
 	return out
 
 
-## `sets` with the goal `o` as the first set, marked "goal": true (the other sets keep their numbers and lose
-## any older mark). A day's total ("day_reps") has no one set: nothing is marked.
-static func apply_goal(sets: Array, o: Dictionary) -> Array:
+## `sets` with the goal `o` as the LAST set, marked "goal": true: the sets before it work up to it (2026-11-28,
+## the user: "It should become the last set not the first... the first 2 sets should work towards it"). The other
+## sets keep their numbers and lose any older mark, except that one which would ALREADY meet the goal is eased just
+## under it (`ease_under`: a step lighter, or two reps fewer), so the last set is the one that goes for it.
+## A day's total ("day_reps") has no one set: nothing is marked.
+static func apply_goal(sets: Array, o: Dictionary, step_kg: float = 2.5) -> Array:
 	var out = []
 	for one in sets:
 		var c = (one as Dictionary).duplicate()
@@ -290,21 +294,43 @@ static func apply_goal(sets: Array, o: Dictionary) -> Array:
 		return out
 	if out.is_empty():
 		out.append({"reps": START_REPS, "weightKg": 0.0})
-	var first: Dictionary = out[0]
+	var last: Dictionary = out[out.size() - 1]
 	match str(o.get("type", "")):
 		"hold":
-			first["holdSec"] = int(o.get("sec", 0))
+			last["holdSec"] = int(o.get("sec", 0))
 		"set_reps":
-			first["reps"] = int(o.get("reps", first.get("reps", 0)))
+			last["reps"] = int(o.get("reps", last.get("reps", 0)))
 		_:
-			first["reps"] = int(o.get("reps", first.get("reps", 0)))
+			last["reps"] = int(o.get("reps", last.get("reps", 0)))
 			if str(o.get("band", "")) != "":
-				first["band"] = str(o.band)
-				first["weightKg"] = 0.0
+				last["band"] = str(o.band)
+				last["weightKg"] = 0.0
 			elif float(o.get("kg", 0.0)) > 0.0:
-				first["weightKg"] = float(o.kg)
-	first["goal"] = true
+				last["weightKg"] = float(o.kg)
+	last["goal"] = true
+	for k in range(out.size() - 1):
+		out[k] = ease_under(out[k], o, step_kg)
 	return out
+
+
+## A set that would meet the goal `o` on its own, eased just under it (a set before the goal set works up to it):
+## a weight goal one step lighter (or a rep fewer when that is no weight at all), a rep record two reps fewer, a band
+## goal two reps fewer, a hold five seconds shorter. Any other set comes back as it was.
+static func ease_under(one: Dictionary, o: Dictionary, step_kg: float) -> Dictionary:
+	var c = one.duplicate()
+	if not Challenges.hit(o, [c]):
+		return c
+	match str(o.get("type", "")):
+		"heavier", "ladder":
+			if str(o.get("band", "")) == "" and float(o.get("kg", 0.0)) - step_kg > 0.0:
+				c["weightKg"] = float(o.kg) - step_kg
+			else:
+				c["reps"] = maxi(1, int(o.get("reps", 1)) - 1)
+		"hold":
+			c["holdSec"] = maxi(5, int(o.get("sec", 10)) - 5)
+		_:
+			c["reps"] = maxi(1, int(o.get("reps", 2)) - 2)
+	return c
 
 
 ## The day's prepped lifts to change: the prep there is, else one made from the day's plan (`plan_lifts`,
@@ -353,7 +379,7 @@ static func with_goal(settings: Dictionary, date: String, lift_name: String, o: 
 		x["sets"] = plain
 	else:
 		x["goal"] = clean_goal(o)
-		x["sets"] = apply_goal(x.get("sets", []), o)
+		x["sets"] = apply_goal(x.get("sets", []), o, step_kg)
 	lifts[i] = x
 	return with_prep(settings, date, lifts, today, at_ms)
 

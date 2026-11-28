@@ -68,14 +68,14 @@ func _init() -> void:
 	var tm = ah.filter(func(a): return str(a.date) == TOMORROW)
 	ok(not tm.is_empty() and bool(tm[0].plan.get("prepped", false)) and tm[0].plan.lifts.size() == 2, "Coming up shows the prepped day as prepped")
 
-	# A GOAL (2026-11-28): a record picked for a lift of the day goes into the day's prep, set 1 that record.
+	# A GOAL (2026-11-28): a record picked for a lift of the day goes into the day's prep, its LAST set that record (the ones before work up to it).
 	var heavier = {"type": "heavier", "kind": "weight", "kg": 85.0, "reps": 3, "title": "Heavier than ever", "words": "85 kg × 3", "tip": "x", "chip": "85 × 3"}
-	var gp = Prep.with_goal(settings, TODAY, "Bench Press - Barbell", heavier, TODAY, plain.lifts, 2.5, [{"reps": 5, "weightKg": 80.0}])
+	var gp = Prep.with_goal(settings, TODAY, "Bench Press - Barbell", heavier, TODAY, plain.lifts, 2.5, [{"reps": 5, "weightKg": 80.0}, {"reps": 5, "weightKg": 80.0}, {"reps": 5, "weightKg": 80.0}])
 	var st3 = settings.duplicate()
 	st3["preps"] = gp
 	var gx = Prep.lift_on(st3, TODAY, "Bench Press - Barbell")
 	ok(gx != null and str(Prep.goal_of(gx).get("type", "")) == "heavier" and not Prep.goal_of(gx).has("tip"), "with_goal: the prep is made from the plan, the lift has the goal (without its tip)", gx)
-	ok(gx != null and bool(gx.sets[0].get("goal", false)) and int(gx.sets[0].reps) == 3 and is_equal_approx(float(gx.sets[0].weightKg), 85.0) and not gx.sets.slice(1).any(func(x): return x.has("goal")), "its set 1 is the record, marked; the others are not", gx.sets if gx != null else null)
+	ok(gx != null and gx.sets.size() >= 2 and bool(gx.sets[-1].get("goal", false)) and int(gx.sets[-1].reps) == 3 and is_equal_approx(float(gx.sets[-1].weightKg), 85.0) and not gx.sets.slice(0, -1).any(func(x): return x.has("goal")) and int(gx.sets[0].reps) != 3, "its last set is the record, marked; the sets before it keep their numbers, unmarked", gx.sets if gx != null else null)
 	ok(Prep.lifts_of(Prep.of(st3, TODAY)).size() >= 2, "the other planned lifts are in the prep too")
 	var tp = Missions.day_plan(log, TODAY, {}, st3)
 	var tb = tp.lifts.filter(func(l): return str(l.name) == "Bench Press - Barbell")
@@ -98,8 +98,13 @@ func _init() -> void:
 	var st6 = settings.duplicate()
 	st6["preps"] = g2
 	var dx = Prep.lift_on(st6, TODAY, "Bench Press - Dumbbell")
-	ok(dx != null and int(dx.sets[0].reps) == 11 and bool(dx.sets[0].goal), "a goal on the way picked")
+	ok(dx != null and int(dx.sets[-1].reps) == 11 and bool(dx.sets[-1].goal), "a goal on the way picked (its last set)")
 	ok(Prep.apply_goal([{"reps": 5, "weightKg": 80.0}], {"type": "day_reps", "reps": 40}).all(func(x): return not x.has("goal")), "a day's total marks no set")
+	# The sets before the goal work up to it: one that would already meet it is eased just under it.
+	var eased = Prep.apply_goal([{"reps": 10, "weightKg": 25.0}, {"reps": 10, "weightKg": 25.0}, {"reps": 10, "weightKg": 25.0}], {"type": "heavier", "kg": 25.0, "reps": 8}, 2.5)
+	ok(bool(eased[2].goal) and int(eased[2].reps) == 8 and is_equal_approx(float(eased[0].weightKg), 22.5) and is_equal_approx(float(eased[1].weightKg), 22.5) and int(eased[0].reps) == 10, "a heavier goal: the sets before it one step lighter", eased)
+	var eased2 = Prep.apply_goal([{"reps": 12, "weightKg": 20.0}, {"reps": 8, "weightKg": 20.0}, {"reps": 8, "weightKg": 20.0}], {"type": "reps", "kg": 20.0, "reps": 11}, 2.5)
+	ok(int(eased2[0].reps) == 9 and int(eased2[1].reps) == 8 and int(eased2[2].reps) == 11, "a rep record: a set before it that already has the reps gets two fewer, the others stay", eased2)
 
 	# The same muscles.
 	ok(Prep.area_parts([], "push") == ["chest", "shoulders", "triceps"], "a push day: chest, shoulders, triceps", Prep.area_parts([], "push"))

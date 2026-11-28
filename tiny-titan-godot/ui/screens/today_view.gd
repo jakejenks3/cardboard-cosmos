@@ -963,7 +963,7 @@ static func _goal_block(g: Dictionary, wu: String) -> Control:
 	b.set_meta("done_tick", false)
 	b.set_meta("today_aim", goal_words(g, wu))
 	b.set_meta("today_goal", str(g.get("type", "")))
-	b.tooltip_text = "Your goal today: %s, %s (set 1 of your prep)" % [str(g.get("title", "a record")).to_lower(), goal_words(g, wu)]
+	b.tooltip_text = "Your goal today: %s, %s (the last set of your prep)" % [str(g.get("title", "a record")).to_lower(), goal_words(g, wu)]
 	Fx.twinkle(b, Pal.CREAM, 3)
 	return b
 

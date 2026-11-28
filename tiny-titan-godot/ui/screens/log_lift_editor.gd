@@ -2374,6 +2374,9 @@ func _goal_words(i: int, met: bool) -> String:
 		return "Every rep of the day counts: tick your sets as you go."
 	for j in range(e.sets.size()):
 		if bool(e.sets[j].get("goal", false)):
+			if j == e.sets.size() - 1 and j > 0:
+				# (the goal is the last set: the sets before it work up to it)
+				return "Set %d, your last, goes for it: build up to it, then tick it." % (j + 1)
 			return "Set %d is set up for it: tick it once it's done." % (j + 1)
 	return "Change any set to it, then tick it once it's done."
 

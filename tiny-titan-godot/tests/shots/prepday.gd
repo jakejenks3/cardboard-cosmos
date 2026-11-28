@@ -107,8 +107,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(rec != null, "a lift shows its records to beat")
 	if rec != null:
 		await _press(rec)
-		var s0 = PrepView._lifts[rec_i].sets[0]
-		check(int(s0.reps) > 0, "a tap puts the record in its first set (%s reps, %s)" % [str(s0.reps), str(s0.w)])
+		var s0 = PrepView._lifts[rec_i].sets[-1]
+		check(int(s0.reps) > 0 and bool(s0.get("goal", false)), "a tap makes it the goal: its last set (%s reps, %s)" % [str(s0.reps), str(s0.w)])
 	sh = _sheet()
 	cards = _all("prep_lift", sh)
 

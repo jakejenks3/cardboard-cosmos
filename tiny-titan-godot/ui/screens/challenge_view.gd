@@ -10,7 +10,7 @@ extends RefCounted
 ##                        ONE (or YOUR GOAL), the reward (or MISSION DONE and the Claim key), then its records
 ##                        side by side as tiles (what kind on a coloured strip, the target big, what it beats
 ##                        small). Every tile is a KEY: a tap makes it the lift's GOAL in today's prep
-##                        (App.prep_goal: its set 1 becomes that record; the prep is made from the day's plan
+##                        (App.prep_goal: its last set becomes that record; the prep is made from the day's plan
 ##                        when there is none); a tap on the goal takes it off. The goal's tile is gold with a
 ##                        star and twinkles (meta `challenge_picked`). Metas: `challenge` = the mission's id on
 ##                        the strip, `challenge_option` = type and `challenge_hit` on each tile, `challenge_claim`
@@ -232,7 +232,7 @@ static func pick_way(planned: String, current: String, way: String) -> void:
 	App.toast("Today: %s. It is in today's prep." % Missions.short_name(way), "info", "edit")
 
 
-## A record tapped: today's goal for the lift (App.prep_goal: into today's prep, its set 1 that record), or,
+## A record tapped: today's goal for the lift (App.prep_goal: into today's prep, its last set that record), or,
 ## tapped again, no goal.
 static func _pick_goal(m: Dictionary, o: Dictionary, picked: bool, key: Control) -> void:
 	if _quiet():
@@ -356,7 +356,7 @@ static func _tile(o: Dictionary, is_hit: bool, n: int, picked: bool = false, m: 
 		if picked:
 			k.tooltip_text = "Your goal today: %s, %s. Tap again to take it off." % [title.to_lower(), str(o.get("words", ""))]
 		else:
-			k.tooltip_text = "%s: %s. Tap to make it today's goal: it goes into today's prep as your first set." % [title, str(o.get("words", ""))]
+			k.tooltip_text = "%s: %s. Tap to make it today's goal: it goes into today's prep as your last set, the ones before work up to it." % [title, str(o.get("words", ""))]
 		# (the tile sinks while it is held, as a key's face does)
 		k.button_down.connect(func():
 			t.offset_top = PixBox.S

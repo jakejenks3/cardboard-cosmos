@@ -2326,8 +2326,10 @@ is the Windows handoff.
   overlay... editable but shows the specific exercises I have missions for"; then "too muddled"; then "Make a way to
   finish or complete each set and rep... locks in that set and then the exercise... maybe changing that boxes color".
   - A GOAL (game/prep.gd) = a Challenges option picked for a prepped lift: the entry's `goal` (Prep.clean_goal: type,
-    kind, title, words, sub, kg, reps, band, sec) and its SET 1 the record, `"goal": true` (Prep.apply_goal; a
-    "day_reps" goal marks no set). `Prep.with_goal(settings, date, lift, option, today, plan_lifts, step_kg, last_sets)`
+    kind, title, words, sub, kg, reps, band, sec) and its LAST set the record, `"goal": true` (Prep.apply_goal; the
+    user, the same day: "It should become the last set not the first... the first 2 sets should work towards it"; a
+    set before it that would already meet the goal is eased just under it, `Prep.ease_under`: a step lighter, or two
+    reps fewer; a "day_reps" goal marks no set). `Prep.with_goal(settings, date, lift, option, today, plan_lifts, step_kg, last_sets)`
     (option {} takes it off), `Prep.with_way(...)` (the movement's prepped lift done another way, no goal), both making
     the day's prep FROM THE PLAN when it has none; `goal_of`. `with_prep` keeps goals; `plan_lifts` carries "goal".
     App: `prep_goal(lift, option, date)`, `prep_way(planned, way, date)`, `goal_on(lift, date)`, `plan_on(date)`.
