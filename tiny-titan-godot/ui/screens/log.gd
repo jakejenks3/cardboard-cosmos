@@ -218,7 +218,9 @@ func _reading_tile() -> Button:
 	var h = Kit.hbox(12)
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_child(Icons.rect("book", 32))
-	var t = Kit.label("Reading", 18, Pal.INK, true)
+	# (2026-11-27 review: dark ink on the brown key could hardly be read) Cream with a dark outline, as the
+	# words on the Lifting, Climbing and Running keys.
+	var t = Kit.outlined("Reading", 18)
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(t)
 	var n = Reading.pages_on(App.state, App.today)

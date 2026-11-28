@@ -50,9 +50,32 @@ static func hp_color(share: float) -> Color:
 	return Pal.DANGER
 
 
-## Dark ink on a bright face, light text on a dark one.
+## Dark ink or cream, whichever reads better on `face` (a small tag's words). (2026-11-27, the Workshop look:
+## this gave Pal.TEXT to a dark face, and Pal.TEXT is dark ink now: "HEAL" was dark on near-black.)
 static func ink_on(face: Color) -> Color:
-	return Pal.INK if face.get_luminance() > 0.45 else Pal.TEXT
+	return Kit.on_color(face)
+
+
+## The words of a fight key: dark ink on a light face (lemon, tan, gold, cream), cream with a dark outline on
+## any other, as the Workshop's keys (Kit.key_words).
+static func light_face(face: Color) -> bool:
+	return Ink.luminance(face) > 0.5
+
+
+## The face of a key that cannot be used: the dark of a sunken track with a hint of the key's own colour, so
+## it reads as locked, not washed out (it used to fade towards the parchment: tan on tan, pink on pink).
+static func off_face(face: Color) -> Color:
+	return Color(Pal.MATERIALS["track"].fill).lerp(face, 0.16)
+
+
+## Words on a key's face: dark ink on a light face; cream on any other, outlined in dark while the key can be
+## used, plain and faded (`alpha`) on a locked key's dark face.
+static func key_ink(l: Label, face: Color, px: int, alpha: float = 1.0) -> void:
+	var dark = BattleWidgets.light_face(face)
+	var fg = Pal.INK if dark else Pal.CREAM
+	l.add_theme_color_override("font_color", Color(fg.r, fg.g, fg.b, alpha))
+	l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	l.add_theme_constant_override("outline_size", 0 if dark or alpha < 1.0 else Kit.outline_for(px))
 
 
 static func _styles(b: Button, looks: Dictionary) -> void:
@@ -64,7 +87,6 @@ static func _styles(b: Button, looks: Dictionary) -> void:
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 
-## Big pixel words in the middle of `over` for a moment. They free themselves.
 ## A number from 0 to 1 that is the same every time for the same two whole numbers.
 static func _hash(a: int, b: int) -> float:
 	var n = (a * 73856093) ^ (b * 19349663)
@@ -72,22 +94,34 @@ static func _hash(a: int, b: int) -> float:
 	return float(absi(n) % 10007) / 10007.0
 
 
-static func banner(over: Control, text: String, color: Color, hold: float = 0.7, px_scale: int = 3) -> void:
+## Big pixel words in the middle of `over` for a moment. They free themselves.
+## (2026-11-27 review: the words were drawn straight over whatever was there, and "PERFECT GUARD" across a
+## foe's plate broke up into its fill and pips.) They sit on a strip of their own: a dark plate framed in their
+## colour, like a sign. Returns the strip (the caller may move it: BattleView puts some over the plates).
+static func banner(over: Control, text: String, color: Color, hold: float = 0.7, px_scale: int = 3) -> Control:
 	if not is_instance_valid(over) or not over.is_inside_tree():
-		return
+		return null
+	var strip = PanelContainer.new()
+	strip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill = Color(Pal.MATERIALS["cap"].fill)
+	strip.add_theme_stylebox_override("panel", PixBox.nine([Pal.OUTLINE, PixBox.bev(color.lightened(0.2), color.darkened(0.4)), Pal.OUTLINE], fill,
+		{"cut": 1, "pad_h": 8 + 2 * px_scale, "pad_v": 3 + 2 * px_scale}))
 	var r = PixelFont.rect(text, px_scale, color)
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	over.add_child(r)
-	r.size = r.custom_minimum_size
-	r.position = ((over.size - r.custom_minimum_size) / 2.0).floor()
-	r.pivot_offset = r.custom_minimum_size / 2.0
-	r.scale = Vector2(0.6, 0.6)
-	r.set_meta("bv_banner", text)
-	var tw = r.create_tween()
-	tw.tween_property(r, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	strip.add_child(r)
+	over.add_child(strip)
+	strip.size = strip.get_combined_minimum_size()
+	strip.position = ((over.size - strip.size) / 2.0).floor()
+	strip.pivot_offset = strip.size / 2.0
+	strip.scale = Vector2(0.6, 0.6)
+	strip.set_meta("bv_banner", text)
+	var tw = strip.create_tween()
+	tw.tween_property(strip, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_interval(maxf(0.05, hold))
-	tw.tween_property(r, "modulate:a", 0.0, 0.2)
-	tw.tween_callback(r.queue_free)
+	tw.tween_property(strip, "modulate:a", 0.0, 0.2)
+	tw.tween_callback(strip.queue_free)
+	return strip
 
 
 # =============================================================================
@@ -212,10 +246,12 @@ class WeakRow extends Control:
 		for i in range(mini(3, marks.size())):
 			var m = marks[i]
 			if str(m.kind) == "unknown":
+				# (a cream "?" a little faded on the dark well: brown on near-black could not be seen)
 				draw_rect(Rect2(x, 0, 16, 16), Pal.OUTLINE)
 				draw_rect(Rect2(x + 1.0, 1, 14, 14), Pal.WELL)
-				var q = PixelFont.tex("?", Pal.MUTED, false)
-				draw_texture(q, Vector2(x + floor((16.0 - float(q.get_width())) / 2.0), floor((16.0 - float(q.get_height())) / 2.0)))
+				draw_rect(Rect2(x + 1.0, 1, 14, 1), Pal.with_alpha(Pal.CREAM, 0.12))
+				var q = PixelFont.tex("?", Pal.CREAM, false)
+				draw_texture(q, Vector2(x + floor((16.0 - float(q.get_width())) / 2.0), floor((16.0 - float(q.get_height())) / 2.0)), Color(1, 1, 1, 0.72))
 			else:
 				draw_texture(Icons.tex(RpgUi.school_icon(str(m.school))), Vector2(x, 0))
 				if str(m.kind) == "resist":
@@ -241,7 +277,10 @@ class IntentTag extends HBoxContainer:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_icon = Icons.rect("in_attack", 16)
 		add_child(_icon)
-		_label = Kit.label("", 12, Pal.TEXT, true)
+		# The number of the coming blow: cream with a dark outline on the dark plate (it was dark ink).
+		_label = Kit.label("", 12, Pal.CREAM, true)
+		_label.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+		_label.add_theme_constant_override("outline_size", Kit.outline_for(12))
 		_label.clip_text = true
 		_label.custom_minimum_size = Vector2(22, 0)
 		if wide:
@@ -296,7 +335,7 @@ class IntentTag extends HBoxContainer:
 		var text = IntentTag.words(intent, wide)
 		_label.text = text
 		var count = int(intent.get("count", 0))
-		_label.add_theme_color_override("font_color", Pal.ACCENT2 if count > 0 else Pal.TEXT)
+		_label.add_theme_color_override("font_color", Pal.ACCENT2 if count > 0 else Pal.CREAM)
 		set_meta("bv_intent", "%s:%s" % [str(intent.get("kind", "")), text])
 
 
@@ -341,10 +380,11 @@ class FoePlate extends Button:
 		badge.add_theme_stylebox_override("normal", Kit.sbox(BattleWidgets.slot_color(slot), 3, null, 0, 0, 0))
 		_put(badge, 4, 3, 14, 14)
 		var num_w = 38.0 if wide else 0.0
-		_name = Kit.clip("", 11, Pal.TEXT, true)
+		# (cream on the dark plate, set here: Pal.TEXT and MUTED are dark inks on paper in the Workshop look)
+		_name = Kit.clip("", 11, Pal.CREAM, true)
 		_put(_name, 21, 2, inner - 17.0 - num_w, 15)
 		if wide:
-			_hp_label = Kit.label("", 11, Pal.MUTED, true)
+			_hp_label = Kit.label("", 11, Pal.CREAM, true)
 			_hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			_hp_label.clip_text = true
 			_put(_hp_label, w - 4.0 - num_w, 2, num_w, 15)
@@ -590,8 +630,12 @@ class Timeline extends Control:
 		_slide = v
 		queue_redraw()
 
+	## (2026-11-27 review: "NEXT" was brown on the dark page, the first tile's frame dark ink on dark, and the
+	## later tiles' near-black numbers sat on reds darkened by 30%.) "NEXT" is cream; the first tile has a cream
+	## frame and a lit edge; the later ones are a shade darker; each tile's word is dark ink or cream (with a
+	## shadow), whichever reads on its colour.
 	func _draw() -> void:
-		var head = PixelFont.tex("NEXT", Pal.MUTED, false)
+		var head = PixelFont.tex("NEXT", Pal.CREAM, true)
 		draw_texture_rect(head, Rect2(0, floor((size.y - float(head.get_height()) * 2.0) / 2.0), float(head.get_width()) * 2.0, float(head.get_height()) * 2.0), false)
 		var count = 7
 		var w = minf(44.0, floor((size.x - HEAD_W - 4.0 * float(count - 1)) / float(count)))
@@ -602,9 +646,15 @@ class Timeline extends Control:
 			var col = Pal.ACCENT if kind == "hero" else (Pal.GOOD if kind == "pet" else BattleWidgets.slot_color(int(t.get("slot", 0))))
 			var text = "YOU" if kind == "hero" else ("PET" if kind == "pet" else str(int(t.get("slot", 0)) + 1))
 			var r = Rect2(floor(HEAD_W + (float(i) + _slide * 0.6) * (w + 4.0)), y, w, TILE_H)
-			draw_rect(r, Pal.TEXT if i == 0 else Pal.OUTLINE)
-			draw_rect(r.grow(-2.0), col if i == 0 else col.darkened(0.3))
-			var g = PixelFont.tex(text, Pal.INK, false)
+			var face = col if i == 0 else col.darkened(0.2)
+			draw_rect(r, Pal.CREAM if i == 0 else Pal.OUTLINE)
+			draw_rect(r.grow(-2.0), face)
+			# A lit top edge and a shaded foot, as the Workshop's keys.
+			var inner = r.grow(-2.0)
+			draw_rect(Rect2(inner.position, Vector2(inner.size.x, 2.0)), face.lightened(0.3))
+			draw_rect(Rect2(inner.position.x, inner.end.y - 2.0, inner.size.x, 2.0), face.darkened(0.3))
+			var ink = Kit.on_color(face)
+			var g = PixelFont.tex(text, ink, ink == Pal.CREAM)
 			var gs = Vector2(float(g.get_width()) * 2.0, float(g.get_height()) * 2.0)
 			draw_texture_rect(g, Rect2((r.position + (r.size - gs) / 2.0).floor(), gs), false)
 
@@ -629,6 +679,8 @@ class MoveKey extends Button:
 	var _dmg: Label
 	var _tag: Label
 	var _icon: TextureRect
+	var _tile: PanelContainer
+	var _off_face: Color
 
 	var _stars: Pips = null
 
@@ -647,9 +699,12 @@ class MoveKey extends Button:
 		set_meta("bv_move", move_id)
 		set_meta("anchor_id", "bv_move:" + move_id)
 		set_meta("bv_ok", true)
-		_on = PixBox.button_set(_col, _col.darkened(0.45), 6, 4, 2)
-		var faded = _col.lerp(Pal.PANEL, 0.72)
-		_off = PixBox.button_set(faded, _col.darkened(0.45).lerp(Pal.OUTLINE, 0.6), 6, 4, 2)
+		# (2026-11-27 review: pastel slabs with dark words, and a locked key faded towards the parchment.) A
+		# Workshop block in the school's colour with cream outlined words (dark ink on lemon); a key that cannot
+		# be used is the dark of a track with a hint of its colour and faded cream words.
+		_on = PixBox.block_set(_col, 6, 4, 2)
+		_off_face = BattleWidgets.off_face(_col)
+		_off = PixBox.block_set(_off_face, 6, 4, 2)
 		BattleWidgets._styles(self, _on)
 		_row = Kit.hbox(6)
 		_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -659,14 +714,14 @@ class MoveKey extends Button:
 		_row.offset_right = -7
 		_row.offset_top = 3
 		_row.offset_bottom = -(3 + BattleWidgets.DROP)
-		# The icon on a dark tile: a school's icon is drawn in the school's own colour, like the key.
-		var tile = PanelContainer.new()
-		tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		tile.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(Pal.OUTLINE, 0.82), 4, null, 0, 2, 2))
+		# The icon in a framed slot ringed in the school's colour (the Workshop's icon slots).
+		_tile = PanelContainer.new()
+		_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_tile.add_theme_stylebox_override("panel", PixBox.slot(_col, true, 4))
 		_icon = Icons.rect(RpgUi.school_icon(school), 32)
-		tile.add_child(_icon)
-		_row.add_child(tile)
+		_tile.add_child(_icon)
+		_row.add_child(_tile)
 		var mid = Kit.vbox(2)
 		mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -689,12 +744,18 @@ class MoveKey extends Button:
 		_dmg.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		_dmg.clip_text = true
 		right.add_child(_dmg)
-		_tag = Kit.label("", 10, Pal.TEXT, true)
+		# KO / WEAK / RESIST / what a support move does: a small bevelled tag (Kit.tag_box), its words dark or
+		# cream by its colour (it was a near-black slab with dark words).
+		_tag = Kit.label("", 10, Pal.INK, true)
 		_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_tag.size_flags_horizontal = Control.SIZE_SHRINK_END
 		_tag.custom_minimum_size = Vector2(46, 0)
 		_tag.clip_text = true
 		right.add_child(_tag)
+		for l in [_name, _cd, _dmg]:
+			l.set_meta("ink_keep", true)
+		_paint(true)
 		_row.add_child(right)
 		button_down.connect(_sink.bind(true))
 		button_up.connect(_sink.bind(false))
@@ -710,7 +771,8 @@ class MoveKey extends Button:
 		if _stars == null:
 			return
 		var mid_y = 3.0 + (size.y - 6.0 - float(BattleWidgets.DROP)) / 2.0
-		_stars.position = Vector2(11, floor(mid_y + 18.0 - 4.0))
+		# (under the middle of the icon, which sits 4 px into its framed slot)
+		_stars.position = Vector2(13, floor(mid_y + 18.0 - 4.0))
 		_stars.size = Vector2(28, 6)
 
 	## 0 to 3 mastery stars (RpgDefs.mastery_level), shown as pips on the icon.
@@ -745,20 +807,27 @@ class MoveKey extends Button:
 		_row.offset_top = 3 + (BattleWidgets.DROP if down else 0)
 		_row.offset_bottom = -3 if down else -(3 + BattleWidgets.DROP)
 
+	## The key's words, pips and icon for its state (see _init).
+	func _paint(on: bool) -> void:
+		var face = _col if on else _off_face
+		var alpha = 1.0 if on else 0.62
+		BattleWidgets.key_ink(_name, face, 14, alpha)
+		BattleWidgets.key_ink(_cd, face, 11, alpha)
+		BattleWidgets.key_ink(_dmg, face, 15, alpha)
+		_tile.modulate = Color.WHITE if on else Color(0.8, 0.8, 0.8, 0.6)
+
 	## `o`: its row of RpgBattle.options ({"ok", "why", "cost", "cd"}); `pv`: RpgBattle.preview on the picked target.
 	func set_state(o: Dictionary, pv: Dictionary) -> void:
 		usable = bool(o.get("ok", false))
 		why = str(o.get("why", ""))
 		BattleWidgets._styles(self, _on if usable else _off)
-		var fg = Pal.INK if usable else Pal.MUTED
-		_name.add_theme_color_override("font_color", fg)
-		_cd.add_theme_color_override("font_color", fg)
-		_dmg.add_theme_color_override("font_color", fg)
-		_icon.modulate.a = 1.0 if usable else 0.5
+		_paint(usable)
+		var fg: Color = _name.get_theme_color("font_color")
 		var cost = int(o.get("cost", 0))
 		_cost.custom_minimum_size = Vector2(float(maxi(1, cost)) * 9.0, 9)
 		_cost.set_values(cost, cost)
-		_cost.set_color(Pal.DANGER if why == "energy" else fg)
+		_cost.set_color(Pal.DANGER if why == "energy" else Color(fg.r, fg.g, fg.b))
+		_cost.modulate.a = 1.0 if usable else 0.62
 		var cd = int(o.get("cd", 0))
 		_cd.text = ("rest %d" % cd) if cd > 0 else ("free" if cost <= 0 else "")
 		var dmg = ""
@@ -778,8 +847,15 @@ class MoveKey extends Button:
 			tag = _support
 		_dmg.text = dmg
 		_tag.text = tag
-		var bg = Pal.ACCENT if tag == "KO" else (Pal.MUTED if tag == "RESIST" else Pal.INK)
-		_tag.add_theme_stylebox_override("normal", Kit.sbox(bg, 3, null, 0, 4, 0))
+		# KO gold, WEAK green, RESIST brown, a support move's word on cream paper.
+		var bg = Pal.PANEL2
+		if tag == "KO":
+			bg = Pal.ACCENT
+		elif tag == "WEAK":
+			bg = Pal.GOOD
+		elif tag == "RESIST":
+			bg = Pal.MUTED
+		_tag.add_theme_stylebox_override("normal", Kit.tag_box(bg, 4, 1))
 		_tag.add_theme_color_override("font_color", BattleWidgets.ink_on(bg))
 		_tag.modulate.a = 0.0 if tag == "" else (1.0 if usable else 0.6)
 		set_meta("bv_ok", usable)
@@ -793,6 +869,7 @@ class ActKey extends Button:
 	var key_id: String = ""
 	var usable: bool = true
 	var _face: Color
+	var _off_face: Color
 	var _on: Dictionary
 	var _lit: Dictionary
 	var _off: Dictionary
@@ -801,9 +878,10 @@ class ActKey extends Button:
 	var _badge: Label
 	var _icon: TextureRect
 
-	func _init(id: String, word: String, icon_name: String, face: Color, h: int) -> void:
+	## `face`: a Pal.BLOCKS name ("tan", "blue", "orange", "green": the Workshop's own keys) or a Color.
+	func _init(id: String, word: String, icon_name: String, face, h: int) -> void:
 		key_id = id
-		_face = face
+		_face = PixBox.block_colors(face)[3]
 		focus_mode = Control.FOCUS_NONE
 		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -813,9 +891,12 @@ class ActKey extends Button:
 		set_meta("bv_key", id)
 		set_meta("anchor_id", "bv_key:" + id)
 		set_meta("bv_ok", true)
-		_on = PixBox.button_set(face, face.darkened(0.45), 4, 4, 2)
-		_lit = PixBox.button_set(Pal.ACCENT, Pal.ACCENT_DARK, 4, 4, 2)
-		_off = PixBox.button_set(face.lerp(Pal.PANEL, 0.72), face.darkened(0.45).lerp(Pal.OUTLINE, 0.6), 4, 4, 2)
+		# (2026-11-27 review) Workshop blocks: the key's own block, gold when lit; one that cannot be used is
+		# the dark of a track with a hint of its colour and faded cream words (it faded towards the parchment).
+		_on = PixBox.block_set(face, 4, 4, 2)
+		_lit = PixBox.block_set("gold", 4, 4, 2)
+		_off_face = BattleWidgets.off_face(_face)
+		_off = PixBox.block_set(_off_face, 4, 4, 2)
 		BattleWidgets._styles(self, _on)
 		_col = Kit.vbox(0)
 		_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -828,12 +909,16 @@ class ActKey extends Button:
 		_col.offset_bottom = -(2 + BattleWidgets.DROP)
 		_icon = Icons.rect(icon_name if Icons.has_icon(icon_name) else "star", 16)
 		_col.add_child(_icon)
-		_label = Kit.clip(word, 11, BattleWidgets.ink_on(face), true)
+		_label = Kit.clip(word, 11, Pal.INK, true)
 		_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_label.set_meta("ink_keep", true)
 		_col.add_child(_label)
-		_badge = Kit.label("", 10, BattleWidgets.ink_on(face), true)
+		_badge = Kit.label("", 10, Pal.INK, true)
 		_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		_badge.clip_text = true
+		_badge.set_meta("ink_keep", true)
+		BattleWidgets.key_ink(_label, _face, 11)
+		BattleWidgets.key_ink(_badge, _face, 10)
 		add_child(_badge)
 		_badge.anchor_left = 1.0
 		_badge.anchor_right = 1.0
@@ -853,11 +938,11 @@ class ActKey extends Button:
 	func set_state(on: bool, badge: String = "", lit: bool = false) -> void:
 		usable = on
 		BattleWidgets._styles(self, _off if not on else (_lit if lit else _on))
-		var fg = Pal.MUTED if not on else BattleWidgets.ink_on(Pal.ACCENT if lit else _face)
-		_label.add_theme_color_override("font_color", fg)
-		_badge.add_theme_color_override("font_color", fg)
+		var face = _off_face if not on else (Pal.ACCENT if lit else _face)
+		BattleWidgets.key_ink(_label, face, 11, 1.0 if on else 0.62)
+		BattleWidgets.key_ink(_badge, face, 10, 1.0 if on else 0.62)
 		_badge.text = badge
-		_icon.modulate.a = 1.0 if on else 0.5
+		_icon.modulate = Color.WHITE if on else Color(0.8, 0.8, 0.8, 0.55)
 		set_meta("bv_ok", on)
 		set_meta("bv_badge", badge)
 		set_meta("bv_lit", lit and on)

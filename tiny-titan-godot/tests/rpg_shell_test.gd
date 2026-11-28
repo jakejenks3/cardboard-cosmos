@@ -194,14 +194,16 @@ func _run() -> void:
 	# --- the Realm's colours (pure) ----------------------------------------------------------------
 	var fresh = {"PUSH": Pal.PUSH, "PULL": Pal.PULL, "LEGS": Pal.LEGS, "GRIT": Pal.GRIT, "REALM": Pal.REALM}
 	var fixed = {"LIFT": Pal.LIFT, "CLIMB": Pal.CLIMB, "RUN": Pal.RUN, "RIDE": Pal.RIDE, "MISC": Pal.MISC, "READ": Pal.READ, "PT": Pal.PT, "BOUNTY": Pal.BOUNTY, "GOOD": Pal.GOOD, "DANGER": Pal.DANGER}
+	# On paper (the Workshop look, 2026-11-27) the five are light: as words there they are darkened by Ink,
+	# which must bring each to 3:1 or more against the parchment and the cream paper.
 	var low = []
-	for id in Pal.THEME_ORDER:
-		for key in ["panel", "panel2"]:
-			for n in fresh:
-				var c = _contrast(fresh[n], Color(Pal.THEMES[id][key]))
-				if c < 3.0:
-					low.append("%s on %s.%s %.2f" % [n, id, key, c])
-	ok(low.is_empty(), "each of the five is 3:1 or more against the panel and the lighter panel of all four themes", low)
+	for key in ["panel", "panel2"]:
+		var bg = Color(Pal.THEMES["workshop"][key])
+		for n in fresh:
+			var c = _contrast(Ink.adjust(fresh[n], bg, 3.0), bg)
+			if c < 3.0:
+				low.append("%s on %s %.2f" % [n, key, c])
+	ok(low.is_empty(), "each of the five, as words on the parchment or the cream paper, reads at 3:1 or more once Ink has seen it", low)
 	# Far apart in plain RGB too (a coarse check; the careful one was made when they were picked).
 	var close = []
 	var every = fixed.duplicate()
@@ -214,7 +216,7 @@ func _run() -> void:
 					close.append("%s-%s %.2f" % [a, b, d])
 	ok(close.is_empty(), "none of the five sits on another colour or on one of the ten fixed ones", close)
 	var before_theme = Pal.theme_id
-	Pal.apply("ember")
+	Pal.apply("workshop")
 	ok(Pal.PUSH == fresh.PUSH and Pal.PULL == fresh.PULL and Pal.LEGS == fresh.LEGS and Pal.GRIT == fresh.GRIT and Pal.REALM == fresh.REALM, "they are the same in every theme")
 	Pal.apply(before_theme)
 	ok(Pal.TAB_ACCENT.has("realm") and Pal.tab("realm") == Pal.REALM and Pal.TAB_ACCENT.size() == 6, "the Realm tab's accent is the Realm's colour; six tabs have one", Pal.TAB_ACCENT.keys())
@@ -506,7 +508,8 @@ func _run() -> void:
 	await _frames(4)
 	realm = main._screen
 	var active = _with_meta(main._nav_row, "tab").filter(func(k): return str(k.get_meta("tab")) == "realm")
-	ok(active.size() == 1 and _all(active[0]).filter(func(n): return n is ColorRect and n.color == Pal.REALM).size() == 1, "its key in the bar is marked in the Realm's colour")
+	# (since the Workshop look, 2026-11-27: the chosen tab's icon slot is lifted and ringed in its colour)
+	ok(active.size() == 1 and _all(active[0]).filter(func(n): return n.has_meta("tab_ring") and n.get_meta("tab_ring") == Pal.REALM).size() == 1, "its key in the bar is marked in the Realm's colour")
 	# A change of the Realm's save: the Realm's screen is drawn again, nothing else hears `changed`.
 	var realm_first = realm.get_child(0)
 	counts.changed = 0

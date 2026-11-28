@@ -37,9 +37,12 @@ signal chosen(what: String)
 const KIND_LINE = "Nothing is lost. Train, tune the build, try again."
 const KEY_H = 46
 const TABLEAU_H = 156.0
-## On a screen taller than the page needs (a phone's) the picture takes the room, up to this much more:
-## no hole between the last block and the keys.
-const TABLEAU_MORE = 110.0
+## On a screen taller than the page needs (a phone's) the picture takes TABLEAU_SHARE of the room, up to
+## TABLEAU_MORE more, with ground in front of the hero and sky over him (as the fight's arena); the page's
+## windows stand in the middle of what is left, so no hole is left between the last one and the keys.
+## (2026-11-27 review: with at most 110 px more, a short result left about 400 px of empty page on a phone.)
+const TABLEAU_MORE = 320.0
+const TABLEAU_SHARE = 0.62
 const HERO_SCALE = 2
 
 var summary: Dictionary = {}
@@ -67,6 +70,10 @@ var _tab_arena = null
 var _tab_hero: HeroView = null
 var _tab_rays = null
 var _tab_title: Label = null
+var _tab_sky = null
+## The fade-ins of the late rows: a skip() stops them (left running, they took a row skipped to its end back
+## down to half and up again: the loss's "What would help" was caught at half its strength).
+var _fades: Array = []
 
 
 func setup(summary_in: Dictionary, info_in: Dictionary) -> void:
@@ -94,6 +101,15 @@ func _build() -> void:
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(base)
 	base.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# The Workshop's dark planks, as on every page (it was a flat brown fill).
+	var planks = TextureRect.new()
+	planks.texture = PixBox.planks()
+	planks.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	planks.stretch_mode = TextureRect.STRETCH_TILE
+	planks.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	planks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(planks)
+	planks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var col = Kit.vbox(10)
 	add_child(col)
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -102,7 +118,7 @@ func _build() -> void:
 	col.offset_top = 14
 	col.offset_bottom = -10
 
-	var head_color = Pal.ACCENT if win else Pal.MUTED
+	var head_color = Pal.ACCENT if win else Pal.CREAM
 	var head = PixelFont.rect("VICTORY" if win else "KNOCKED DOWN", 4 if win else 3, head_color)
 	_head = head
 	var hero = info.get("hero")
@@ -112,7 +128,7 @@ func _build() -> void:
 		head.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		col.add_child(head)
 	if _tab == null:
-		var title = Kit.clip(str(info.get("title", "")), 15, Pal.MUTED, true)
+		var title = Kit.clip(str(info.get("title", "")), 15, Pal.LINE, true)
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		col.add_child(title)
 
@@ -125,18 +141,32 @@ func _build() -> void:
 	var body = Kit.vbox(10)
 	_body = body
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# (it fills the room between the picture and the keys, its windows in the middle of it: see TABLEAU_MORE)
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.alignment = BoxContainer.ALIGNMENT_CENTER
 	body.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll.add_child(body)
 
-	if not win:
-		var kind = Kit.row(Callable(), Pal.SECOND, Pal.SECOND, 10, 4)
-		var line = Kit.para(KIND_LINE, 15, null, true)
-		line.set_meta("br_kind", true)
-		kind.add(line)
-		body.add_child(kind)
 	if win and info.get("stars") is Array:
 		body.add_child(_stars_block(info.stars, info.get("objectives") if info.get("objectives") is Array else []))
-	body.add_child(_facts())
+	# (2026-11-27 review: the three numbers, the level bar and the record rows were pastel boxes on the bare
+	# page.) How the fight went is one wooden window: the kind line after a loss, the three tiles, the move
+	# that carried it, the level bar and what the fight brought (gold words on the slips are a deep gold, the
+	# gold itself on the icon's slot: pale gold on cream was faint).
+	var fight = Kit.section("br_fight", "The fight", "sword", Pal.ACCENT2)
+	body.add_child(fight)
+	var gold = RpgUi.ink_on(Pal.ACCENT, RpgUi.slip_of(Pal.ACCENT))
+	if not win:
+		var kind = Kit.row(Callable(), null, null, 8, 4)
+		var kh = Kit.hbox(8)
+		kh.add_child(Kit.vcenter(Kit.badge("heart", Pal.DANGER, 16)))
+		var line = Kit.para(KIND_LINE, 15, null, true)
+		line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.set_meta("br_kind", true)
+		kh.add_child(line)
+		kind.add(kh)
+		fight.add(kind)
+	fight.add(_facts())
 	if info.get("top_move") is Dictionary:
 		# The move that carried the fight.
 		var tm = info.top_move
@@ -149,53 +179,58 @@ func _build() -> void:
 		tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		th.add_child(Kit.vcenter(tl))
 		trow.add(th)
-		body.add_child(trow)
+		fight.add(trow)
 	if win and info.get("level_before") is Dictionary and info.get("level_after") is Dictionary:
 		_xp = XpBarAnim.new()
 		_xp.setup(_level_info(info.level_before), _level_info(info.level_after), RpgUi.color("realm"), "Fighter", "realm" if Icons.has_icon("realm") else "star")
 		_xp.set_meta("br_xp", true)
-		body.add_child(_xp)
+		fight.add(_xp)
 		_rose = int(info.level_after.get("lvl", 1)) > int(info.level_before.get("lvl", 1))
 		if _rose:
-			# Its place is there from the start, so nothing under it moves when it lights up.
-			var lv = PixelFont.rect("LEVEL UP", 3, Pal.ACCENT)
+			# Its place is there from the start, so nothing under it moves when it lights up. A gold stamp with
+			# dark pixel letters (gold letters on the parchment were faint).
+			var lv = PanelContainer.new()
+			lv.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			lv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			lv.add_theme_stylebox_override("panel", PixBox.block_set("gold", 16, 6, 1)["normal"])
 			lv.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			lv.add_child(PixelFont.rect("LEVEL UP", 3, Pal.INK, false))
 			lv.modulate.a = 0.0
 			lv.set_meta("br_level_up", false)
 			_level_up = lv
-			body.add_child(lv)
+			fight.add(lv)
 	var pts = int(info.get("points", 0))
 	if win and pts > 0:
 		# A skill point (or more) came with this win: a line of its own, with the way to spend it.
 		var prow = Kit.row(Callable(), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
 		prow.set_meta("br_points", pts)
 		var ph = Kit.hbox(8)
-		ph.add_child(Kit.vcenter(Icons.rect("sp" if Icons.has_icon("sp") else "star", 24)))
+		ph.add_child(Kit.vcenter(Kit.badge("sp" if Icons.has_icon("sp") else "star", Pal.ACCENT, 16)))
 		var pv = Kit.vbox(0)
 		pv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		pv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		pv.add_child(Kit.clip("+%d skill point%s" % [pts, "" if pts == 1 else "s"], 15, Pal.ACCENT, true))
+		pv.add_child(Kit.clip("+%d skill point%s" % [pts, "" if pts == 1 else "s"], 15, gold, true))
 		pv.add_child(Kit.clip("Spend %s on the Skills page: a new move or a passive." % ("it" if pts == 1 else "them"), 11, Pal.MUTED))
 		ph.add_child(pv)
 		prow.add(ph)
 		_late.append(prow)
-		body.add_child(prow)
+		fight.add(prow)
 	if info.get("record_hit") is Dictionary:
 		# The hardest single hit ever dealt: a line of its own.
 		var rec = info.record_hit
 		var rrow = Kit.row(Callable(), Pal.ACCENT, Pal.ACCENT, 8, 0, 0.14)
 		rrow.set_meta("br_record", int(rec.get("now", 0)))
 		var rh = Kit.hbox(8)
-		rh.add_child(Kit.vcenter(Icons.rect("power" if Icons.has_icon("power") else "star", 24)))
+		rh.add_child(Kit.vcenter(Kit.badge("power" if Icons.has_icon("power") else "star", Pal.ACCENT, 16)))
 		var rv = Kit.vbox(0)
 		rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		rv.add_child(Kit.clip("Your hardest hit ever: %s" % Xp.fmt_int(int(rec.get("now", 0))), 15, Pal.ACCENT, true))
+		rv.add_child(Kit.clip("Your hardest hit ever: %s" % Xp.fmt_int(int(rec.get("now", 0))), 15, gold, true))
 		rv.add_child(Kit.clip("The record was %s." % Xp.fmt_int(int(rec.get("was", 0))), 11, Pal.MUTED))
 		rh.add_child(rv)
 		rrow.add(rh)
 		_late.append(rrow)
-		body.add_child(rrow)
+		fight.add(rrow)
 	var grown = info.get("mastery") if info.get("mastery") is Array else []
 	for g in grown:
 		if not (g is Dictionary):
@@ -215,12 +250,12 @@ func _build() -> void:
 		var mv = Kit.vbox(0)
 		mv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		mv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		mv.add_child(Kit.clip("%s: %s" % [str(g.get("name", "")), str(g.get("rank", ""))], 15, Pal.ACCENT, true))
+		mv.add_child(Kit.clip("%s: %s" % [str(g.get("name", "")), str(g.get("rank", ""))], 15, RpgUi.ink_on(Pal.ACCENT, RpgUi.slip_of(mcol)), true))
 		mv.add_child(Kit.clip("Used enough to get better at it: %s." % str(g.get("words", "")), 11, Pal.MUTED))
 		mh.add_child(mv)
 		mrow.add(mh)
 		_late.append(mrow)
-		body.add_child(mrow)
+		fight.add(mrow)
 	if win and info.get("rewards") is Dictionary:
 		var loot = _loot(info.rewards)
 		_late.append(loot)
@@ -259,7 +294,9 @@ func _fit_tableau() -> void:
 		return
 	var cur = _tab.custom_minimum_size.y
 	var spare = _scroll.size.y - _body.get_combined_minimum_size().y - 6.0
-	var want = clampf(floor(cur + spare), TABLEAU_H, TABLEAU_H + TABLEAU_MORE)
+	# (the room over the least picture, whatever the picture has now: the same answer every time it is asked)
+	var room = maxf(0.0, cur - TABLEAU_H + spare)
+	var want = TABLEAU_H + clampf(floor(room * TABLEAU_SHARE), 0.0, TABLEAU_MORE)
 	if absf(want - cur) >= 1.0:
 		_tab.custom_minimum_size.y = want
 
@@ -279,6 +316,12 @@ func _tableau(hero: Dictionary, head: Control) -> Control:
 		arena.self_modulate = info.light
 	box.add_child(arena)
 	_tab_arena = arena
+	# A tall picture (a phone's) has sky over the scene: clouds by day, stars by night, as in the fight.
+	if not BattleView.INDOORS.has(RealmScenes.scene_of(str(info.get("scene", "")))):
+		_tab_sky = BattleFx.SkyBand.new()
+		_tab_sky.sky = arena._sky * (info.light if info.get("light") is Color else Color(1, 1, 1))
+		_tab_sky.visible = false
+		box.add_child(_tab_sky)
 	if win:
 		var air = BattleFx.Ambient.new()
 		air.mode = "stars"
@@ -300,7 +343,8 @@ func _tableau(hero: Dictionary, head: Control) -> Control:
 	_tab_hero.forced_pose = "flex" if win else "hurt"
 	box.add_child(_tab_hero)
 	box.add_child(head)
-	_tab_title = Kit.clip(str(info.get("title", "")), 14, Pal.TEXT, true)
+	# The stage's name: cream with a dark outline, so it reads on any sky (dark ink was lost on a dusky one).
+	_tab_title = Kit.clip(str(info.get("title", "")), 14, Pal.CREAM, true)
 	_tab_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tab_title.add_theme_color_override("font_outline_color", Pal.OUTLINE)
 	_tab_title.add_theme_constant_override("outline_size", 4)
@@ -321,6 +365,17 @@ func _place_tableau() -> void:
 	var h = _tab.size.y
 	_tab_arena.position = Vector2.ZERO
 	_tab_arena.size = Vector2(w, h)
+	# Taller than the scene's picture: a share of the room over it is ground in front of the hero (as the
+	# fight's arena: BattleView.FLOOR_SHARE), the rest sky over him.
+	var kk = float(_tab_arena.k())
+	var pic = float(RealmScenes.H) * kk
+	var fl = floor(minf(maxf(0.0, h - pic) * BattleView.FLOOR_SHARE, BattleView.FLOOR_MAX) / kk) * kk
+	_tab_arena.floor_h = fl if fl >= BattleView.FLOOR_MIN else 0.0
+	var band = h - _tab_arena.floor_h - pic
+	if _tab_sky != null:
+		_tab_sky.visible = band >= 24.0 and not BattleFx.light
+		_tab_sky.position = Vector2.ZERO
+		_tab_sky.size = Vector2(w, maxf(0.0, band))
 	var fit = info.get("hero_fit") if info.get("hero_fit") is Dictionary else {}
 	var k = float(HERO_SCALE)
 	var ground = _tab_arena.ground()
@@ -334,14 +389,16 @@ func _place_tableau() -> void:
 		_head.size = _head.custom_minimum_size
 		_head.pivot_offset = _head.size / 2.0
 		var room = w - cx - 44.0
-		_head.position = Vector2(floor(cx + 44.0 + maxf(0.0, room - _head.size.x) / 2.0), 30.0)
+		# (beside the hero's head however tall the picture is: in a tall one the words came far above him)
+		var hy = maxf(30.0, floor(ground - 160.0))
+		_head.position = Vector2(floor(cx + 44.0 + maxf(0.0, room - _head.size.x) / 2.0), hy)
 		if _tab_title != null:
 			_tab_title.size = Vector2(room - 8.0, 22.0)
 			_tab_title.position = Vector2(cx + 48.0, _head.position.y + _head.size.y + 6.0)
 	if win and _tab_rays == null and is_inside_tree() and w > 120.0:
 		_tab_rays = BattleFx.at(_tab, "rays", Vector2(cx, ground - 60.0), Pal.ACCENT, 6.0, {"loop": true, "n": 12, "half": 26.0})
 		if _tab_rays != null:
-			_tab.move_child(_tab_rays, 2)
+			_tab.move_child(_tab_rays, _tab_hero.get_index())
 			_tab_rays.modulate.a = 0.5
 	if _tab_rays != null and is_instance_valid(_tab_rays):
 		_tab_rays.position = (Vector2(cx, ground - 60.0) - _tab_rays.size / 2.0).floor()
@@ -371,17 +428,40 @@ func _stars_block(stars: Array, objectives: Array) -> Control:
 	return sec
 
 
-## How the fight went, as three small tiles.
+## How the fight went, as three tiles. (2026-11-27 review: they were flat pastel boxes, the "Turns" one the old
+## grey-blue.) Each is a cream card with a band across its top in its colour, its name in cream pixel letters
+## on it, and the number big in dark ink under it: the Workshop's record cards (the Hero tab's challenges).
 func _facts() -> Control:
 	var row = Kit.hbox(8)
-	for f in [["Turns", int(summary.get("turns", 0)), Pal.SECOND], ["Dealt", int(summary.get("dealt", 0)), Pal.ACCENT2], ["Taken", int(summary.get("taken", 0)), Pal.DANGER]]:
-		var t = Kit.row(Callable(), f[2], f[2], 8, 0)
+	for f in [["Turns", int(summary.get("turns", 0)), Pal.SECOND, "clock"], ["Dealt", int(summary.get("dealt", 0)), Pal.ACCENT2, "sword"], ["Taken", int(summary.get("taken", 0)), Pal.DANGER, "heart"]]:
+		var col: Color = f[2]
+		var t = PanelContainer.new()
+		t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var num = Kit.label(Xp.fmt_int(int(f[1])), 17, null, true)
+		t.add_theme_stylebox_override("panel", PixBox.material("card", {"pad_h": 4, "pad_v": 4}))
+		var v = Kit.vbox(2)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		t.add_child(v)
+		var band = PanelContainer.new()
+		band.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		band.add_theme_stylebox_override("panel", PixBox.nine([PixBox.bev(col.lightened(0.3), col.darkened(0.3))], col, {"cut": 0, "pad_h": 4, "pad_v": 3}))
+		# (cream letters with their dark shadow on the colour, as the mock-up's; Ink would turn some dark)
+		band.set_meta("ink_keep", true)
+		var bh = Kit.hbox(4)
+		bh.alignment = BoxContainer.ALIGNMENT_CENTER
+		bh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var ic = Icons.rect(str(f[3]) if Icons.has_icon(str(f[3])) else "star", 16)
+		bh.add_child(Kit.vcenter(ic))
+		bh.add_child(Kit.vcenter(PixelFont.rect(str(f[0]).to_upper(), 2, Pal.CREAM)))
+		band.add_child(bh)
+		v.add_child(band)
+		var num = Kit.label(Xp.fmt_int(int(f[1])), 20, Pal.TEXT, true)
+		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		num.set_meta("br_fact", int(f[1]))
 		_fact_labels.append(num)
-		t.add(num)
-		t.add(Kit.clip(str(f[0]), 11, Pal.MUTED, true))
+		v.add_child(num)
 		row.add_child(t)
 	row.set_meta("br_facts", true)
 	return row
@@ -571,7 +651,7 @@ func _run() -> void:
 		if not _alive(gen):
 			return
 	for c in _late:
-		Kit.fade_in(c, 0.2)
+		_fade(c, 0.2)
 		await _wait(0.18)
 		if not _alive(gen):
 			return
@@ -590,7 +670,7 @@ func _run() -> void:
 			var n = 0
 			for r in _loot_rows:
 				var rare = bool(r.get_meta("br_rare", false))
-				Kit.fade_in(r, 0.16)
+				_fade(r, 0.16)
 				Kit.pop(r, 1.05 if not rare else 1.08, 0.18)
 				if rare:
 					RpgSfx.play("loot_rare")
@@ -647,6 +727,14 @@ func skip() -> void:
 	_finish()
 
 
+## A late row fades in; skip() stops it (see _fades).
+func _fade(c: CanvasItem, dur: float) -> void:
+	c.modulate.a = 0.0
+	var tw = c.create_tween()
+	tw.tween_property(c, "modulate:a", 1.0, dur)
+	_fades.append(tw)
+
+
 func _finish() -> void:
 	for i in range(_stars.size()):
 		if _earned[i]:
@@ -656,6 +744,11 @@ func _finish() -> void:
 	if _level_up != null:
 		_level_up.modulate.a = 1.0
 		_level_up.set_meta("br_level_up", true)
+	# (a fade-in under way would take a row back down to where it was and up again: stopped first)
+	for tw in _fades:
+		if tw != null and tw.is_valid():
+			tw.kill()
+	_fades.clear()
 	for c in _late:
 		c.modulate.a = 1.0
 	for r in _loot_rows:

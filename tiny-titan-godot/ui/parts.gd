@@ -5,11 +5,11 @@ extends RefCounted
 ## about the game; these do. They are colour-coded by what they show and keep
 ## words to a minimum: an icon, a title, a bar, a number.
 ##
-## Inside a Hero tab section (2026-11-24) rows are FLAT (Kit.row: a darker
-## fill, a stripe down the left), never raised boxes in a box: `quest_list`,
+## Inside a section (2026-11-24; the Workshop look since 2026-11-27) rows are
+## FLAT (Kit.row: a cream paper slip), never raised boxes in a box: `quest_list`,
 ## `goal_tile` and `session_row` take `flat = true` for that, and
 ## `mission_grid` lays the open missions out as small flat tiles two across.
-## Without it they look as before (the Adventure and Journey tabs).
+## The Adventure tab's missions are flat rows in a section too.
 
 const KIND_LABEL = {"achievement": "Trophy", "item": "Gear", "pet": "Companion", "stage": "Evolution", "rank": "Rank"}
 
@@ -42,6 +42,89 @@ static func xp_chip(xp, size: int = 12) -> Control:
 	return Kit.tag("+%s" % Xp.fmt_int(xp), Pal.ACCENT, true, size)
 
 
+## A mission's reward as the mock-up has it (2026-11-27 Workshop review: the tiny "+250" tag was easy to
+## miss): "+250 XP" in dark ink on a gold plate, bevelled but with no lip, so it does not read as a key.
+static func reward_plate(xp, size: int = 13) -> Control:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_END
+	p.add_theme_stylebox_override("panel", PixBox.block_set("gold", 7, 3, 0)["normal"])
+	var h = Kit.hbox(3)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Kit.label("+%s" % Xp.fmt_int(xp), size, Pal.INK, true)))
+	h.add_child(Kit.vcenter(Kit.label("XP", maxi(9, size - 3), Pal.INK, true)))
+	p.add_child(h)
+	return p
+
+
+## The short word on top of a challenge's option tile, by its type.
+const OPTION_WORDS = {"heavier": "HEAVIER", "reps": "REP RECORD", "set_reps": "ONE SET", "day_reps": "IN A DAY", "band": "BAND UP", "hold": "LONGER"}
+
+
+## The records a challenge mission offers (Challenges.options), as tiles side by side like the mock-up's
+## (2026-11-27 Workshop review: they were a five-line sentence of small grey words): a coloured strip with
+## what kind of record (ChallengeView.look's colours, as on the Hero tab), the target big, what it beats
+## small; a tile already done is green with a tick. The whole option is the tile's tooltip.
+static func option_tiles(opts: Array, hit: Array) -> Control:
+	var n = mini(3, opts.size())
+	var g = Kit.grid(maxi(1, n), 6)
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	g.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in range(n):
+		var o = opts[i]
+		var kind = str(o.get("type", ""))
+		var col: Color = ChallengeView.look(kind)[1]
+		var is_hit = hit.has(kind)
+		if is_hit:
+			col = Pal.GOOD
+		var tile = PanelContainer.new()
+		tile.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tile.mouse_filter = Control.MOUSE_FILTER_PASS
+		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tile.add_theme_stylebox_override("panel", PixBox.panel(Pal.GOOD.lerp(Pal.PANEL2, 0.72) if is_hit else null, col, 3))
+		tile.set_meta("mission_option", kind)
+		tile.set_meta("mission_option_hit", is_hit)
+		tile.tooltip_text = "%s: %s\n%s" % [str(o.get("title", "")), str(o.get("words", "")), str(o.get("sub", ""))]
+		var v = Kit.vbox(2)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var strip = PanelContainer.new()
+		strip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		strip.add_theme_stylebox_override("panel", Kit.tag_box(col, 3, 1))
+		var word = str(OPTION_WORDS.get(kind, str(o.get("title", "")).to_upper()))
+		if kind == "ladder":
+			word = "BEST FOR %d" % int(o.get("reps", 0))
+		var sh = Kit.hbox(3)
+		sh.alignment = BoxContainer.ALIGNMENT_CENTER
+		sh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if is_hit:
+			sh.add_child(Kit.vcenter(Icons.rect("check", 16, Pal.CREAM)))
+		var wl = Kit.tag_words(word, 10, col)
+		wl.clip_text = true
+		wl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		wl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		wl.custom_minimum_size = Vector2(20, 0)
+		sh.add_child(Kit.vcenter(wl))
+		strip.add_child(sh)
+		v.add_child(strip)
+		var big = Kit.clip(str(o.get("chip", o.get("words", ""))), 15, Pal.TEXT, true)
+		big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(big)
+		# "Your heaviest: 75 kg × 8" -> "was 75 kg × 8": what it beats, short enough for a third of a row.
+		var sub = str(o.get("sub", ""))
+		if sub.contains(": "):
+			sub = "was " + sub.substr(sub.find(": ") + 2)
+		var sl = Kit.clip(sub, 10, Pal.MUTED, true)
+		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		v.add_child(sl)
+		tile.add_child(v)
+		g.add_child(tile)
+	return g
+
+
 static func _claim(q: Dictionary, from: Control) -> void:
 	Kit.burst(from, Pal.ACCENT, 22)
 	App.claim_quest(q)
@@ -52,6 +135,10 @@ static func _claim(q: Dictionary, from: Control) -> void:
 ## `flat`: rows for a section (Kit.row, striped in the mission's colour, green
 ## once done), each as tall with its Claim key as with "Done", so nothing under
 ## a row moves when one is claimed.
+## (2026-11-27 Workshop review) Not compact, a mission says what to do in ONE line (the whole sentence is the
+## row's tooltip on the Adventure tab), and a challenge shows its records as tiles (`option_tiles`) instead of
+## the sentence; the reward is a gold "+250 XP" plate; a claimed mission stays opaque (it was see-through and
+## the planks showed through it): a plain slip, a green tick and a DONE stamp.
 static func quest_list(quests: Array, compact: bool = false, flat: bool = false) -> Control:
 	var list = Kit.vbox(6 if flat else 8)
 	var settings = App.settings()
@@ -59,36 +146,46 @@ static func quest_list(quests: Array, compact: bool = false, flat: bool = false)
 		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
 		# A mission about one lift opens that lift's page (last time, what to beat).
 		var tap = JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else Callable()
+		var opts = [] if compact or not bool(q.get("challenge", false)) else q.get("options", [])
+		if not (opts is Array):
+			opts = []
+		var hit = q.get("hit", [])
+		if not (hit is Array):
+			hit = []
 		var card
 		if flat:
 			card = Kit.row(tap, Pal.GOOD if q.done else color, Pal.GOOD if (q.done and not q.claimed) else null, 8, 4)
-			if q.claimed:
-				card.modulate.a = 0.6
 		else:
 			card = Kit.card(5, tap, 10)
-			if q.claimed:
-				card.modulate.a = 0.6
-			elif q.done:
+			if q.done and not q.claimed:
 				card.accent(Pal.GOOD)
 		var row = Kit.hbox(10)
 		if flat:
 			row.custom_minimum_size.y = 44 if Kit.fingers else 40
-		row.add_child(Kit.vcenter(Kit.badge("check" if q.claimed else Icons.for_emoji(q.icon), Pal.GOOD if q.done else color, 22 if Kit.look != "stripe" else (28 if flat else 30))))
-		var main = Kit.vbox(4)
+		row.add_child(Kit.vcenter(Kit.badge("check" if q.claimed else Icons.for_emoji(q.icon), Pal.GOOD if q.done else color, 24 if flat else 28)))
+		var main = Kit.vbox(3)
 		main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		main.add_child(Kit.clip(Icons.strip_emoji(q.title), 14 if flat else 15, null, true))
-		if not compact:
-			main.add_child(Kit.muted_para(Icons.strip_emoji(q.desc), 12))
-		var ratio = 0.0
-		if float(q.target) > 0.0:
-			ratio = float(q.progress) / float(q.target)
-		main.add_child(Kit.bar(ratio, color, 6 if flat else 8))
-		if not compact:
-			main.add_child(Kit.muted(quest_progress_text(q, settings), 11))
+		main.add_child(Kit.clip(Icons.strip_emoji(q.title), 14 if flat else 15, Pal.MUTED if q.claimed else null, true))
+		if not opts.is_empty():
+			var said = "Pick one record to set"
+			if q.done:
+				said = "Done another way: it beat its last time" if hit.has("other") else "Done: one record is enough"
+			main.add_child(Kit.clip(said, 12, Pal.GOOD_DARK if q.done else Pal.MUTED))
+		elif not compact:
+			main.add_child(Kit.clip(Icons.strip_emoji(q.desc), 12, Pal.MUTED))
+		if opts.is_empty():
+			var ratio = 0.0
+			if float(q.target) > 0.0:
+				ratio = float(q.progress) / float(q.target)
+			main.add_child(Kit.bar(ratio, Pal.GOOD if q.done else color, 6 if flat else 8))
+			if not compact:
+				main.add_child(Kit.muted(quest_progress_text(q, settings), 11))
 		row.add_child(main)
 		if q.claimed:
-			row.add_child(Kit.vcenter(Kit.muted("Done", 12)))
+			var stamp = Kit.tag("DONE", Pal.GOOD, true, 11)
+			stamp.set_meta("quest_done", str(q.id))
+			row.add_child(Kit.vcenter(stamp))
 		elif q.done:
 			var claim = Kit.button("Claim +%s" % Xp.fmt_int(q.xp), "good", Callable(), "sm")
 			# (its own name: after a claim it is gone, and no other key of the same
@@ -98,8 +195,17 @@ static func quest_list(quests: Array, compact: bool = false, flat: bool = false)
 			Fx.shine(claim, 2.6, 0.5, 0.45)
 			row.add_child(Kit.vcenter(claim))
 		else:
-			row.add_child(Kit.vcenter(xp_chip(q.xp)))
+			row.add_child(Kit.vcenter(reward_plate(q.xp, 13)))
 		card.add(row)
+		if not opts.is_empty():
+			# The records to pick from, under the row across its whole width, and one thing to try.
+			card.add(option_tiles(opts, hit))
+			if not q.done and str(opts[0].get("tip", "")) != "":
+				var tip = Kit.hbox(6)
+				tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				tip.add_child(Kit.vcenter(Icons.rect("info", 16)))
+				tip.add_child(Kit.vcenter(Kit.clip("Try: " + str(opts[0].tip), 11, Pal.MUTED)))
+				card.add(tip)
 		list.add_child(card)
 	return list
 
@@ -108,8 +214,6 @@ static func quest_list(quests: Array, compact: bool = false, flat: bool = false)
 ## mission's own title (two lines at most), a thin bar and the reward. A
 ## mission about one lift opens that lift's page, any other the Missions list.
 static func mission_grid(quests: Array) -> Container:
-	if Kit.look == "clean":
-		return _mission_list(quests)
 	var g = Kit.grid(2, 6)
 	for q in quests:
 		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
@@ -119,7 +223,7 @@ static func mission_grid(quests: Array) -> Container:
 		t.tooltip_text = Icons.strip_emoji(str(q.get("desc", "")))
 		var line = Kit.hbox(6)
 		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		line.add_child(Kit.vcenter(Kit.badge(Icons.for_emoji(q.icon), color, 18 if Kit.look != "stripe" else 20)))
+		line.add_child(Kit.vcenter(Kit.badge(Icons.for_emoji(q.icon), color, 20)))
 		var title = Kit.para(Icons.strip_emoji(q.title), 12, Pal.TEXT, true)
 		title.max_lines_visible = 2
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -132,36 +236,10 @@ static func mission_grid(quests: Array) -> Container:
 		if float(q.target) > 0.0:
 			ratio = float(q.progress) / float(q.target)
 		foot.add_child(Kit.vcenter(Kit.bar(ratio, color, 4)))
-		foot.add_child(Kit.vcenter(xp_chip(q.xp, 11)))
+		foot.add_child(Kit.vcenter(reward_plate(q.xp, 12)))
 		t.add(foot)
 		g.add_child(t)
 	return g
-
-
-## The clean look's open missions: one line each, the badge, the title over its words, the bar, the reward.
-static func _mission_list(quests: Array) -> VBoxContainer:
-	var v = Kit.vbox(0)
-	for q in quests:
-		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
-		var tap = JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else App.go.bind("adventure", "quests")
-		var t = Kit.row(tap, color, null, 8, 4)
-		t.tooltip_text = Icons.strip_emoji(str(q.get("desc", "")))
-		var line = Kit.hbox(10)
-		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		line.add_child(Kit.vcenter(Kit.badge(Icons.for_emoji(q.icon), color, 20)))
-		var mid = Kit.vbox(4)
-		mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		mid.add_child(Kit.clip(Icons.strip_emoji(q.title), 14, Pal.TEXT, true))
-		var ratio = 0.0
-		if float(q.target) > 0.0:
-			ratio = float(q.progress) / float(q.target)
-		mid.add_child(Kit.bar(ratio, color, 4))
-		line.add_child(mid)
-		line.add_child(Kit.vcenter(Kit.label("+%s XP" % Xp.fmt_int(q.xp), 12, Pal.ACCENT, true)))
-		t.add(line)
-		v.add_child(t)
-	return v
 
 
 ## One "next goal" row (from App.next_goals): icon, title, a bar and the percentage.
@@ -261,13 +339,16 @@ static func stat_tile(d: String, level: Dictionary, tap: Callable = Callable()) 
 	v.offset_bottom = -8 - drop
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# (2026-11-27 Workshop review) The level is cream pixel digits with their dark shadow, like the words on
+	# the mock-up's keys; "ink_keep" stops ui/ink.gd turning white on orange into muddy dark ink.
+	v.set_meta("ink_keep", true)
 	var ic = Icons.rect(d, 30)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(ic)
-	var num = PixelFont.rect(str(int(level.level)), 3, Color.WHITE)
+	var num = PixelFont.rect(str(int(level.level)), 3, Pal.CREAM, true)
 	num.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(num)
-	v.add_child(Kit.bar(level.progress, Color.WHITE, 4))
+	v.add_child(Kit.bar(level.progress, Pal.CREAM, 4))
 	b.add_child(v)
 	b.button_down.connect(func():
 		v.offset_top = 8 + drop

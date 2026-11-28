@@ -321,6 +321,15 @@ func _build() -> void:
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(base)
 	base.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# The Workshop's dark planks behind the fight's bars and keys, as on every page (it was a flat brown).
+	var planks = TextureRect.new()
+	planks.texture = PixBox.planks()
+	planks.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	planks.stretch_mode = TextureRect.STRETCH_TILE
+	planks.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	planks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(planks)
+	planks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_top()
 	_build_arena()
 	_timeline = BattleWidgets.Timeline.new()
@@ -530,11 +539,12 @@ func _build_moves() -> void:
 func _build_acts() -> void:
 	_acts = Kit.hbox(int(KEY_GAP))
 	add_child(_acts)
+	# The Workshop's own keys (Pal.BLOCKS: tan, blue, orange, green), the Ultimate in the gauge's colour.
 	var rows = [
-		["strike", "Strike", "strike", Pal.PANEL2],
-		["guard", "Guard", "guard", Pal.SECOND],
-		["item", "Item", "belt", Pal.ACCENT2],
-		["pet", "Companion", "paw", Pal.GOOD],
+		["strike", "Strike", "strike", "tan"],
+		["guard", "Guard", "guard", "blue"],
+		["item", "Item", "belt", "orange"],
+		["pet", "Companion", "paw", "green"],
 		["ult", "Ultimate", "gauge", RpgUi.color("grit")],
 	]
 	for r in rows:
@@ -1578,15 +1588,27 @@ func _num(id: String, text: String, color: Color, px: int = 2, big: bool = false
 
 
 ## A word at a unit ("WEAK", a status): over the hero's head, across a foe's feet. Words of one action stack.
+## (2026-11-27 review: words of one pixel size were too small to read on a phone.) Every word is drawn at least
+## twice its pixel size, with a dark edge (BattleFx.word), and the words of one action stack a word apart. Quiet
+## words (MISS, RESIST, NO EFFECT) are a light tan, Pal.LINE: brown ink did not stand off the dark edge.
 func _word(id: String, text: String, color: Color, px: int = 1, delay: float = 0.0, _up: float = 0.0) -> void:
 	if instant:
 		return
+	var wpx = maxi(2, px)
 	var n = int(_word_counts.get(id, 0))
 	_word_counts[id] = n + 1
+	var step = 7.0 * float(wpx) + 6.0
 	if id == "hero" or id == "pet":
-		BattleFx.word(_fx_layer, _head(id) + Vector2(0, -14.0 - 12.0 * float(n)), text, color, px, delay)
+		BattleFx.word(_fx_layer, _head(id) + Vector2(0, -14.0 - step * float(n)), text, color, wpx, delay)
 	else:
-		BattleFx.word(_fx_layer, _mid(id) + Vector2(0, 20.0 - 12.0 * float(n)), text, color, px, delay, 12.0)
+		BattleFx.word(_fx_layer, _mid(id) + Vector2(0, 20.0 - step * float(n)), text, color, wpx, delay, 12.0)
+
+
+## A word over a foe's head, under its plate (what it is about to do: "CHARGING"), not across its body.
+func _word_over(id: String, text: String, color: Color) -> void:
+	if instant or id == "hero" or id == "pet" or not _foes.has(id):
+		return
+	BattleFx.word(_fx_layer, _head(id) + Vector2(0, 2.0), text, color, 2, 0.0, 4.0)
 
 
 ## Something behind the fighters (over the backdrop and its motes): an ultimate's rays, the dark of a wind-up.
@@ -1717,7 +1739,7 @@ func _show(e: Dictionary) -> float:
 			return _show_dmg(e)
 		"miss":
 			var md = str(e.get("dst", ""))
-			_word(md, "MISS", Pal.MUTED, 2)
+			_word(md, "MISS", Pal.LINE, 2)
 			_knock(md, -10.0 if md == "hero" else 10.0)
 			_snd("miss", 1.0, 0.05)
 			_say("%s: a miss." % _act_head if _act_head != "" else "A miss.")
@@ -1804,14 +1826,15 @@ func _show(e: Dictionary) -> float:
 				_fx("stars", _head(who5), Pal.ACCENT, 0.7)
 				if not instant:
 					Kit.pop(nd5.plate, 1.04, 0.2)
-			if not instant:
-				BattleWidgets.banner(_fx_layer, "PERFECT GUARD", Pal.ACCENT, 0.5 / float(speed), 2)
 			_fx("ring", _mid("hero") + Vector2(14, 0), Pal.ACCENT, 0.45, {"u": 4.0, "half": 14.0})
 			_fx("sparkle", _mid("hero"), Color(1, 1, 1), 0.6, {"n": 8, "half": 22.0})
 			_snd("perfect")
 			_hit_stop("crit")
 			RpgSfx.buzz(2)
 			_teach("perfect")
+			if not instant:
+				# (after the hint: it goes over the plates too, and the banner goes over it)
+				_over_plates(BattleWidgets.banner(_fx_layer, "PERFECT GUARD", Pal.ACCENT, 0.5 / float(speed), 2))
 			_say("Perfect guard! %s is thrown off, its guard cracks. Your next hit is a crit." % _name(who5))
 			return 0.5
 		"ko":
@@ -2053,7 +2076,8 @@ func _show_act(e: Dictionary) -> float:
 			_act_head = "%s is charging %s" % [nm, move]
 			_say(_act_head + "!")
 			_fx("gather", _mid(who), Pal.DANGER, 0.6, {"n": 14})
-			_word(who, "CHARGING", Pal.DANGER, 1)
+			# (over its head, twice the size, with a dark edge: it was red on the boss's red mouth)
+			_word_over(who, "CHARGING", Pal.DANGER.lightened(0.15))
 			_teach("charge")
 			_snd("charge")
 			if nd != null and not instant:
@@ -2170,7 +2194,7 @@ func _show_dmg(e: Dictionary) -> float:
 				_fx("slash", at, col, 0.28, {"flip": true})
 		if _guard_shown:
 			_fx("block", at + Vector2(14, 0), RpgUi.color("grit"), 0.3)
-			_word("hero", "BLOCK", RpgUi.color("grit"), 1, 0.05, 8.0)
+			_word("hero", "BLOCK", RpgUi.color("grit"), 2, 0.05, 8.0)
 			_snd("block", 1.0, 0.05)
 			_knock("hero", -3.0)
 		else:
@@ -2198,12 +2222,13 @@ func _show_dmg(e: Dictionary) -> float:
 	nd.plate.set_guard(int(e.get("guard", 0)), int(nd.unit.get("guard_max", 0)))
 	if soaked:
 		_fx("shield", _mid(dst), Pal.MUTED, 0.45)
-		_word(dst, "SHIELD", Pal.MUTED, 1)
+		_word(dst, "SHIELD", Pal.LINE, 1)
 		_snd("absorb", 0.9)
 		return 0.3
 	nd.view.hit()
 	var ult = _act_kind == "ult" and _act_who == "hero"
-	var col2 = Pal.TEXT
+	# (a plain hit's number is cream, a resisted one light tan: dark inks on the sky were left to Ink to guess)
+	var col2 = Pal.CREAM
 	var px = 2
 	if crit:
 		col2 = Pal.ACCENT
@@ -2211,14 +2236,14 @@ func _show_dmg(e: Dictionary) -> float:
 	elif weak:
 		col2 = RpgUi.color(school)
 	elif resist:
-		col2 = Pal.MUTED
+		col2 = Pal.LINE
 	_num(dst, str(amount) + ("!" if crit else ""), col2, px, crit or ult)
 	if crit:
 		_word(dst, "CRIT!", Pal.ACCENT, 1, 0.04, 12.0)
 	if weak:
 		_word(dst, "WEAK", RpgUi.color(school), 2 if not crit else 1, 0.08, 0.0 if not crit else 24.0)
 	elif resist:
-		_word(dst, "RESIST", Pal.MUTED, 1, 0.06)
+		_word(dst, "RESIST", Pal.LINE, 1, 0.06)
 		_teach("resist")
 		if not nd.known.resist.has(school):
 			nd.known.resist.append(school)
@@ -2281,7 +2306,7 @@ func _show_status(e: Dictionary) -> float:
 	var row = RpgDefs.STATUS.get(id, {})
 	var nm = str(row.get("name", id.capitalize()))
 	if bool(e.get("resisted", false)) or bool(e.get("bounced", false)):
-		_word(dst, "NO EFFECT", Pal.MUTED, 1)
+		_word(dst, "NO EFFECT", Pal.LINE, 1)
 		_snd("resist", 1.2)
 		_say("%s shrug%s off %s." % [_name(dst), "" if dst == "hero" else "s", nm])
 		return 0.24
@@ -2596,7 +2621,7 @@ func _show_new_wave(e: Dictionary) -> float:
 		return 1.0
 	_snd("wave" if n > 1 else "enter")
 	if not instant:
-		BattleWidgets.banner(_fx_layer, "FIGHT!" if of <= 1 else "WAVE %d/%d" % [n, of], Pal.TEXT, 0.4 / float(speed))
+		BattleWidgets.banner(_fx_layer, "FIGHT!" if of <= 1 else "WAVE %d/%d" % [n, of], Pal.CREAM, 0.4 / float(speed))
 	var first_words = str(_opts.get("opening_line", ""))
 	_say("Wave %d of %d." % [n, of] if of > 1 else (first_words if first_words != "" else "The fight begins."))
 	return 0.65 if n > 1 else 0.45
@@ -2623,7 +2648,7 @@ func _show_end(win: bool) -> float:
 		RpgSfx.buzz(3)
 		return 1.0
 	if not instant:
-		BattleWidgets.banner(_fx_layer, "KNOCKED DOWN", Pal.MUTED, 0.7 / float(speed), 2)
+		BattleWidgets.banner(_fx_layer, "KNOCKED DOWN", Pal.LINE, 0.7 / float(speed), 2)
 	_say("You are knocked down. Nothing is lost.")
 	_snd("defeat")
 	return 0.9
@@ -2690,6 +2715,24 @@ func _teach(id: String) -> void:
 	var cb = _opts.get("on_hint")
 	if cb is Callable and cb.is_valid():
 		cb.call(id)
+
+
+## A banner (BattleWidgets.banner) moved into the sky over the foes' plates, and over a hint showing there,
+## when there is sky for it (2026-11-27 review: "PERFECT GUARD" across a plate broke up into its fill and pips).
+## With no room it stays in the middle, on its own dark strip.
+func _over_plates(strip: Control) -> void:
+	if strip == null or not is_instance_valid(strip):
+		return
+	var top = _arena.size.y
+	for fid in _foes:
+		var p = _foes[fid].plate
+		if p != null and is_instance_valid(p) and p.visible:
+			top = minf(top, p.position.y)
+	if _tip != null and Time.get_ticks_msec() - _tip_at < int((HINT_SECS + 0.6) * 1000.0) and _tip.position.y < top:
+		top = _tip.position.y
+	var y = floor(top - 6.0 - strip.size.y)
+	if y >= 4.0:
+		strip.position.y = y - _fx_layer.position.y
 
 
 ## The keys go quiet while something plays (they still hear a tap: it skips).

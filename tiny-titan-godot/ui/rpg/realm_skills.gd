@@ -13,7 +13,7 @@ extends RefCounted
 ##                 nodes as tiles of one size in three states:
 ##                   learned  filled in the board's colour, a tick
 ##                   can      a gold edge and a "Learn · N" key
-##                   blocked  dim, the reason in a few words
+##                   blocked  a darker tan slip with a lock, the reason in a few words
 ##                 A tap on a node opens its sheet: the move or passive in full,
 ##                 each requirement ticked or crossed, and "Learn for N points"
 ##                 or why not.
@@ -227,13 +227,12 @@ static func _board(rpg: Dictionary, sheet: Dictionary, screen) -> Control:
 static func _band(tier: int, nodes: Array, sheet: Dictionary, level: int, col: Color) -> Control:
 	var p = PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sb = Kit.sbox(Pal.with_alpha(col, 0.2), 3, null, 0, 8, 4)
-	sb.border_width_left = 4
-	sb.border_color = col
-	p.add_theme_stylebox_override("panel", sb)
+	# A paper note pinned across the board, the tier's number on a tag in the board's colour.
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.material("note", {"pad_h": 8, "pad_v": 4}))
 	var f = Kit.flow(8)
 	f.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	f.add_child(Kit.label("TIER %d" % tier, 12, Pal.TEXT, true))
+	f.add_child(Kit.tag("TIER %d" % tier, col, true, 11))
 	var need = int(RpgDefs.REQ[tier])
 	var met = true
 	var stats = []
@@ -303,7 +302,9 @@ static func _node_tile(node: Dictionary, rpg: Dictionary, sheet: Dictionary, lev
 		"can":
 			t = Kit.row(open_node.bind(id), Pal.ACCENT, Pal.ACCENT, 6, 3, 0.14)
 		_:
-			t = Kit.row(open_node.bind(id), Pal.ACCENT.darkened(0.35) if gold else Pal.LINE, null, 6, 3)
+			## (Workshop look: a locked tile is a darker tan slip with a lock, its words at full strength; it was
+			## a cream slip faded to half, which read as washed out rather than locked)
+			t = Kit.row(open_node.bind(id), Pal.ACCENT.darkened(0.35) if gold else Pal.LINE, Pal.LINE, 6, 3, 0.3)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.custom_minimum_size = Vector2(0, TILE_H_FINGERS if Kit.fingers else TILE_H)
 	t.set_meta("node", id)
@@ -322,6 +323,9 @@ static func _node_tile(node: Dictionary, rpg: Dictionary, sheet: Dictionary, lev
 	elif kind == "passive":
 		icon_name = "star"
 		kind_word = "Passive"
+	if state != "learned" and state != "can":
+		# (a locked tile says so by its shape: a lock where the kind's icon was)
+		icon_name = "lock"
 	head.add_child(Kit.vcenter(Icons.rect(icon_name, 16)))
 	head.add_child(Kit.vcenter(Kit.clip(kind_word, 10, Pal.ACCENT if gold else Pal.MUTED, true)))
 	if id == suggest_id and state == "can":
@@ -333,7 +337,7 @@ static func _node_tile(node: Dictionary, rpg: Dictionary, sheet: Dictionary, lev
 		head.add_child(Kit.vcenter(Icons.rect("sp", 16)))
 		head.add_child(Kit.vcenter(Kit.label(str(int(node.cost)), 12, Pal.TEXT, true)))
 	t.add(head)
-	var title = _two_lines(_ref_name(node), 13, null, true)
+	var title = _two_lines(_ref_name(node), 13, null if (state == "learned" or state == "can") else Pal.MUTED, true)
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	t.add(title)
 
@@ -357,8 +361,6 @@ static func _node_tile(node: Dictionary, rpg: Dictionary, sheet: Dictionary, lev
 			why.set_meta("node_blocked", str(can.get("why", "")))
 			why.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			t.add(why)
-			head.modulate = Color(1, 1, 1, 0.55)
-			title.modulate = Color(1, 1, 1, 0.55)
 	return t
 
 

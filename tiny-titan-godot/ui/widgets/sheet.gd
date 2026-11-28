@@ -13,6 +13,9 @@ var _title = ""
 var _closing = false
 ## The slide-in: 1 = below the screen, 0 = in place.
 var _rise = 1.0
+## The panel's content margins: the wooden frame (14 px) and a little paper.
+const PAD_H = 18
+const PAD_V = 17
 
 
 func setup(title: String = "") -> void:
@@ -20,14 +23,16 @@ func setup(title: String = "") -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_backdrop = ColorRect.new()
-	_backdrop.color = Color(0.02, 0.03, 0.05, 0.74)
+	_backdrop.color = Color(0.05, 0.025, 0.01, 0.72)
 	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_backdrop.gui_input.connect(_backdrop_input)
 	add_child(_backdrop)
 
 	_panel = PanelContainer.new()
 	_panel.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_panel.add_theme_stylebox_override("panel", PixBox.make(Pal.BG2, {"ring": Pal.BORDER, "lip": 0, "pad_h": 16, "pad_v": 14}))
+	# A wooden window sliding up: parchment inside, so the cards in it are cream paper (meta tt_paper).
+	_panel.add_theme_stylebox_override("panel", PixBox.window(PAD_H, PAD_V, null, 0))
+	_panel.set_meta("tt_paper", true)
 	add_child(_panel)
 
 	var outer = Kit.vbox(10)
@@ -87,7 +92,7 @@ func _layout() -> void:
 		return
 	# As tall as the content needs, but never more than 88% of the screen.
 	var max_h = size.y * 0.88
-	var chrome = 14 + 14 + 34 + 10 + 8
+	var chrome = PAD_V * 2 + 34 + 10 + 8
 	var want = box.get_combined_minimum_size().y + chrome + 8
 	var h = clampf(want, 120.0, max_h)
 	_panel.size = Vector2(size.x, h)

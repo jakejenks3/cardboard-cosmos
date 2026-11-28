@@ -101,6 +101,12 @@ static func _on_save(r: Dictionary, button: Button) -> void:
 # The poster
 # ---------------------------------------------------------------------------
 
+## A colour for words and big numbers on the poster's paper: darkened in its own hue until it reads, as
+## ui/ink.gd does (gold becomes a deep gold, not khaki; 2026-11-27 Workshop review).
+static func _paper_ink(c: Color) -> Color:
+	return Ink.adjust(c, Pal.PANEL, Ink.MIN_PIXEL)
+
+
 static func _well(child: Control, ring = null, pad: int = 6) -> PanelContainer:
 	var p = PanelContainer.new()
 	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -175,7 +181,8 @@ static func poster(r: Dictionary) -> Control:
 	top.add_child(Kit.vcenter(Kit.label(r.range, 11, Pal.MUTED, true)))
 	card.add(top)
 	card.add(Kit.clip(r.title, 22, null, true))
-	card.add(Kit.clip(r.headline + ("  (so far)" if r.running else ""), 14, Pal.ACCENT, true))
+	# (2026-11-27 Workshop review: gold words and numbers on the poster's paper looked faded) In a deep gold.
+	card.add(Kit.clip(r.headline + ("  (so far)" if r.running else ""), 14, _paper_ink(Pal.ACCENT), true))
 
 	if r.empty:
 		var rest = Kit.muted_para("Nothing logged in this stretch. Rest counts too." if not r.running else "Nothing logged yet. The first session starts the story.", 13)
@@ -194,7 +201,7 @@ static func poster(r: Dictionary) -> Control:
 	xcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	xcol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var xrow = Kit.hbox(6)
-	xrow.add_child(Kit.vcenter(Kit.big_number(Xp.fmt_int(r.xp), Pal.ACCENT, 110, 4)))
+	xrow.add_child(Kit.vcenter(Kit.big_number(Xp.fmt_int(r.xp), _paper_ink(Pal.ACCENT), 110, 4)))
 	xrow.add_child(Kit.vcenter(Kit.label("XP", 13, Pal.MUTED, true)))
 	xcol.add_child(xrow)
 	if int(r.prev.xp) > 0 and int(r.xp) != int(r.prev.xp) and not r.running:
@@ -213,7 +220,8 @@ static func poster(r: Dictionary) -> Control:
 	for d in TT.SESSION_KINDS:
 		var n = int(r.by.get(d, 0))
 		if n > 0:
-			chips.add_child(Kit.icon_chip(d, str(n), Pal.disc(d), "", Color.WHITE))
+			# (the tag's own words: ink or cream with a shadow, whichever reads on the colour)
+			chips.add_child(Kit.icon_chip(d, str(n), Pal.disc(d)))
 	xcol.add_child(chips)
 	hero_row.add_child(xcol)
 	card.add(hero_row)

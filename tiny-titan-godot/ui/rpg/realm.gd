@@ -146,7 +146,8 @@ func _build_first() -> void:
 		h.add_child(Kit.vcenter(name_l))
 		var lines = st.get("lines", [])
 		h.add_child(Kit.vcenter(Kit.clip(str(lines[0]) if not lines.is_empty() else "", 11, Pal.MUTED)))
-		var val = Kit.label("", 16, col, true)
+		## (the number in the stat's colour made deep enough to read on its tinted slip)
+		var val = Kit.label("", 16, RpgUi.ink_on(col, RpgUi.slip_of(col)), true)
 		val.custom_minimum_size = Vector2(28, 0)
 		val.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		val.set_meta("first_value", int(st.v))
@@ -784,7 +785,12 @@ func _boost_section(boosts: Array) -> Control:
 		v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(Kit.clip(str(b.get("name", "")), 13, null, true))
-		v.add_child(Kit.clip(str(b.get("text", "")), 11, Pal.MUTED))
+		## (what it does may take two lines: cut off at one, "+10% d…" looked unfinished)
+		var what = Kit.para(str(b.get("text", "")), 11, Pal.MUTED)
+		what.max_lines_visible = 2
+		what.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		what.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(what)
 		h.add_child(v)
 		row.add(h)
 		grid.add_child(row)

@@ -47,7 +47,10 @@ static func card() -> Control:
 		Fx.flicker(flame)
 		Fx.embers(flame, Pal.ACCENT2, 2)
 	fl.add_child(Kit.vcenter(flame))
-	fl.add_child(Kit.vcenter(PixelFont.rect("%dD" % streak, 2, Pal.ACCENT2 if streak > 0 else Pal.MUTED)))
+	## (2026-11-27 review: "0D" in pixel letters read as "00") the streak in words: "0 days", "1 day".
+	var st_words = Kit.label("%d day%s" % [streak, "" if streak == 1 else "s"], 12, Pal.TEXT, true)
+	st_words.set_meta("reading_streak", streak)
+	fl.add_child(Kit.vcenter(st_words))
 	right.add_child(Kit.vcenter(fl))
 	Kit.passthrough(right)
 	var c = Kit.section("reading", "READING", "book", Pal.READ, right, ReadingView.open, 8, 10)
@@ -58,15 +61,29 @@ static func card() -> Control:
 	ring.setup(float(pages_today) / float(maxi(1, goal)), Pal.READ, 52.0, Icons.rect("book", 32))
 	top.add_child(Kit.vcenter(ring))
 
-	var main = Kit.vbox(3)
+	var main = Kit.vbox(4)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var nums = Kit.hbox(6)
-	var big = PixelFont.rect(Xp.fmt_int(pages_today), 3, Pal.READ if pages_today > 0 else Pal.MUTED)
-	nums.add_child(Kit.vcenter(big))
-	nums.add_child(Kit.vcenter(Kit.clip("of %d pages today" % goal, 12, Pal.MUTED)))
+	var nums = Kit.hbox(8)
+	## (2026-11-27 review: a muted pixel "0" hardly showed on the parchment) Today's pages, the key number, in a
+	## dark well with gold digits (cream at 0), like the stat tiles.
+	var well = PanelContainer.new()
+	well.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	well.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	well.add_theme_stylebox_override("panel", PixBox.material("well", {"pad_h": 8, "pad_v": 4}))
+	well.set_meta("ink_bg", Pal.WELL)
+	var big = PixelFont.rect(Xp.fmt_int(pages_today), 3, Pal.GOLD_TEXT if pages_today > 0 else Pal.CREAM)
+	big.set_meta("ink_keep", true)
+	well.add_child(big)
+	nums.add_child(Kit.vcenter(well))
+	nums.add_child(Kit.vcenter(Kit.clip("of %d pages today" % goal, 13, Pal.TEXT, true)))
 	main.add_child(nums)
-	main.add_child(Kit.bar(float(lv.progress), Pal.READ, 4))
+	## (2026-11-27 review: the bar under today's pages was the reading LEVEL's, half empty on a day the goal was
+	## beaten five times) today's pages against the day's goal, gold once it is met. The level is the LV plate.
+	var met = pages_today >= goal
+	var day_bar = Kit.bar(minf(1.0, float(pages_today) / float(maxi(1, goal))), Pal.ACCENT if met else Pal.READ, 8)
+	day_bar.set_meta("reading_day_bar", true)
+	main.add_child(day_bar)
 	top.add_child(main)
 	c.add(top)
 
@@ -480,3 +497,12 @@ class DayBars:
 		while gx < cw * _days.size():
 			draw_rect(Rect2(gx, gy, PXS * 3.0, PXS), Pal.with_alpha(Pal.GOOD, 0.8))
 			gx += PXS * 6.0
+		## (2026-11-27 review: with no pages the chart was a dark block and a dashed line, as if broken) a small
+		## stub on every day's floor and a line on the well saying so.
+		if top <= 0:
+			for i in range(_days.size()):
+				draw_rect(Rect2(float(i) * cw + PXS * 2.0, base_y - PXS, cw - PXS * 4.0, PXS), Pal.with_alpha(Pal.CREAM, 0.25))
+			var said = "No pages in the last two weeks"
+			var f = ThemeDB.fallback_font
+			var fy = floor((gy + base_y) / 2.0) + 5.0
+			draw_string(f, Vector2(0, fy), said, HORIZONTAL_ALIGNMENT_CENTER, cw * _days.size(), 12, Pal.with_alpha(Pal.CREAM, 0.85))

@@ -24,25 +24,9 @@ func fill() -> void:
 	var p = App.profile()
 	var st = App.settings()
 
-	# --- look ---------------------------------------------------------------------
-	add_child(Kit.section_title("Theme"))
-	var themes = Kit.grid(Pal.THEME_ORDER.size(), 8)
-	for id in Pal.THEME_ORDER:
-		themes.add_child(_theme_tile(id))
-	add_child(themes)
-	# The look of sections and rows (Kit.look): the mock-ups of 2026-11-27, to try on the real log.
-	add_child(Kit.section_title("Look (trying out)"))
-	var looks = []
-	for lk in Kit.LOOKS:
-		var k = Kit.choice({"stripe": "Now", "arcade": "Arcade", "clean": "Clean", "rpg": "RPG", "neon": "Neon"}[lk], Kit.look == lk, _on_ui_look.bind(lk), Pal.ACCENT, 12)
-		k.tooltip_text = "Sections and rows: %s" % lk
-		k.set_meta("look_key", lk)
-		looks.append(k)
-	add_child(Kit.choice_track(looks))
-
 	# --- hero -------------------------------------------------------------------
 	if p != null:
-		var hero = _card("HERO")
+		var hero = _card("HERO", null, "shield", Pal.tab("home"))
 		var row = Kit.hbox(14)
 		var pic = PixelRect.make(Art.hero_texture(App.state, p, App.loadout()), 2.0)
 		pic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -61,7 +45,7 @@ func fill() -> void:
 		add_child(hero)
 
 	# --- units & training ------------------------------------------------------------
-	var train = _card("TRAINING")
+	var train = _card("TRAINING", null, "lift", Pal.LIFT)
 	train.add(_row("scale", "Weight", Kit.segmented([{"value": "kg", "label": "kg"}, {"value": "lb", "label": "lb"}], st.get("weightUnit", "kg"), _on_weight_unit)))
 	train.add(_row("road", "Distance", Kit.segmented([{"value": "km", "label": "km"}, {"value": "mi", "label": "mi"}], st.get("distanceUnit", "km"), _on_setting.bind("distanceUnit"))))
 	var unit = str(st.get("weightUnit", "kg"))
@@ -105,7 +89,7 @@ func fill() -> void:
 			"Backups include %s." % what,
 			"Your save lives in this app on this phone, and (when it is shared) in your note's script. A dated copy is kept automatically each day.",
 		]
-	var data = _card("DATA", _info_button("About your data", about))
+	var data = _card("DATA", _info_button("About your data", about), "chest", Pal.BORDER)
 	var web = OS.has_feature("web")
 	if web:
 		# The phone app: the backup file is the only copy outside this phone.
@@ -150,19 +134,29 @@ func fill() -> void:
 	add_child(data)
 
 
-## A settings card with a pixel-font heading and an optional control on the right.
-func _card(title: String, right: Control = null) -> Card:
-	var c = Kit.card(12, Callable(), 12)
-	var h = Kit.hbox(8)
-	h.custom_minimum_size = Vector2(0, 26)
-	var t = PixelFont.rect(title, 2, Pal.ACCENT)
-	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(t)
-	h.add_child(Kit.spacer())
-	if right != null:
-		h.add_child(Kit.vcenter(right))
-	c.add(h)
-	return c
+## A settings window (Kit.section): the title on a wooden sign on the frame's top edge, `icon` on the sign,
+## `color` its ring; an optional control (an "i" key, "How it works") at the right end of the head, pinned on
+## a paper note. `add()` fills the window.
+## (2026-11-27 review: the titles were thin gold pixel letters straight on the cream paper, the old look,
+## hard to read; every card is now a window with a sign, as in the Workshop mock-up.)
+func _card(title: String, right: Control = null, icon: String = "settings", color = null) -> Card:
+	var col: Color = Pal.ACCENT2 if color == null else color
+	var id = "settings_" + title.to_lower().replace(" ", "_")
+	return Kit.section(id, title, icon, col, right, Callable(), 12, 10)
+
+
+## A time between its − and + keys: cream pixel digits in a dark well, like every number entry of the
+## Workshop look (they were gold digits floating on the cream paper).
+static func _time_well(t: String) -> Control:
+	var w = PanelContainer.new()
+	w.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	w.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	w.add_theme_stylebox_override("panel", PixBox.well(4, 3))
+	w.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var cap = PixelFont.rect(t, 2, Pal.CREAM)
+	cap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	w.add_child(cap)
+	return w
 
 
 ## icon · label · control, on one line.
@@ -235,7 +229,7 @@ func _exit_tree() -> void:
 
 func _build_inbox() -> void:
 	var ib = App.inbox.settings()
-	var card = _card("PHONE INBOX", Kit.button("How it works", "ghost", SettingsPanel.show_how, "sm"))
+	var card = _card("PHONE INBOX", Kit.button("How it works", "ghost", SettingsPanel.show_how, "sm"), "speech", Pal.SECOND)
 	card.set_meta("inbox_section", true)
 	var src = Kit.input(str(ib.get("source", "")), "Google Doc link or a file path")
 	src.select_all_on_focus = false
@@ -319,7 +313,7 @@ func _build_split() -> void:
 		"The Today card, the missions and the morning message plan that day: its lifts from your log, and one of its movements you have not tried.",
 		"Doing something else today? Tap another day on the Today card. Whatever you log decides what comes next.",
 		"\"From my log\" has no cycle: the day is guessed from your weekdays and how often you do each lift.",
-	]))
+	]), "calendar", Pal.LIFT)
 	card.set_meta("split_section", true)
 	var chips = Kit.flow(6)
 	for s in Missions.SPLITS:
@@ -348,7 +342,7 @@ func _build_focus() -> void:
 		"Every day is planned as a lift day. When you need a rest day, tap Rest on the Today card (or on a day in Coming up): no lifting that day, your run, a climb and physical therapy stay, and the split carries on a day later. The weekly sets are planned as if you lift every day, so a muscle can read over its range until a rest day comes.",
 		"A climbing session counts for the forearms only, not for the back.",
 		"\"From my log\" switches all of this off.",
-	]))
+	]), "target", Pal.GOOD)
 	card.set_meta("focus_section", true)
 	var chips = Kit.flow(6)
 	chips.add_child(Kit.chip("From my log", cur == "", _on_setting.bind("", "focus"), Pal.LIFT))
@@ -409,7 +403,7 @@ func _on_run_goal(on: bool) -> void:
 
 func _build_morning() -> void:
 	var m = MorningAlert.settings(App.settings())
-	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_morning_how.bind(m.topic), "sm"))
+	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_morning_how.bind(m.topic), "sm"), "sun", Pal.ACCENT2)
 	card.set_meta("morning_section", true)
 	card.add(Kit.muted_para("Today's plan on your phone when you wake up: what you will probably do, what to beat, PT and something new to try.", 12))
 	var row = Kit.hbox(8)
@@ -418,7 +412,7 @@ func _build_morning() -> void:
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(l)
 	row.add_child(Kit.vcenter(Kit.icon_button("minus", _morning_time.bind(-30), "30 minutes earlier", 28)))
-	row.add_child(Kit.vcenter(PixelFont.rect(m.time, 2, Pal.ACCENT)))
+	row.add_child(_time_well(m.time))
 	row.add_child(Kit.vcenter(Kit.icon_button("plus", _morning_time.bind(30), "30 minutes later", 28)))
 	row.add_child(Kit.spacer())
 	row.add_child(Kit.switch(m.on, _on_morning, "Send it every morning"))
@@ -430,7 +424,7 @@ func _build_morning() -> void:
 	el.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	ev.add_child(el)
 	ev.add_child(Kit.vcenter(Kit.icon_button("minus", _evening_time.bind(-30), "30 minutes earlier", 28)))
-	ev.add_child(Kit.vcenter(PixelFont.rect(m.eveningTime, 2, Pal.ACCENT)))
+	ev.add_child(_time_well(m.eveningTime))
 	ev.add_child(Kit.vcenter(Kit.icon_button("plus", _evening_time.bind(30), "30 minutes later", 28)))
 	ev.add_child(Kit.spacer())
 	ev.add_child(Kit.switch(m.evening, _on_evening, "In the evening: what of today is still open (nothing when all is done)"))
@@ -459,7 +453,7 @@ func _build_morning() -> void:
 ## with ntfy itself (app/phone_push.gd), so no PC is needed.
 func _build_morning_phone() -> void:
 	var m = PhonePush.settings(App.settings())
-	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_phone_morning_how.bind(m.topic), "sm"))
+	var card = _card("MORNING GOALS", Kit.button("How it works", "ghost", SettingsPanel.show_phone_morning_how.bind(m.topic), "sm"), "sun", Pal.ACCENT2)
 	card.set_meta("morning_phone", true)
 	card.add(Kit.muted_para("The day's plan on this phone each morning, sent by the app itself. No PC needed.", 12))
 	var row = Kit.hbox(8)
@@ -468,7 +462,7 @@ func _build_morning_phone() -> void:
 	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(l)
 	row.add_child(Kit.vcenter(Kit.icon_button("minus", _phone_morning_time.bind(-30), "30 minutes earlier", 28)))
-	row.add_child(Kit.vcenter(PixelFont.rect(m.time, 2, Pal.ACCENT)))
+	row.add_child(_time_well(m.time))
 	row.add_child(Kit.vcenter(Kit.icon_button("plus", _phone_morning_time.bind(30), "30 minutes later", 28)))
 	row.add_child(Kit.spacer())
 	row.add_child(Kit.switch(m.phone, _on_phone_morning, "Send it every morning"))
@@ -648,7 +642,8 @@ static func show_how() -> void:
 	var cheat = PanelContainer.new()
 	cheat.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	cheat.add_theme_stylebox_override("panel", PixBox.well(12, 10))
-	cheat.add_child(Kit.para(QuickLog.CHEAT_SHEET, 13, Pal.TEXT))
+	# (cream on the dark well, as typed text there is)
+	cheat.add_child(Kit.para(QuickLog.CHEAT_SHEET, 13, Pal.CREAM))
 	var v = Kit.vbox(10)
 	v.add_child(cheat)
 	v.add_child(Kit.para("4. Press Check now, or just start the game. Nothing is imported until you say so; lines it cannot read are shown, never dropped.", 14, Pal.TEXT))
@@ -866,63 +861,6 @@ func _on_setting(value, key: String) -> void:
 	Sfx.tick()
 	App.update_settings({key: value})
 	call_deferred("_refill")
-
-
-## A swatch of a theme: its world colour with a panel and the accent on it.
-func _theme_tile(id: String) -> Button:
-	var th = Pal.THEMES[id]
-	var on = id == Pal.theme_id
-	var b = Button.new()
-	b.focus_mode = Control.FOCUS_NONE
-	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.custom_minimum_size = Vector2(60, 64)
-	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	b.tooltip_text = th.name
-	var looks = PixBox.button_set(Color(th.bg), Color(th.outline), 6, 6, 1, Pal.ACCENT if on else Color(th.border))
-	for k in ["normal", "hover", "pressed"]:
-		b.add_theme_stylebox_override(k, looks[k])
-	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var v = Kit.vbox(4)
-	v.set_anchors_preset(Control.PRESET_FULL_RECT)
-	v.offset_left = 8
-	v.offset_right = -8
-	v.offset_top = 8
-	v.offset_bottom = -12
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var row = Kit.hbox(3)
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	for key in ["panel2", "accent", "second"]:
-		var sw = ColorRect.new()
-		sw.color = Color(th[key])
-		sw.custom_minimum_size = Vector2(12, 12)
-		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(sw)
-	v.add_child(row)
-	var l = Kit.label(th.name, 12, Color(th.text), true)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(l)
-	b.add_child(v)
-	b.pressed.connect(_on_theme.bind(id))
-	Kit.juice(b)
-	return b
-
-
-func _on_ui_look(id: String) -> void:
-	if id == Kit.look:
-		return
-	Sfx.claim()
-	# The shell rebuilds itself in the new look (main.gd) and reopens this sheet.
-	App.update_settings({"look": id})
-
-
-func _on_theme(id: String) -> void:
-	if id == Pal.theme_id:
-		return
-	Sfx.claim()
-	# The shell rebuilds itself in the new colours and reopens this sheet.
-	App.update_settings({"theme": id})
 
 
 func _on_sound(on) -> void:

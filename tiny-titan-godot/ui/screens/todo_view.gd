@@ -11,9 +11,9 @@ extends RefCounted
 ## The look (2026-11-24, the Hero tab's clean-up): the card is a section
 ## (Kit.section "TO DO", a grey band with the open count and the plus key) and
 ## every item is a flat row (Kit.row) with the shared tick box (Kit.tick_box);
-## a done row is striped and tinted green. The "+20 XP" chip has the same
-## padding and words in every state (open: gold outline, earned: green,
-## none: unseen), so a row is never wider or narrower after a tick.
+## a done row is tinted green. The "+20 XP" chip has the same padding and
+## words in every state (open: solid gold, earned: green, none: unseen), so a
+## row is never wider or narrower after a tick.
 ##
 ## Nothing may move under the finger: a ticked item stays where it is (on the
 ## card until tomorrow, in the sheet until it is cleared), the sheet's status
@@ -40,17 +40,16 @@ static func _box(done: bool) -> Control:
 
 
 ## The "+20 XP" chip: the same padding and the same words in every state, so
-## it is as wide open as earned; `state` is "open" (gold outline: a tick pays
-## it), "earned" (green: paid) or "none" (unseen, the slot kept).
+## it is as wide open as earned; `state` is "open" (solid gold, like every other
+## reward chip: a tick pays it), "earned" (green: paid) or "none" (unseen, the
+## slot kept).
+## (2026-11-27 review: it was a pale flat box with a thin gold rim beside the solid bevelled "+250" chips) a
+## bevelled tag (Kit.tag) like Parts.xp_chip, gold while to be had, green once earned.
 static func _bonus_chip(state: String) -> Control:
-	var col = Pal.GOOD if state == "earned" else Pal.ACCENT
-	var edge = Pal.with_alpha(Pal.GOOD, 0.6) if state == "earned" else Pal.ACCENT
-	var chip = PanelContainer.new()
+	var chip = Kit.tag("+%d XP" % Todos.BONUS_XP, Pal.GOOD if state == "earned" else Pal.ACCENT, true, 11)
 	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	chip.size_flags_horizontal = Control.SIZE_SHRINK_END
-	chip.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(col, 0.12), 3, edge, 1, 6, 1))
-	chip.add_child(Kit.label("+%d XP" % Todos.BONUS_XP, 11, col, true))
 	chip.set_meta("todo_bonus", state)
 	if state == "none":
 		chip.modulate.a = 0.0

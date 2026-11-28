@@ -124,15 +124,22 @@ static func _day_text(date: String) -> String:
 
 
 ## A raised strip in one colour with an icon and a line of bold text.
-static func banner(icon: String, text: String, color: Color, dark_text: bool = true) -> PanelContainer:
+## (2026-11-27 review: the words follow the face as on the Workshop's keys: dark ink and a dark icon on a
+## light face (gold, cream), cream words with a dark outline and the icon in its own colours on blue, green,
+## orange and brown. `_dark_text` is kept for the callers; the face decides.)
+static func banner(icon: String, text: String, color: Color, _dark_text: bool = true) -> PanelContainer:
+	var dark = PixBox.dark_words(color)
 	var p = PanelContainer.new()
 	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	p.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 2, "pad_h": 10, "pad_v": 7}))
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var h = Kit.hbox(8)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Kit.vcenter(Icons.rect(icon, 16, Pal.INK if dark_text else null)))
-	var l = Kit.para(text, 14, Pal.INK if dark_text else Pal.TEXT, true)
+	h.add_child(Kit.vcenter(Icons.rect(icon, 16, Pal.INK if dark else null)))
+	var l = Kit.para(text, 14, Pal.INK if dark else Pal.CREAM, true)
+	if not dark:
+		l.add_theme_constant_override("outline_size", Kit.outline_for(14))
+		l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
 	h.add_child(l)
 	p.add_child(h)
 	return p
@@ -225,7 +232,14 @@ static func _versus(cur: Dictionary, other, is_best: bool, mode: String, wu: Str
 		var none = Kit.vbox(4)
 		none.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		none.add_child(Kit.label("TIME BEFORE" if past else "LAST TIME", 10, Pal.MUTED, true))
-		none.add_child(Kit.vcenter(PixelFont.rect("--", 3, Pal.with_alpha(Pal.MUTED, 0.6))))
+		# (in a dark well like the number on the other side)
+		var none_well = PanelContainer.new()
+		none_well.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		none_well.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		none_well.add_theme_stylebox_override("panel", PixBox.well(8, 6))
+		none_well.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		none_well.add_child(PixelFont.rect("--", 3, Pal.CREAM.lerp(Pal.WELL, 0.45)))
+		none.add_child(none_well)
 		none.add_child(Kit.label("Nothing yet", 11, Pal.MUTED, true))
 		row.add_child(none)
 	var vs = PanelContainer.new()
@@ -252,9 +266,17 @@ static func _side(h: Dictionary, kicker: String, lit: bool, mode: String, wu: St
 	v.add_child(when)
 	var d = LiftTrend.day(h.sets)
 	var mt = main_text(d, mode, wu)
-	var big = PixelFont.rect(str(mt[0]), 4 if lit and str(mt[0]).length() <= 4 else 3, (Pal.GOOD if note else Pal.ACCENT) if lit else Pal.MUTED)
-	big.size_flags_horizontal = Control.SIZE_SHRINK_END if lit else Control.SIZE_SHRINK_BEGIN
-	v.add_child(big)
+	## The big number in a dark well, gold (this time) or a quieter cream (the other day), like the tiles under
+	## it (2026-11-27 review: thin gold or light brown pixel digits on cream paper were washed out).
+	var big_col = (Pal.GOOD.lightened(0.3) if note else Pal.GOLD_TEXT) if lit else Pal.CREAM.lerp(Pal.WELL, 0.22)
+	var big = PixelFont.rect(str(mt[0]), 4 if lit and str(mt[0]).length() <= 4 else 3, big_col)
+	var well = PanelContainer.new()
+	well.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	well.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	well.add_theme_stylebox_override("panel", PixBox.well(8, 6))
+	well.add_child(big)
+	well.size_flags_horizontal = Control.SIZE_SHRINK_END if lit else Control.SIZE_SHRINK_BEGIN
+	v.add_child(well)
 	if mode == "band" and int(d.get("band", 0)) > 0:
 		# The band's own colour under its name.
 		var sw = BandPicker.swatch(d.bandId, 10)
@@ -278,7 +300,10 @@ static func _verdict(cmp: Dictionary, recs: Array, other, against: String, wu: S
 		return banner("sparkle", ("%sthe first time, the mark to beat." % on) if past != "" else "First time: this is the mark to beat.", Pal.SECOND)
 	if not recs.is_empty():
 		var b = banner("crown", "%sa new record! %s." % [on, str(recs[0].label)] if past != "" else "New record! %s." % str(recs[0].label), Pal.ACCENT)
-		Fx.shine(b, 3.5, 0.4)
+		## (2026-11-27 review: the glint crossed OVER the words and hid them while it passed: fainter now, and
+		## moved behind the words, so only the gold face shines)
+		var glint = Fx.shine(b, 3.5, 0.4, 0.26)
+		b.move_child(glint, 0)
 		return b
 	var said = SessionView.delta_text(cmp, wu)
 	var where = "in all"
@@ -296,7 +321,7 @@ static func _verdict(cmp: Dictionary, recs: Array, other, against: String, wu: S
 			return banner("arrow_up", "%s%s %s. Better than %s." % [on, said, where, who], Pal.GOOD)
 		"down":
 			return banner("arrow_down", "%s%s %s. A lighter day than %s." % [on, said, where, who], Pal.ACCENT2)
-	return banner("repeat", "%sSame as %s." % [on, who], Pal.PANEL2, false)
+	return banner("repeat", "%sSame as %s." % [on, who], SessionView.same_color(), false)
 
 
 ## Set by set: last time on the left, this time on the right, the change between.
@@ -338,7 +363,8 @@ static func _pair_row(p: Dictionary, wu: String) -> Control:
 	nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	num.add_child(nl)
 	row.add_child(Kit.vcenter(_col(num, 26)))
-	var prev = Kit.clip(set_text(p.prev, wu), 13, Pal.MUTED, false)
+	## (dark ink, not bold: grey on the tinted row was too faint; 2026-11-27 review)
+	var prev = Kit.clip(set_text(p.prev, wu), 13, Pal.TEXT, false)
 	row.add_child(_with_swatch(prev, p.prev, false))
 	var mid = CenterContainer.new()
 	mid.custom_minimum_size = Vector2(84, 24)
@@ -377,9 +403,9 @@ static func _pair_chip(p: Dictionary, wu: String) -> Control:
 		"added":
 			return Kit.tag("NEW SET", Pal.SECOND, false, 10)
 		"dropped":
-			return Kit.tag("NOT DONE", Pal.PANEL2, false, 10)
+			return SessionView.same_tag("NOT DONE", 10)
 		"same":
-			return Kit.tag("same", Pal.PANEL2, false, 10)
+			return SessionView.same_tag("same", 10)
 	var up = str(p.kind) == "up"
 	var text = ""
 	if absf(float(p.dkg)) > 1e-6:
@@ -426,15 +452,16 @@ static func _total_tile(cap: String, v: float, was: float, kind: String, wu: Str
 		unit = " " + str(parts[1])
 	var top = Kit.hbox(3)
 	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(PixelFont.rect(shown, 2 if shown.length() <= 6 else 1, Pal.TEXT))
+	# (words in a dark well: cream, and a quieter cream for the small ones)
+	top.add_child(PixelFont.rect(shown, 2 if shown.length() <= 6 else 1, Pal.CREAM))
 	if unit != "":
-		top.add_child(Kit.vcenter(Kit.label(unit.strip_edges(), 10, Pal.MUTED, true)))
+		top.add_child(Kit.vcenter(Kit.label(unit.strip_edges(), 10, Pal.CREAM.lerp(Pal.WELL, 0.3), true)))
 	v_box.add_child(top)
-	v_box.add_child(Kit.clip(cap, 11, Pal.MUTED, true))
+	v_box.add_child(Kit.clip(cap, 11, Pal.CREAM.lerp(Pal.WELL, 0.3), true))
 	if was >= 0.0:
 		var dv = v - was
 		if absf(dv) < 1e-6:
-			v_box.add_child(Kit.tag("same", Pal.PANEL2, false, 10))
+			v_box.add_child(SessionView.same_tag("same", 10))
 		else:
 			var said = Xp.fmt_int(absf(dv)) if kind != "kg" else Fmt.fmt_big_kg(absf(dv), wu)
 			v_box.add_child(Kit.tag("%s%s" % ["+" if dv > 0.0 else "-", said], Pal.GOOD if dv > 0.0 else Pal.ACCENT2, true, 10))
@@ -453,14 +480,29 @@ static func record_value(r: Dictionary, wu: String) -> String:
 	return "%d reps" % int(r.value)
 
 
+## A card's title in the Workshop look: its icon in a framed slot ringed in `color`, the title in dark ink,
+## `sub` in brown after it, a dotted rule to the end (2026-11-27 review: thin pixel letters in gold or blue on
+## cream paper were faint, and blue titles read as the old navy look).
+static func _card_head(icon: String, title: String, color: Color, sub: String = "") -> HBoxContainer:
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Kit.badge(icon, color, 16)))
+	h.add_child(Kit.vcenter(Kit.clip_fit(title, 14, Pal.TEXT, true, 240.0)))
+	if sub != "":
+		h.add_child(Kit.vcenter(Kit.clip_fit(sub, 12, Pal.MUTED, true, 170.0)))
+	h.add_child(Kit.vcenter(Kit.dotted_rule()))
+	return h
+
+
+## The frame of a card that is not about one colour (a target, the ghost): the Workshop's wood.
+static func _wood() -> Color:
+	return Color(Pal.BLOCKS["wood"][3])
+
+
 static func _records_card(recs: Array, wu: String, past: String = "") -> Card:
 	var c = Kit.card(6, Callable(), 12)
 	c.accent(Pal.ACCENT)
-	var head = Kit.hbox(8)
-	head.add_child(Kit.vcenter(Icons.rect("trophy", 20)))
-	head.add_child(Kit.vcenter(PixelFont.rect("RECORDS", 2, Pal.ACCENT)))
-	head.add_child(Kit.vcenter(Kit.clip("beaten on %s" % _day_text(past) if past != "" else "beaten this time", 12, Pal.MUTED, true)))
-	c.add(head)
+	c.add(_card_head("trophy", "RECORDS", Pal.ACCENT, "beaten on %s" % _day_text(past) if past != "" else "beaten this time"))
 	for r in recs:
 		var row = Kit.hbox(8)
 		row.add_child(Kit.vcenter(Icons.rect("star", 16)))
@@ -501,9 +543,10 @@ static func _best_card(cur: Dictionary, best: Dictionary, mode: String, wu: Stri
 ## four weeks earlier, a bar each, who won (a burst when it is the player).
 static func _ghost_card(g: Dictionary, mode: String, wu: String) -> Card:
 	var c = Kit.card(6, Callable(), 10)
-	c.accent(Pal.SECOND)
+	# (a wooden frame and a dark title: the blue frame and blue small caps read as the old look)
+	c.accent(_wood())
 	var weeks = maxi(1, int(round(float(g.days) / 7.0)))
-	c.add(Kit.label("GHOST DUEL · YOU vs YOU, %d WEEK%s AGO" % [weeks, "" if weeks == 1 else "S"], 10, Pal.SECOND, true))
+	c.add(_card_head("sword", "GHOST DUEL", Pal.SECOND, "you vs you, %d week%s ago" % [weeks, "" if weeks == 1 else "s"]))
 	var row = Kit.hbox(10)
 	var tex = Art.hero_texture(App.state, App.profile(), App.loadout())
 	var me = PixelRect.make(tex, 1.0)
@@ -633,11 +676,9 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 	if str(t.kind) == "none":
 		return null
 	var c = Kit.card(6, Callable(), 12)
-	c.accent(Pal.SECOND)
-	var head = Kit.hbox(8)
-	head.add_child(Kit.vcenter(Icons.rect("target", 18)))
-	head.add_child(Kit.vcenter(PixelFont.rect("NEXT TIME", 2, Pal.SECOND)))
-	c.add(head)
+	# (a wooden frame and a dark title: the blue frame and blue pixel letters read as the old look)
+	c.accent(_wood())
+	c.add(_card_head("target", "NEXT TIME", Pal.LIFT))
 	c.add(Kit.para(LiftHistory.describe_sets(t.sets, _fmt_w(wu)), 16, Pal.TEXT, true))
 	if Bands.top(t.sets) != "":
 		# The band to use, in its own colour.
@@ -811,7 +852,7 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 		var col = Pal.GOOD if up else Pal.ACCENT2
 		var num = Kit.hbox(4)
 		if flat:
-			num.add_child(Kit.vcenter(Kit.tag("Level", Pal.PANEL2, false, 13)))
+			num.add_child(Kit.vcenter(SessionView.same_tag("Level", 13)))
 		else:
 			num.add_child(Kit.vcenter(Icons.rect("arrow_up" if up else "arrow_down", 16, col)))
 			num.add_child(Kit.vcenter(PixelFont.rect(("+" if up else "-") + str(parts[0]), 3, col)))
@@ -919,6 +960,12 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 		return
 	var lmode = str(all_rows[all_rows.size() - 1].key.mode)
 	var fmt = rung_fmt(lmode, wu)
+	if all_rows.size() < 2:
+		_first_workout(holder, ctx, all_rows[0], wu)
+		var first_table = _best_reps_card(history, lmode, fmt)
+		if first_table != null:
+			holder.add_child(first_table)
+		return
 	var span = Dates.days_between(str(all_rows[0].date), App.today)
 	var range_id = str(ctx.get("range", "all"))
 	var days = 0
@@ -954,7 +1001,8 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 	# How the last one went, as a banner.
 	var last = all_rows[all_rows.size() - 1]
 	var said = ""
-	var col = Pal.PANEL2
+	# (a matched day: the mock-up's greyer brown, as the "same" tags; it was a cream strip on cream)
+	var col = SessionView.same_color()
 	var icon = "arrow_up"
 	if int(sm.streak) >= 2:
 		said = "Beat last time %d times in a row" % int(sm.streak)
@@ -973,7 +1021,7 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 		col = Pal.ACCENT2
 		icon = "target"
 	if said != "":
-		var bn = banner(icon, said, col, col != Pal.PANEL2)
+		var bn = banner(icon, said, col)
 		bn.set_meta("progress_banner", int(sm.streak))
 		holder.add_child(bn)
 
@@ -1010,9 +1058,9 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 	chart.set_meta("rung_chart", rows.size())
 	c.add(chart)
 	var legend = [{"name": "Beat last time", "color": Pal.GOOD}, {"name": "Step up / gold top: best ever / gold star: rep record", "color": Pal.ACCENT},
-		{"name": "Same", "color": Pal.with_alpha(Pal.MUTED, 0.7)}, {"name": "Short of it", "color": Pal.ACCENT2}]
+		{"name": "Same", "color": RungChart.same_color()}, {"name": "Short of it", "color": Pal.ACCENT2}]
 	if nxt != null:
-		legend.append({"name": "Next aim", "color": Pal.SECOND})
+		legend.append({"name": "Next aim", "color": RungChart.aim_color()})
 	c.add(Charts.legend(legend))
 	var how = "Each bar is the reps you did at that day's top weight. One more rep at the same weight is a taller bar; a heavier weight starts a new step."
 	match lmode:
@@ -1027,6 +1075,35 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 	var table = _best_reps_card(history, lmode, fmt)
 	if table != null:
 		holder.add_child(table)
+
+
+## One workout so far: nothing to compare yet, so no tiles and no step chart (three zero tiles and one lone
+## bar looked broken; 2026-11-27 review). It is the mark to beat: a banner, its sets, next time's aim.
+static func _first_workout(holder: Control, ctx: Dictionary, row: Dictionary, wu: String) -> void:
+	var fb = banner("sparkle", "First time: this is the mark to beat.", Pal.SECOND)
+	fb.set_meta("progress_first", str(row.date))
+	holder.add_child(fb)
+	var sets = []
+	for h in ctx.history:
+		if str(h.date) == str(row.date):
+			sets.append_array(h.get("sets", []))
+	var c = Kit.card(6, Callable(), 12)
+	c.accent(Pal.LIFT)
+	c.add(_card_head("star", "YOUR MARK", Pal.LIFT, _day_text(str(row.date))))
+	c.add(Kit.para(LiftHistory.describe_sets(sets, _fmt_w(wu)), 16, Pal.TEXT, true))
+	if Bands.top(sets) != "":
+		c.add(BandPicker.pill(Bands.top(sets), 12))
+	# Next time's aim (not for physical therapy: that follows its plan).
+	if int(ctx.get("goal", 0)) <= 0 and not sets.is_empty():
+		var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
+		var t = LiftTrend.next_target(sets, step)
+		if str(t.kind) != "none":
+			var nl = Kit.hbox(6)
+			nl.add_child(Kit.vcenter(Kit.label("NEXT TIME", 11, Pal.MUTED, true)))
+			nl.add_child(Kit.vcenter(Kit.clip(LiftHistory.describe_sets(t.sets, _fmt_w(wu)), 13, Pal.TEXT, true)))
+			c.add(nl)
+	c.add(Kit.para("Do it again and this page charts every workout against the one before.", 11, Pal.MUTED))
+	holder.add_child(c)
 
 
 ## "BEST REPS AT EACH WEIGHT": the most reps in one set at every weight done (LiftProgress.best_reps), the

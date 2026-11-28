@@ -28,7 +28,7 @@ var _show_connect: bool = false
 
 
 static func make(panel) -> Control:
-	var card = panel._card("PHONE APP", panel._info_button("About the phone app", ABOUT))
+	var card = panel._card("PHONE APP", panel._info_button("About the phone app", ABOUT), "repeat", Pal.SECOND)
 	var me = PhoneAppCard.new()
 	me._panel = panel
 	me.add_theme_constant_override("separation", 8)
@@ -156,7 +156,9 @@ func _home_screen_hint_plain() -> void:
 static func update_card() -> Control:
 	var b = Kit.button("Restart", "good", restart_now, "sm")
 	b.set_meta("update_restart", true)
-	var c = Kit.notice("sparkle", "New version ready", "Restart to use it. Your log is kept.", Pal.SECOND, b)
+	# (2026-11-27 review: a blue notice read as the old blue style on the warm page; its icon slot is ringed in
+	# the green of its Restart key)
+	var c = Kit.notice("sparkle", "New version ready", "Restart to use it. Your log is kept.", Pal.GOOD, b)
 	c.set_meta("update_card", true)
 	return c
 
@@ -291,6 +293,8 @@ func _on_status() -> void:
 		return
 	_status.text = App.cloud.status_text()
 	_status.add_theme_color_override("font_color", _color(App.cloud.status))
+	# (a colour set after the label came in is not checked by ui/ink.gd by itself: green on the sand would not read)
+	Ink.check(_status)
 
 
 func _on_switch(on) -> void:

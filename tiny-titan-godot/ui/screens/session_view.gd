@@ -17,11 +17,28 @@ static func pt_tag(size: int = 10) -> Control:
 	return Kit.tag("PT", Pal.PT, true, size)
 
 
+## The Workshop's quiet tags, as the approved mock-up has them (its "t-var" and "t-same"): a lift's
+## variation on brown wood, "same" on a greyer brown, both with cream words and a dark shadow
+## (Kit.tag_words). They were cream boxes with a black rim on cream paper, which read as debug labels
+## (2026-11-27 review).
+static func variation_color() -> Color:
+	return Pal.BORDER.lightened(0.08)
+
+
+static func same_color() -> Color:
+	return Pal.MUTED.lightened(0.15)
+
+
+## A "same" / "not done" / "level" tag in the quiet brown.
+static func same_tag(text, size: int = 10) -> PanelContainer:
+	return Kit.tag(text, same_color(), false, size)
+
+
 ## A lift's variation beside its movement: "Barbell", "Single arm". `soft`: for a
 ## Kit.squeeze row, where a long one ("Single leg balance pad") is cut off with
 ## "…" when the row has no room for it.
 static func variation_tag(variation: String, size: int = 10, soft: bool = false) -> Control:
-	var t = Kit.tag(variation, Pal.PANEL2, false, size)
+	var t = Kit.tag(variation, variation_color(), false, size)
 	t.tooltip_text = variation
 	if soft:
 		var l = t.get_child(0) as Label
@@ -84,7 +101,7 @@ static func compare_tag(cmp: Dictionary, wu: String, size: int = 10):
 				return Kit.tag("PR", Pal.ACCENT, true, size)
 			return Kit.tag(change, Pal.ACCENT2, true, size)
 		"same":
-			return Kit.tag("same as last time" if size > 10 else "same", Pal.PANEL2, false, size)
+			return same_tag("same as last time" if size > 10 else "same", size)
 	return null
 
 
@@ -262,7 +279,7 @@ static func open(session: Dictionary) -> void:
 			var all_beat = int(bc.beat) == int(bc.of)
 			var bl = LiftViews.banner("arrow_up" if int(bc.beat) > 0 else "target",
 				("Beat last time on every lift" if all_beat else "Beat last time on %d of %d lifts" % [int(bc.beat), int(bc.of)]) if int(bc.beat) > 0 else "Matched or short of last time on every lift",
-				Pal.GOOD if int(bc.beat) > 0 else Pal.PANEL2, int(bc.beat) > 0)
+				Pal.GOOD if int(bc.beat) > 0 else same_color(), int(bc.beat) > 0)
 			bl.set_meta("session_beat_line", int(bc.beat))
 			box.add_child(bl)
 
@@ -272,7 +289,8 @@ static func open(session: Dictionary) -> void:
 		# Every piece of the session as its own chip: "V4 flash x2", "5.2 km", "27:30".
 		var bits = Kit.flow(6)
 		for piece in QuickLog.summary("session", session, wu, du).split(" · ", false):
-			bits.add_child(Kit.icon_chip("", str(piece), Pal.PANEL2, "", Pal.TEXT))
+			# (brown wood chips with cream words, as the variation tags)
+			bits.add_child(Kit.icon_chip("", str(piece), variation_color()))
 		if bits.get_child_count() > 0:
 			box.add_child(bits)
 		else:

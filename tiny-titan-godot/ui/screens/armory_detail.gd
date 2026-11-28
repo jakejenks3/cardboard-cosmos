@@ -200,19 +200,19 @@ static func open_item(it: Dictionary) -> void:
 	var sheet = Kit.sheet(it.name if (owned != null or for_sale) else "Locked item")
 	var row = Kit.hbox(14)
 
+	# (2026-11-27 review: a small whole hero in a big dark well, so a belt could not be seen) The hero wearing
+	# it, zoomed in on where it goes, as the shop's tiles: a locked piece is shown dimmed, as on its tile.
 	var preview_loadout = loadout.duplicate()
-	if owned != null or for_sale:
-		preview_loadout[it.slot] = it.id
+	preview_loadout[it.slot] = it.id
 	var hero = HeroView.new()
-	hero.setup(Art.tryon_state(state, it.id) if for_sale else state, App.profile(), preview_loadout, null, false)
-	hero.custom_minimum_size = Vector2(120, 150)
+	hero.setup(state if owned != null else Art.tryon_state(state, it.id), App.profile(), preview_loadout, null, false)
 	if owned == null and not for_sale:
 		hero.modulate = Color(0.55, 0.55, 0.6, 1.0)
 	var stage = PanelContainer.new()
 	stage.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	stage.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": rc, "lip": 0, "inset": true, "pad_h": 4, "pad_v": 4}))
 	stage.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	stage.add_child(hero)
+	stage.add_child(_zoom_on(hero, str(it.slot)))
 	row.add_child(stage)
 
 	var info = Kit.vbox(8)
@@ -229,7 +229,8 @@ static func open_item(it: Dictionary) -> void:
 		desc = "%s. Drops after sessions; loot luck helps." % Items.unlock_hint(it)
 	else:
 		desc = "Unlock: %s" % item_hint(it)
-	info.add_child(Kit.muted_para(Units.text(Icons.strip_emoji(desc), App.settings()), 14))
+	# (dark ink: brown ink on the sand was dim)
+	info.add_child(Kit.para(Units.text(Icons.strip_emoji(desc), App.settings()), 14, Pal.TEXT))
 	if for_sale:
 		info.add_child(Kit.muted("Tap the hero to see it flex", 11))
 	elif owned == null:
@@ -245,10 +246,36 @@ static func open_item(it: Dictionary) -> void:
 		sheet.box.add_child(_buy_box(it, sheet))
 	elif owned != null:
 		var wearing = loadout.get(it.slot) == it.id
-		var b = Kit.button("Unequip" if wearing else "Equip", "ghost" if wearing else "primary", Callable(), "lg")
+		# (Unequip is a solid wooden key: the pale tan one read as a flat box)
+		var b = Kit.button("Unequip" if wearing else "Equip", "secondary" if wearing else "primary", Callable(), "lg")
 		b.pressed.connect(ArmoryDetail._toggle_item.bind(it, sheet, b))
 		sheet.box.add_child(Kit.expand(b))
 	sheet.open()
+
+
+## The animated hero zoomed in on `slot` (ArmoryScreen.slot_view: the part of the hero a slot is about, at a
+## whole-number scale): a window that clips the hero, drawn that much bigger and moved so that part fills it.
+## A tap still makes the hero flex. Back gear and auras show the whole hero.
+static func _zoom_on(hero: HeroView, slot: String) -> Control:
+	var v = ArmoryScreen.slot_view(slot)
+	var sc = maxi(1, int(v.scale))
+	var art = Vector2(HeroBody.width(), HeroBody.height())
+	var r: Rect2 = v.rect
+	r = r.intersection(Rect2(Vector2.ZERO, art))
+	if r.size.x < 1.0 or r.size.y < 1.0:
+		r = Rect2(Vector2.ZERO, art)
+		sc = 2
+	hero.min_scale = sc
+	var win = Control.new()
+	win.clip_contents = true
+	win.mouse_filter = Control.MOUSE_FILTER_PASS
+	win.custom_minimum_size = r.size * float(sc)
+	win.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	win.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hero.position = -r.position * float(sc)
+	hero.size = art * float(sc)
+	win.add_child(hero)
+	return win
 
 
 ## The price of a shop item, what the player has, and the button that buys it
@@ -264,10 +291,11 @@ static func _buy_box(it: Dictionary, sheet) -> Control:
 		line.add_child(Kit.tag("DEAL -%d%%" % TTUtil.jsround(Wallet.DEAL_OFF * 100.0), Pal.GOOD, true, 10))
 		line.add_child(Kit.vcenter(Kit.muted("was %s" % Xp.fmt_int(Wallet.base_price(it)), 12)))
 	line.add_child(Kit.spacer())
-	line.add_child(Kit.vcenter(Kit.muted("You have %s" % Xp.fmt_int(have), 12)))
+	line.add_child(Kit.vcenter(Kit.label("You have %s" % Xp.fmt_int(have), 12, Pal.TEXT, true)))
 	box.add_child(line)
 	if check.ok:
-		var b = Kit.button("Buy and wear", "primary", Callable(), "lg", "coin")
+		# (the coin icon was gold on the gold key and showed as a faint ring: the shop's bag instead)
+		var b = Kit.button("Buy and wear", "primary", Callable(), "lg", "bag")
 		b.pressed.connect(ArmoryDetail._buy.bind(it, sheet, b))
 		box.add_child(Kit.expand(b))
 	else:
@@ -331,7 +359,7 @@ static func open_pet(p: Dictionary) -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	info.add_child(_chips(p.rarity, [["paw", p.species if owned else "???"]], p.get("perk")))
-	info.add_child(Kit.muted_para(Units.text(Icons.strip_emoji(p.flavor if owned else "Unlock: %s" % pet_hint(p)), App.settings()), 14))
+	info.add_child(Kit.para(Units.text(Icons.strip_emoji(p.flavor if owned else "Unlock: %s" % pet_hint(p)), App.settings()), 14, Pal.TEXT))
 	if not owned and p.has("progress"):
 		info.add_child(Parts.progress_line(p.progress.call(state), rc))
 	elif owned:
@@ -341,7 +369,7 @@ static func open_pet(p: Dictionary) -> void:
 
 	if owned:
 		var active = App.active_pet() == p.id
-		var b = Kit.button("Send home" if active else "Follow me", "ghost" if active else "primary", Callable(), "lg")
+		var b = Kit.button("Send home" if active else "Follow me", "secondary" if active else "primary", Callable(), "lg")
 		b.pressed.connect(ArmoryDetail._toggle_pet.bind(p, sheet, b))
 		sheet.box.add_child(Kit.expand(b))
 	sheet.open()

@@ -13,6 +13,11 @@ extends UiScreen
 ## bounty and its record (`_bounty`); a campaign trophy not earned yet says it
 ## is a campaign reward instead of naming a boss (`trophy_words`). With
 ## ON_SCREEN true the page is the campaign again (`_campaign`).
+##
+## The Workshop look (2026-11-27 review): every group is a window with its sign
+## (Kit.section): the bounty's record and past weeks, the daily and weekly
+## missions (flat slips; a challenge's records as tiles), the trophies next up
+## and earned. Gold numbers on paper are a deep gold (`on_paper`).
 
 const TIER_ICON = {"bronze": "medal", "silver": "medal", "gold": "medal", "platinum": "gem"}
 const TROPHY_COLS = 3
@@ -59,7 +64,8 @@ func build() -> void:
 
 static func weak_pill(d: String) -> Control:
 	var tip = "Weak to %s: those sessions hit for ×%s" % [str(TT.DISCIPLINE_META[d].name).to_lower(), TTUtil.num_str(Campaign.WEAK_MULT)]
-	return Kit.pill(d, "×%s" % TTUtil.num_str(Campaign.WEAK_MULT), Pal.disc(d), tip, Color.WHITE, 13)
+	# (a flat tag: it only says something, it is no key)
+	return Kit.icon_chip(d, "×%s" % TTUtil.num_str(Campaign.WEAK_MULT), Pal.disc(d), tip)
 
 
 ## The reward chips of a boss: XP in gold, its unique gear in its rarity colour.
@@ -87,27 +93,33 @@ func _bounty(state: Dictionary) -> void:
 		add_child(Kit.empty("skull", "No bounty yet", "A new monster shows up every Monday."))
 		return
 	add_child(BountyView.card(true))
-	var how = Kit.muted_para("A new monster every Monday, sized from your last four weeks. Every XP you log that week is a point of damage: beat it by Sunday night for coins.", 13)
+	# (2026-11-27 Workshop review: the words, the tiles and the past weeks lay loose on the planks) The
+	# record in a window, how it works in ink on its parchment; the past weeks in a window of their own.
+	var rec = Kit.section("bounty_rules", "YOUR RECORD", "trophy", Pal.BOUNTY, null, Callable(), 8, 10)
+	var how = Kit.para("A new monster every Monday, sized from your last four weeks. Every XP you log that week is a point of damage: beat it by Sunday night for coins.", 13, Pal.TEXT)
 	how.set_meta("bounty_how", true)
-	add_child(how)
+	rec.add(how)
 	var tiles = Kit.grid(3, 8)
 	tiles.set_meta("bounty_record", true)
 	tiles.add_child(_stat_tile(str(int(w.wins)), "WINS", Pal.TEXT, "skull"))
-	tiles.add_child(_stat_tile(str(int(w.streak)), "IN A ROW", Pal.ACCENT2, "flame"))
-	tiles.add_child(_stat_tile(Xp.fmt_int(w.coins), "COINS", Pal.ACCENT, "coin"))
-	add_child(tiles)
+	tiles.add_child(_stat_tile(str(int(w.streak)), "IN A ROW", AdventureScreen.on_paper(Pal.ACCENT2), "flame"))
+	tiles.add_child(_stat_tile(Xp.fmt_int(w.coins), "COINS", AdventureScreen.on_paper(Pal.ACCENT), "coin"))
+	rec.add(tiles)
+	add_child(rec)
 	var past = []
 	for r in w.history:
 		if r.week != w.current.week:
 			past.append(r)
 	if past.is_empty():
 		return
-	add_child(Kit.section_title("Past weeks"))
 	var g = Kit.grid(BOSS_COLS, 6)
 	g.set_meta("bounty_past", true)
 	for i in range(past.size() - 1, maxi(-1, past.size() - 1 - BOUNTY_WEEKS), -1):
 		g.add_child(BountyView._past_tile(past[i]))
-	add_child(g)
+	var shown = Kit.label("%d weeks" % g.get_child_count(), 12, Pal.TEXT, true)
+	var weeks = Kit.section("bounty_weeks", "PAST WEEKS", "calendar", Pal.BOUNTY, shown, Callable(), 8, 10)
+	weeks.add(g)
+	add_child(weeks)
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +188,7 @@ func _campaign(state: Dictionary) -> void:
 	# --- three numbers ----------------------------------------------------------
 	var tiles = Kit.grid(3, 8)
 	tiles.add_child(_stat_tile("%d/%d" % [mini(defeated, all_bosses.size()), all_bosses.size()], "BOSSES", Pal.TEXT, "skull"))
-	tiles.add_child(_stat_tile(Xp.fmt_int(c.totalDamage), "DAMAGE", Pal.ACCENT, "sword"))
+	tiles.add_child(_stat_tile(Xp.fmt_int(c.totalDamage), "DAMAGE", AdventureScreen.on_paper(Pal.ACCENT), "sword"))
 	if echo:
 		tiles.add_child(_stat_tile(str(defeated - all_bosses.size()), "ECHOES", Pal.TEXT, "repeat"))
 	else:
@@ -187,6 +199,12 @@ func _campaign(state: Dictionary) -> void:
 	add_child(Kit.section_title("Zones"))
 	for zi in range(zones.size()):
 		add_child(_zone_card(zi, zones[zi], c))
+
+
+## A colour for big pixel numbers and words on cream paper (2026-11-27 Workshop review: gold on paper looked
+## faded): darkened in its own hue until it reads, as ui/ink.gd does (gold becomes a deep gold, not khaki).
+static func on_paper(c: Color) -> Color:
+	return Ink.adjust(c, Pal.PANEL, Ink.MIN_PIXEL)
 
 
 ## A tile with a small icon, one big pixel number and a tiny caption.
@@ -341,14 +359,33 @@ func _quests(q: Dictionary) -> void:
 	top.add_child(_quest_ring("WEEKLY", q.weekly, "calendar"))
 	add_child(top)
 
+	# (2026-11-27 Workshop review: the groups lay on the bare planks under thin coloured headings) Each group
+	# is a window with its sign, the reset time pinned on a note, the missions as slips inside it.
 	if not q.get("yesterday", []).is_empty():
-		add_child(Kit.section_title("From yesterday"))
-		add_child(_quest_list(q.yesterday))
-	add_child(Kit.section_title("Daily", Kit.pill("clock", "Midnight", Pal.PANEL2, "Daily missions reset at midnight", Pal.TEXT, 11)))
-	add_child(_quest_list(q.daily))
+		add_child(_mission_section("adv_yesterday", "FROM YESTERDAY", "clock", Pal.GOOD, null, q.yesterday))
+	add_child(_mission_section("adv_daily", "DAILY", "sun", Pal.ACCENT2, _reset_note("clock", "Midnight", "Daily missions reset at midnight", false), q.daily))
 	var hint = "Last day!" if days_left == 0 else "%dd left" % days_left
-	add_child(Kit.section_title("Weekly", Kit.pill("calendar", hint, Pal.HP if days_left == 0 else Pal.PANEL2, "Weekly missions reset on Monday", Color.WHITE if days_left == 0 else Pal.TEXT, 11)))
-	add_child(_quest_list(q.weekly))
+	add_child(_mission_section("adv_weekly", "WEEKLY", "calendar", Pal.SECOND, _reset_note("calendar", hint, "Weekly missions reset on Monday", days_left == 0), q.weekly))
+
+
+## A group of missions as a window: its sign, `right` on a note, the missions as flat rows.
+func _mission_section(id: String, title: String, icon: String, color: Color, right: Control, list: Array) -> Control:
+	var sec = Kit.section(id, title, icon, color, right, Callable(), 6, 10)
+	if list.is_empty():
+		sec.add(Kit.muted("Nothing here right now.", 13))
+	else:
+		sec.add(_quest_list(list))
+	return sec
+
+
+## When a group of missions starts again, on a section's note: a small icon and the words in ink.
+func _reset_note(icon: String, text: String, tip: String, urgent: bool) -> Control:
+	var h = Kit.hbox(4)
+	h.mouse_filter = Control.MOUSE_FILTER_STOP
+	h.tooltip_text = tip
+	h.add_child(Kit.vcenter(Icons.rect(icon, 16)))
+	h.add_child(Kit.vcenter(Kit.label(text, 12, Pal.DANGER_DARK if urgent else Pal.TEXT, true)))
+	return h
 
 
 ## How many quests of a kind are done, as a ring with the count under it.
@@ -375,10 +412,11 @@ func _quest_ring(caption: String, list: Array, icon: String) -> Control:
 	return t
 
 
-## The shared compact quest rows, with the description and exact progress as a tooltip.
+## The shared quest rows (flat slips inside the group's window), with the description and exact progress
+## as a tooltip.
 func _quest_list(list: Array) -> Control:
-	# With the words under each title: a mission says what to aim for.
-	var box = Parts.quest_list(list, false)
+	# With a line under each title: a mission says what to aim for (a challenge shows its records as tiles).
+	var box = Parts.quest_list(list, false, true)
 	var settings = App.settings()
 	var rows = box.get_children()
 	for i in range(mini(rows.size(), list.size())):
@@ -474,12 +512,18 @@ func _trophies(state: Dictionary) -> void:
 		return
 	var todo = rows.filter(func(x): return x.u == null)
 	var got = rows.filter(func(x): return x.u != null)
+	# (2026-11-27 Workshop review) The two grids in windows with their signs, not loose on the planks.
 	if not todo.is_empty():
-		add_child(Kit.section_title("Next up"))
-		add_child(_trophy_grid(todo))
+		var nxt = Kit.section("trophies_next", "NEXT UP", "target", Pal.SECOND, Kit.label(str(todo.size()), 12, Pal.TEXT, true), Callable(), 8, 10)
+		nxt.add(_trophy_grid(todo))
+		add_child(nxt)
 	if not got.is_empty():
-		add_child(Kit.section_title("Earned", Kit.pill("check", str(got.size()), Pal.GOOD)))
-		add_child(_trophy_grid(got))
+		var got_note = Kit.hbox(4)
+		got_note.add_child(Kit.vcenter(Icons.rect("check", 16)))
+		got_note.add_child(Kit.vcenter(Kit.label(str(got.size()), 12, Pal.TEXT, true)))
+		var got_sec = Kit.section("trophies_earned", "EARNED", "trophy", Pal.ACCENT, got_note, Callable(), 8, 10)
+		got_sec.add(_trophy_grid(got))
+		add_child(got_sec)
 
 
 func _trophy_grid(rows: Array) -> Control:
@@ -516,7 +560,9 @@ static func trophy_plate(r: Dictionary, px: int) -> Control:
 	else:
 		plate.add_theme_stylebox_override("panel", PixBox.make(Pal.WELL, {"ring": Pal.with_alpha(tc, 0.55), "lip": 0, "inset": true, "pad_h": 0, "pad_v": 0}))
 	var icon_name = "question" if hidden else Icons.for_emoji(a.icon)
-	var ic = Icons.rect(icon_name, int(px * 0.6), null if earned else Pal.MUTED)
+	# (2026-11-27 Workshop review: a locked icon in brown ink vanished into the dark well) A pale tan touched
+	# by the tier's colour: a silhouette that reads, still clearly not earned.
+	var ic = Icons.rect(icon_name, int(px * 0.6), null if earned else tc.lerp(Pal.LINE, 0.6))
 	plate.add_child(Kit.center(ic))
 	var stack = MarginContainer.new()
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -61,14 +61,17 @@ func draw_tip(lines: Array, anchor_x: float) -> void:
 	if anchor_x > size.x * 0.55:
 		x = 40.0
 	var r = Rect2(x, 4.0, bw, bh)
-	draw_style_box(PixBox.make(Pal.INK, {"ring": Pal.BORDER, "lip": 0, "pad_h": 0, "pad_v": 0}), r.grow(2.0))
+	## (2026-11-27 review: dark ink on a near-black box could not be read. A tooltip in the Workshop look is a
+	## paper note: dark words on it, and it stands out from the dark well under it.)
+	draw_style_box(PixBox.material("note", {"pad_h": 0, "pad_v": 0, "shadow": 1}), r.grow(2.0))
 	var y = 4.0 + 5.0 + 11.0
 	for l in lines:
 		var tx = x + 8.0
 		if l.get("sw") != null:
+			draw_rect(Rect2(tx - 1.0, y - 10.0, 11.0, 11.0), Pal.OUTLINE)
 			draw_rect(Rect2(tx, y - 9.0, 9.0, 9.0), l.sw)
 			tx += 13.0
-		txt(tx, y, l.t, Pal.TEXT, 0, 11, l.get("bold", false))
+		txt(tx, y, l.t, Pal.INK if l.get("bold", false) else Pal.TEXT, 0, 11, l.get("bold", false))
 		y += 15.0
 
 ## The sunken well the plot sits in (grown a little past the plot rect).

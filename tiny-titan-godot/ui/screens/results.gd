@@ -17,6 +17,11 @@ extends Control
 ## mid-sequence the paused coroutine is simply dropped (a SceneTree timer would
 ## try to resume it on a freed instance). Each step also checks `_gen`, which
 ## a skip or close bumps, so a skipped reel never runs another step.
+##
+## The Workshop look (2026-11-27 review): the planks behind it, the title on a
+## wooden sign, the hero in a wooden window; on a dark filled card (a bounty, a
+## boss) the words are cream and the numbers gold; gold words and numbers on
+## paper are a deep gold (`_paper_ink`).
 
 signal finished
 
@@ -112,11 +117,20 @@ func _build() -> void:
 	base.set_anchors_preset(Control.PRESET_FULL_RECT)
 	base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(base)
-	# A soft glow behind the hero, in the theme's own world colours.
+	# (2026-11-27 Workshop review: the reel floated on a plain dark gradient) The page's own planks behind it,
+	# as behind every tab, and a soft warm glow over them behind the hero.
+	var planks = TextureRect.new()
+	planks.texture = PixBox.planks()
+	planks.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	planks.stretch_mode = TextureRect.STRETCH_TILE
+	planks.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	planks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	planks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(planks)
 	var bg = TextureRect.new()
 	var grad = Gradient.new()
-	grad.set_color(0, Pal.BG2.lightened(0.12))
-	grad.set_color(1, Pal.BG)
+	grad.set_color(0, Pal.with_alpha(Pal.ACCENT, 0.12))
+	grad.set_color(1, Pal.with_alpha(Pal.BG, 0.0))
 	var gt = GradientTexture2D.new()
 	gt.gradient = grad
 	gt.fill = GradientTexture2D.FILL_RADIAL
@@ -160,26 +174,36 @@ func _build() -> void:
 	add_child(_confetti)
 
 
+## The head of the reel. (2026-11-27 Workshop review: it floated on the dark with nothing round it) The title
+## on a wooden sign, the hero (and the replay's caption) in a wooden window, the XP big and bright on the
+## planks under it.
 func _build_head() -> Control:
 	var head = Kit.vbox(8)
 	head.alignment = BoxContainer.ALIGNMENT_CENTER
 	var scale_px = 2
-	if PixelFont.measure(_title).x * 2 > 380:
+	if PixelFont.measure(_title).x * 2 > 340:
 		scale_px = 1
-	var title = PixelFont.rect(_title.to_upper(), scale_px, Pal.ACCENT)
-	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	head.add_child(title)
-	Kit.pop(title, 1.15, 0.4)
+	var plate = PanelContainer.new()
+	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	plate.add_theme_stylebox_override("panel", Kit.sign_box(_xp_color))
+	plate.add_child(PixelFont.rect(_title.to_upper(), scale_px, Pal.CREAM))
+	head.add_child(plate)
+	Kit.pop(plate, 1.15, 0.4)
 
+	var stage = Kit.card(4, Callable(), 10)
+	stage.set_meta("reel_stage", true)
 	_hero = HeroView.new()
 	_hero.happy = true
 	_hero.forced_pose = "flex" if _leveled else "idle"
 	_hero.min_scale = 3
 	_hero.setup(App.state, App.profile(), App.loadout(), App.active_pet(), false)
 	_hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	head.add_child(_hero)
+	stage.add(_hero)
 	if not _replay.is_empty():
-		head.add_child(_caption())
+		stage.add(_caption())
+	head.add_child(stage)
 
 	# The XP as big as it fits: the number the whole reel is about.
 	var widest = PixelFont.measure("+%s XP" % Xp.fmt_int(_amount)).x
@@ -257,11 +281,18 @@ func _set_count(v: float) -> void:
 # The caption keeps its height, so nothing below it moves.
 # ---------------------------------------------------------------------------
 
+## A colour for words and pixel numbers on the reel's paper (its cards, the hero's window): darkened in its
+## own hue until it reads, as ui/ink.gd does when a word enters the tree; done here for the colours set
+## later or drawn into a picture (2026-11-27 Workshop review: gold on paper looked faded).
+static func _paper_ink(c: Color) -> Color:
+	return Ink.adjust(c, Pal.PANEL, Ink.MIN_PIXEL)
+
+
 func _caption() -> Control:
 	var box = Kit.vbox(0)
 	box.custom_minimum_size = Vector2(0, 40)
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_cap_a = Kit.clip("", 16, Pal.LIFT, true)
+	_cap_a = Kit.clip("", 16, _paper_ink(Pal.LIFT), true)
 	_cap_a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cap_b = Kit.clip("", 12, Pal.MUTED)
 	_cap_b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -678,7 +709,7 @@ func _build_card(ev: Dictionary, animate: bool):
 			var c = _rcard(Pal.ACCENT)
 			c.main.add_child(_kicker("COINS", Pal.ACCENT))
 			var h = Kit.hbox(8)
-			h.add_child(PixelFont.rect("+" + Xp.fmt_int(ev.amount), 3, Pal.ACCENT))
+			h.add_child(PixelFont.rect("+" + Xp.fmt_int(ev.amount), 3, _paper_ink(Pal.ACCENT)))
 			h.add_child(Kit.vcenter(Kit.label("for the shop", 14, null, true)))
 			c.main.add_child(h)
 			c.main.add_child(_sub("%s in your purse" % Xp.fmt_int(ev.balance)))
@@ -693,7 +724,7 @@ func _build_card(ev: Dictionary, animate: bool):
 			kick.add_child(_kicker("RANK UP", rc))
 			kick.add_child(Icons.rect(ev.discipline, 16))
 			c.main.add_child(kick)
-			c.main.add_child(Kit.rich("[color=%s]%s →[/color] [color=%s]%s[/color]" % [Kit.hex_of(Pal.MUTED), Kit.esc(Xp.RANKS[int(ev.from)].name), Kit.hex_of(rc), Kit.esc(rank.name)], 17, null))
+			c.main.add_child(Kit.rich("[color=%s]%s →[/color] [color=%s]%s[/color]" % [Kit.hex_of(Pal.MUTED), Kit.esc(Xp.RANKS[int(ev.from)].name), Kit.hex_of(_paper_ink(rc)), Kit.esc(rank.name)], 17, null))
 			c.panel.tooltip_text = "%s level %d reached." % [m.statName, int(rank.minLevel)]
 			return _finish(c, _icon_cell("medal", rc))
 		"stage":
@@ -737,7 +768,7 @@ func _build_card(ev: Dictionary, animate: bool):
 			var c = _rcard(Pal.ACCENT2)
 			c.main.add_child(_kicker("STREAK", Pal.ACCENT2))
 			var h = Kit.hbox(8)
-			h.add_child(PixelFont.rect(str(int(ev.current)), 3, Pal.ACCENT2))
+			h.add_child(PixelFont.rect(str(int(ev.current)), 3, _paper_ink(Pal.ACCENT2)))
 			h.add_child(Kit.vcenter(Kit.label("weeks in a row", 15, null, true)))
 			c.main.add_child(h)
 			c.panel.tooltip_text = "Consistency is the real superpower."
@@ -760,7 +791,8 @@ func _project_card(ev: Dictionary):
 	var kick = _kicker("PROJECT", Pal.CLIMB)
 	c.main.add_child(kick)
 	c.main.add_child(_title_l(Projects.title(p)))
-	var sub = Kit.para("", 13, Pal.with_alpha(Pal.TEXT, 0.8))
+	# (on the filled card of a send, and on the gold one it turns into: cream; else ink on paper)
+	var sub = Kit.para("", 13, Pal.CREAM if bool(ev.ask) else Pal.with_alpha(Pal.TEXT, 0.8))
 	c.main.add_child(sub)
 	var badge = ProjectsView.grade_badge(p, 44)
 	var card = _finish(c, badge)
@@ -813,7 +845,8 @@ func _boss_card(ev: Dictionary, animate: bool) -> Control:
 	var max_hp = maxf(1.0, float(ev.maxHp))
 	var hp = Kit.bar(float(ev.hpBefore) / max_hp, Pal.HP, 12)
 	c.main.add_child(Kit.pad(hp, 0, 2, 0, 2))
-	var foot = Kit.rich("", 13, Pal.with_alpha(Pal.TEXT, 0.75))
+	# (2026-11-27 Workshop review: dark ink on this dark card could not be seen) Cream words, gold numbers.
+	var foot = Kit.rich("", 13, Pal.CREAM)
 	c.main.add_child(foot)
 	if ev.weak:
 		c.panel.tooltip_text = "Super effective: its weakness hits for ×%s." % TTUtil.num_str(Campaign.WEAK_MULT)
@@ -856,15 +889,18 @@ func _bounty_card(ev: Dictionary, animate: bool) -> Control:
 	var max_hp = maxf(1.0, float(ev.maxHp))
 	var hp = Kit.bar(float(ev.hpBefore) / max_hp, Pal.BOUNTY, 12)
 	c.main.add_child(Kit.pad(hp, 0, 2, 0, 2))
-	var foot = Kit.rich("", 13, Pal.with_alpha(Pal.TEXT, 0.75))
+	# (2026-11-27 Workshop review: dark ink at 75% on deep violet could not be seen) Cream words on the dark
+	# card, the damage in gold.
+	var foot = Kit.rich("", 13, Pal.CREAM)
 	c.main.add_child(foot)
 	if ev.weak:
 		c.panel.tooltip_text = "Super effective: its weakness hits for ×%s." % TTUtil.num_str(Bounty.WEAK_MULT)
-	var hit_text = "[b]−%s[/b] · %s / %s HP" % [Xp.fmt_int(ev.damage), Xp.fmt_int(ev.hpAfter), Xp.fmt_int(ev.maxHp)]
+	var gold = Kit.hex_of(Pal.GOLD_TEXT)
+	var hit_text = "[b][color=%s]−%s[/color][/b] · %s / %s HP" % [gold, Xp.fmt_int(ev.damage), Xp.fmt_int(ev.hpAfter), Xp.fmt_int(ev.maxHp)]
 	var parts = {"ev": ev, "bv": bv, "kick_row": kick_row, "foot": foot, "panel": c.panel}
 	var card = _finish(c, bv)
 	if animate:
-		foot.text = "[b]−%s[/b] · %s / %s HP" % [Xp.fmt_int(ev.damage), Xp.fmt_int(ev.hpBefore), Xp.fmt_int(ev.maxHp)]
+		foot.text = "[b][color=%s]−%s[/color][/b] · %s / %s HP" % [gold, Xp.fmt_int(ev.damage), Xp.fmt_int(ev.hpBefore), Xp.fmt_int(ev.maxHp)]
 		var tw = card.create_tween()
 		tw.tween_interval(0.2)
 		tw.tween_callback(func():
@@ -892,9 +928,11 @@ func _bounty_down(parts: Dictionary, animate: bool) -> void:
 	parts.kick_row.add_child(Icons.rect("coin", 16))
 	parts.bv.set_dim(true)
 	parts.panel.accent(Pal.ACCENT, true)
-	var text = "[b][color=%s]+%s coins[/color][/b]" % [Kit.hex_of(Pal.ACCENT), Xp.fmt_int(ev.coins)]
+	# (the foot's own colour is cream: "· 4 in a row" was dark brown on the gold-brown card)
+	var text = "[b][color=%s]+%s coins[/color][/b]" % [Kit.hex_of(Pal.GOLD_TEXT), Xp.fmt_int(ev.coins)]
 	if int(ev.streak) >= 2:
 		text += " · %d in a row" % int(ev.streak)
+	parts.foot.add_theme_color_override("default_color", Pal.CREAM)
 	parts.foot.text = text
 	if animate:
 		Kit.pop(parts.panel, 1.04, 0.3)
@@ -904,14 +942,14 @@ func _bounty_down(parts: Dictionary, animate: bool) -> void:
 func _boss_foot(parts: Dictionary, hp: float, down: bool) -> void:
 	var ev = parts.ev
 	var boss = parts.boss
-	var text = "[b]−%s[/b] · " % Xp.fmt_int(ev.damage)
+	var text = "[b][color=%s]−%s[/color][/b] · " % [Kit.hex_of(Pal.GOLD_TEXT), Xp.fmt_int(ev.damage)]
 	if down:
 		var reward = ""
 		if boss.get("rewardItem") != null:
 			var it = Items.by_id(boss.rewardItem)
 			if it != null:
 				reward = " + %s" % Kit.esc(it.name)
-		text = "[b][color=%s]+%s XP%s[/color][/b]" % [Kit.hex_of(Pal.ACCENT), Xp.fmt_int(boss.xp), reward]
+		text = "[b][color=%s]+%s XP%s[/color][/b]" % [Kit.hex_of(Pal.GOLD_TEXT), Xp.fmt_int(boss.xp), reward]
 	else:
 		text += "%s / %s HP" % [Xp.fmt_int(hp), Xp.fmt_int(ev.maxHp)]
 	parts.foot.text = text
@@ -1142,16 +1180,15 @@ func _receipt_card(ev: Dictionary) -> Control:
 	var card = Kit.card(6, Callable(), 12)
 	card.accent(Pal.LIFT)
 	card.set_meta("reel_receipt", ev.parts.size())
-	var head = Kit.hbox(8)
-	head.add_child(_kicker("WORKOUT RECEIPT", Pal.LIFT))
-	head.add_child(Kit.spacer())
+	card.add(_kicker("WORKOUT RECEIPT", Pal.LIFT))
 	var bits = ["%d sets" % int(ev.sets)]
 	if float(ev.volKg) > 0.0:
 		bits.append("%s moved" % Fmt.fmt_weight(float(ev.volKg), App.weight_unit()))
 	if int(ev.durationSec) > 0:
 		bits.append(Fmt.fmt_duration_short(int(ev.durationSec)))
-	head.add_child(Kit.vcenter(Kit.clip(" · ".join(PackedStringArray(bits)), 12, Pal.MUTED, true)))
-	card.add(head)
+	# (2026-11-27 Workshop review: beside the tag these were cut off, "2,315 kg mo…") The numbers have a line of
+	# their own under it, as wide as the card.
+	card.add(Kit.clip(" · ".join(PackedStringArray(bits)), 13, Pal.TEXT, true))
 	var body = Kit.hbox(12)
 	var pic = PixelRect.make(Art.muscle_texture(App.state, App.profile(), ev.heat), 1.0)
 	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1185,5 +1222,5 @@ func _receipt_card(ev: Dictionary) -> Control:
 	body.add_child(rows)
 	card.add(body)
 	if int(ev.prs) > 0:
-		card.add(Kit.clip("%d record%s in this workout" % [int(ev.prs), "" if int(ev.prs) == 1 else "s"], 12, Pal.ACCENT, true))
+		card.add(Kit.clip("%d record%s in this workout" % [int(ev.prs), "" if int(ev.prs) == 1 else "s"], 12, _paper_ink(Pal.ACCENT), true))
 	return card

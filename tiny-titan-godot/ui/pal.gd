@@ -2,121 +2,128 @@ class_name Pal
 extends RefCounted
 ## The colour palette. One place, so the whole game stays consistent.
 ##
-## The colours come from a theme (Settings → Theme). Every theme is a vivid
-## world colour with pixel-art panels on top; boxes are colour-coded by what
-## they show (gold for level, red for the boss, a bright tile per discipline)
-## and each tab has its own accent.
+## THE WORKSHOP LOOK (2026-11-27, the user's pick of four mock-ups made after looking at the menus of idle
+## and pixel RPG games: "Let's go with #1"). A dark plank page; windows framed in wood round sand
+## parchment; rows on cream paper slips; solid bevelled keys in green, gold, red, orange, blue and wood with
+## cream words outlined in dark; icons in framed slots; dark wells for numbers being typed. Dark ink is the
+## text on paper, cream the text on wood, keys and the page (ui/ink.gd keeps every word readable on what it
+## sits on). It is the only theme: "theme" in the settings is ignored (the four old ones are gone).
 
 const THEMES = {
-	"arcade": {
-		"name": "Arcade",
-		"bg": "18244a", "bg2": "1f2e5e", "panel": "27386f", "panel2": "33488c", "border": "5f80dc", "line": "465da3",
-		"outline": "0b1126", "text": "fff6ea", "muted": "b6c2ea", "well": "111a3a",
-		"accent": "ffd23f", "accent_dark": "c98a12", "accent2": "ff9f1c",
-		"second": "3d8bff", "second_dark": "2459c4",
-	},
-	"ember": {
-		"name": "Ember",
-		"bg": "251a1c", "bg2": "302226", "panel": "3d2b2e", "panel2": "4f383a", "border": "c0794a", "line": "6e4c46",
-		"outline": "120b0c", "text": "fff3e6", "muted": "d6bcab", "well": "1a1214",
-		"accent": "ffb43a", "accent_dark": "c2741a", "accent2": "ff7a3c",
-		"second": "2fb7a3", "second_dark": "1c7d70",
-	},
-	"forest": {
-		"name": "Forest",
-		"bg": "10261f", "bg2": "163329", "panel": "1f4636", "panel2": "2a5c47", "border": "62c48e", "line": "3d7a5f",
-		"outline": "07140f", "text": "f4ffe9", "muted": "b5d6c0", "well": "0b1c16",
-		"accent": "ffd95a", "accent_dark": "b8962a", "accent2": "ff9f43",
-		"second": "39a0ed", "second_dark": "1f6fb0",
-	},
-	"slate": {
-		"name": "Slate",
-		"bg": "12161f", "bg2": "191f2b", "panel": "232c3d", "panel2": "2f3b52", "border": "6f83a8", "line": "43516d",
-		"outline": "07090d", "text": "f2f5fa", "muted": "a3afc4", "well": "0c1017",
-		"accent": "ffc83d", "accent_dark": "b88a1f", "accent2": "ff8a5c",
-		"second": "4f8dff", "second_dark": "2f5fc0",
+	"workshop": {
+		"name": "Workshop",
+		"bg": "2b1a12", "bg2": "1f110a", "panel": "eccd94", "panel2": "fbf1d8", "border": "7a5230", "line": "c9a46a",
+		"outline": "1f110a", "text": "3b2417", "muted": "76553a", "well": "2a170e",
+		"accent": "f2b632", "accent_dark": "c4871a", "accent2": "e8692e",
+		"second": "3f86d6", "second_dark": "2a5f9e",
 	},
 }
-const THEME_ORDER = ["arcade", "ember", "forest", "slate"]
+const THEME_ORDER = ["workshop"]
 
-static var theme_id: String = "arcade"
+static var theme_id: String = "workshop"
 
-## The world behind everything, and a slightly lighter version of it.
-static var BG = Color("18244a")
-static var BG2 = Color("1f2e5e")
-## Panels (cards) and a lighter panel for things sitting on a panel.
-static var PANEL = Color("27386f")
-static var PANEL2 = Color("33488c")
-## The bright inner edge of a panel, quiet divider lines, and the dark pixel outline.
-static var BORDER = Color("5f80dc")
-static var LINE = Color("465da3")
-static var OUTLINE = Color("0b1126")
-static var TEXT = Color("fff6ea")
-static var MUTED = Color("b6c2ea")
-static var ACCENT = Color("ffd23f")
-static var ACCENT_DARK = Color("c98a12")
-static var ACCENT2 = Color("ff9f1c")
-## The face of "secondary" buttons.
-static var SECOND = Color("3d8bff")
-static var SECOND_DARK = Color("2459c4")
-static var GOOD = Color("3ddc6d")
-static var GOOD_DARK = Color("1f9c48")
-static var DANGER = Color("ff4d6d")
-static var DANGER_DARK = Color("b82645")
-## Dark ink: text on bright buttons.
-static var INK = Color("151a30")
-## Sunken surfaces: text inputs and the track of progress bars.
-static var WELL = Color("111a3a")
-static var WELL_LINE = Color("0b1126")
+## The page behind everything (dark planks: PixBox.planks), and a darker shade of it.
+static var BG = Color("2b1a12")
+static var BG2 = Color("1f110a")
+## Sand parchment inside a wooden window, and the cream paper of a slip or card sitting on it.
+static var PANEL = Color("eccd94")
+static var PANEL2 = Color("fbf1d8")
+## Brown edges of paper, quiet divider lines on paper, and the dark rim round everything.
+static var BORDER = Color("7a5230")
+static var LINE = Color("c9a46a")
+static var OUTLINE = Color("1f110a")
+## Dark ink: words on paper. MUTED is the quieter brown ink.
+static var TEXT = Color("3b2417")
+static var MUTED = Color("76553a")
+## Gold (a reward, the one main action), its dark edge, and orange (a warning).
+static var ACCENT = Color("f2b632")
+static var ACCENT_DARK = Color("c4871a")
+static var ACCENT2 = Color("e8692e")
+## The face of "secondary" keys: blue.
+static var SECOND = Color("3f86d6")
+static var SECOND_DARK = Color("2a5f9e")
+static var GOOD = Color("5bb34a")
+static var GOOD_DARK = Color("3d8a33")
+static var DANGER = Color("d2493b")
+static var DANGER_DARK = Color("a12f25")
+## The darkest ink: words on bright keys and tags, the rim of everything.
+static var INK = Color("1f110a")
+## Cream: words on wood, on keys, on the page and in dark wells. GOLD_TEXT: gold numbers there.
+static var CREAM = Color("fff2cf")
+static var GOLD_TEXT = Color("ffd25e")
+## Sunken surfaces: text inputs, the track of a bar or a switch (dark; their words are CREAM).
+static var WELL = Color("2a170e")
+static var WELL_LINE = Color("1f110a")
 
-# Discipline colours: bright, and distinct from each other.
-static var LIFT = Color("ff6b35")
-static var CLIMB = Color("23c29b")
-static var RUN = Color("3d9bff")
-static var RIDE = Color("ffb21f")
+# Discipline colours: bright, and distinct from each other (the mock-up's).
+static var LIFT = Color("e8692e")
+static var CLIMB = Color("2fa37a")
+static var RUN = Color("3f86d6")
+static var RIDE = Color("e0a030")
 ## Misc activities (vest walks...): pink, apart from the four disciplines.
-static var MISC = Color("f272b8")
-## Reading: the colour of a page, apart from everything that is training.
-static var READ = Color("f1dfae")
-static var READ_DARK = Color("a8894f")
+static var MISC = Color("d65aa0")
+## Reading: the brown of a book's spine, apart from everything that is training.
+static var READ = Color("b07a3a")
+static var READ_DARK = Color("7d5222")
 ## Physical therapy (game/pt.gd): a fresh green-yellow, apart from the training colours.
-static var PT = Color("b9e769")
-static var PT_DARK = Color("6c9a2b")
+static var PT = Color("8cbf3f")
+static var PT_DARK = Color("5e8a22")
 
-static var HP = Color("ff4d6d")
+static var HP = Color("d2493b")
 ## The weekly bounty: violet, so it never reads as the campaign boss.
-static var BOUNTY = Color("a66bff")
+static var BOUNTY = Color("9b4de0")
 
 # The Realm (the RPG tab, RPG_PLAN.md): its own colour and one per school of
 # moves that has none yet. The other schools borrow what their training
-# already has (speed RUN, grip CLIMB, mind READ, flow PT: RpgUi.color). The same
-# in every theme, like PT and BOUNTY. Picked 2026-11-25 so that each is at
-# least 3:1 against PANEL and PANEL2 of all four themes (the lowest: GRIT 3.03
-# and PULL 3.08 on Forest's PANEL2) and far from each other and from the fixed
-# colours above (CIEDE2000; the nearest pairs: GRIT-MISC 11.2, PUSH-LIFT 12.0,
-# LEGS-PT 13.7, PULL-RUN 13.8, REALM-CLIMB 23.6; the old ones are 14 or more
-# apart). A change here should be checked the same way.
-## Push moves (chest, shoulders, arms): a light coral, between LIFT's orange
-## and the pink-red of HP / DANGER, lighter than both.
+# already has (speed RUN, grip CLIMB, mind READ, flow PT: RpgUi.color). Picked
+# 2026-11-25 far from each other and from the fixed colours above. As words on
+# paper they are darkened by Ink to stay readable.
+## Push moves (chest, shoulders, arms): a light coral.
 static var PUSH = Color("ff8e7c")
 ## Pull moves (back, arms): periwinkle, between RUN's blue and BOUNTY's violet.
 static var PULL = Color("939bff")
-## Legs moves: lemon yellow, greener and paler than RIDE's amber and the gold
-## of a reward (ACCENT), yellower than PT.
+## Legs moves: lemon yellow.
 static var LEGS = Color("f0e63c")
-## Grit (showing up): magenta, apart from MISC's pink and BOUNTY's violet.
+## Grit (showing up): magenta.
 static var GRIT = Color("ff60f6")
-## The Realm itself (its tab, its sections, ore): cyan, between CLIMB's teal
-## and RUN's blue. TAB_ACCENT.realm is the same value.
+## The Realm itself (its tab, its sections, ore): cyan. TAB_ACCENT.realm is the same value.
 static var REALM = Color("36d6f2")
 
-## What a colour means on the Hero tab (2026-11-24, "things blend together"):
-## gold (ACCENT) is a reward (XP, coins, the level, the chest, Claim) and the one
-## main action (Start workout), never a target or a frame for everything. A
-## section's colour is what it is about (LIFT for today's lifting, PT, CLIMB,
-## READ) or the tab it leads to (Pal.tab). GOOD means done, ACCENT2 a warning,
-## DANGER stuck or down. Sections are Kit.section (a band in Pal.band), rows
-## inside them Kit.row (a Pal.slot fill with a stripe).
+## What a colour means (2026-11-24, "things blend together"): gold (ACCENT) is a reward (XP, coins, the
+## level, the chest, Claim) and the one main action, never a target or a frame for everything. A section's
+## colour is what it is about (LIFT for today's lifting, PT, CLIMB, READ) or the tab it leads to (Pal.tab):
+## it colours the section's icon slot and its sign. GOOD means done, ACCENT2 a warning, DANGER stuck or down.
+
+## The materials of the Workshop look (PixBox.material): rings from the outside in, each a colour, a bevel
+## [lit top and left, shaded bottom and right] or four sides [top, left, bottom, right]; the fill; the
+## corner chamfer in art pixels. The same values as the approved mock-up.
+const MATERIALS = {
+	# A window: dark rim, a raised wood band, a dark inner line, then sand parchment.
+	"wood": {"rings": ["3a2216", ["e09656", "7d4322"], "b5683a", "b5683a", ["8a4a26", "c97a44"], "4a2a18", ["c29a5e", "f6e2b4"]], "fill": "eccd94", "cut": 2},
+	# The sign on a window's top edge, the tab bar's shelf and the top bar's board.
+	"plate": {"rings": ["1f110a", ["c27a46", "4e2814"], ["8f4f2c", "69371d"]], "fill": "7a4224", "cut": 1},
+	"board": {"rings": ["1f110a", ["d98a4e", "5a3018"], ["b5683a", "a85f34", "6b3a1c", "a85f34"]], "fill": "9c5630", "cut": 1},
+	# Paper: a row's slip, a card, a note pinned on wood, a quiet chip.
+	"slip": {"rings": ["7a5230", ["fffcf2", "d8bb84"]], "fill": "fbf1d8", "cut": 1},
+	"card": {"rings": ["3a2216", ["fffdf6", "d6b77e"]], "fill": "fff8e8", "cut": 1},
+	"note": {"rings": ["a8794a", ["b98d55", "f9e7bf"]], "fill": "e2bf82", "cut": 1},
+	"chip": {"rings": ["7a5230", ["f6dfae", "b48a52"]], "fill": "e6c690", "cut": 1},
+	# Sunken: a pick-one track, a well for numbers, a dark cap (the coins, a timer).
+	"track": {"rings": ["24140c", ["2a170e", "6b442c"]], "fill": "4a2e1e", "cut": 1},
+	"well": {"rings": ["1a0d07", ["120904", "5a3a26"]], "fill": "2a170e", "cut": 1},
+	"cap": {"rings": ["120804", ["0b0502", "5a3a26"]], "fill": "24140c", "cut": 2},
+	# An icon's framed slot (PixBox.slot puts a ring in the slot's colour after the rim).
+	"slot": {"rings": ["24140c", ["2a170e", "6b442c"]], "fill": "4a2e1e", "cut": 1},
+}
+## The solid keys: [rim, lit edge, shaded edge, face].
+const BLOCKS = {
+	"green": ["1f3d18", "8fd46f", "3d8a33", "5bb34a"], "gold": ["4a2e08", "ffe08a", "c4871a", "f2b632"],
+	"red": ["4a120c", "f28474", "a12f25", "d2493b"], "orange": ["4a1d08", "ffa46e", "b14a1a", "e8692e"],
+	"wood": ["3a2216", "e09a5c", "7d4322", "b5683a"], "purple": ["2c1145", "c58cff", "6e2fae", "9b4de0"],
+	"blue": ["0f2a4a", "86bdf2", "2a5f9e", "3f86d6"], "tan": ["6b4a2c", "fff8e2", "c9a46a", "efd9aa"],
+}
+## The shadow a window and a key cast on what is under them.
+const SHADOW = Color(0.03, 0.016, 0.008, 0.7)
 
 ## Each tab has its own accent, used for its headings, sub-tabs and tab-bar label,
 ## so the six areas of the game do not all look the same ("realm" is Pal.REALM;
@@ -133,9 +140,9 @@ const TAB_ACCENT = {
 static var current_tab: String = "home"
 
 
-## Switch theme. The caller rebuilds the UI afterwards (see main.gd).
-static func apply(id) -> void:
-	theme_id = str(id) if THEMES.has(str(id)) else "arcade"
+## The one theme (any id): kept so main.gd's start-up and an old save's "theme" still work.
+static func apply(_id = "workshop") -> void:
+	theme_id = "workshop"
 	var t = THEMES[theme_id]
 	BG = Color(t.bg)
 	BG2 = Color(t.bg2)
@@ -153,11 +160,11 @@ static func apply(id) -> void:
 	ACCENT2 = Color(t.accent2)
 	SECOND = Color(t.second)
 	SECOND_DARK = Color(t.second_dark)
-	INK = Color(t.outline).lightened(0.06)
+	INK = Color(t.outline)
 
 
-static func theme_name(id) -> String:
-	return THEMES.get(id, THEMES["arcade"]).name
+static func theme_name(_id = "") -> String:
+	return THEMES["workshop"].name
 
 
 static func tab(id) -> Color:
@@ -218,10 +225,9 @@ static func band(c: Color) -> Color:
 	return deep(c).lerp(c, 0.22)
 
 
-## The fill of a row inside a section (Kit.row): a little darker than the panel,
-## so tags and outlined chips stand out on it. Worked out on each call (themes).
+## The fill of a row inside a section (Kit.row): the cream paper of a slip.
 static func slot() -> Color:
-	return WELL.lerp(PANEL, 0.55)
+	return PANEL2
 
 
 ## A deep shade of `c`, for filling a box that is colour-coded by what it shows.

@@ -69,10 +69,14 @@ func _draw() -> void:
 			draw_rect(Rect2(bx, base_y - h + PXS, bw, h - PXS), col)
 			draw_rect(Rect2(bx, base_y - h + PXS, PXS, h - PXS), col.lightened(0.35))
 			draw_rect(Rect2(bx + bw - PXS, base_y - h + PXS, PXS, h - PXS), col.darkened(0.25))
-			draw_string(font, Vector2(x, base_y - h - 3.0), str(n), HORIZONTAL_ALIGNMENT_CENTER, cw, 11, Pal.TEXT)
+			## (2026-11-27 review: the count sits in the dark well, so it is cream; dark ink there was invisible)
+			draw_string(font, Vector2(x, base_y - h - 3.0), str(n), HORIZONTAL_ALIGNMENT_CENTER, cw, 11, Pal.CREAM)
+		if now:
+			_now_tag(x, cw)
+			continue
 		var parts = Dates.parse_date_key(str(w.week))
 		var label = "%d/%d" % [int(parts.month), int(parts.day)]
-		draw_string(ThemeDB.fallback_font, Vector2(x, H - 3.0), "now" if now else label, HORIZONTAL_ALIGNMENT_CENTER, cw, 10, Pal.ACCENT if now else Pal.MUTED)
+		draw_string(ThemeDB.fallback_font, Vector2(x, H - 3.0), label, HORIZONTAL_ALIGNMENT_CENTER, cw, 10, Pal.MUTED)
 	if _goal > 0:
 		var gy = floor((base_y - plot_h * float(_goal) / float(most)) / PXS) * PXS
 		var gx = 0.0
@@ -86,6 +90,22 @@ func _draw() -> void:
 		if _goal > 0:
 			said += " of %d" % _goal
 		draw_tip([{"t": "Week of %s" % Dates.format_date(str(hw.week)), "bold": true}, {"t": said}], (float(hover) + 0.5) * cw)
+
+
+## "now" under this week's column as a small gold tag with dark words (2026-11-27 review: gold words on the
+## parchment under the chart were faint).
+func _now_tag(x: float, cw: float) -> void:
+	var font = Kit.font_bold()
+	var tw = ceilf(font.get_string_size("now", HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x) + PXS * 4.0
+	if tw > cw - PXS:
+		# A narrow column: bold dark words, no tag (it would run into the next label).
+		draw_string(font, Vector2(x, H - 3.0), "now", HORIZONTAL_ALIGNMENT_CENTER, cw, 10, Pal.TEXT)
+		return
+	var r = Rect2(floor((x + (cw - tw) / 2.0) / PXS) * PXS, H - 14.0, tw, 13.0)
+	draw_rect(r, Pal.OUTLINE)
+	draw_rect(r.grow(-1.0), Pal.ACCENT)
+	draw_rect(Rect2(r.position.x + 1.0, r.position.y + 1.0, r.size.x - 2.0, 1.0), Pal.ACCENT.lightened(0.35))
+	draw_string(font, Vector2(r.position.x, H - 4.0), "now", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, Pal.INK)
 
 
 class Dots:

@@ -146,7 +146,16 @@ static func _badge(text: String, col: Color) -> Control:
 	plate.custom_minimum_size = Vector2(56, 44)
 	plate.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	plate.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(col), {"ring": col, "lip": 1, "lip_color": Pal.OUTLINE, "pad_h": 3, "pad_v": 2}))
-	plate.add_child(Kit.center(PixelFont.rect(text, JourneyScreen.fit_scale([text], 50, 2), Color.WHITE)))
+	if text == text.to_upper():
+		plate.add_child(Kit.center(PixelFont.rect(text, JourneyScreen.fit_scale([text], 50, 2), Color.WHITE)))
+		return plate
+	## A route's grade has a lower-case letter ("5.11a") and the pixel font has none: it said "5.11A",
+	## unlike the bars and the tiles (2026-11-27 review). Bold cream words with a dark outline, the largest
+	## size that fits the plate.
+	var px = 20
+	while px > 11 and Kit.font_bold().get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x + float(Kit.outline_for(px)) > 48.0:
+		px -= 1
+	plate.add_child(Kit.center(Kit.outlined(text, px)))
 	return plate
 
 
@@ -167,9 +176,11 @@ static func _detail(box: Control, r: Dictionary, routes: bool) -> void:
 	var n_s = int(r.sessions)
 	v.add_child(Kit.clip("%d %s over %d session%s" % [int(r.tries), "try" if int(r.tries) == 1 else "tries", n_s, "" if n_s == 1 else "s"], 15, null, true))
 	var chips = Kit.flow(6)
-	chips.add_child(Kit.icon_chip("bolt", "%d flashed" % int(r.flash), GradeLadder.flash_col() if int(r.flash) > 0 else Pal.PANEL2))
-	chips.add_child(Kit.icon_chip("check", "%d sent after tries" % int(r.send), GradeLadder.send_col() if int(r.send) > 0 else Pal.PANEL2))
-	chips.add_child(Kit.icon_chip("repeat", "%d didn't go" % int(r.attempt), GradeLadder.miss_col() if int(r.attempt) > 0 else Pal.PANEL2))
+	# (none of an outcome: the quiet brown tag of the Workshop, not a cream box with a black rim)
+	var none_col = SessionView.same_color()
+	chips.add_child(Kit.icon_chip("bolt", "%d flashed" % int(r.flash), GradeLadder.flash_col() if int(r.flash) > 0 else none_col))
+	chips.add_child(Kit.icon_chip("check", "%d sent after tries" % int(r.send), GradeLadder.send_col() if int(r.send) > 0 else none_col))
+	chips.add_child(Kit.icon_chip("repeat", "%d didn't go" % int(r.attempt), GradeLadder.miss_col() if int(r.attempt) > 0 else none_col))
 	v.add_child(chips)
 	var bits = []
 	if int(r.sent) > 0:

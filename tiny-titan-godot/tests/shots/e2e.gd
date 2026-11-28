@@ -31,8 +31,9 @@ func tap_card(text: String) -> void:
 	await ShotHelper.frames(tree, 3)
 	await ShotHelper.click(tree, c)
 	# (the Log tab drops presses for a moment after a tap that changed what is
-	# under the pointer: UiScreen.guard_shifts. A person is never that quick.)
-	await ShotHelper.wait(tree, 0.45)
+	# under the pointer: UiScreen.guard_shifts. A person is never that quick. With several walkthroughs at
+	# once the form can be built a few slow frames after the tap: a little longer.)
+	await ShotHelper.wait(tree, 0.9)
 
 
 func press(text: String) -> void:

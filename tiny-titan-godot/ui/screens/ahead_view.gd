@@ -20,17 +20,8 @@ const KEY_W = 88
 
 ## Days on the Hero tab's card (the sheet has Missions.AHEAD_DAYS).
 const STRIP_DAYS = 4
-
-
-static func _color(what: String) -> Color:
-	match what:
-		"lift":
-			return Pal.LIFT
-		"rest":
-			return Pal.SECOND
-		"":
-			return Pal.MUTED
-	return Pal.disc(what)
+## The most a day tile's icon and word take (four tiles fit a section's row with room to spare).
+const TILE_BODY = 80.0
 
 
 ## Is there anything to show: a day with a lift, a rest day or another activity?
@@ -47,20 +38,13 @@ static func card():
 	var c = Kit.section("ahead", "COMING UP", "calendar", Pal.BORDER, Icons.rect("chevron_right", 16), AheadView.open, 6, 10)
 	c.tooltip_text = "The next days, if each goes as planned"
 	c.set_meta("ahead_card", true)
+	## (2026-11-27 review: four tiny tags under muted weekdays, every lift day the same orange) A framed tile a
+	## day, as in the mock-up: the weekday on a strip in the day's colour (push coral, pull periwinkle, legs
+	## lemon, a run blue, a day off quiet tan), then its icon and its word.
 	var cells = Kit.hbox(6)
 	cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for a in days.slice(0, STRIP_DAYS):
-		var w = Missions.ahead_word(a)
-		var v = Kit.vbox(2)
-		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var wd = Kit.label(Dates.format_date(str(a.date), {"weekday": "short"}).to_upper(), 11, Pal.MUTED, true)
-		wd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		v.add_child(wd)
-		var tag = Kit.tag(str(w.text), _color(str(w.what)), true, 12)
-		tag.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		v.add_child(tag)
-		cells.add_child(v)
+		cells.add_child(_day_tile(a))
 	c.add(cells)
 	# Prep tomorrow (PrepView): its lifts the way you'll do them, with what you'll have.
 	var tomorrow = Dates.add_days(App.today, 1)
@@ -74,6 +58,79 @@ static func card():
 		pk.set_meta("prep_tomorrow", prepped)
 		c.add(pk)
 	return c
+
+
+## The colour and icon of a day of the look-ahead: [colour, icon]. A lift day by its kind (a split's push,
+## pull, legs; else the body area it is named after), a rest day the player called, a run or a climb, a day
+## with nothing planned (quiet tan).
+static func _day_look(a: Dictionary) -> Array:
+	var w = Missions.ahead_word(a)
+	match str(w.what):
+		"rest":
+			return [Pal.SECOND, "moon"]
+		"":
+			return [Color(Pal.BLOCKS["tan"][3]), "couch"]
+		"lift":
+			var plan = a.plan
+			var kind = str(plan.get("kind", ""))
+			if kind == "":
+				# (no split: the body area the day is named after)
+				var by_group = {"chest": "push", "shoulders": "push", "back": "pull", "legs": "legs"}
+				kind = str(by_group.get(str(plan.get("group", "")), ""))
+			match kind:
+				"push":
+					return [Pal.PUSH, "st_chest"]
+				"pull":
+					return [Pal.PULL, "st_back"]
+				"legs", "lower":
+					return [Pal.LEGS, "st_legs"]
+				"upper":
+					return [Pal.PUSH, "st_shoulders"]
+			var group = str(plan.get("group", ""))
+			return [Pal.LIFT, "st_arms" if group == "arms" else ("st_core" if group == "core" else "lift")]
+	var d = str(w.what)
+	return [Pal.disc(d), d if d != "misc" else "vest"]
+
+
+## One day of the Hero tab's strip: a small framed tile, the weekday ("SAT", a Label: tests read it) on a
+## strip in the day's colour, then the day's icon and its word ("Push", "Run", "Off").
+static func _day_tile(a: Dictionary) -> Control:
+	var w = Missions.ahead_word(a)
+	var lk = _day_look(a)
+	var col: Color = lk[0]
+	var t = PanelContainer.new()
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.set_meta("ahead_tile", str(a.date))
+	t.add_theme_stylebox_override("panel", PixBox.nine([Pal.OUTLINE, PixBox.bev(Pal.PANEL2.lightened(0.5), Pal.PANEL2.darkened(0.18))], Pal.PANEL2, {"cut": 1, "pad_h": 4, "pad_v": 4}))
+	var v = Kit.vbox(3)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var strip = PanelContainer.new()
+	strip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_theme_stylebox_override("panel", PixBox.nine([PixBox.bev(col.lightened(0.3), col.darkened(0.3))], col, {"cut": 0, "pad_h": 3, "pad_v": 2}))
+	var wd = Kit.tag_words(Dates.format_date(str(a.date), {"weekday": "short"}).to_upper(), 12, col)
+	wd.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	strip.add_child(wd)
+	v.add_child(strip)
+	var body = Kit.hbox(4)
+	body.alignment = BoxContainer.ALIGNMENT_CENTER
+	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var text = str(w.text)
+	# Four tiles share the row, so the icon and the word take at most TILE_BODY px: a short word beside the big
+	# icon, a long one ("Shoulder", "Full body") beside the small one, cut off with "…" past that.
+	var ww = ceilf(Kit.font_bold().get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x) + 1.0
+	var big_icon = ww <= TILE_BODY - 36.0
+	body.add_child(Kit.vcenter(Icons.rect(str(lk[1]), 32 if big_icon else 16)))
+	var word = Kit.clip(text, 14, Pal.TEXT, true)
+	word.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	word.custom_minimum_size = Vector2(minf(ww, TILE_BODY - (36.0 if big_icon else 20.0)), 0)
+	word.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	body.add_child(word)
+	v.add_child(body)
+	t.add_child(v)
+	return t
 
 
 ## What to aim for on a planned lift, in a few words.
@@ -133,16 +190,28 @@ static func _lift_row(l: Dictionary, wu: String) -> Control:
 		if main_word != "":
 			ways.add_child(Kit.tag(main_word, Pal.LIFT, true, 10))
 		if opts.size() > 1:
-			var orl = Kit.label("or", 10, Pal.MUTED, true)
-			orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			ways.add_child(orl)
+			# (2026-11-27 review: a plain lift has no word of its own, and an "or" with nothing before it read as
+			# broken: then the other ways stand alone)
+			if main_word != "":
+				var orl = Kit.label("or", 10, Pal.MUTED, true)
+				orl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				ways.add_child(orl)
 			for o in opts.slice(1):
 				var text = str(o.variation) if (str(o.move) == str(sp.move) and str(o.variation) != "") else Missions.way_word(o, str(sp.move))
-				ways.add_child(Kit.tag(text, Pal.with_alpha(Pal.SECOND, 0.85) if bool(o.new) else Pal.PANEL2, bool(o.new), 10))
+				ways.add_child(Kit.tag(text, Pal.SECOND if bool(o.new) else Pal.PANEL2, bool(o.new), 10))
 		left.add_child(ways)
 	row.add_child(left)
-	var aim = Kit.label(_aim(l, wu), 12, Pal.SECOND if (not opts.is_empty() and bool(opts[0].new)) else Pal.ACCENT, true)
-	aim.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	## (2026-11-27 review: gold words on cream, faint and against the colour rule) The aim on a small key like
+	## the Today rows' blocks: orange, blue for a first time.
+	var first_time = not opts.is_empty() and bool(opts[0].new)
+	var aim = PanelContainer.new()
+	aim.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	aim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	aim.add_theme_stylebox_override("panel", PixBox.block_set("blue" if first_time else "orange", 6, 2, 1)["normal"])
+	var al = Kit.outlined(_aim(l, wu), 12)
+	al.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	aim.add_child(al)
+	aim.set_meta("ahead_aim", al.text)
 	row.add_child(Kit.vcenter(aim))
 	c.add(row)
 	return c
@@ -161,7 +230,8 @@ static func _line(icon: String, text: String, color = null) -> Control:
 static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Control:
 	var plan = a.plan
 	var w = Missions.ahead_word(a)
-	var col = _color(str(w.what))
+	# (the same colour as the day's tile on the Hero tab: a push day coral, a pull day periwinkle...)
+	var col: Color = _day_look(a)[0]
 	var c = Kit.card(6, Callable(), 10)
 	c.accent(col)
 	c.set_meta("ahead_day", str(a.date))
@@ -262,8 +332,9 @@ static func _week_card(days: Array):
 	c.accent(Pal.LIFT)
 	c.set_meta("ahead_week", true)
 	c.tooltip_text = "Your weekly sets per muscle, and what counts"
-	c.add(Kit.label("IF IT GOES AS PLANNED · SETS A WEEK", 10, Pal.LIFT, true))
-	var cells = Kit.hbox(8)
+	c.add(Kit.sub_head("IF IT GOES AS PLANNED · SETS A WEEK", Pal.LIFT))
+	## (2026-11-27 review: six across, the names were cut to "Side de…") three to a line, two lines.
+	var cells = Kit.grid(3, 8)
 	cells.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for p in Dose.build_parts(st):
 		var t = plan.targets[p]

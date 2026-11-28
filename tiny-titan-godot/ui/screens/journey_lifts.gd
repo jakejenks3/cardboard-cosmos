@@ -50,13 +50,19 @@ static func build(parent: Control, st: Dictionary, rebuild: Callable) -> void:
 	var rows = LiftLibrary.rows(App.sessions())
 	var n_done = rows.filter(func(e): return e.st != null).size()
 
+	# (2026-11-27, the Workshop look: the search and the filters in one window, FIND A LIFT, with the count of
+	# lifts found on its sign's note; the lifts under it in a window per body part. All of it sat loose on the
+	# planks, the small "Sort" and "101 lifts" faint on the wood.)
+	var count = Kit.label("", 12, Pal.TEXT, true)
+	var finder = Kit.section("lift_filters", "FIND A LIFT", "search", Pal.LIFT, count, Callable(), 8, 10)
+
 	var search = Kit.input(st.q, "Search lifts, muscles, equipment")
 	search.clear_button_enabled = true
 	search.select_all_on_focus = false
 	search.tooltip_text = "Try \"cable\", \"curl\", \"glutes\" or part of a name"
-	parent.add_child(search)
+	finder.add(search)
 
-	parent.add_child(Kit.segmented([
+	finder.add(Kit.segmented([
 		{"value": "all", "label": "All %d" % rows.size()},
 		{"value": "mine", "label": "Done %d" % n_done},
 		{"value": "new", "label": "New to me"},
@@ -67,20 +73,24 @@ static func build(parent: Control, st: Dictionary, rebuild: Callable) -> void:
 		if p.id == "other" and not rows.any(func(e): return e.part == "other"):
 			continue
 		parts.add_child(LogWidgets.mini_chip(p.name, st.part == p.id, JourneyLifts._pick.bind(st, "part", p.id, rebuild), part_color(p.id)))
-	parent.add_child(parts)
+	finder.add(parts)
 
 	var equips = Kit.flow(5)
 	for q in LiftLibrary.EQUIPMENT:
 		equips.add_child(LogWidgets.mini_chip(q.name, st.equip == q.id, JourneyLifts._pick.bind(st, "equip", q.id, rebuild), Pal.TEXT))
-	parent.add_child(equips)
+	finder.add(equips)
 
-	var sorts = Kit.hbox(5)
-	sorts.add_child(Kit.vcenter(Kit.muted("Sort", 12)))
+	# (a flow, so the keys wrap rather than widen the window; the picked one orange, as every pick-one)
+	var sorts = Kit.flow(5)
+	sorts.add_child(Kit.vcenter(Kit.label("Sort", 12, Pal.MUTED, true)))
 	for o in LiftLibrary.SORTS:
-		sorts.add_child(LogWidgets.mini_chip(o.label, st.sort == o.value, JourneyLifts._set_st.bind(o.value, st, "sort", rebuild), Pal.ACCENT, 7))
-	parent.add_child(sorts)
+		sorts.add_child(LogWidgets.mini_chip(o.label, st.sort == o.value, JourneyLifts._set_st.bind(o.value, st, "sort", rebuild), Pal.ACCENT2, 7))
+	finder.add(sorts)
+	parent.add_child(finder)
 
-	var list = Kit.vbox(6)
+	# (as far apart as the page's own windows: a section's sign stands up above its frame)
+	var list = Kit.vbox(12)
+	list.set_meta("lift_count", count)
 	parent.add_child(list)
 	search.text_changed.connect(JourneyLifts._on_search.bind(st, list, rows))
 	_fill(list, rows, st)
@@ -111,37 +121,50 @@ static func _fill(list: Control, rows: Array, st: Dictionary) -> void:
 		list.remove_child(c)
 		c.queue_free()
 	var found = LiftLibrary.query(rows, st)
+	# How many were found: on the FIND A LIFT sign's note (it follows the search as it is typed).
+	var count = list.get_meta("lift_count") if list.has_meta("lift_count") else null
+	if count is Label and is_instance_valid(count):
+		count.text = "%d lift%s" % [found.size(), "" if found.size() == 1 else "s"]
 	if found.is_empty():
 		list.add_child(Kit.empty("info", "No lifts match", "Try fewer filters or a shorter search."))
 		return
-	list.add_child(JourneyScreen.caption("%d lift%s" % [found.size(), "" if found.size() == 1 else "s"], 11))
-	var grouped = str(st.sort) == "part"
-	var part = ""
+	if str(st.sort) == "part":
+		# A window a body part: its muscle on the sign, ringed in its colour, the count on the note.
+		var part = ""
+		var sec = null
+		for e in found:
+			if sec == null or e.part != part:
+				part = e.part
+				var n = found.filter(func(x): return x.part == part).size()
+				sec = Kit.section("lifts_" + str(part), LiftLibrary.part_name(part).to_upper(), TodayView.part_icon(str(part)), part_color(part), Kit.label(str(n), 12, Pal.TEXT, true), Callable(), 6, 10)
+				list.add_child(sec)
+			sec.add(_row(e, rows))
+		return
+	# Sorted another way: one window, named by the sort.
+	var title = "LIFTS"
+	for o in LiftLibrary.SORTS:
+		if str(o.value) == str(st.sort):
+			title = str(o.label).to_upper()
+	var whole = Kit.section("lifts_list", title, "lift", Pal.LIFT, Kit.label(str(found.size()), 12, Pal.TEXT, true), Callable(), 6, 10)
 	for e in found:
-		if grouped and e.part != part:
-			part = e.part
-			var n = found.filter(func(x): return x.part == part).size()
-			var head = Kit.hbox(8)
-			head.add_child(Kit.tag(LiftLibrary.part_name(part), part_color(part), true, 13))
-			head.add_child(Kit.vcenter(Kit.muted(str(n), 12)))
-			list.add_child(Kit.pad(head, 0, 6, 0, 0))
-		list.add_child(_row(e, rows))
+		whole.add(_row(e, rows))
+	list.add_child(whole)
 
 
-## One lift: a bar in its body-part colour, name and equipment, your best on the right.
+## One lift: an icon slot in its body-part colour, name and equipment, your best on the right.
+## (2026-11-27: a paper slip in its body part's window; the slot shows that muscle's icon, as the Today rows do.)
 static func _row(e: Dictionary, rows: Array) -> Card:
 	var wu = App.weight_unit()
-	var c = Kit.card(0, JourneyLifts.open_detail.bind(e, rows), 8)
+	var c = Kit.row(JourneyLifts.open_detail.bind(e, rows), part_color(e.part), null, 8, 0)
 	var h = _ig(Kit.hbox(10))
-	var bar = Panel.new()
-	bar.add_theme_stylebox_override("panel", Kit.sbox(part_color(e.part), 3, null, 0, 0, 0))
-	bar.custom_minimum_size = Vector2(6, 34)
-	h.add_child(_ig(bar))
+	# The lift in a framed slot ringed in its body part's colour (it was a bar down the left edge).
+	h.add_child(_ig(Kit.badge(TodayView.part_icon(str(e.part)), part_color(e.part), 20)))
 	var v = _ig(Kit.vbox(0))
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var name_row = _ig(Kit.hbox(6))
-	name_row.add_child(Kit.clip_fit(e.name, 14, null, true, 230.0))
+	# (a squeeze row: in the window a long name is cut off with "…" rather than make the row too wide)
+	var name_row = Kit.squeeze(6)
+	name_row.add_child(Kit.soft_name(e.name, 14, null, true, 230.0, 60.0))
 	if is_pt(e):
 		name_row.add_child(Kit.vcenter(SessionView.pt_tag()))
 	v.add_child(name_row)
@@ -177,7 +200,8 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 			h.add_child(Kit.vcenter(sb))
 		var r = _ig(Kit.vbox(0))
 		r.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var best = Kit.label(best_text(st, wu), 13, Pal.ACCENT, true)
+		# (a deep gold: bright gold words on the cream slip read pale)
+		var best = Kit.label(best_text(st, wu), 13, JourneyScreen.on_paper(Pal.ACCENT), true)
 		best.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		r.add_child(best)
 		var when = Kit.label("%d× · %s" % [int(st.count), Dates.relative_day(st.last, App.today)], 11, Pal.MUTED)
@@ -289,7 +313,8 @@ static func _pt_block(holder: Control, lift: String) -> void:
 			var goal = Kit.hbox(6)
 			goal.add_child(Kit.vcenter(Kit.clip("Aim for", 13, Pal.MUTED)))
 			goal.add_child(Kit.vcenter(Kit.icon_button("minus", JourneyLifts._set_goal.bind(holder, lift, int(mine.perWeek) - 1), "One day fewer", 28)))
-			goal.add_child(Kit.vcenter(PixelFont.rect(str(int(mine.perWeek)), 2, Pal.PT)))
+			# (a deep green, no shadow: light green pixel digits on the cream card read pale)
+			goal.add_child(Kit.vcenter(PixelFont.rect(str(int(mine.perWeek)), 2, JourneyScreen.on_paper(Pal.PT), false)))
 			goal.add_child(Kit.vcenter(Kit.icon_button("plus", JourneyLifts._set_goal.bind(holder, lift, int(mine.perWeek) + 1), "One day more", 28)))
 			goal.add_child(Kit.vcenter(Kit.clip(PtView.aim_words(int(mine.perWeek)), 13, Pal.MUTED)))
 			c.add(goal)
@@ -491,7 +516,8 @@ static func open_detail(e: Dictionary, rows: Array, opts: Dictionary = {}) -> vo
 		cur = history[0]
 
 	var tags = Kit.flow(6)
-	tags.add_child(Kit.tag(LiftLibrary.part_name(e.part), part_color(e.part), true, 12))
+	# (the body part with its muscle's icon: a plain "Back" tag at the top left read like a Back key, 2026-11-27)
+	tags.add_child(Kit.icon_chip(TodayView.part_icon(str(e.part)), LiftLibrary.part_name(e.part), part_color(e.part), "The muscle it works most"))
 	if e.own:
 		tags.add_child(Kit.tag("Your own", Pal.PANEL2, false, 12))
 	if Pt.is_pt(App.pt(), lift) or (pending is Dictionary and bool(pending.get("pt", false))):
@@ -687,7 +713,8 @@ static func _variation_chips(vf: Control, sheet: Sheet, e: Dictionary, rows: Arr
 			hidden += 1
 			continue
 		var said2 = str(d.variation) if str(d.variation) != "" else "No variation"
-		var chip = LogWidgets.mini_chip(said2, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.SECOND if d.name == pick.name else Pal.MUTED)
+		# (the page's own one an orange key, as every pick-one of the game: it was pale blue, the old look)
+		var chip = LogWidgets.mini_chip(said2, d.name == pick.name, JourneyLifts._switch.bind(sheet, e, rows, str(d.variation)), Pal.ACCENT2 if d.name == pick.name else Pal.MUTED)
 		chip.tooltip_text = "Not done yet"
 		if d.name != pick.name:
 			chip.modulate.a = 0.75

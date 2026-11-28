@@ -36,15 +36,15 @@ static func build(parent: Control, st: Dictionary, rebuild: Callable) -> void:
 	if trend_card != null:
 		parent.add_child(trend_card)
 
+	# (2026-11-27, the Workshop look: each part below is a window with its title on the sign, the check-ins as
+	# paper slips in one; they were bare blue headings over cards that sat loose on the planks.)
 	# --- then & now photos ----------------------------------------------------------------
 	if not with_photos.is_empty():
-		parent.add_child(Kit.section_title("Then & now"))
 		parent.add_child(_compare(st, angle, with_angle, wu, rebuild))
 
 	# --- trends -----------------------------------------------------------------------
 	if weights.size() >= 2:
-		parent.add_child(Kit.section_title("Weight"))
-		var wc = Kit.card(8)
+		var wc = Kit.section("weight", "WEIGHT", "scale", Pal.ACCENT, null, Callable(), 8, 10)
 		var trend = Charts.moving_average(weights, 5) if weights.size() >= 5 else []
 		wc.add(Charts.line(weights, Pal.ACCENT, func(v): return "%s %s" % [Fmt.to_fixed(v, 1), wu], trend))
 		if not trend.is_empty():
@@ -53,18 +53,17 @@ static func build(parent: Control, st: Dictionary, rebuild: Callable) -> void:
 			wc.add(lg)
 		parent.add_child(wc)
 	if fats.size() >= 2:
-		parent.add_child(Kit.section_title("Body fat"))
-		var fc = Kit.card()
+		var fc = Kit.section("body_fat", "BODY FAT", "body", Pal.RUN, null, Callable(), 8, 10)
 		fc.add(Charts.line(fats, Pal.RUN, func(v): return Fmt.to_fixed(v, 1) + "%"))
 		parent.add_child(fc)
 
 	# --- every check-in, newest first: date, weight, little photos ---------------------------
-	parent.add_child(Kit.section_title("Check-ins"))
-	var list = Kit.vbox(6)
+	var n = entries.size()
+	var cs = Kit.section("checkins", "CHECK-INS", "calendar", Pal.BORDER, Kit.label("%d check-in%s" % [n, "" if n == 1 else "s"], 12, Pal.TEXT, true), Callable(), 6, 10)
 	var body_xp = App.state.bodyXp
 	for i in range(entries.size() - 1, -1, -1):
-		list.add_child(_entry_row(entries[i], int(body_xp.get(entries[i].id, 0)), wu))
-	parent.add_child(list)
+		cs.add(_entry_row(entries[i], int(body_xp.get(entries[i].id, 0)), wu))
+	parent.add_child(cs)
 
 
 ## Current weight in big pixel digits, with chips for the change, body fat and the
@@ -138,11 +137,13 @@ static func _pick(index: int, ids: Array, which: String, st: Dictionary, rebuild
 	rebuild.call()
 
 
+## The then-and-now photos: a window under a THEN & NOW sign (2026-11-27; it was a bare heading on the planks).
 static func _compare(st: Dictionary, angle: String, with_angle: Array, wu: String, rebuild: Callable) -> Control:
-	var card = Kit.card(10)
+	var card = Kit.section("photos", "THEN & NOW", "camera", Pal.GOOD, null, Callable(), 10, 10)
 	var angles = Kit.hbox(6)
 	for a in TT.PHOTO_ANGLES:
-		var ch = Kit.chip(TT.PHOTO_ANGLE_NAMES[a], a == angle, _set_angle.bind(a, st, rebuild))
+		# (the picked angle an orange key, as every pick-one of the game)
+		var ch = Kit.chip(TT.PHOTO_ANGLE_NAMES[a], a == angle, _set_angle.bind(a, st, rebuild), Pal.ACCENT2)
 		ch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		angles.add_child(ch)
 	card.add(angles)
@@ -174,7 +175,8 @@ static func _compare(st: Dictionary, angle: String, with_angle: Array, wu: Strin
 		frame.add_child(PhotoThumb.make(pid, _viewer.bind(pid)))
 		cell.add_child(frame)
 		var tag_row = Kit.hbox(6)
-		tag_row.add_child(Kit.vcenter(PixelFont.rect("THEN" if i == 0 else "NOW", 2, Pal.MUTED if i == 0 else Pal.ACCENT)))
+		# (THEN and NOW as tags in their frame's colour: brown and gold pixel letters on parchment read washed out)
+		tag_row.add_child(Kit.vcenter(Kit.tag("THEN" if i == 0 else "NOW", Pal.BORDER if i == 0 else Pal.ACCENT, i == 1, 12)))
 		if TTUtil.truthy(e.get("weightKg")):
 			tag_row.add_child(Kit.spacer())
 			tag_row.add_child(Kit.vcenter(Kit.label(Fmt.fmt_weight(e.weightKg, wu), 13, Pal.TEXT, true)))
@@ -206,9 +208,9 @@ static func _compare(st: Dictionary, angle: String, with_angle: Array, wu: Strin
 	return card
 
 
-## One check-in on one line: date, weight, little photos, XP. Tap to edit it.
+## One check-in on one line, a paper slip in the CHECK-INS window: date, weight, little photos, XP. Tap to edit it.
 static func _entry_row(e: Dictionary, xp: int, wu: String) -> Control:
-	var card = Kit.card(4, App.open_log.bind("body", e.id), 8)
+	var card = Kit.row(App.open_log.bind("body", e.id), Pal.BORDER, null, 8, 4)
 	card.set_meta("checkin", e.id)
 	var row = Kit.hbox(10)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE

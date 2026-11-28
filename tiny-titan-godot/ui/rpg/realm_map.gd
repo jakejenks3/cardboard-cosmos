@@ -6,7 +6,7 @@ extends RefCounted
 ##
 ## Three sections, top to bottom:
 ##   map_hunts   the DAILY HUNT row (today's pack as small sprites, the day's rule, the two schools the pack is
-##               weak to, "WON" once won; a tap opens the prep sheet; after the day's first win a "Prize" key
+##               weak to, a small Fight key, "WON" once won; a tap opens the prep sheet; after the day's first win a "Prize" key
 ##               opens the three prizes to pick one from) and the WEEKLY RIVAL row when there is a bounty
 ##               monster this week.
 ##   map_road    the eight regions as numbered keys (a locked one dimmed with a lock; the chosen one is kept in
@@ -209,6 +209,15 @@ static func _end_slot(c: Control, w: int = 72) -> Control:
 	return cc
 
 
+## The call to action at the end of a hunt, rival or gauntlet row: a small solid key that opens the fight's
+## sheet, as a tap on the row does. (Workshop look, 2026-11-27: it was a flat "FIGHT" tag that did not look
+## tappable beside the bevelled Go key of "Next on the road".)
+static func _fight_end(what: Dictionary, variant: String, anchor: String) -> Control:
+	var b = Kit.button("Fight", variant, open_prep.bind(what), "sm")
+	b.set_meta("anchor_id", anchor)
+	return _finger(b)
+
+
 ## The schools a pack is weak to, as icons after the word.
 ## `named` false: the schools as icons alone (when the line has something else to say after them).
 static func _weak_line(weak: Array, extra: String = "", named: bool = true) -> Control:
@@ -329,7 +338,7 @@ static func _gauntlet_row(gt: Dictionary, rpg: Dictionary) -> Control:
 	mid.add_child(top)
 	mid.add_child(Kit.clip("Your HP carries over · one prize a week", 12, Pal.MUTED))
 	h.add_child(mid)
-	h.add_child(Kit.vcenter(_end_slot(Kit.tag("WON", Pal.GOOD) if won else Kit.tag("FIGHT", Pal.ACCENT2))))
+	h.add_child(Kit.vcenter(_end_slot(Kit.tag("WON", Pal.GOOD) if won else _fight_end(what, "orange", "map_gauntlet_fight"))))
 	row.add(h)
 	return row
 
@@ -379,7 +388,7 @@ static func _hunt_row(hunt: Dictionary, rpg: Dictionary, today: String) -> Contr
 	elif won:
 		h.add_child(Kit.vcenter(_end_slot(Kit.tag("WON", Pal.GOOD))))
 	else:
-		h.add_child(Kit.vcenter(_end_slot(Kit.tag("FIGHT", col))))
+		h.add_child(Kit.vcenter(_end_slot(_fight_end(what, "danger", "map_hunt_fight"))))
 	row.add(h)
 	return row
 
@@ -412,7 +421,7 @@ static func _rival_row(rival: Dictionary, rpg: Dictionary) -> Control:
 	mid.add_child(top)
 	mid.add_child(_weak_line(weak, " · this week"))
 	h.add_child(mid)
-	h.add_child(Kit.vcenter(_end_slot(Kit.tag("WON", Pal.GOOD) if won else Kit.tag("FIGHT", Pal.BOUNTY))))
+	h.add_child(Kit.vcenter(_end_slot(Kit.tag("WON", Pal.GOOD) if won else _fight_end(what, "purple", "map_rival_fight"))))
 	row.add(h)
 	return row
 

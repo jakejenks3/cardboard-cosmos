@@ -237,7 +237,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	if cap != null:
 		ShotHelper.reveal(cap)
 		await ShotHelper.wait(tree, 0.4)
-	check(ShotHelper.all_text(main).contains("23, 22, 25 @ 15 lb"), "and the aim is one more rep, not more weight")
+	# (the row's orange block: the reps big, "AIM · L+R @ 15 lb" under them; 2026-11-27)
+	var said_all = ShotHelper.all_text(main)
+	check(said_all.contains("23, 22, 25") and said_all.contains("AIM · L+R @ 15 lb"), "and the aim is one more rep, not more weight")
 	await ShotHelper.snap(tree, "sides_6_today")
 
 	print("SIDES WALK: %d failed" % fails)

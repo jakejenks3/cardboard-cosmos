@@ -286,7 +286,9 @@ static func report_card() -> Control:
 		total += rep[g[0]].size()
 	if total == 0:
 		return null
-	var sec = Kit.section("lift_report", "LIFT REPORT · 4 WEEKS", "trophy", Pal.tab("journey"), null, Callable(), 6, 10)
+	## (the lifting colour, as SETS A WEEK above it: the Journey tab's blue gave the only navy plate and blue
+	## frame among the Workshop sections; 2026-11-27 review)
+	var sec = Kit.section("lift_report", "LIFT REPORT · 4 WEEKS", "trophy", Pal.LIFT, null, Callable(), 6, 10)
 	sec.add(Kit.para("Each lift's best of the last 4 weeks against the 4 before (estimated one-rep max, or reps, or the hold).", 11, Pal.MUTED))
 	for g in REPORT_GROUPS:
 		var rows = rep[g[0]]

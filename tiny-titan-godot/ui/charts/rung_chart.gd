@@ -109,7 +109,23 @@ func _bar_color(r: Dictionary) -> Color:
 			return Pal.GOOD
 		-1:
 			return Pal.ACCENT2
-	return Pal.with_alpha(Pal.MUTED, 0.7)
+	return same_color()
+
+
+## A day that matched the one before: a light grey-tan, so it stands off the dark well (it was brown ink at
+## 70%, which sank into it; 2026-11-27 review). The legends under the chart use it too.
+static func same_color() -> Color:
+	return Pal.MUTED.lightened(0.3)
+
+
+## Words drawn inside the dark well (2026-11-27 review: parchment ink there was dim brown on near-black):
+## cream for what matters, cream at `quiet` for the rest, gold for records, a light blue for the aim.
+static func well_ink(quiet: float = 1.0) -> Color:
+	return Pal.with_alpha(Pal.CREAM, quiet)
+
+
+static func aim_color() -> Color:
+	return Pal.SECOND.lightened(0.3)
 
 
 func _draw() -> void:
@@ -131,13 +147,14 @@ func _draw() -> void:
 		var left = _bars[start].position.x - 1.0
 		var right = _bars[end].end.x + 1.0
 		var band = Rect2(left, PAD_T - 2.0, right - left, H - PAD_B - PAD_T + 2.0)
-		draw_rect(band, Pal.with_alpha(Pal.TEXT, 0.05 if band_i % 2 == 0 else 0.1))
+		## (light shading: dark ink at 5-10% did not show on the dark well)
+		draw_rect(band, Pal.with_alpha(Pal.CREAM, 0.04 if band_i % 2 == 0 else 0.08))
 		var is_next = start >= rows.size()
 		var up = start > 0 and (is_next or bool(rows[start].rung_up))
 		var label = str(fmt_rung.call(rung))
-		var col = Pal.ACCENT if up else Pal.MUTED
+		var col = Pal.GOLD_TEXT if up else well_ink(0.75)
 		if is_next:
-			col = Pal.SECOND
+			col = aim_color()
 		var lw = text_w(label, 10, true) + (9.0 if up else 0.0)
 		var prio = 3 if up else (2 if end == n - 1 else 1)
 		# Over its band from the left, else ending at its band's right edge.
@@ -174,10 +191,11 @@ func _draw() -> void:
 				# A best ever: a gold top on its bar.
 				draw_rect(Rect2(r.position.x, r.position.y, r.size.x, minf(4.0, r.size.y)), Pal.ACCENT)
 			if i == rows.size() - 1:
-				draw_rect(r.grow(1.0), Pal.OUTLINE, false, 1.0)
+				# The latest workout: a light ring (a dark one vanished on the well).
+				draw_rect(r.grow(1.0), well_ink(0.5), false, 1.0)
 			var rep_rec = not (row.get("rep_records", []) as Array).is_empty()
 			if r.size.x >= 11.0:
-				var ncol = Pal.ACCENT if rep_rec else (Pal.TEXT if int(row.beat) == 1 or bool(row.record) else Pal.MUTED)
+				var ncol = Pal.GOLD_TEXT if rep_rec else (well_ink() if int(row.beat) == 1 or bool(row.record) else well_ink(0.6))
 				txt(r.get_center().x, r.position.y - 3.0, str(int(row.key.reps)), ncol, 1, 10, true)
 			if rep_rec:
 				# A rep record: a gold star over the bar's number.
@@ -185,17 +203,29 @@ func _draw() -> void:
 		else:
 			# Next time's aim: a dashed outline.
 			var pts = PackedVector2Array([r.position + Vector2(0, r.size.y), r.position, Vector2(r.end.x, r.position.y), r.end])
-			dashed(pts, Pal.SECOND, 2.0, 4.0, 3.0)
+			dashed(pts, aim_color(), 2.0, 4.0, 3.0)
 			if r.size.x >= 11.0:
-				txt(r.get_center().x, r.position.y - 3.0, str(int(next.reps)), Pal.SECOND, 1, 10, true)
-	# The first and last dates under the bars, and "next" under the aim.
-	txt(_bars[0].position.x, H - 6.0, Dates.format_date(str(rows[0].date), {"month": "short", "day": "numeric"}), Pal.MUTED, 0, 10)
+				txt(r.get_center().x, r.position.y - 3.0, str(int(next.reps)), aim_color(), 1, 10, true)
+	# "next" under the aim, then the first and last dates under the bars. The dates keep clear of "next" and
+	# of each other (2026-11-27 review: the last date ran into "next": "Nov 2?next").
+	var next_left = INF
+	if next != null:
+		var nw = text_w("next", 10, true)
+		var ncx = minf(_bars[n - 1].get_center().x, size.x - PAD_X - nw / 2.0)
+		txt(ncx, H - 6.0, "next", aim_color(), 1, 10, true)
+		next_left = ncx - nw / 2.0
+	var first_s = Dates.format_date(str(rows[0].date), {"month": "short", "day": "numeric"})
+	var first_w = text_w(first_s, 10)
+	var first_x = _bars[0].position.x
+	if first_x + first_w > next_left - 5.0:
+		first_x = maxf(PAD_X, next_left - 5.0 - first_w)
+	txt(first_x, H - 6.0, first_s, well_ink(0.7), 0, 10)
 	var last_i = rows.size() - 1
 	if last_i > 0:
-		var last_x = _bars[last_i].end.x
-		txt(last_x, H - 6.0, Dates.format_date(str(rows[last_i].date), {"month": "short", "day": "numeric"}), Pal.MUTED, 2, 10)
-	if next != null:
-		txt(_bars[n - 1].get_center().x, H - 6.0, "next", Pal.SECOND, 1, 10, true)
+		var last_s = Dates.format_date(str(rows[last_i].date), {"month": "short", "day": "numeric"})
+		var last_end = minf(_bars[last_i].end.x, next_left - 5.0)
+		if last_end - text_w(last_s, 10) > first_x + first_w + 6.0:
+			txt(last_end, H - 6.0, last_s, well_ink(0.7), 2, 10)
 	if hover >= 0 and hover < rows.size() and hover < tips.size():
 		var row = rows[hover]
 		draw_tip([{"t": Dates.format_date(str(row.date)), "bold": true}, {"t": str(tips[hover])}], _bars[hover].get_center().x)

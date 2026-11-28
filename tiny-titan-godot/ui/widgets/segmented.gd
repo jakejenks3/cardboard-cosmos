@@ -25,7 +25,7 @@ func setup(options: Array, current, color = null, pills: bool = false) -> void:
 	if pills:
 		add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	else:
-		add_theme_stylebox_override("panel", PixBox.well(4, 4, null))
+		add_theme_stylebox_override("panel", PixBox.material("track", {"pad_h": 4, "pad_v": 4}))
 	if _row != null:
 		remove_child(_row)
 		_row.queue_free()
@@ -64,21 +64,19 @@ func _pick(v) -> void:
 func _restyle() -> void:
 	var col = _color
 	if col == null:
-		col = Pal.tab_accent() if _pills else Pal.ACCENT
+		col = Pal.ACCENT2
 	for i in range(_buttons.size()):
 		var b = _buttons[i]
 		var on = _options[i].value == value
-		var fg = Pal.INK if on else Pal.TEXT
-		if on:
-			var looks = PixBox.button_set(col, col.darkened(0.42), 10, 5, 1, null)
+		if on or _pills:
+			# The chosen one a key in its colour; sub-tabs not chosen are tan keys.
+			var face = col if on else "tan"
+			var looks = PixBox.block_set(face, 10, 5, 1)
 			for k in ["normal", "hover", "pressed"]:
-				b.add_theme_stylebox_override(k, looks["normal"])
-		elif _pills:
-			var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 10, 5, 1, Pal.LINE)
-			for k in ["normal", "hover", "pressed"]:
-				b.add_theme_stylebox_override(k, looks[k])
+				b.add_theme_stylebox_override(k, looks["normal"] if on else looks[k])
+			Kit.key_words(b, face, 13)
 		else:
-			# Flat inside the track, with the same height as the raised option.
+			# Flat inside the dark track, as tall as the raised option; light tan words.
 			var flat = StyleBoxEmpty.new()
 			flat.content_margin_left = 10
 			flat.content_margin_right = 10
@@ -87,9 +85,10 @@ func _restyle() -> void:
 			b.add_theme_stylebox_override("normal", flat)
 			b.add_theme_stylebox_override("hover", flat)
 			b.add_theme_stylebox_override("pressed", flat)
-			fg = Pal.MUTED
+			var fg = Pal.CREAM.darkened(0.12)
+			for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+				b.add_theme_color_override(k, fg)
+			b.add_theme_constant_override("outline_size", 0)
 		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
-			b.add_theme_color_override(k, fg)
 		b.add_theme_font_size_override("font_size", 13)
 		b.add_theme_font_override("font", Kit.font_bold())

@@ -32,10 +32,14 @@ func _draw() -> void:
 	var y_of = func(v: float) -> float: return floor(h - 1.0 - (h - 2.0) * clampf(v / top, 0.0, 1.0))
 	draw_rect(Rect2(0, 0, w, h), Pal.WELL)
 	if least > 0.0 or most > 0.0:
+		## (2026-11-27 review: at 0.16 the band was the well's own colour; the caption says it is shaded, so it
+		## shows, with a bright line at the least and at the most)
 		var y1 = y_of.call(most if most > 0.0 else least)
 		var y0 = y_of.call(least)
-		draw_rect(Rect2(0, y1, w, maxf(1.0, y0 - y1)), Pal.with_alpha(Pal.GOOD, 0.16))
-		draw_rect(Rect2(0, y0, w, 1), Pal.with_alpha(Pal.GOOD, 0.6))
+		draw_rect(Rect2(0, y1, w, maxf(1.0, y0 - y1)), Pal.with_alpha(Pal.GOOD, 0.3))
+		draw_rect(Rect2(0, y0, w, 1), Pal.with_alpha(Pal.GOOD, 0.95))
+		if most > 0.0 and y1 < y0:
+			draw_rect(Rect2(0, y1, w, 1), Pal.with_alpha(Pal.GOOD.lightened(0.3), 0.95))
 	var n = maxi(1, values.size())
 	var slot = floor(w / float(n))
 	var bw = maxf(2.0, slot - 3.0)

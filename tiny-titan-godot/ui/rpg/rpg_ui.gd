@@ -109,6 +109,23 @@ static func rarity_color(rarity: String) -> Color:
 	return Pal.rarity(rarity)
 
 
+## `col` darkened in its own hue until it reads on `bg` (contrast `ratio` or more). (Workshop look,
+## 2026-11-27: a big number in a stat's colour on a slip tinted that colour came out washed out, a yellow
+## one worst; the hue stays, the number reads.)
+static func ink_on(col: Color, bg: Color, ratio: float = 4.5) -> Color:
+	for i in range(0, 21):
+		var c = col.darkened(i / 20.0)
+		if Ink.contrast(c, bg) >= ratio:
+			return Color(c.r, c.g, c.b, 1.0)
+	return Pal.TEXT
+
+
+## About the face of a Kit.row slip tinted `col` (Card._row_box at a row's usual amount, a little on the
+## dark side): what `ink_on` measures a number in that colour against.
+static func slip_of(col: Color) -> Color:
+	return Pal.PANEL2.lerp(col, 0.26)
+
+
 ## An amount of ore as a pill in the Realm's colour.
 static func ore_pill(amount) -> PanelContainer:
 	var p = Kit.pill("ore", Xp.fmt_int(int(round(float(amount)))), color("realm"))
@@ -665,13 +682,14 @@ static func page_note(id: String, text: String) -> Label:
 	return l
 
 
-## A slot that is not open yet: a dim row with a lock and when it opens (meta "realm_locked").
+## A slot that is not open yet: a darker tan row with a lock and when it opens (meta "realm_locked").
+## (Workshop look: it was a cream row faded to three quarters, grey on cream; now its state shows by the
+## darker slip and the lock, its words at full strength.)
 static func lock_row(text: String) -> Card:
-	var r = Kit.row(Callable(), Pal.LINE, null, 8, 4)
+	var r = Kit.row(Callable(), Pal.LINE, Pal.LINE, 8, 4, 0.3)
 	var h = Kit.hbox(8)
 	h.add_child(Kit.vcenter(Icons.rect("lock", 16)))
 	h.add_child(Kit.vcenter(Kit.clip(text, 13, Pal.MUTED)))
 	r.add(h)
-	r.modulate = Color(1, 1, 1, 0.75)
 	r.set_meta("realm_locked", true)
 	return r

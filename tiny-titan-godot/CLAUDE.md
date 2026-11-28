@@ -28,7 +28,7 @@ is the Windows handoff.
              home gym). Pixel-exact parity test.
 - `app/`     `app.gd` (autoload App: save file, derived state, all commands, navigation),
              `sfx.gd` (synthesized sounds), `inbox.gd` (phone inbox).
-- `ui/`      `pal.gd` (colours as theme variables: Arcade, Ember, Forest, Slate),
+- `ui/`      `pal.gd` (colours: the one Workshop theme, see "THE WORKSHOP LOOK"), `ink.gd` (readable words),
              `pix_box.gd` (pixel-art 9-patch panels/buttons), `kit.gd` (toolkit),
              `widgets/`, `parts.gd` (shared rows/tiles), `icons.gd` (86 pixel icons, no
              emoji anywhere), `pixel_font.gd`, `backdrop.gd` (pixel sky),
@@ -630,7 +630,7 @@ is the Windows handoff.
     moves the pointer away again (hover is worked out before `_input` runs); project.godot has
     `gui/timers/tooltip_delay_sec.web` = a day (read it with `get_setting_with_override`); the page
     follows the finger in parts of a unit (`_scroll_to` returns where it is, `tt_fine` / `tt_base`
-    metas, `_placed` after `sort_children`); `TouchScroll.scrolling` pauses Backdrop, Fx, Bar and Stage
+    metas, `_placed` after `sort_children`); `TouchScroll.scrolling` pauses Fx, Bar and Stage
     animations. When testing touch in a browser, ALSO dispatch `PointerEvent('pointermove',
     {pointerType: 'touch'})` on window: that is what a phone does.
     NEVER leave a file with the user's data in the project folder: a build exports every resource
@@ -2214,19 +2214,78 @@ is the Windows handoff.
     next set not ticked (`_use_try`), and a key lights up the moment the sets do it (burst, the PR sound, a toast, once).
   - Walkthrough `tests/shots/challenges.gd` (year data, also --fingers); the home walkthrough's section order has
     "challenges" after "today".
-- THE LOOK, MOCK-UPS (2026-11-27, night; the user, with a screenshot of the mission tiles: "that rectangle with the left
-  edge being a color with the slightly darker blue on that blue background. Looks really ugly and like bad word art...
-  experiment with new designs... Maybe work toward a few mock ups and send to me"). `Kit.look` (`Kit.LOOKS`): "stripe"
-  (as it was, the default), "arcade" (raised tiles with a lip in their colour, solid coloured section headers with dark
-  pixel titles, sub-heads as coloured tags), "clean" (sections as soft rounded cards with a shadow and no border, plain
-  bold headings, rows without boxes split by hairlines, icons in round washes, open missions as a list:
-  `Parts._mission_list`), "rpg" (gold-trimmed windows, sunken slots, gold sub-heads), "neon" (rows and sections
-  outlined in their colour with a glow). Read by `Kit.section`, `Card._section_box` / `_row_box` (Card.flat),
-  `Kit.badge` (icons on plates: mission rows and tiles, challenge options), `Kit.sub_head`; `Kit.soft_box` is a box
-  with real rounding and a glow. Settings -> "Look (trying out)" (`settings.look`, meta `look_key`; main.gd
-  `_apply_look`, a change rebuilds the shell like a theme). Walkthrough `tests/shots/looks.gd` (year data): the same
-  six screens in every look, put side by side in `looks_<screen>.png`. Waiting for the user's pick: then make it the
-  look and take the others out.
+- THE WORKSHOP LOOK, the whole game's look since 2026-11-27 (night). The user, after the first mock-ups (Kit.look
+  variants of the old blue panels): "Those look barely different... It's the blue boxes over slightly blue background...
+  STOP. Completely new direction... Go find some games online of some idle games or some rpg games... and look at their
+  menus". Four HTML mock-ups were made from real game menus (Idle Slayer, Stardew, Loop Hero, card-table and cozy
+  styles); the user picked the first: "Let's go with #1". Kit.look, its four variants, Settings' "Look (trying out)"
+  and the theme picker are GONE; there is one theme.
+  - Colours (`ui/pal.gd`): the page is dark planks (BG #2b1a12), windows are sand parchment (PANEL) in wooden frames,
+    rows and cards on them cream paper (PANEL2), TEXT dark ink, MUTED brown ink, `Pal.CREAM` words on wood, keys, the
+    page and dark wells, `Pal.GOLD_TEXT` gold numbers there. `Pal.MATERIALS` = the mock-up's materials as rings (wood,
+    plate, board, slip, card, note, chip, track, well, cap, slot), `Pal.BLOCKS` its keys (green, gold, red, orange,
+    wood, purple, blue, tan), `Pal.SHADOW`. `Pal.apply(any id)` sets the one theme: an old save's "theme" is ignored.
+  - Boxes (`ui/pix_box.gd`): `PixBox.nine(rings, fill, opts)` (a port of the mock-up's canvas 9-slice: rings outside
+    in, a ring a colour or a bevel `bev(lit, shade)` or `sides(t, l, b, r)`, nipped corners `cut`, rows `below` (a
+    key's lip, a shadow), `gap` (a pressed key sinks)); every box carries meta "bg" = its fill. `make()`, `panel()`,
+    `well()`, `button_set()` keep the old API (120 calls took the look at once); `material(name, opts)`,
+    `window()`, `block_set(face, pad_h, pad_v, lip)` (a Pal.BLOCKS name or any Color), `block_colors`, `dark_words`,
+    `slot(color, small)`, `planks()` (the page's tile).
+  - Cards (`ui/widgets/card.gd`): a card on the page is a WOODEN WINDOW (sand inside a 14 px frame, a shadow); inside a
+    window, a sheet (meta `tt_paper`) or another card it is CREAM PAPER; on the page but in a grid or a row (stat
+    tiles) paper with a shadow (`_tile`); decided in `_enter_tree`. `Kit.section` = a window whose frame is drawn
+    (`_draw`) from half way down its head, so the SIGN (a plate in a deep shade of the section's colour, the title in
+    cream pixel letters, `Kit.sign_box`) sits on the frame's top edge; `right` is pinned on a paper note; the line
+    inside the frame is the section's colour. `Kit.row` = a cream slip (the stripe down the left edge is gone; `stripe`
+    is ignored, `tint` tints the slip).
+  - Keys (`ui/kit.gd`): `Kit.button` variants are blocks: primary gold, good green, danger red, ghost tan, "blue",
+    "orange", "purple", and the default (secondary) wood. `Kit.key_words(b, face, px)`: dark ink on a light face (gold,
+    tan), cream with a dark outline (`outline_for(px)`) on the others. Chips: tan, the active one a key in its colour.
+    `Kit.tag` / `icon_chip` / `disc_tag` / `pill`: small bevelled tags, words by `Kit.on_color`. `choice_track` and
+    Segmented: a dark track, the picked key raised. `tick_box` / `pips`: green keys and pale paper boxes
+    (`Kit.empty_box`). `sub_head`: a colour square, brown words, a dotted rule (`DottedRule`). `badge`: an icon in a
+    framed slot. `coin_pill`: gold numbers in a dark cap. `Kit.outlined(text, px, color)`: cream words with a dark
+    outline. Inputs and steppers: dark wells with cream numbers, tan -/+ keys. Bars: a dark inset track. Sheets: a
+    wooden window sliding up. Tooltips: a note.
+  - The shell (`main.gd`): the planks tile behind everything (the sky, ui/backdrop.gd, was deleted), side margins 8,
+    the tab bar a wooden board with each tab's icon in a framed slot (the chosen one lifted, its ring the tab's colour,
+    its name gold) and the Log key a big green block. The Hero tab's top bar (`HomeScreen._top_bar`, meta `top_bar`): a
+    board with the hero's face (the top of `Art.hero_texture`) in a gold slot, LV on a gold key, the name and title in
+    cream, the coins, the settings key and the hero's XP bar; the hero card below no longer repeats the level.
+  - READABILITY (`ui/ink.gd`, `Ink`, added by main.gd): the screens were written for light words on dark panels and set
+    many colours by hand, so every Label, flat Button and pixel-font caption that enters the tree is checked a moment
+    later against the surface under it (`Ink.surface`: the nearest ancestor with a fill: a StyleBoxFlat's bg_color, a
+    box's meta "bg", a ColorRect, meta `ink_bg`; see-through fills blended; the page at the root). Under MIN_SMALL 4.2
+    (MIN_BIG 3 for 18 px or bold 15 px, MIN_PIXEL 4 for pixel letters) the colour moves towards dark ink or cream
+    (whichever reads better): plain words (chroma under NEUTRAL) and words that need a big move all the way, coloured
+    words only as far as needed. Skipped: an outline of 3 px or more, meta `ink_keep` on it or an ancestor, a colour
+    set again after the check (call `Ink.check(node)`). A control that DRAWS its own surface under words must set meta
+    `ink_bg`; a caption that sits across two surfaces (a bar's numbers) gets `ink_keep` and cream with a shadow.
+    `PixelFont.rect` leaves metas `pf_text`, `pf_color`, `pf_shadow` so Ink can draw it again; a dark caption gets a
+    faint light shadow.
+  - The Today card as in the mock-up: `TodayView._day_head` (a calendar in a slot, the date big, the kind of day or
+    why under it, "REST DAY · ..." on a day called rest), Start / Continue workout (a green key) right under the body
+    row, and each likely lift (`_lift_row`) a slip with the body part's icon in a slot ringed in its colour
+    (`TodayView.part_icon`: the Realm's st_* icons), the lift and how it stands in the middle, and a block on the right
+    (`BLOCK_W` 100): ORANGE with the aim's numbers big and "AIM @ 85 kg" under them (`_aim_block`; blue for a first
+    time, the PT colour for PT) or GREEN "DONE" with the sets done (`_done_block`). The blocks carry `done_tick` (and
+    `today_aim`); the done status is a tag (`today_done`). A section's sign is centred by `SignRow` (ui/widgets).
+  - After a review of every screenshot by reviewer agents (182 findings), the shared pieces were tightened:
+    `Kit.section_title` (a heading between windows) is a small wooden sign plate with cream pixel letters and a
+    dotted rule, never coloured letters on the planks; `Kit.sign_box` stays wood (the section's colour a ring
+    inside its rim: a blue tab gave navy plates); windows keep the wood's own dark inner line (no coloured line);
+    `Kit.option_chip` is a small tan key (a colour tints its face light: blue = new to you); `Kit.tag_words`:
+    cream words with a dark shadow on darker faces, ink on light ones (Ink skips words with a shadow); a
+    notice is an untinted slip; a slip tinted blue or cyan stays nearly cream (`Card._row_box`); a disabled
+    key keeps solid, dimmed words (`Kit.key_words` font_disabled_color; a half-clear fill over a full outline
+    smeared); `Kit._button_icon` switches off the hidden text's outline (it drew a ghost of the words under
+    the icon); dark pixel captions have no shadow and Ink drops the shadow of any pixel caption on paper;
+    Ink darkens a coloured word in its own hue (`Color.darkened`: gold becomes deep gold, not khaki), flips
+    dark words with a dark outline to cream (and light ones with a light outline to ink), and checks a
+    RichTextLabel's default colour; Segmented's picked key is orange (not the tab's colour); the tab bar's
+    icons are in their colours; `Kit.h1` (a page title on the planks) is outlined cream.
+  - Fonts: the mock-up used Jersey 10 / 15 (Google Fonts, OFL). The game still uses its own pixel font for captions
+    and Godot's fallback font for words: downloading a font needs the user's OK.
 - PREP A DAY AHEAD, AND THE SAME MUSCLES' LIFTS IN THE LOG TAB (2026-11-27, night; the user: "I want to be able to
   plan my workout based on variation and equipment for the next day so I can look ahead at weights, reps, and
   equipment. I can still change once I go to log it, but like tomorrow the plan for me has a bunch of stuff I can't
@@ -2504,7 +2563,6 @@ logjump (a workout edited with finger events: + Set, a set's cross, a weight's +
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
-looks (the mock-ups: the same screens in every Kit.look, side by side; year data),
 prepday (prep tomorrow from Coming up: ways, records, a superset, saved; the day's plan and the Log tab start from it; the same muscles' keys; year data, also --fingers),
 challenges (the day's lift challenges: the Hero section, the Log tab's TRY keys, done and claimed; year data, also --fingers),
 rungs (a lift done by double progression: the Beat it step chart, the reel's Beat last time card, beat tags in the history; `new` data, also --fingers),

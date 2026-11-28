@@ -49,22 +49,37 @@ static func _others(ed: LogLiftEditor) -> Array:
 	return sessions.filter(func(s): return s.id != ed.editing_id)
 
 
-## The card's first line: the sun, its name, the day's label, a count, and
-## whatever key goes at its end.
-static func _head(plan: Dictionary, count: Control, last = null) -> Control:
-	var head = Kit.hbox(6)
-	head.add_child(Kit.vcenter(Icons.rect("sun", 16)))
-	var title = Kit.clip("From today's plan", 14, null, true)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(Kit.vcenter(title))
+## The card: a window with "TODAY'S PLAN" on its sign and `right` (the count, the Hide key) on the paper
+## note at the sign's end.
+## (2026-11-27 review: it was the only window on the Log page with its title as a line of text inside the
+## parchment, beside the signed LOG A WORKOUT and EVERY DAY) The same sign as the page's other windows.
+static func _card(id: String, right: Control) -> Card:
+	var c = Kit.section(id, "TODAY'S PLAN", "sun", Pal.LIFT, right, Callable(), 6, 10)
+	return c
+
+
+## The first line inside: the day's label as a tag, then what a tap does (it names "today's plan" in words:
+## the sign is pixel letters).
+static func _intro(plan: Dictionary, said: String) -> Control:
+	var row = Kit.hbox(8)
 	if bool(plan.get("off", false)):
-		head.add_child(Kit.vcenter(Kit.tag("Rest day", Pal.SECOND, true, 11)))
+		row.add_child(Kit.vcenter(Kit.tag("Rest day", Pal.SECOND, true, 12)))
 	elif str(plan.get("label", "")) != "":
-		head.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 11)))
-	head.add_child(Kit.vcenter(count))
+		row.add_child(Kit.vcenter(Kit.tag(str(plan.label), Pal.LIFT, true, 12)))
+	var p = Kit.para(said, 12, Pal.MUTED)
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(p)
+	return row
+
+
+## What sits on the sign's note: the count, and a key at its end.
+static func _note(count: Control, last = null) -> Control:
+	var h = Kit.hbox(6)
+	h.add_child(Kit.vcenter(count))
 	if last != null:
-		head.add_child(last)
-	return head
+		h.add_child(Kit.vcenter(last))
+	return h
 
 
 ## The rows, under their kickers.
@@ -84,11 +99,26 @@ static func _fill(c: Card, ctx: Dictionary, rows: Array, here: Dictionary) -> vo
 		var g = "done" if _state(r, here) == "done" else _group(r)
 		if g != group:
 			group = g
-			var k = Kit.label(str(KICKERS[g]), 10, Pal.GOOD if g == "done" else Pal.MUTED, true)
+			# (a group's heading as the Hero tab has them: a square in its colour, the words, a dotted rule)
+			var k = Kit.sub_head(str(KICKERS[g]), _group_color(g))
 			if g == "done":
 				k.set_meta("plan_done_head", done.size())
 			c.add(k)
 		c.add(_done_row(ctx, r) if g == "done" else _row(ctx, r, here))
+
+
+## The colour of a group's heading.
+static func _group_color(g: String) -> Color:
+	match g:
+		"done":
+			return Pal.GOOD
+		"new":
+			return Pal.SECOND
+		"pt":
+			return Pal.PT
+		"extra":
+			return Pal.ACCENT2
+	return Pal.LIFT
 
 
 static func _state(r: Dictionary, here: Dictionary) -> String:
@@ -144,18 +174,18 @@ static func build(ed: LogLiftEditor):
 		if str(r.done) != "" or here.has(Xp.normalize_exercise(str(r.name))) or r.ways.any(func(w): return here.has(Xp.normalize_exercise(str(w.name)))):
 			seen_to += 1
 
-	var c = Kit.card(6, Callable(), 10)
-	c.accent(Pal.ACCENT)
-	c.set_meta("plan_card", true)
-	var count = Kit.tag("%d/%d" % [seen_to, rows.size()], Pal.PANEL2, false, 11)
+	var count = Kit.tag("%d/%d" % [seen_to, rows.size()], Pal.GOOD if seen_to >= rows.size() else Pal.LIFT, true, 12)
 	count.set_meta("plan_count", seen_to)
-	var fold = LogWidgets.mini_chip("Show" if folded else "Hide", false, _toggle_fold.bind(ed))
+	count.tooltip_text = "%d of %d seen to: in this workout, or done today" % [seen_to, rows.size()]
+	count.mouse_filter = Control.MOUSE_FILTER_PASS
+	var fold = LogWidgets.mini_chip("Show" if folded else "Hide", false, _toggle_fold.bind(ed), null, 8)
 	fold.tooltip_text = "Show the day's plan" if folded else "Fold the day's plan away"
 	fold.set_meta("plan_fold", folded)
-	c.add(_head(plan, count, fold))
+	var c = _card("plan_card", _note(count, fold))
+	c.set_meta("plan_card", true)
 	if folded:
 		return c
-	c.add(Kit.para("Tap a lift to add it with last time's sets. Tap it again to take it back.", 11, Pal.MUTED))
+	c.add(_intro(plan, "Lifts from today's plan: tap one to add it with last time's sets, again to take it back."))
 	_fill(c, {"wu": ed.wu, "sessions": others, "last": ed._last, "tap": ed.plan_toggle}, rows, here)
 	return c
 
@@ -176,13 +206,11 @@ static func picker():
 		for i in range(draft.exercises.size()):
 			if draft.exercises[i] is Dictionary:
 				here[Xp.normalize_exercise(str(draft.exercises[i].get("name", "")))] = i
-	var c = Kit.card(6, Callable(), 10)
-	c.accent(Pal.ACCENT)
-	c.set_meta("plan_picker", true)
-	var count = Kit.tag("%d to go" % rows.size(), Pal.PANEL2, false, 11)
+	var count = Kit.tag("%d to go" % rows.size(), Pal.LIFT, true, 12)
 	count.set_meta("plan_left", rows.size())
-	c.add(_head(plan, count))
-	c.add(Kit.para("Tap a lift to open your workout with it, last time's sets filled in.", 11, Pal.MUTED))
+	var c = _card("plan", _note(count))
+	c.set_meta("plan_picker", true)
+	c.add(_intro(plan, "Lifts from today's plan: tap one to open your workout with it, last time's sets filled in."))
 	_fill(c, {"wu": App.weight_unit(), "sessions": sessions, "last": LiftHistory.last_performances(sessions, null), "tap": _open_with}, rows, here)
 	return c
 
@@ -208,18 +236,18 @@ static func _toggle_fold(ed: LogLiftEditor) -> void:
 	ed._changed(true)
 
 
-## The box at the front of a row: a plus while the lift can be added, a tick
-## once it is in the workout (the lift colour) or was done today (green).
+## The box at the front of a row: a plus in an empty box while the lift can be
+## added, a tick once it is in the workout (an orange key) or was done today
+## (green). (2026-11-27 review: a flat rounded box, unlike every other tick box)
+## Kit.tick_box's bevelled boxes, the same size in every state.
 static func _box(state: String) -> Control:
-	var box = PanelContainer.new()
-	box.custom_minimum_size = Vector2(24, 24)
-	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	box.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var col = Pal.LIFT if state == "in" else (Pal.GOOD if state == "done" else Pal.LINE)
-	box.add_theme_stylebox_override("panel", Kit.sbox(Pal.PANEL if state == "add" else Pal.with_alpha(col, 0.25), 4, col, 2, 2, 2))
-	var mid = CenterContainer.new()
-	mid.add_child(Icons.rect("plus" if state == "add" else "check", 16))
-	box.add_child(mid)
+	var box = Kit.tick_box(state != "add", 24)
+	var mid = box.get_child(0)
+	if state == "add":
+		mid.add_child(Icons.rect("plus", 16, Pal.TEXT))
+	elif state == "in":
+		var o = PixBox.block_colors("orange")
+		box.add_theme_stylebox_override("panel", PixBox.nine([o[0], PixBox.bev(o[1], o[2])], o[3], {"cut": 0, "pad_h": 0, "pad_v": 0}))
 	return box
 
 
@@ -273,7 +301,7 @@ static func _row(ctx: Dictionary, r: Dictionary, here: Dictionary) -> Control:
 	# What to aim for on a line of its own, so the name never cuts it short.
 	var words = _words(ctx, r, state)
 	var line = Kit.hbox(6)
-	var cap = Kit.label(str(words.cap), 9, Pal.GOOD if state == "done" else Pal.MUTED, true)
+	var cap = Kit.label(str(words.cap), 10, Pal.GOOD_DARK if state == "done" else Pal.MUTED, true)
 	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	line.add_child(cap)
 	var said = Kit.clip(str(words.said), 12, words.col, true)
@@ -282,8 +310,10 @@ static func _row(ctx: Dictionary, r: Dictionary, here: Dictionary) -> Control:
 	v.add_child(line)
 	h.add_child(v)
 	Kit.passthrough(h)
+	# A cream slip with its rim in what it is: orange once in this workout, green when done today (a light
+	# green wash too). (2026-11-27 review: a lift in the workout was a salmon pink key, off the palette)
 	var tint = Pal.LIFT if state == "in" else (Pal.GOOD if state == "done" else null)
-	var face = Pal.PANEL2 if tint == null else Pal.PANEL2.lerp(tint, 0.3 if state == "done" else 0.2)
+	var face = Pal.PANEL2.lerp(Pal.GOOD, 0.14) if state == "done" else Pal.PANEL2
 	var tap: Callable = ctx.tap
 	# The key's own (unseen) text never changes, so a rebuild finds it again.
 	var b = LogWidgets.key("Plan: %s" % str(r.name), face, h, tap.bind(str(r.name)), 8, 6, 2, Pal.LINE if tint == null else tint)

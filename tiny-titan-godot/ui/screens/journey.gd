@@ -107,6 +107,47 @@ static func big_num(text: String, scale: int, color: Color) -> Control:
 	return r
 
 
+## A colour as ink on paper (2026-11-27, the Workshop look): darkened in its own hue, so a coloured number or
+## word reads on cream and sand and keeps its colour (gold becomes a deep gold, not a washed-out yellow).
+static func on_paper(c: Color) -> Color:
+	return c.darkened(0.45)
+
+
+## A colour for a number on a dark well (the Workshop's records tiles): dark ink turns cream, brown ink a
+## dimmer cream, gold the bright gold of the numbers on wood; any other colour is kept, made lighter only as
+## far as it needs to read on the well.
+static func on_well(c: Color) -> Color:
+	if c == Pal.TEXT or c == Pal.INK:
+		return Pal.CREAM
+	if c == Pal.MUTED:
+		return Pal.CREAM.darkened(0.25)
+	if c == Pal.ACCENT:
+		return Pal.GOLD_TEXT
+	var out = c
+	var i = 0
+	while Ink.contrast(out, Pal.WELL) < 4.5 and i < 8:
+		out = out.lightened(0.1)
+		i += 1
+	return out
+
+
+## The words under a number in a dark well.
+static func well_words() -> Color:
+	return Pal.CREAM.darkened(0.15)
+
+
+## A small dark cap (the Workshop's coins and timers) round light pixel numbers on parchment.
+static func dark_cap(child: Control, pad_v: int = 6) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.add_theme_stylebox_override("panel", PixBox.material("cap", {"pad_h": 10, "pad_v": pad_v}))
+	p.add_child(child)
+	return p
+
+
 ## A centred one-line caption.
 static func caption(text: String, size: int = 11, color = null) -> Label:
 	var l = Kit.clip(text, size, Pal.MUTED if color == null else color, true)
@@ -115,20 +156,31 @@ static func caption(text: String, size: int = 11, color = null) -> Label:
 
 
 ## A tile: icon, big pixel number, one-word caption.
-static func num_tile(icon: String, value: String, cap: String, color: Color, scale: int, tip: String = "") -> Card:
-	var c = Kit.card(4, Callable(), 10)
+## (2026-11-27, the Workshop look: in a dark well with light numbers, as the records tiles. On cream paper a
+## gold or orange pixel number read washed out, and its shadow doubled the strokes.)
+static func num_tile(icon: String, value: String, cap: String, color: Color, scale: int, tip: String = "") -> Control:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.well(6, 8))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if tip != "":
-		c.tooltip_text = tip
-		c.mouse_filter = Control.MOUSE_FILTER_STOP
+		p.tooltip_text = tip
+		p.mouse_filter = Control.MOUSE_FILTER_STOP
+	else:
+		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var v = Kit.vbox(4)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ic = Icons.rect(icon, 26)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	c.add(ic)
-	c.add(big_num(value, scale, color))
-	c.add(caption(cap))
-	return c
+	v.add_child(ic)
+	v.add_child(big_num(value, scale, on_well(color)))
+	v.add_child(caption(cap, 11, well_words()))
+	p.add_child(v)
+	return p
 
 
 ## A sunken mini tile inside a card: big pixel number over a short caption.
+## (2026-11-27: the colours are made for the dark well here, cream and bright gold, not left to be fixed later.)
 static func well_tile(value: String, cap: String, color: Color, scale: int, tip: String = "") -> PanelContainer:
 	var p = PanelContainer.new()
 	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -140,8 +192,8 @@ static func well_tile(value: String, cap: String, color: Color, scale: int, tip:
 		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var v = Kit.vbox(5)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(big_num(value, scale, color))
-	v.add_child(caption(cap))
+	v.add_child(big_num(value, scale, on_well(color)))
+	v.add_child(caption(cap, 11, well_words()))
 	p.add_child(v)
 	return p
 
@@ -159,16 +211,19 @@ static func value_chip(cap: String, value: String, color: Color, tip: String = "
 	var v = Kit.vbox(0)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(Kit.clip(cap, 11, Pal.MUTED, true))
-	v.add_child(Kit.clip(value, 15, color, true))
+	# (the value in a deep shade of its colour: a bright one on cream paper read pale)
+	v.add_child(Kit.clip(value, 15, on_paper(color), true))
 	p.add_child(v)
 	return p
 
 
 ## The coloured heading row of a discipline card: badge + name in the pixel font.
+## (ClimbCard still uses it; Journey's own discipline cards are sections now. The name is a deep shade of the
+## discipline's colour: ochre or pink pixel letters on cream read pale.)
 static func disc_head(d: String) -> Control:
 	var h = Kit.hbox(10)
 	h.add_child(Parts.disc_badge(d, 34))
-	h.add_child(Kit.vcenter(PixelFont.rect(TT.DISCIPLINE_META[d].name, 2, Pal.disc(d))))
+	h.add_child(Kit.vcenter(PixelFont.rect(TT.DISCIPLINE_META[d].name, 2, on_paper(Pal.disc(d)))))
 	return h
 
 
@@ -238,7 +293,8 @@ func _hero_fig(tex: Texture2D, title: String, lv: int, now: bool, tip: String, s
 	art.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(art)
-	v.add_child(big_num(title, 2, Pal.TEXT if now else Pal.MUTED))
+	# (dark ink for both: a brown "DAY 1" on the parchment read washed out)
+	v.add_child(big_num(title, 2, Pal.TEXT))
 	var lvt = Kit.tag("LV %d" % lv, Pal.ACCENT if now else Pal.PANEL2, now, 12)
 	lvt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	v.add_child(lvt)
@@ -263,8 +319,9 @@ func _then_now() -> void:
 	var start = s.chronicle[0].date
 	var days = Dates.days_between(start, App.today)
 	var profile = App.profile()
-	var card = Kit.card(12, Callable(), 10)
-	card.accent(Pal.tab_accent())
+	# (2026-11-27, the Workshop look: a window under a sign, the day count gold in a dark cap, the
+	# improvements cream slips. It was a window with a blue line, gold numbers on parchment and dark green chips.)
+	var card = Kit.section("then_now", "THEN & NOW", "journey", Pal.GOOD, null, Callable(), 12, 10)
 	var heroes = Kit.hbox(0)
 	var then_tex = Art.hero_texture(Art.state_with_levels(s, LEVEL_ONE), profile, THEN_LOADOUT)
 	var now_tex = Art.hero_texture(s, profile, App.loadout())
@@ -273,9 +330,12 @@ func _then_now() -> void:
 	var mid = Kit.vbox(6)
 	mid.custom_minimum_size = Vector2(76, 0)
 	mid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	mid.add_child(big_num(str(days), fit_scale([str(days)], 76, 4), Pal.ACCENT))
-	mid.add_child(big_num("DAY" if days == 1 else "DAYS", 2, Pal.MUTED))
-	mid.add_child(big_num("→", 3, Pal.ACCENT))
+	var count = Kit.vbox(4)
+	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	count.add_child(big_num(str(days), fit_scale([str(days)], 52, 4), Pal.GOLD_TEXT))
+	count.add_child(big_num("DAY" if days == 1 else "DAYS", 2, Pal.CREAM))
+	mid.add_child(dark_cap(count))
+	mid.add_child(big_num("→", 3, on_paper(Pal.ACCENT2)))
 	heroes.add_child(mid)
 	heroes.add_child(_hero_fig(now_tex, "TODAY", int(s.levels.hero.level), true, "Today", sc))
 	card.add(heroes)
@@ -289,18 +349,25 @@ func _then_now() -> void:
 	add_child(card)
 
 
+## One improvement: a cream slip (a hint of green) with the movement in ink and its variation as a tag, then
+## the value then in brown ink, an arrow, and the value now on a green tag.
+## (2026-11-27: it was a dark green box with the "then" value in brown on it, nearly invisible, and the raw
+## "Deadlift - Barbell" as its label.)
 func _then_now_chip(label_text: String, then_text: String, now_text: String) -> Control:
-	var p = PanelContainer.new()
-	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	p.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(Pal.GOOD), {"ring": Pal.GOOD, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 10, "pad_v": 6}))
-	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var v = Kit.vbox(1)
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(Kit.clip(label_text, 11, Pal.MUTED, true))
-	v.add_child(Kit.rich("[color=%s]%s →[/color] [b]%s[/b]" % [Kit.hex_of(Pal.MUTED), Kit.esc(then_text), Kit.esc(now_text)], 15, Pal.GOOD))
-	p.add_child(v)
-	return p
+	var c = Kit.row(Callable(), Pal.GOOD, Pal.GOOD, 8, 4, 0.05)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var top = Kit.squeeze(5)
+	var sp = LiftNames.split(label_text)
+	top.add_child(Kit.soft_name(str(sp.move), 12, Pal.TEXT, true, 160.0, 50.0))
+	if str(sp.variation) != "":
+		top.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+	c.add(top)
+	var vals = Kit.flow(5)
+	vals.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vals.add_child(Kit.vcenter(Kit.label(then_text + " →", 13, Pal.MUTED, true)))
+	vals.add_child(Kit.vcenter(Kit.tag(now_text, Pal.GOOD, false, 13)))
+	c.add(vals)
+	return c
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +420,8 @@ func _build_stats() -> void:
 	_then_now()
 
 	# --- recaps: a week or a month as one poster --------------------------------------
-	var rc = Kit.section("recaps", "RECAPS", "calendar", Pal.tab("journey"), null, Callable(), 6, 10)
+	# (a wood-brown sign: the Journey tab's sky blue made the sign navy, the old look)
+	var rc = Kit.section("recaps", "RECAPS", "calendar", Pal.BORDER, null, Callable(), 6, 10)
 	var rrow = Kit.hbox(8)
 	var rl = Kit.para("A week or a month as one poster.", 12, Pal.MUTED)
 	rl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -392,7 +460,10 @@ func _build_stats() -> void:
 	var tiles = []
 	for x in totals:
 		tiles.append(num_tile(x[0], x[1], x[2], x[3], sc, x[4]))
-	add_child(_tiles(tiles))
+	# (2026-11-27: in a window of their own; the tiles sat loose on the planks)
+	var tsec = Kit.section("totals", "TOTALS", "star", Pal.ACCENT, null, Callable(), 6, 10)
+	tsec.add(_tiles(tiles))
+	add_child(tsec)
 
 	# --- weekly sets over 8 weeks, the streak on target, the lift report ----------------
 	var wsec = TrackingViews.weekly_card()
@@ -417,16 +488,19 @@ func _build_stats() -> void:
 	# ported rule, so the fact is left out here.)
 	var facts = FunFacts.fun_facts(s).filter(func(f): return not str(f.detail).contains("ridden") and (Campaign.ON_SCREEN or not str(f.detail).contains("bosses")))
 	if not facts.is_empty():
-		add_child(Kit.section_title("In perspective"))
+		# (a window of its own, 2026-11-27: the tiles sat loose on the planks under a bare heading)
+		var psec = Kit.section("perspective", "IN PERSPECTIVE", "globe", Pal.BORDER, null, Callable(), 8, 10)
 		var nums = []
 		for f in facts:
 			nums.append(split_first(Icons.strip_emoji(f.headline))[0])
-		var fsc = fit_scale(nums, 132, 3)
+		# (a little narrower than on the page: the window's frame takes some of the width)
+		var fsc = fit_scale(nums, 116, 3)
 		var g = Kit.grid(2, 8)
 		g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		for i in range(facts.size()):
 			g.add_child(_fact_tile(facts[i], fsc))
-		add_child(g)
+		psec.add(g)
+		add_child(psec)
 
 	# --- one card per discipline ------------------------------------------------------
 	var by = t.byDiscipline
@@ -449,23 +523,24 @@ func _build_stats() -> void:
 		if mt != null and int(mt.sessions) > 0:
 			side.append({"id": "%s:%s" % [TT.MISC, k], "icon": str(Misc.meta(k).icon), "badge": TT.MISC, "name": str(Misc.meta(k).name), "color": Pal.MISC, "n": int(mt.sessions), "m": float(mt.distanceM)})
 	if not side.is_empty():
-		var mh = Kit.section_title("Miscellaneous")
+		# (a window with its lines as slips, 2026-11-27; it was a bare heading and cards on the planks)
+		var mh = Kit.section("misc", "MISCELLANEOUS", "misc", Pal.MISC, null, Callable(), 6, 10)
 		mh.set_meta("misc_area", true)
-		add_child(mh)
 		for x in side:
-			add_child(_side_row(x, du))
+			mh.add(_side_row(x, du))
+		add_child(mh)
 
 
 ## An activity of the Miscellaneous area as one line: its icon, its name, how
 ## often and how far in all. A tap opens its numbers (_open_side).
 func _side_row(x: Dictionary, du: String) -> Card:
-	var c = Kit.card(0, _open_side.bind(str(x.id)), 8)
+	var c = Kit.row(_open_side.bind(str(x.id)), x.color, null, 8, 0)
 	c.set_meta("side_row", str(x.id))
 	c.tooltip_text = "%s: all its numbers" % str(x.name)
 	var h = Kit.hbox(8)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(Kit.vcenter(Parts.disc_badge(str(x.badge), 32, str(x.icon))))
-	var nm = Kit.clip(str(x.name), 13, x.color, true)
+	var nm = Kit.clip(str(x.name), 13, on_paper(x.color), true)
 	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(Kit.vcenter(nm))
 	h.add_child(Kit.vcenter(Kit.label("%d time%s · %s" % [int(x.n), "" if int(x.n) == 1 else "s", Fmt.fmt_distance(float(x.m), du)], 12, Pal.MUTED, true)))
@@ -539,7 +614,8 @@ func _fact_tile(f: Dictionary, sc: int) -> Card:
 	var row = Kit.hbox(8)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(Kit.vcenter(Icons.rect(Icons.for_emoji(f.icon), 28)))
-	row.add_child(Kit.vcenter(PixelFont.rect(parts[0], sc, _fact_color(str(f.detail)))))
+	# (a deep shade of the fact's colour, no shadow: a bright one on cream paper read washed out)
+	row.add_child(Kit.vcenter(PixelFont.rect(parts[0], sc, on_paper(_fact_color(str(f.detail))), false)))
 	c.add(row)
 	c.add(Kit.clip(parts[1], 13, null, true))
 	return c
@@ -548,13 +624,9 @@ func _fact_tile(f: Dictionary, sc: int) -> Card:
 ## A misc activity: how far in all, how often, the longest, and its marks as chips.
 func _misc_card(kind: String, mt: Dictionary, du: String) -> Card:
 	var m = Misc.meta(kind)
-	var c = Kit.card(10)
-	c.accent(Pal.MISC)
+	# (2026-11-27, the Workshop look: a window with its name on the sign; pink pixel letters on cream read pale)
+	var c = Kit.section("misc_" + kind, str(m.short).to_upper(), str(m.icon), Pal.MISC, null, Callable(), 10, 10)
 	c.set_meta("misc_card", kind)
-	var h = Kit.hbox(10)
-	h.add_child(Parts.disc_badge(TT.MISC, 34, str(m.icon)))
-	h.add_child(Kit.vcenter(PixelFont.rect(str(m.short), 2, Pal.MISC)))
-	c.add(h)
 	var a = split_unit(Fmt.fmt_distance(float(mt.distanceM), du))
 	var l = split_unit(Fmt.fmt_distance(float(mt.longestM), du))
 	var n = Xp.fmt_int(int(mt.sessions))
@@ -578,21 +650,11 @@ func _misc_card(kind: String, mt: Dictionary, du: String) -> Card:
 
 ## Pages read: the totals, and the sheet with the bookshelf behind a tap.
 func _reading_card(s: Dictionary) -> Card:
-	var c = Kit.card(10, ReadingView.open)
-	c.accent(Pal.READ)
+	# (2026-11-27, the Workshop look: a window with READING on its sign and the chevron on its note; the name was
+	# ochre pixel letters on cream. A tap anywhere still opens the bookshelf.)
+	var c = Kit.section("reading_stats", "READING", "book", Pal.READ, Icons.rect("chevron_right", 16), ReadingView.open, 10, 10)
+	c.tooltip_text = "Reading: tap for the bookshelf"
 	c.set_meta("reading_card", true)
-	var h = Kit.hbox(10)
-	var badge = PanelContainer.new()
-	badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	badge.add_theme_stylebox_override("panel", PixBox.make(Pal.READ, {"lip": 1, "lip_color": Pal.READ_DARK, "pad_h": 0, "pad_v": 0}))
-	badge.custom_minimum_size = Vector2(34, 36)
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	badge.add_child(Kit.center(Icons.rect("book", 16)))
-	h.add_child(badge)
-	h.add_child(Kit.vcenter(PixelFont.rect("Reading", 2, Pal.READ)))
-	h.add_child(Kit.spacer())
-	h.add_child(Kit.vcenter(Icons.rect("chevron_right", 16)))
-	c.add(h)
 	var pages = Xp.fmt_int(Reading.pages(s))
 	var days = Xp.fmt_int(Reading.days(s))
 	var lv = str(int(Reading.level_of(s).level))
@@ -632,9 +694,9 @@ static func run_card(s: Dictionary, sessions: Array, du: String) -> Card:
 
 
 static func _distance_card(d: String, dist: float, elev: float, longest: float, du: String, best: Array) -> Card:
-	var c = Kit.card(10)
-	c.accent(Pal.disc(d))
-	c.add(disc_head(d))
+	# (2026-11-27, the Workshop look: a window with the discipline on its sign, as THIS WEEK and RECAPS are;
+	# it was small coloured pixel letters inside a window with a coloured line)
+	var c = Kit.section(d + "_card", str(TT.DISCIPLINE_META[d].name).to_upper(), d, Pal.disc(d), null, Callable(), 10, 10)
 	var a = split_unit(Fmt.fmt_distance(dist, du, 0))
 	var b = split_unit(Fmt.fmt_elevation(elev, du))
 	var l = split_unit(Fmt.fmt_distance(longest, du))
@@ -656,9 +718,8 @@ static func _distance_card(d: String, dist: float, elev: float, longest: float, 
 ## (ui/screens/discipline_sheet.gd).
 static func lift_card(s: Dictionary, sessions: Array, wu: String, exercise, pick: Callable) -> Card:
 	var t = s.totals
-	var card = Kit.card(10)
-	card.accent(Pal.LIFT)
-	card.add(disc_head("lift"))
+	# (2026-11-27, the Workshop look: a window with LIFTING on its sign, as the other sections of the page)
+	var card = Kit.section("lift_card", str(TT.DISCIPLINE_META.lift.name).to_upper(), "lift", Pal.LIFT, null, Callable(), 10, 10)
 	var vol = split_unit(Fmt.fmt_big_kg(t.liftVolumeKg, wu))
 	var vals = [vol[0], Xp.fmt_int(t.liftReps), Xp.fmt_int(t.liftSets)]
 	var sc = fit_scale(vals, 96, 3)
@@ -715,7 +776,10 @@ static func lift_card(s: Dictionary, sessions: Array, wu: String, exercise, pick
 			rc.setup(shown, {"fmt_rung": LiftViews.rung_fmt(mode, wu)})
 			rc.set_meta("stats_rungs", shown.size())
 			card.add(rc)
-			card.add(caption("Reps at each session's top weight. A heavier weight starts a new step.", 11))
+			# (on two lines when it must: cut off with "…" the sentence lost its point)
+			var how = Kit.para("Reps at each session's top weight. A heavier weight starts a new step.", 11, Pal.MUTED)
+			how.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			card.add(how)
 		else:
 			card.add(caption("Log it again to see a trend", 12))
 
@@ -809,24 +873,31 @@ func _build_chronicle() -> void:
 			events.append({"e": e, "i": i})
 	TTUtil.stable_sort(events, func(a, b): return a.e.date > b.e.date or (a.e.date == b.e.date and a.i > b.i))
 
+	# (2026-11-27, the Workshop look: the head is a window under a YOUR STORY sign, the day count gold in a dark
+	# cap, the filter chips inside it; then a window a month with the moments as paper slips. The page sat loose
+	# on the planks, the day count gold on parchment in a box with a blue line.)
 	var start = chron[0].date
-	var head = Kit.card(6, Callable(), 12)
-	head.accent(Pal.tab_accent())
+	var head = Kit.section("story", "YOUR STORY", "book", Pal.BORDER, Kit.label("%d moments" % chron.size(), 12, Pal.TEXT, true), Callable(), 10, 10)
 	head.tooltip_text = "Started " + Dates.format_date(start, {"month": "long", "day": "numeric", "year": "numeric"})
 	head.mouse_filter = Control.MOUSE_FILTER_STOP
 	var hrow = Kit.hbox(12)
 	hrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hrow.add_child(Kit.vcenter(Icons.rect("book", 34)))
-	hrow.add_child(Kit.vcenter(PixelFont.rect("DAY %d" % (Dates.days_between(start, App.today) + 1), 3, Pal.ACCENT)))
-	hrow.add_child(Kit.spacer())
-	hrow.add_child(Kit.vcenter(Kit.tag("%d moments" % chron.size(), Pal.PANEL2, false, 12)))
+	hrow.add_child(Kit.vcenter(dark_cap(PixelFont.rect("DAY %d" % (Dates.days_between(start, App.today) + 1), 3, Pal.GOLD_TEXT), 8)))
+	var since = Kit.vbox(0)
+	since.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	since.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	since.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	since.add_child(Kit.clip("Started", 11, Pal.MUTED, true))
+	since.add_child(Kit.clip(Dates.format_date(start, {"month": "short", "day": "numeric", "year": "numeric"}), 14, Pal.TEXT, true))
+	hrow.add_child(since)
 	head.add(hrow)
-	add_child(head)
 
 	var chips = Kit.flow(6)
 	for f in filters:
-		chips.add_child(Kit.chip(f.label, f.id == _chron_filter, _set_chron_filter.bind(f.id)))
-	add_child(chips)
+		# (the picked one an orange key, as every pick-one of the game)
+		chips.add_child(Kit.chip(f.label, f.id == _chron_filter, _set_chron_filter.bind(f.id), Pal.ACCENT2))
+	head.add(chips)
+	add_child(head)
 
 	if events.is_empty():
 		var c = Kit.card()
@@ -835,59 +906,65 @@ func _build_chronicle() -> void:
 		return
 
 	var settings = App.settings()
-	var month = ""
-	var line = null
+	# The moments month by month (they are newest first), a window a month.
+	var months = []
 	for ev in events:
-		var e = ev.e
-		var m = _month_label(e.date)
-		if m != month:
-			month = m
-			add_child(Kit.section_title(m))
-			line = TimelineBox.new()
-			line.add_theme_constant_override("separation", 6)
-			add_child(line)
-		line.add_child(_moment(e, settings))
+		var key = str(ev.e.date).substr(0, 7)
+		if months.is_empty() or str(months[months.size() - 1].key) != key:
+			months.append({"key": key, "label": _month_label(ev.e.date), "events": []})
+		months[months.size() - 1].events.append(ev.e)
+	for mo in months:
+		var n = mo.events.size()
+		var sec = Kit.section("month_" + str(mo.key), str(mo.label).to_upper(), "calendar", Pal.BORDER, Kit.label("%d moment%s" % [n, "" if n == 1 else "s"], 12, Pal.TEXT, true), Callable(), 6, 10)
+		var line = TimelineBox.new()
+		line.add_theme_constant_override("separation", 6)
+		for e in mo.events:
+			line.add_child(_moment(e, settings))
+		sec.add(line)
+		add_child(sec)
 
 
-## One moment on one line: an icon tile in the moment's colour, the title (with
-## its value) and the date as a muted chip. The detail sentence is the tooltip.
+## One moment on one line, a paper slip: its icon in a slot ringed in the moment's colour, the title (with its
+## value) and the date. The detail sentence is the tooltip.
 func _moment(e: Dictionary, settings: Dictionary) -> Control:
 	var col = _moment_color(e.kind)
-	var row = Kit.hbox(8)
+	var row = Kit.row(Callable(), col, null, TimelineBox.PAD, 0)
 	var detail = e.get("detail")
 	if detail != null and str(detail) != "":
 		row.tooltip_text = Icons.strip_emoji(detail)
 		row.mouse_filter = Control.MOUSE_FILTER_STOP
-	var ic = PanelContainer.new()
-	ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	ic.add_theme_stylebox_override("panel", PixBox.make(Pal.deep(col), {"ring": col, "lip": 1, "lip_color": Pal.OUTLINE.lightened(0.08), "pad_h": 0, "pad_v": 0}))
-	ic.custom_minimum_size = Vector2(38, 40)
-	ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var icc = Kit.center(Icons.rect(Icons.for_emoji(e.get("icon", "")), 22))
-	icc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ic.add_child(icc)
-	row.add_child(Kit.pad(ic, 4, 0, 0, 0))
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ic = Kit.badge(Icons.for_emoji(e.get("icon", "")), col, 16)
+	ic.custom_minimum_size = Vector2(TimelineBox.ICON_W, TimelineBox.ICON_W)
+	h.add_child(ic)
 	var t = Kit.clip(Icons.strip_emoji(e.title), 14, null, true)
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(t)
+	h.add_child(t)
 	var val = e.get("val")
 	if val != null:
-		var vl = Kit.label(Fmt.fmt_goal_value(val.n, val.unit, settings), 14, col if e.kind == "pr" else Pal.ACCENT, true)
-		row.add_child(Kit.vcenter(vl))
-	row.add_child(Kit.vcenter(Kit.tag(Dates.format_date(e.date), Pal.PANEL2, false, 11)))
+		var vl = Kit.label(Fmt.fmt_goal_value(val.n, val.unit, settings), 14, on_paper(col if e.kind == "pr" else Pal.ACCENT), true)
+		h.add_child(Kit.vcenter(vl))
+	h.add_child(Kit.vcenter(Kit.label(Dates.format_date(e.date), 11, Pal.MUTED, true)))
+	row.add(h)
 	return row
 
 
-## A column of moments with the timeline's vertical rule behind the icons.
+## A column of moments (paper slips) with the timeline's vertical rule behind them: it shows in the gaps
+## between the slips, through the middle of their icon slots.
 class TimelineBox extends VBoxContainer:
+	## A slip's padding and the width of its icon slot: the rule runs at PAD + ICON_W / 2.
+	const PAD = 6
+	const ICON_W = 36
+	const RULE_X = 24.0
+
 	func _init() -> void:
 		resized.connect(queue_redraw)
 
 	func _draw() -> void:
 		if size.y > 16.0:
-			draw_rect(Rect2(21.0, 8.0, 4.0, size.y - 16.0), Pal.OUTLINE)
-			draw_rect(Rect2(22.0, 8.0, 2.0, size.y - 16.0), Pal.LINE)
+			draw_rect(Rect2(RULE_X - 2.0, 8.0, 4.0, size.y - 16.0), Pal.OUTLINE)
+			draw_rect(Rect2(RULE_X - 1.0, 8.0, 2.0, size.y - 16.0), Pal.LINE)
 
 
 # ---------------------------------------------------------------------------
@@ -944,14 +1021,15 @@ func _build_history() -> void:
 	var xp_of = App.state.sessionXp
 	var keys = []
 	for f in HIST_FILTERS:
-		var k = Kit.choice(str(f[1]), hist_filter == str(f[0]), _set_hist_filter.bind(str(f[0])), Pal.tab("journey"), 12)
+		# (the picked key orange, as every pick-one of the game: the tab's sky blue was the old look)
+		var k = Kit.choice(str(f[1]), hist_filter == str(f[0]), _set_hist_filter.bind(str(f[0])), Pal.ACCENT2, 12)
 		k.tooltip_text = "Show %s" % ("every workout" if f[0] == "all" else str(f[1]).to_lower())
 		k.set_meta("hist_filter", str(f[0]))
 		keys.append(k)
 	add_child(Kit.choice_track(keys))
 	var shown = sorted.filter(func(x): return hist_match(x, hist_filter))
 	if shown.is_empty():
-		add_child(Kit.para("Nothing of this kind logged yet.", 13, Pal.MUTED))
+		add_child(Kit.para("Nothing of this kind logged yet.", 13, Pal.CREAM))  # (on the planks: cream)
 		return
 	var oldest = Dates.add_days(Dates.week_key(App.today), -7 * (hist_weeks - 1))
 	var weeks = []
@@ -971,14 +1049,16 @@ func _build_history() -> void:
 		var xp = 0
 		for x in list:
 			xp += int(xp_of.get(x.id, 0))
-		var right = Kit.label("%d · +%s XP" % [list.size(), Xp.fmt_int(xp)], 11, Pal.MUTED, true)
-		var sec = Kit.section("week_" + wk, week_title(wk, App.today), "calendar", Pal.tab("journey"), right, Callable(), 6, 8)
+		# (2026-11-27: a wood-brown sign; the Journey tab's sky blue made it navy with a blue line, the old look.
+		# The rows inside are colour-coded by their discipline badges. The count in dark ink on its note.)
+		var right = Kit.label("%d · +%s XP" % [list.size(), Xp.fmt_int(xp)], 11, Pal.TEXT, true)
+		var sec = Kit.section("week_" + wk, week_title(wk, App.today), "calendar", Pal.BORDER, right, Callable(), 6, 8)
 		sec.set_meta("hist_week", wk)
 		for x in list:
 			sec.add(Parts.session_row(x, int(xp_of.get(x.id, 0)), true))
 		add_child(sec)
 	if weeks.is_empty():
-		add_child(Kit.para("Nothing in the last %d weeks." % hist_weeks, 13, Pal.MUTED))
+		add_child(Kit.para("Nothing in the last %d weeks." % hist_weeks, 13, Pal.CREAM))  # (on the planks: cream)
 	if more:
 		var b = Kit.button("Show older weeks", "secondary", _more_weeks, "md")
 		b.set_meta("hist_more", true)

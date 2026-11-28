@@ -105,17 +105,18 @@ func _make_btn(icon: String, h: float = 42.0) -> Button:
 	var big = _touch or Kit.fingers
 	b.custom_minimum_size = Vector2((40 if big else 26) if compact else (46 if big else 36), h)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var looks = PixBox.button_set(Pal.PANEL2, Pal.OUTLINE.lightened(0.1), 0, 0, 1, Pal.BORDER)
+	# A tan key with a dark sign on it (the Workshop's steppers).
+	var looks = PixBox.block_set("tan", 0, 0, 1)
 	for k in looks:
 		b.add_theme_stylebox_override(k, looks[k])
 	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	b.add_theme_font_override("font", Kit.font_bold())
 	b.add_theme_font_size_override("font_size", 17 if compact else 20)
-	b.add_theme_color_override("font_color", Pal.TEXT)
-	b.add_theme_color_override("font_hover_color", Pal.TEXT)
-	b.add_theme_color_override("font_pressed_color", Pal.ACCENT)
-	b.add_theme_color_override("font_hover_pressed_color", Pal.ACCENT)
+	b.add_theme_color_override("font_color", Pal.INK)
+	b.add_theme_color_override("font_hover_color", Pal.INK)
+	b.add_theme_color_override("font_pressed_color", Pal.ACCENT2.darkened(0.3))
+	b.add_theme_color_override("font_hover_pressed_color", Pal.ACCENT2.darkened(0.3))
 	return b
 
 
@@ -123,14 +124,14 @@ func _make_btn(icon: String, h: float = 42.0) -> Button:
 func _style_edit(h: float, font_px: int) -> void:
 	var pv = int(maxf(0.0, (h - float(font_px) - 12.0) / 2.0))
 	_edit.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_edit.add_theme_stylebox_override("normal", PixBox.well(2, pv, Pal.LINE))
+	_edit.add_theme_stylebox_override("normal", PixBox.well(2, pv, null))
 	_edit.add_theme_stylebox_override("focus", PixBox.well(2, pv, Pal.ACCENT))
 	_edit.add_theme_stylebox_override("read_only", PixBox.well(2, pv, null))
 	_edit.add_theme_constant_override("minimum_character_width", 0)
 	_edit.add_theme_font_size_override("font_size", font_px)
 	_edit.add_theme_font_override("font", Kit.font_bold())
-	_edit.add_theme_color_override("font_color", Pal.TEXT)
-	_edit.add_theme_color_override("font_placeholder_color", Pal.with_alpha(Pal.MUTED, 0.55))
+	_edit.add_theme_color_override("font_color", Pal.CREAM)
+	_edit.add_theme_color_override("font_placeholder_color", Pal.with_alpha(Pal.CREAM, 0.42))
 	_edit.size_flags_horizontal = Control.SIZE_FILL
 
 

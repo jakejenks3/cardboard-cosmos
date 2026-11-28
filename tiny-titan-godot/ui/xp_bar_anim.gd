@@ -22,6 +22,7 @@ var _tween = null
 var _bar: Bar
 var _badge: PanelContainer
 var _lv_rect: TextureRect
+var _lv_fg: Color = Color.BLACK
 var _foot: Label
 
 
@@ -41,9 +42,13 @@ func setup(before: Dictionary, after: Dictionary, color: Color, label_text: Stri
 	_badge = PanelContainer.new()
 	_badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_badge.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 8, "pad_v": 5}))
+	_badge.add_theme_stylebox_override("panel", PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": 9, "pad_v": 5}))
 	_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_lv_rect = PixelFont.rect("LV 1", 2, Pal.INK, false)
+	# (2026-11-27 Workshop review) The level's letters in whichever of dark ink or cream reads on the plate's
+	# colour (cream with its dark shadow); set here and in every refresh, so ui/ink.gd keeps out of it.
+	_badge.set_meta("ink_keep", true)
+	_lv_fg = Kit.on_color(color)
+	_lv_rect = PixelFont.rect("LV 1", 2, _lv_fg, _lv_fg != Pal.INK)
 	_badge.add_child(_lv_rect)
 	row.add_child(_badge)
 	var v = Kit.vbox(5)
@@ -129,16 +134,17 @@ func _final_fill() -> void:
 
 
 func _set_flash(on: bool) -> void:
-	# A level-up lights the whole panel gold for a moment.
+	# A level-up lights the whole panel gold for a moment. (2026-11-27 Workshop review: it was a dark brown
+	# fill under dark words, which vanished; a light gold one keeps them readable.)
 	if on:
-		add_theme_stylebox_override("panel", PixBox.panel(Pal.deep(Pal.ACCENT), Pal.ACCENT, 12))
+		add_theme_stylebox_override("panel", PixBox.panel(Pal.ACCENT.lerp(Pal.PANEL2, 0.5), Pal.ACCENT, 12))
 	else:
 		add_theme_stylebox_override("panel", PixBox.panel(null, null, 12))
 
 
 func _refresh_text() -> void:
 	var to_next = int(_after.toNext) if _level == int(_after.level) else int(_before.toNext)
-	var t = PixelFont.tex("LV %d" % _level, Pal.INK, false)
+	var t = PixelFont.tex("LV %d" % _level, _lv_fg, _lv_fg != Pal.INK)
 	_lv_rect.texture = t
 	_lv_rect.custom_minimum_size = Vector2(t.get_width() * 2, t.get_height() * 2)
 	_foot.text = "%s / %s" % [Xp.fmt_int(TTUtil.jsround(_pct * to_next)), Xp.fmt_int(to_next)]

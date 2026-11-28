@@ -26,27 +26,46 @@ static func open() -> void:
 	sh.open()
 
 
+## Under the sheet's own title (it says "Trophy room" already: the big gold pixel copy of it on cream was
+## dropped in the 2026-11-27 Workshop review): the trophy and how many are earned.
 static func _title() -> Control:
-	var h = Kit.hbox(10)
+	var h = Kit.hbox(8)
 	h.add_child(Kit.vcenter(Icons.rect("trophy", 32)))
-	var t = PixelFont.rect("TROPHY ROOM", 3, Pal.ACCENT)
-	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(t)
 	var n = App.state.achievements.size()
-	h.add_child(Kit.spacer())
-	h.add_child(Kit.vcenter(Kit.tag("%d earned" % n, Pal.ACCENT, true, 11)))
+	h.add_child(Kit.vcenter(Kit.tag("%d earned" % n, Pal.ACCENT, true, 13)))
+	h.add_child(Kit.vcenter(Kit.clip("of %d trophies" % Achievements.all().size(), 13, Pal.MUTED, true)))
 	return h
 
 
-## Shelves of the newest trophies: a row of glowing slots on a wooden plank.
+## The dark wall behind the shelves and the companions' floor: one sunken well (Pal.MATERIALS, no colour
+## typed here).
+static func _wall_box(pad: int) -> StyleBox:
+	return PixBox.material("well", {"pad_h": pad, "pad_v": pad})
+
+
+## A wooden plank: a lit top edge, the board, a shaded bottom edge, in the browns of the Workshop's wood.
+static func _plank(h: int = 5) -> Control:
+	var v = Kit.vbox(0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for part in [[Pal.LINE.darkened(0.25), 2], [Pal.BORDER, h], [Pal.BORDER.darkened(0.45), 2]]:
+		var r = ColorRect.new()
+		r.color = part[0]
+		r.custom_minimum_size = Vector2(0, part[1])
+		r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(r)
+	return v
+
+
+## Shelves of the newest trophies: a row of framed slots on a wooden plank.
 static func _shelves() -> Control:
 	var ids = App.state.achievements.keys()
 	ids.sort_custom(func(a, b): return str(App.state.achievements[a].get("at", "")) > str(App.state.achievements[b].get("at", "")))
 	var wall = PanelContainer.new()
-	wall.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(Pal.BG2, 0.9), 5, Pal.LINE, 2, 10, 10))
+	wall.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	wall.add_theme_stylebox_override("panel", _wall_box(10))
 	var v = Kit.vbox(4)
 	if ids.is_empty():
-		v.add_child(Kit.para("No trophies yet: your first workout earns one.", 13, Pal.MUTED))
+		v.add_child(Kit.para("No trophies yet: your first workout earns one.", 13, Pal.LINE))
 	for s in range(SHELVES):
 		var row_ids = ids.slice(s * PER_SHELF, (s + 1) * PER_SHELF)
 		if row_ids.is_empty():
@@ -56,17 +75,10 @@ static func _shelves() -> Control:
 		for id in row_ids:
 			row.add_child(_trophy(str(id)))
 		v.add_child(row)
-		var plank = ColorRect.new()
-		plank.color = Color("7a5232")
-		plank.custom_minimum_size = Vector2(0, 5)
-		v.add_child(plank)
-		var edge = ColorRect.new()
-		edge.color = Color("4a301c")
-		edge.custom_minimum_size = Vector2(0, 2)
-		v.add_child(edge)
+		v.add_child(_plank(5))
 		v.add_child(Kit.gap(4))
 	if ids.size() > SHELVES * PER_SHELF:
-		v.add_child(Kit.label("and %d more in Adventure -> Trophies" % (ids.size() - SHELVES * PER_SHELF), 11, Pal.MUTED))
+		v.add_child(Kit.label("and %d more in Adventure -> Trophies" % (ids.size() - SHELVES * PER_SHELF), 11, Pal.LINE))
 	wall.add_child(v)
 	return wall
 
@@ -74,9 +86,11 @@ static func _shelves() -> Control:
 static func _trophy(id: String) -> Control:
 	var a = Achievements.by_id(id)
 	var slot = PanelContainer.new()
+	slot.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	slot.custom_minimum_size = Vector2(44, 44)
 	var tc = Pal.hex(Achievements.TIER_COLOR[Achievements.tier_of(a)]) if a != null else Pal.ACCENT
-	slot.add_theme_stylebox_override("panel", Kit.sbox(Pal.with_alpha(tc, 0.18), 5, Pal.with_alpha(tc, 0.7), 2, 4, 4))
+	# (a framed icon slot ringed in the tier's colour, as every icon of the Workshop look)
+	slot.add_theme_stylebox_override("panel", PixBox.slot(tc, true, 2))
 	var mid = CenterContainer.new()
 	mid.add_child(Icons.rect(Icons.for_emoji(a.icon) if a != null else "trophy", 32))
 	slot.add_child(mid)
@@ -128,7 +142,8 @@ static func _plaques() -> Control:
 	return grid
 
 
-## The floor: every companion the player has, walking to and fro.
+## The floor: every companion the player has, walking to and fro. (2026-11-27 Workshop review: it was a
+## navy strip in typed colours, the old look; now the shelves' dark wall with a wooden plank to walk on.)
 static func _pets_floor():
 	var owned = App.state.get("pets", {}).keys()
 	if owned.is_empty():
@@ -136,16 +151,20 @@ static func _pets_floor():
 	var floor = Control.new()
 	floor.custom_minimum_size = Vector2(0, 76)
 	floor.clip_contents = true
-	var bg = ColorRect.new()
-	bg.color = Color("3a3460")
+	var bg = Panel.new()
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_theme_stylebox_override("panel", _wall_box(0))
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	floor.add_child(bg)
-	var line = ColorRect.new()
-	line.color = Color("2b2540")
-	line.anchor_right = 1.0
-	line.offset_top = 64
-	line.offset_bottom = 76
-	floor.add_child(line)
+	# (inside the well's rim, which is 2 art pixels: 4 screen pixels)
+	var boards = _plank(6)
+	boards.anchor_right = 1.0
+	boards.offset_left = 4
+	boards.offset_right = -4
+	boards.offset_top = 62
+	boards.offset_bottom = 72
+	floor.add_child(boards)
 	var i = 0
 	for id in owned.slice(0, 6):
 		var pv = PetView.new()

@@ -58,6 +58,8 @@ static func snap(tree: SceneTree, shot_name: String) -> String:
 	for n in walk(tree.root):
 		if n is ScrollContainer and n.is_visible_in_tree() and n.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and n.get_global_rect().end.x > win_w + 0.5:
 			print("CHECK FAIL  %s: a column runs past the right edge of the window (%d > %d, %s)" % [shot_name, int(n.get_global_rect().end.x), int(win_w), str(n.get_path()).right(70)])
+			for line in widest(n):
+				print("  WIDE " + line)
 	for n in walk(tree.root):
 		if n is ScrollContainer and n.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and n.get_child_count() > 0:
 			for c in n.get_children():
@@ -257,3 +259,40 @@ static func _sets(top: float, reps: int, count: int, rng: RandomNumberGenerator)
 	for i in range(count):
 		sets.append({"reps": maxi(1, reps - (1 if i == count - 1 and rng.randf() < 0.4 else 0)), "weightKg": w})
 	return sets
+
+
+## What makes a column too wide (printed under its CHECK FAIL): down from the column, the child that needs the
+## most width, until a row (a box of things side by side) or a leaf; then that row and its parts' widths.
+static func widest(column: Control) -> Array:
+	var out = []
+	var node: Control = null
+	for c in column.get_children():
+		if c is Control and not (c is ScrollBar):
+			node = c
+	var depth = 0
+	while node != null and depth < 60:
+		depth += 1
+		var kids = node.get_children().filter(func(k): return k is Control and k.visible and not (k is ScrollBar))
+		if node is HBoxContainer or node is HFlowContainer or node is GridContainer or kids.is_empty():
+			break
+		var best: Control = null
+		for k in kids:
+			if best == null or k.get_combined_minimum_size().x > best.get_combined_minimum_size().x:
+				best = k
+		if best.get_combined_minimum_size().x < node.get_combined_minimum_size().x - 48.0:
+			break
+		node = best
+	if node == null:
+		return out
+	out.append("%s %s needs %d" % [node.get_class(), str(node.get_path()).right(90), int(node.get_combined_minimum_size().x)])
+	for k in node.get_children():
+		if k is Control and k.visible:
+			var words = str(k.get("text")) if k.get("text") != null else ""
+			if words == "":
+				for l in walk(k):
+					if l is Label and str(l.text) != "":
+						words = str(l.text)
+						break
+			out.append("   %s %d '%s'" % [k.get_class(), int(k.get_combined_minimum_size().x), words.left(40)])
+	return out
+

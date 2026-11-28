@@ -15,7 +15,8 @@ extends RefCounted
 ##
 ## Everything is drawn on a grid of U screen pixels, in a few flat colours, so
 ## it reads as part of the pixel art and not as a smooth particle system.
-## Nothing here reads the battle, the save or Pal: colours are handed in.
+## Nothing here reads the battle or the save, and colours are handed in (but for the dark edge round a word's
+## letters, Pal.OUTLINE).
 ## `speed` (1 or 2) is the battle's own: effects run that much faster.
 
 ## Screen pixels per effect pixel.
@@ -129,11 +130,51 @@ static func number(layer: Control, pos: Vector2, text: String, color: Color, px:
 	tw.tween_callback(r.queue_free)
 
 
-## A word that pops and rises ("WEAK", "BREAK!", a status).
+static var _outlined = {}
+
+
+## Pixel letters in `color` with a one-pixel `edge` all round them (cached). (2026-11-27 review: a word drawn
+## bare was red on a red foe or magenta on a pale sky; with a dark edge it reads on anything.) A colour too dark
+## to stand off its dark edge is lifted first.
+static func outlined_tex(text: String, color: Color, edge: Color) -> ImageTexture:
+	var c = color
+	if c.get_luminance() < 0.22:
+		c = c.lerp(Color(1, 1, 1, c.a), 0.45)
+	var key = "%s|%s|%s" % [text, c.to_html(), edge.to_html()]
+	if _outlined.has(key):
+		return _outlined[key]
+	var src = PixelFont.tex(text, c, false).get_image()
+	var w = src.get_width()
+	var h = src.get_height()
+	var img = Image.create_empty(w + 2, h + 2, false, Image.FORMAT_RGBA8)
+	var on = []
+	for y in range(h):
+		for x in range(w):
+			if src.get_pixel(x, y).a > 0.5:
+				on.append(Vector2i(x + 1, y + 1))
+	for p in on:
+		for dy in range(-1, 2):
+			for dx in range(-1, 2):
+				img.set_pixel(p.x + dx, p.y + dy, edge)
+	for p in on:
+		img.set_pixel(p.x, p.y, c)
+	var t = ImageTexture.create_from_image(img)
+	if _outlined.size() > 200:
+		_outlined.clear()
+	_outlined[key] = t
+	return t
+
+
+## A word that pops and rises ("WEAK", "BREAK!", a status), with a dark edge round its letters.
 static func word(layer: Control, pos: Vector2, text: String, color: Color, px: int = 1, delay: float = 0.0, rise: float = 24.0) -> void:
 	if layer == null or not is_instance_valid(layer) or not layer.is_inside_tree():
 		return
-	var r = PixelFont.rect(text, px, color)
+	var r = TextureRect.new()
+	r.texture = outlined_tex(text, color, Pal.OUTLINE)
+	r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	r.custom_minimum_size = Vector2(r.texture.get_width() * maxi(1, px), r.texture.get_height() * maxi(1, px))
 	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(r)
 	r.size = r.custom_minimum_size

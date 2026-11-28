@@ -108,9 +108,17 @@ static func _level_card(d: String, s: Dictionary, mine: Array, col: Color) -> Ca
 	var side = Kit.vbox(5)
 	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	side.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# (2026-11-27 review: "LEVEL 23" was thin pixel letters in a lightened colour straight on the cream paper)
+	# The level on a raised plate in the discipline's colour, words in whichever of ink or cream reads on it,
+	# as the Hero tab's LV plate.
 	var num = Kit.hbox(8)
-	num.add_child(Kit.vcenter(PixelFont.rect("LEVEL", 2, col.lightened(0.25))))
-	num.add_child(Kit.vcenter(PixelFont.rect(str(int(lv.level)), 4, col)))
+	var plate = PanelContainer.new()
+	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.add_theme_stylebox_override("panel", PixBox.block_set(col, 8, 5, 1)["normal"])
+	plate.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	plate.add_child(PixelFont.rect("LV %d" % int(lv.level), 3, Kit.on_color(col), false))
+	num.add_child(plate)
 	side.add_child(num)
 	side.add_child(Kit.bar(float(lv.progress), col, 12))
 	var left = "The highest level"
@@ -127,7 +135,8 @@ static func _level_card(d: String, s: Dictionary, mine: Array, col: Color) -> Ca
 	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for i in range(tiles.size()):
 		var x = tiles[i]
-		var w = JourneyScreen.well_tile(str(x[1]), str(x[2]), col if i == 0 else Pal.TEXT, sc)
+		# (the tiles are dark wells: their numbers cream, the first in the discipline's colour)
+		var w = JourneyScreen.well_tile(str(x[1]), str(x[2]), col if i == 0 else Pal.CREAM, sc)
 		w.set_meta("disc_tile", str(x[0]))
 		g.add_child(w)
 	c.add(g)

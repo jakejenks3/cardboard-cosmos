@@ -94,6 +94,9 @@ static func page_row(b: Dictionary) -> Control:
 	box.custom_minimum_size = Vector2(84, 38)
 	box.size_flags_horizontal = Control.SIZE_SHRINK_END
 	box.max_length = 5
+	## (2026-11-27 review: the bookmark shown only as the theme's dim placeholder looked like an empty, switched
+	## off box) the page it stands at in brighter cream; typing over it still replaces it.
+	box.add_theme_color_override("font_placeholder_color", Pal.with_alpha(Pal.CREAM, 0.62))
 	box.tooltip_text = "The page you stopped on: the pages since your last one are counted"
 	box.set_meta("book_page_box", str(b.id))
 	row.add_child(box)
@@ -249,16 +252,14 @@ static func shelf_card() -> Control:
 	return c
 
 
+## (2026-11-27 review: a bar of the spine's colour down each row's left edge was the old striped look) A row
+## is a cream slip (Kit.row) with the book in a framed slot ringed in its spine's colour.
 static func _shelf_row(b: Dictionary) -> Control:
-	var row = Kit.card(0, BookView.open_book.bind(str(b.id)), 6)
+	var row = Kit.row(BookView.open_book.bind(str(b.id)), null, null, 6, 0)
 	row.set_meta("shelf_book", str(b.id))
 	row.tooltip_text = str(b.title)
 	var h = Kit.hbox(8)
-	var sw = ColorRect.new()
-	sw.color = Books.spine(b).color
-	sw.custom_minimum_size = Vector2(8, 22)
-	sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(sw)
+	h.add_child(Kit.vcenter(Kit.badge("book", Books.spine(b).color, 16)))
 	var v = Kit.vbox(0)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(Kit.soft_name(str(b.title), 13, null, true, 260.0))

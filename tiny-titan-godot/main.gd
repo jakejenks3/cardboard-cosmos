@@ -4,8 +4,6 @@ extends Control
 
 const NAV_H = 64.0
 const MAX_W = 520.0
-## How far down the sky shows through the top of the column.
-const SKY_H = 260.0
 ## The tabs, left to right. The sixth, Realm (the turn-based RPG, RPG_PLAN.md),
 ## came 2026-11-25 and is LAST, so the first five are where they always were.
 const TABS = [
@@ -73,7 +71,6 @@ var _speed_lows = []
 
 func _ready() -> void:
 	Pal.apply(App.settings().get("theme", "arcade"))
-	_apply_look()
 	if OS.has_feature("web"):
 		# A phone's browser has no fonts to fall back on for arrows and triangles.
 		SymbolFont.install(ThemeDB.fallback_font, Kit.font_bold())
@@ -116,8 +113,16 @@ func _ask_update() -> void:
 func _build() -> void:
 	theme = Kit.theme()
 
-	# The pixel-art sky and mountains behind everything.
-	add_child(Backdrop.new())
+	# The Workshop's dark planks behind everything (ui/pal.gd; the pixel sky that was here is gone).
+	var planks = TextureRect.new()
+	planks.texture = PixBox.planks()
+	planks.stretch_mode = TextureRect.STRETCH_TILE
+	planks.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	planks.set_anchors_preset(Control.PRESET_FULL_RECT)
+	planks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(planks)
+	# Ink is told the page's colour by the planks' own: words on the page are cream.
+	add_child(Ink.new())
 	_floor = ColorRect.new()
 	_floor.color = Pal.BG2
 	_floor.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -127,39 +132,13 @@ func _build() -> void:
 	_column = Control.new()
 	add_child(_column)
 
-	# The app column sits on the scene like a pane of dark glass: the sky shows
-	# through at the top and fades to the solid background further down.
-	var fade = Gradient.new()
-	fade.set_color(0, Pal.with_alpha(Pal.BG, 0.0))
-	fade.set_color(1, Pal.BG)
-	var fade_tex = GradientTexture2D.new()
-	fade_tex.gradient = fade
-	fade_tex.fill_from = Vector2(0, 0)
-	fade_tex.fill_to = Vector2(0, 1)
-	fade_tex.width = 4
-	fade_tex.height = 64
-	var shade_top = TextureRect.new()
-	shade_top.texture = fade_tex
-	shade_top.stretch_mode = TextureRect.STRETCH_SCALE
-	shade_top.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	shade_top.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	shade_top.offset_bottom = SKY_H
-	shade_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_column.add_child(shade_top)
-	var shade_rest = ColorRect.new()
-	shade_rest.color = Pal.BG
-	shade_rest.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade_rest.offset_top = SKY_H
-	shade_rest.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_column.add_child(shade_rest)
-
 	# On a wide window the column gets thin side lines so it reads as "the device".
 	_frame = Panel.new()
 	var fs = StyleBoxFlat.new()
 	fs.bg_color = Color(0, 0, 0, 0)
-	fs.border_color = Pal.LINE
-	fs.border_width_left = 1
-	fs.border_width_right = 1
+	fs.border_color = Pal.OUTLINE
+	fs.border_width_left = 2
+	fs.border_width_right = 2
 	_frame.add_theme_stylebox_override("panel", fs)
 	_frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -173,15 +152,16 @@ func _build() -> void:
 	_column.add_child(_scroll)
 	_holder = MarginContainer.new()
 	_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_holder.add_theme_constant_override("margin_left", 14)
-	_holder.add_theme_constant_override("margin_right", 14)
+	_holder.add_theme_constant_override("margin_left", 8)
+	_holder.add_theme_constant_override("margin_right", 8)
 	_holder.add_theme_constant_override("margin_top", 10)
 	_holder.add_theme_constant_override("margin_bottom", 28)
 	_scroll.add_child(_holder)
 
 	_nav = PanelContainer.new()
 	_nav.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_nav.add_theme_stylebox_override("panel", PixBox.make(Pal.BG2, {"ring": Pal.BORDER, "lip": 0, "pad_h": 4, "pad_v": 0}))
+	# A wooden shelf (the board material) the tabs sit on.
+	_nav.add_theme_stylebox_override("panel", PixBox.material("board", {"pad_h": 4, "pad_v": 0}))
 	_nav.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_nav.offset_top = -NAV_H
 	_nav.offset_bottom = 0
@@ -429,22 +409,8 @@ func _layout() -> void:
 		_floor.visible = _inset_bottom > 0.0
 
 
-## The look of sections and rows picked in Settings (Kit.look; the mock-ups of 2026-11-27).
-func _apply_look() -> void:
-	var lk = str(App.settings().get("look", "stripe"))
-	Kit.look = lk if Kit.LOOKS.has(lk) else "stripe"
-
-
 func _on_changed() -> void:
-	var want_look = str(App.settings().get("look", "stripe"))
-	if Kit.LOOKS.has(want_look) and want_look != Kit.look:
-		_apply_look()
-		call_deferred("_retheme")
-		return
-	if str(App.settings().get("theme", "arcade")) != Pal.theme_id and Pal.THEMES.has(str(App.settings().get("theme", "arcade"))):
-		# Deferred: this runs inside the button press that asked for the change.
-		call_deferred("_retheme")
-		return
+	# (There is one look and one theme since 2026-11-27: nothing to switch here.)
 	# Profile created or wiped: swap between onboarding and the game.
 	if (_onboarding != null) == App.has_profile():
 		_refresh()
@@ -576,7 +542,7 @@ func _nav_button(t: Dictionary, active: bool, badge: int, dot: bool = false) -> 
 		b.add_theme_stylebox_override(s, empty)
 	b.pressed.connect(_nav_pressed.bind(t.id))
 
-	var col = Pal.tab(t.id) if active else Pal.MUTED
+	var col = Pal.GOLD_TEXT if active else Pal.CREAM
 	var v = VBoxContainer.new()
 	v.set_anchors_preset(Control.PRESET_FULL_RECT)
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -585,17 +551,17 @@ func _nav_button(t: Dictionary, active: bool, badge: int, dot: bool = false) -> 
 	b.add_child(v)
 
 	if t.id == "log":
-		# The big gold "+" that sticks up out of the bar.
+		# The big green "+" key that sticks up out of the shelf.
 		var key = Panel.new()
 		key.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		key.add_theme_stylebox_override("panel", PixBox.button_set(Pal.ACCENT, Pal.ACCENT_DARK, 0, 0, 2)["normal"])
-		key.custom_minimum_size = Vector2(48, 50)
+		key.add_theme_stylebox_override("panel", PixBox.block_set("green", 0, 0, 2)["normal"])
+		key.custom_minimum_size = Vector2(50, 52)
 		key.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		key.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		Fx.shine(key, 7.0, 2.5, 0.35)
-		var plus = Icons.rect("plus", 26, Pal.INK)
+		var plus = Icons.rect("plus", 32, Pal.CREAM)
 		plus.set_anchors_preset(Control.PRESET_CENTER)
-		plus.position -= Vector2(13, 14)
+		plus.position -= Vector2(16, 18)
 		key.add_child(plus)
 		var lift = Control.new()
 		lift.custom_minimum_size = Vector2(46, 30)
@@ -605,14 +571,27 @@ func _nav_button(t: Dictionary, active: bool, badge: int, dot: bool = false) -> 
 		lift.add_child(key)
 		v.add_child(lift)
 	else:
+		# The icon in a framed slot, the tab's colour on its ring; the chosen one lifted and bright.
 		var holder = Control.new()
-		holder.custom_minimum_size = Vector2(32, 32)
+		holder.custom_minimum_size = Vector2(40, 40)
 		holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var ic = Icons.rect(t.icon, 32, null if active else Pal.MUTED)
-		ic.position = Vector2(0, 0)
+		var slot = Panel.new()
+		slot.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_theme_stylebox_override("panel", PixBox.slot(Pal.tab(t.id) if active else Pal.BORDER.lightened(0.15), true, 0))
+		slot.position = Vector2(0, -4 if active else 0)
+		if active:
+			# The chosen tab: its slot's ring in the tab's colour (tests read this).
+			slot.set_meta("tab_ring", Pal.tab(t.id))
+		slot.size = Vector2(40, 40)
+		holder.add_child(slot)
+		var ic = Icons.rect(t.icon, 32)
+		if not active:
+			ic.modulate = Color(0.82, 0.8, 0.78)
+		ic.position = Vector2(4, 4)
 		ic.size = Vector2(32, 32)
-		holder.add_child(ic)
+		slot.add_child(ic)
 		if active and _bounce_tab == str(t.id):
 			# The tab that was just chosen: its icon drops in with a bounce.
 			_bounce_tab = ""
@@ -630,20 +609,9 @@ func _nav_button(t: Dictionary, active: bool, badge: int, dot: bool = false) -> 
 			pip.set_meta("tab_dot", str(t.id))
 			holder.add_child(pip)
 		v.add_child(holder)
-	var l = Kit.label(t.label, 11, col, true)
+	var l = Kit.outlined(t.label, 11, col, true)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(l)
-	if active and t.id != "log":
-		# A marker in the tab's colour along the top edge of the bar.
-		var mark = ColorRect.new()
-		mark.color = Pal.tab(t.id)
-		mark.set_anchors_preset(Control.PRESET_TOP_WIDE)
-		mark.offset_left = 14
-		mark.offset_right = -14
-		mark.offset_top = 2
-		mark.offset_bottom = 6
-		mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		b.add_child(mark)
 	Kit.juice(b)
 	return b
 
@@ -761,7 +729,7 @@ func _on_toast(text: String, kind: String, icon: String) -> void:
 	p.add_theme_stylebox_override("panel", PixBox.make(Pal.PANEL2, {"ring": col, "lip": 1, "pad_h": 12, "pad_v": 8}))
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var h = Kit.hbox(8)
-	h.add_child(Icons.rect(ic, 20))
+	h.add_child(Kit.vcenter(Kit.badge(ic, col, 16)))
 	h.add_child(Kit.para(text, 14, null, true))
 	p.add_child(h)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE

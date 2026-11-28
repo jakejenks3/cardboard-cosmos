@@ -197,11 +197,12 @@ static func _slot_tile(slot: String, rpg: Dictionary, b: Dictionary, have: Dicti
 			pl.size = pl.custom_minimum_size
 			pic.add_child(pl)
 	else:
+		## (Workshop look: an empty slot is not faded; its plus says it is empty and its caption reads in
+		## brown ink.)
 		card.accent(rc)
 		pic = PixFit.make(Icons.tex("plus", Pal.LINE), TILE_BOX, 1)
-		card.modulate = Color(1, 1, 1, 0.8)
 	card.add(pic)
-	var cap = PixelFont.rect(str(SHORT.get(slot, slot.to_upper())), 1, Pal.TEXT if g != null else Pal.LINE, false)
+	var cap = PixelFont.rect(str(SHORT.get(slot, slot.to_upper())), 1, Pal.TEXT if g != null else Pal.MUTED, false)
 	cap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	card.add(cap)
 	Kit.passthrough(card.box)
@@ -222,11 +223,11 @@ static func _pet_tile(b: Dictionary, have: Dictionary) -> Control:
 		card.tint(Pal.PANEL2.lightened(0.06), Pal.rarity(str(p.get("rarity", "common"))))
 		pic = PixFit.make(Art.pet_texture(id, 0, false), TILE_BOX, 2)
 	else:
+		## (as an empty gear slot: not faded, the caption in brown ink)
 		card.accent(Pal.LINE)
 		pic = PixFit.make(Icons.tex("plus", Pal.LINE), TILE_BOX, 1)
-		card.modulate = Color(1, 1, 1, 0.8)
 	card.add(pic)
-	var cap = PixelFont.rect("PET", 1, Pal.TEXT if p != null else Pal.LINE, false)
+	var cap = PixelFont.rect("PET", 1, Pal.TEXT if p != null else Pal.MUTED, false)
 	cap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	card.add(cap)
 	Kit.passthrough(card.box)

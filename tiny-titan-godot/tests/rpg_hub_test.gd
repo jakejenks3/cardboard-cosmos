@@ -100,7 +100,8 @@ func _too_wide() -> String:
 		if c is Control and not (c is ScrollBar) and c.get_combined_minimum_size().x > sc.size.x + 0.5:
 			return "the page needs %d of %d" % [int(c.get_combined_minimum_size().x), int(sc.size.x)]
 	var page = main._screen
-	if page.size.x > 412.5:
+	# (the column less its side margins: 8 each since the Workshop look, 2026-11-27)
+	if page.size.x > 424.5:
 		return "the page is %d wide" % int(page.size.x)
 	for c in _all(page):
 		if c is Control and c.is_visible_in_tree() and c.get_global_rect().end.x > page.get_global_rect().end.x + 0.5 and not _clipped(c, page):
@@ -717,7 +718,7 @@ func _run() -> void:
 	# Layout: the width, finger sizes, a rebuild
 	# =================================================================================================
 	realm = _realm()
-	ok(_too_wide() == "" and realm.size.x <= 412.5 and realm.size.x >= 400.0, "the hub with the Map fits the column (412, less the scroll bar)", [_too_wide(), realm.size.x])
+	ok(_too_wide() == "" and realm.size.x <= 424.5 and realm.size.x >= 400.0, "the hub with the Map fits the column (424, less the scroll bar)", [_too_wide(), realm.size.x])
 	var places = _key_places()
 	realm.rebuild_now()
 	await _frames(14)

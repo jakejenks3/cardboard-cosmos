@@ -35,26 +35,42 @@ static func is_date_key(t: String) -> bool:
 	return t <= App.today
 
 
-## "← [icon] Title  [trash]".
-static func topbar(icon: String, title: String, on_back: Callable, on_delete: Callable = Callable(), badge_icon: String = "") -> HBoxContainer:
+## The form's head: "← [icon] Title  [trash]", and under it the rows the form passes in `under` (the day
+## with its arrows, the timer, the time picks).
+## (2026-11-27 review: the pieces floated on the bare planks in two loose rows) As the mock-up's Log page has
+## it, all of it on one wooden BOARD, the title in cream, the day in gold (date_field).
+static func topbar(icon: String, title: String, on_back: Callable, on_delete: Callable = Callable(), badge_icon: String = "", under: Array = []) -> PanelContainer:
+	var board = PanelContainer.new()
+	board.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	board.add_theme_stylebox_override("panel", PixBox.material("board", {"pad_h": 10, "pad_v": 8, "shadow": 2}))
+	board.set_meta("form_head", true)
+	var v = Kit.vbox(6)
 	var h = Kit.hbox(8)
 	h.add_child(Kit.icon_button("arrow_left", on_back, "Back", 34))
 	h.add_child(Kit.vcenter(Parts.disc_badge(icon, 30, badge_icon) if (Xp.is_discipline(icon) or icon == TT.MISC) else Icons.rect(icon, 24)))
-	var t = Kit.clip(title, 19, null, true)
+	var t = Kit.clip(title, 19, Pal.CREAM, true)
+	t.add_theme_constant_override("outline_size", Kit.outline_for(19))
+	t.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(t)
 	if on_delete.is_valid():
 		h.add_child(Kit.icon_button("trash", on_delete, "Delete", 34))
-	return h
+	v.add_child(h)
+	for r in under:
+		if r is Control:
+			v.add_child(r)
+	board.add_child(v)
+	return board
 
 
 # ---------------------------------------------------------------------------
 # Raised keys, chips and badges
 # ---------------------------------------------------------------------------
 
-## Make a label read on a bright face: white with a dark pixel outline.
+## Make a label read on a bright face: cream (the Workshop's words on a key) with a dark pixel outline.
 static func on_face(l: Label, outline: int = 4) -> Label:
-	l.add_theme_color_override("font_color", Color.WHITE)
+	l.add_theme_color_override("font_color", Pal.CREAM)
 	l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
 	l.add_theme_constant_override("outline_size", outline)
 	return l
@@ -178,24 +194,52 @@ static func template(date_key: String, text: String, on_tap: Callable, icon: Str
 const ROW_H = 32
 
 
-## Date entry: ‹ [YYYY-MM-DD] ›. The day spelled out is in the tooltip; a line
-## under it appears only when the date is not valid.
-## `on_change.call(key)` only fires with a valid date.
+## Date entry: ‹ Fri, Nov 27 ›. The day is spelled out (2026-11-27 review: a raw "2026-11-27" where the
+## rest of the game says the day), in gold words for the form's wooden board; a tap on it shows the box to
+## type a date in (YYYY-MM-DD), which goes again once it is left. A line under it appears only when the
+## typed date is not valid. `on_change.call(key)` only fires with a valid date.
 static func date_field(value: String, on_change: Callable) -> VBoxContainer:
 	var row = Kit.hbox(3)
 	var e = Kit.input(value, "YYYY-MM-DD", true)
 	e.set_meta(FKEY, "date")
 	e.tooltip_text = _date_hint(value)
-	e.custom_minimum_size = Vector2(100, ROW_H)
+	e.custom_minimum_size = Vector2(110, ROW_H)
 	e.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	e.max_length = 10
 	_slim_edit(e)
-	var hint = Kit.label("", 10, Pal.DANGER)
+	e.visible = false
+	# The day in words, gold with a dark outline (it sits on the board); a tap shows the box instead.
+	var day = Button.new()
+	day.focus_mode = Control.FOCUS_NONE
+	day.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	day.flat = true
+	day.text = _day_words(value)
+	day.tooltip_text = _date_hint(value) + " (tap to type a date)"
+	day.custom_minimum_size = Vector2(0, ROW_H)
+	var plain = StyleBoxEmpty.new()
+	for side in [SIDE_LEFT, SIDE_RIGHT]:
+		plain.set_content_margin(side, 6)
+	for k in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+		day.add_theme_stylebox_override(k, plain)
+	day.add_theme_font_override("font", Kit.font_bold())
+	day.add_theme_font_size_override("font_size", 16)
+	for k in ["font_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		day.add_theme_color_override(k, Pal.GOLD_TEXT)
+	day.add_theme_color_override("font_hover_color", Pal.GOLD_TEXT.lightened(0.25))
+	day.add_theme_constant_override("outline_size", Kit.outline_for(16))
+	day.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	day.set_meta("date_words", value)
+	var hint = Kit.label("", 11, Pal.CREAM, true)
+	hint.add_theme_constant_override("outline_size", Kit.outline_for(11))
+	hint.add_theme_color_override("font_outline_color", Pal.OUTLINE)
 	hint.visible = false
 	var apply = func(t: String) -> void:
 		if is_date_key(t):
 			hint.visible = false
 			e.tooltip_text = _date_hint(t)
+			day.text = _day_words(t)
+			day.tooltip_text = _date_hint(t) + " (tap to type a date)"
+			day.set_meta("date_words", t)
 			on_change.call(t)
 		else:
 			hint.text = "YYYY-MM-DD, not in the future"
@@ -212,7 +256,22 @@ static func date_field(value: String, on_change: Callable) -> VBoxContainer:
 	var prev = small_key("‹", func(): shift.call(-1), "Day before", 24, ROW_H)
 	var nxt_btn = small_key("›", func(): shift.call(1), "Day after", 24, ROW_H)
 	e.text_changed.connect(func(t): apply.call(t.strip_edges()))
+	# The box to type in: shown in the day's place, gone again (the day back) once it is left.
+	day.pressed.connect(func():
+		Sfx.tap()
+		day.visible = false
+		e.visible = true
+		e.grab_focus()
+		e.select_all())
+	var back = func():
+		if not is_instance_valid(e) or not is_instance_valid(day):
+			return
+		e.visible = false
+		day.visible = true
+	e.focus_exited.connect(back)
+	e.text_submitted.connect(func(_t): e.release_focus())
 	row.add_child(prev)
+	row.add_child(day)
 	row.add_child(e)
 	row.add_child(nxt_btn)
 	var f = Kit.vbox(2)
@@ -220,6 +279,13 @@ static func date_field(value: String, on_change: Callable) -> VBoxContainer:
 	f.add_child(row)
 	f.add_child(hint)
 	return f
+
+
+## "Fri, Nov 27" (the date as typed when it is not a valid day).
+static func _day_words(t: String) -> String:
+	if not is_date_key(t):
+		return t
+	return Dates.format_date(t, {"weekday": "short", "month": "short", "day": "numeric"})
 
 
 static func _date_hint(t: String) -> String:
@@ -277,6 +343,9 @@ static func _slim_edit(e: LineEdit, pad_h: int = 4, pad_v: int = 5, font_px: int
 	e.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	e.add_theme_stylebox_override("normal", PixBox.well(pad_h, pad_v, Pal.LINE))
 	e.add_theme_stylebox_override("focus", PixBox.well(pad_h, pad_v, Pal.ACCENT))
+	# (2026-11-27 review: the half-clear cream placeholder, "0 : 00 : 00", was a dim grey on the dark well) A
+	# solid light tan: it reads, and it is still not the cream of a number typed.
+	e.add_theme_color_override("font_placeholder_color", Pal.LINE)
 
 
 ## A small number box (duration parts, distance …) with a focus key.
@@ -339,44 +408,43 @@ static func mini_chip_space(text: String, pad_h: int = 9) -> Control:
 	return gap
 
 
-## An icon button with no box of its own (remove set / exercise): muted icon,
-## a pixel key appears under it on hover and goes red when pressed.
+## A small red key with a cream icon (remove a set, an exercise, a photo): the mock-up's red X.
+## (2026-11-27 review: a bare grey glyph with no key looked unfinished beside the bevelled steppers) The same
+## size as before, so nothing in a row moves.
 static func quiet_icon(icon: String, on_press: Callable, tip: String, px: int = 28) -> Button:
 	if Kit.fingers:
 		px = maxi(px, 36)
 	var b = Kit.icon_button(icon, on_press, tip, px)
 	b.custom_minimum_size = Vector2(px, px)
-	var pad_px = int(maxf(5.0, (px - 16) / 2.0))
-	var empty = StyleBoxEmpty.new()
-	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
-		empty.set_content_margin(side, pad_px)
-	b.add_theme_stylebox_override("normal", empty)
-	b.add_theme_stylebox_override("hover", PixBox.make(Pal.PANEL2, {"ring": Pal.LINE, "lip": 0, "pad_h": pad_px, "pad_v": pad_px}))
-	b.add_theme_stylebox_override("pressed", PixBox.make(Pal.deep(Pal.DANGER), {"ring": Pal.DANGER, "lip": 0, "pad_h": pad_px, "pad_v": pad_px}))
-	b.add_theme_color_override("icon_normal_color", Pal.with_alpha(Pal.MUTED, 0.7))
-	b.add_theme_color_override("icon_hover_color", Pal.TEXT)
-	b.add_theme_color_override("icon_pressed_color", Pal.TEXT)
+	b.icon = Icons.tex(icon, Pal.CREAM, 1)
+	# A lip of one art pixel (and its rim) under the face: the icon is centred on the face above it.
+	var lip = 1
+	var drop = (lip + 1) * PixBox.S
+	var pad_px = maxi(1, int((px - 16 - drop) / 2.0))
+	var looks = PixBox.block_set("red", pad_px, pad_px, lip)
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
+	for k in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_focus_color", "icon_hover_pressed_color"]:
+		b.add_theme_color_override(k, Color.WHITE)
+	b.add_theme_color_override("icon_disabled_color", Pal.with_alpha(Color.WHITE, 0.55))
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	return b
 
 
-## A text field that reads as a bold title: no box until hovered or focused.
+## A text field for a name (an exercise being named or renamed): bold words in a dark well.
+## (2026-11-27 review: it had no box until hovered, and its cream words stood on the sand parchment where
+## they could hardly be read) A dark well in every state, like every box being typed in.
 static func title_edit(value: String, placeholder: String, px: int = 16) -> LineEdit:
 	var e = Kit.input(value, placeholder)
-	e.custom_minimum_size = Vector2(48, 30)
+	e.custom_minimum_size = Vector2(48, 32)
 	e.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	e.add_theme_font_override("font", Kit.font_bold())
 	e.add_theme_font_size_override("font_size", px)
-	var plain = StyleBoxEmpty.new()
-	plain.set_content_margin(SIDE_LEFT, 6)
-	plain.set_content_margin(SIDE_RIGHT, 6)
-	plain.set_content_margin(SIDE_TOP, 3)
-	plain.set_content_margin(SIDE_BOTTOM, 3)
-	var hover = PixBox.well(6, 3, Pal.LINE)
-	e.add_theme_stylebox_override("normal", plain)
-	e.add_theme_stylebox_override("focus", PixBox.well(6, 3, Pal.ACCENT))
-	e.mouse_entered.connect(func(): e.add_theme_stylebox_override("normal", hover))
-	e.mouse_exited.connect(func(): e.add_theme_stylebox_override("normal", plain))
+	e.add_theme_stylebox_override("normal", PixBox.well(8, 3, Pal.LINE))
+	e.add_theme_stylebox_override("focus", PixBox.well(8, 3, Pal.ACCENT))
+	e.add_theme_color_override("font_color", Pal.CREAM)
+	e.add_theme_color_override("font_placeholder_color", Pal.LINE)
 	return e
 
 
@@ -384,20 +452,35 @@ static func title_edit(value: String, placeholder: String, px: int = 16) -> Line
 # The finish block
 # ---------------------------------------------------------------------------
 
-## Fill `holder` with the XP preview: "+240" as a big gold pixel number, "XP"
-## beside it, and at most one short muted line. `tip` goes in the tooltip.
+## Fill `holder` with the XP preview: a star and "+240 XP" in gold pixel letters on a dark cap, and at most
+## one short line under it. `tip` goes in the tooltip.
+## (2026-11-27 review: the big number stood on the parchment in a dull darkened gold with a pale shadow, the
+## least punchy thing on the screen) As the mock-up has it: gold on a dark cap, so the reward shines.
 static func fill_xp_preview(holder: Container, amount: int, _color: Color, tip: String, sub: String) -> void:
 	Kit.clear(holder)
+	var cap = PanelContainer.new()
+	cap.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cap.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	cap.add_theme_stylebox_override("panel", PixBox.material("cap", {"pad_h": 10, "pad_v": 7}))
+	cap.set_meta("xp_cap", amount)
 	var main_row = Kit.hbox(6)
 	main_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	main_row.add_child(PixelFont.rect("+%s" % Xp.fmt_int(amount), 4 if amount < 10000 else 3, Pal.ACCENT))
-	var xp = PixelFont.rect("XP", 2, Pal.ACCENT)
+	main_row.add_child(Kit.vcenter(Icons.rect("star", 16)))
+	var big = PixelFont.rect("+%s" % Xp.fmt_int(amount), 3 if amount < 10000 else 2, Pal.GOLD_TEXT)
+	big.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# (gold with its dark shadow, on the dark cap: Ink leaves it as it is)
+	big.set_meta("ink_keep", true)
+	main_row.add_child(big)
+	var xp = PixelFont.rect("XP", 2, Pal.CREAM)
 	xp.size_flags_vertical = Control.SIZE_SHRINK_END
+	xp.set_meta("ink_keep", true)
 	main_row.add_child(xp)
-	holder.add_child(main_row)
+	cap.add_child(main_row)
+	holder.add_child(cap)
 	holder.tooltip_text = tip
 	if sub != "":
-		holder.add_child(Kit.clip(sub, 11, Pal.MUTED))
+		holder.add_child(Kit.clip(sub, 12, Pal.MUTED, true))
 
 
 ## The bottom block: the XP preview (big gold number) beside a big green button.
@@ -445,5 +528,7 @@ static func text_area(value: String, placeholder: String, fkey: String, on_chang
 	t.custom_minimum_size = Vector2(0, 26 * rows + 18)
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	t.set_meta(FKEY, fkey)
+	# (the same solid tan placeholder as the number wells: half-clear cream was a dim grey there)
+	t.add_theme_color_override("font_placeholder_color", Pal.LINE)
 	t.text_changed.connect(func(): on_change.call(t.text))
 	return t

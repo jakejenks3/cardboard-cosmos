@@ -21,6 +21,8 @@ const TILE_COLS = 3
 const DOLL_LEFT = ["head", "face", "body", "hands", "legs"]
 const DOLL_RIGHT = ["aura", "back", "accessory", "feet", "pet"]
 const SLOT_SHORT = {"head": "HEAD", "face": "FACE", "body": "BODY", "hands": "HANDS", "legs": "LEGS", "feet": "FEET", "back": "BACK", "accessory": "EXTRA", "aura": "AURA", "pet": "PET"}
+## Each gear slot's icon on its key (the grid under the page track).
+const SLOT_ICONS = {"head": "crown", "face": "fx_insight", "body": "body", "hands": "strike", "legs": "st_legs", "feet": "run", "back": "bag", "accessory": "gem", "aura": "sparkle"}
 
 ## "equipped" | "shop" | "head" … "aura" | "pets" | "look"
 var tab: String = "equipped"
@@ -180,9 +182,13 @@ func _slot_tile(slot: String) -> Control:
 	else:
 		pic = PixFit.make(Icons.tex("plus", Pal.LINE), box, 1)
 	card.add(pic)
-	var cap = PixelFont.rect(SLOT_SHORT[slot], 1, Pal.ACCENT if here else (Pal.TEXT if filled else Pal.LINE), false)
+	# (2026-11-27 review: an empty slot's name was pale tan on cream, nearly invisible, and every name sat on
+	# the tile's bottom bevel) Dark ink, brown ink when empty, gold on the picked tile's dark face; a little
+	# room under it so it clears the bevel.
+	var cap = PixelFont.rect(SLOT_SHORT[slot], 1, Pal.GOLD_TEXT if here else (Pal.TEXT if filled else Pal.MUTED), false)
 	cap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	card.add(cap)
+	card.add(Kit.gap(2))
 	# A small bolt in the corner when what is worn here does something.
 	var perk = item.get("perk") if item != null else (pet.get("perk") if pet != null else null)
 	if not Items.perk_summary(perk).is_empty():
@@ -253,19 +259,16 @@ static func effect_sources() -> Array:
 
 func _equipped() -> void:
 	# --- what all of it adds up to --------------------------------------------------
+	# (2026-11-27 review: the effects and the rows sat loose on the planks with a body-text heading) Two
+	# windows with signs, as the rest of the look: ACTIVE EFFECTS, then EQUIPPED with a slip per slot.
 	var fx = ArmoryScreen.effect_sources()
-	var ec = Kit.card(6, Callable(), 10)
-	ec.accent(Pal.GOOD if not fx.is_empty() else Pal.LINE)
-	var eh = Kit.hbox(8)
-	eh.add_child(Kit.vcenter(Icons.rect("bolt", 16)))
-	eh.add_child(Kit.clip("Active effects", 14, null, true))
-	ec.add(eh)
+	var ec = Kit.section("armory_effects", "ACTIVE EFFECTS", "bolt", Pal.GOOD, null, Callable(), 6, 10)
 	if fx.is_empty():
 		ec.add(Kit.muted_para("Nothing you are wearing gives a bonus yet. Gear and companions with a bolt add XP or loot luck, and they stack.", 12))
 	for e in fx:
 		var r = Kit.hbox(8)
-		r.add_child(Kit.vcenter(Icons.rect(str(e.icon), 16)))
-		r.add_child(Kit.vcenter(Kit.label("+%d%%" % TTUtil.jsround(float(e.pct) * 100.0), 14, Pal.GOOD, true)))
+		r.add_child(Kit.vcenter(Kit.badge(str(e.icon), Pal.GOOD, 16)))
+		r.add_child(Kit.vcenter(Kit.tag("+%d%%" % TTUtil.jsround(float(e.pct) * 100.0), Pal.GOOD, true, 13)))
 		var names = []
 		for f in e.from:
 			names.append("%s +%d%%" % [f[0], TTUtil.jsround(float(f[1]) * 100.0)])
@@ -278,29 +281,34 @@ func _equipped() -> void:
 	add_child(ec)
 
 	# --- one row per slot ---------------------------------------------------------------
-	var list = Kit.vbox(6)
+	var worn_n = 0
+	for slot in TT.SLOTS:
+		var wid = App.loadout().get(slot)
+		if wid != null and App.state.items.has(wid):
+			worn_n += 1
+	var list = Kit.section("armory_equipped", "EQUIPPED", "armory", Pal.tab("armory"), Kit.label("%d of %d worn" % [worn_n, TT.SLOTS.size()], 12, Pal.TEXT, true), Callable(), 6, 10)
 	for slot in TT.SLOTS:
 		var id = App.loadout().get(slot)
 		var it = Items.by_id(id) if (id != null and App.state.items.has(id)) else null
 		if it != null:
 			var o = ArmoryDetail.item_origin(it, App.state.items.get(it.id))
-			list.add_child(_equipped_row(TT.SLOT_NAMES[slot], PixFit.make(Art.item_icon_texture(it.id), Vector2(40, 40), 3), it.name, Pal.rarity(it.rarity), str(it.rarity), o, it.get("perk"), ArmoryDetail.open_item.bind(it)))
+			list.add(_equipped_row(TT.SLOT_NAMES[slot], PixFit.make(Art.item_icon_texture(it.id), Vector2(40, 40), 3), it.name, Pal.rarity(it.rarity), str(it.rarity), o, it.get("perk"), ArmoryDetail.open_item.bind(it)))
 		else:
-			list.add_child(_empty_row(TT.SLOT_NAMES[slot], slot))
+			list.add(_empty_row(TT.SLOT_NAMES[slot], slot))
 	var pet = _active_pet()
 	if pet != null:
 		var pv = PetView.new()
 		pv.setup(pet.id, 40.0, false)
-		list.add_child(_equipped_row("Companion", pv, "%s the %s" % [pet.name, pet.species], Pal.rarity(pet.rarity), str(pet.rarity), ArmoryDetail.pet_origin(pet, App.state.pets.get(pet.id)), pet.get("perk"), ArmoryDetail.open_pet.bind(pet)))
+		list.add(_equipped_row("Companion", pv, "%s the %s" % [pet.name, pet.species], Pal.rarity(pet.rarity), str(pet.rarity), ArmoryDetail.pet_origin(pet, App.state.pets.get(pet.id)), pet.get("perk"), ArmoryDetail.open_pet.bind(pet)))
 	else:
-		list.add_child(_empty_row("Companion", "pets"))
+		list.add(_empty_row("Companion", "pets"))
 	add_child(list)
 
 
 ## One worn thing: its picture, its name, how and when it was obtained, and what it does.
 func _equipped_row(slot_name: String, pic: Control, title: String, rc: Color, rarity: String, origin: Dictionary, perk, on_tap: Callable) -> Control:
-	var card = Kit.card(4, on_tap, 8)
-	card.accent(rc)
+	# A cream slip in the EQUIPPED window (its rarity is the picture's ring and the tag).
+	var card = Kit.row(on_tap, rc, null, 8, 4)
 	var row = Kit.hbox(10)
 	var plate = PanelContainer.new()
 	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -312,7 +320,8 @@ func _equipped_row(slot_name: String, pic: Control, title: String, rc: Color, ra
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var top = Kit.hbox(6)
-	top.add_child(Kit.vcenter(PixelFont.rect(slot_name, 1, Pal.MUTED, false)))
+	# (the slot's name was tiny 1x pixel letters in brown ink)
+	top.add_child(Kit.vcenter(Kit.label(slot_name.to_upper(), 11, Pal.TEXT, true)))
 	top.add_child(Kit.vcenter(Kit.tag(rarity.to_upper(), rc, true, 9)))
 	main.add_child(top)
 	main.add_child(Kit.clip(title, 15, null, true))
@@ -337,7 +346,9 @@ func _equipped_row(slot_name: String, pic: Control, title: String, rc: Color, ra
 
 ## A slot with nothing in it: tap to go and pick something.
 func _empty_row(slot_name: String, to_tab: String) -> Control:
-	var card = Kit.card(4, _set_tab.bind(to_tab), 8)
+	# (2026-11-27 review: "Pick" was a tiny flat label and the slot's name tiny pixel letters) A slip with the
+	# slot's name as its title, and Pick a real green key.
+	var card = Kit.row(_set_tab.bind(to_tab), null, null, 8, 4)
 	var row = Kit.hbox(10)
 	var plate = PanelContainer.new()
 	plate.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -347,11 +358,12 @@ func _empty_row(slot_name: String, to_tab: String) -> Control:
 	var main = Kit.vbox(2)
 	main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	main.add_child(PixelFont.rect(slot_name, 1, Pal.MUTED, false))
-	main.get_child(0).size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	main.add_child(Kit.label("Nothing here", 14, Pal.MUTED, true))
+	main.add_child(Kit.clip(slot_name, 15, Pal.TEXT, true))
+	main.add_child(Kit.label("Nothing here yet", 12, Pal.MUTED))
 	row.add_child(main)
-	row.add_child(Kit.vcenter(Kit.tag("Pick", Pal.PANEL2, false, 11)))
+	var pick = Kit.button("Pick", "good", _set_tab.bind(to_tab), "sm")
+	pick.tooltip_text = "Pick something for this slot"
+	row.add_child(Kit.vcenter(pick))
 	card.add(row)
 	Kit.passthrough(card.box)
 	return card
@@ -381,23 +393,76 @@ func _tabs() -> Control:
 		counts[it.slot][1] += 1
 		if App.state.items.has(it.id):
 			counts[it.slot][0] += 1
-	var f = Kit.flow(6)
-	var worn_chip = Kit.chip("Equipped", tab == "equipped", _set_tab.bind("equipped"), Pal.tab("armory"))
-	worn_chip.icon = Icons.tex("armory")
-	f.add_child(worn_chip)
-	var shop_chip = Kit.chip("Shop", tab == "shop", _set_tab.bind("shop"), Pal.ACCENT)
-	shop_chip.icon = Icons.tex("bag")
-	f.add_child(shop_chip)
+	# (2026-11-27 review: thirteen tan chips wrapped into four ragged rows, one alone on the last) A pick-one
+	# track for the four pages, then the nine gear slots as a 3 x 3 grid of equal keys, each with its icon and
+	# how many of its pieces are found: every row full.
+	var v = Kit.vbox(8)
+	var pages = []
+	for p in [["equipped", "Equipped"], ["shop", "Shop"], ["pets", "Pets"], ["look", "Look"]]:
+		var k = Kit.choice(str(p[1]), tab == str(p[0]), _set_tab.bind(str(p[0])), Pal.ACCENT2, 13)
+		k.set_meta("armory_page", str(p[0]))
+		pages.append(k)
+	v.add_child(Kit.choice_track(pages))
+	var g = Kit.grid(3, 6)
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for s in TT.SLOTS:
 		var c = counts.get(s, [0, 0])
-		f.add_child(Kit.chip("%s %d/%d" % [TT.SLOT_NAMES[s], c[0], c[1]], tab == s, _set_tab.bind(s)))
-	var pets_chip = Kit.chip("Pets %d/%d" % [App.state.pets.size(), Pets.all().size()], tab == "pets", _set_tab.bind("pets"))
-	pets_chip.icon = Icons.tex("paw")
-	f.add_child(pets_chip)
-	var look_chip = Kit.chip("Look", tab == "look", _set_tab.bind("look"))
-	look_chip.icon = Icons.tex("body")
-	f.add_child(look_chip)
-	return f
+		g.add_child(_slot_key(s, int(c[0]), int(c[1])))
+	v.add_child(g)
+	return v
+
+
+## One gear slot's key: its icon and name, and under them how many of its pieces are found. The picked one
+## is orange, like the track's. The key's own text ("Head 14/25") is hidden (it still names it for the
+## screen's anchoring and the walkthroughs): the row on top draws the words.
+func _slot_key(s: String, have: int, total: int) -> Button:
+	var on = tab == s
+	var b = Kit.chip("%s %d/%d" % [TT.SLOT_NAMES[s], have, total], on, _set_tab.bind(s), Pal.ACCENT2, 13)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = "%s: %d of %d found" % [TT.SLOT_NAMES[s], have, total]
+	b.clip_text = true
+	var fg: Color = b.get_meta("tt_fg", Pal.INK)
+	var ol = int(b.get_meta("tt_outline", 0))
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
+		b.add_theme_color_override(k, Color(0, 0, 0, 0))
+	b.add_theme_constant_override("outline_size", 0)
+	b.custom_minimum_size.y = 50 if Kit.fingers else 44
+	# A chip's lip: 1 art pixel of side and the rim under it; the face sinks by that much when pressed.
+	var drop = 2 * PixBox.S
+	var col = VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.set_anchors_preset(Control.PRESET_FULL_RECT)
+	col.offset_bottom = -drop
+	var top = Kit.hbox(5)
+	top.alignment = BoxContainer.ALIGNMENT_CENTER
+	top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top.add_child(Kit.vcenter(Icons.rect(str(SLOT_ICONS.get(s, "armory")), 16)))
+	var nm = Kit.label(TT.SLOT_NAMES[s], 13, fg, true)
+	top.add_child(Kit.vcenter(nm))
+	col.add_child(top)
+	var n = Kit.label("%d/%d" % [have, total], 11, fg, true)
+	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if not on:
+		n.add_theme_color_override("font_color", Pal.MUTED)
+	col.add_child(n)
+	for l in [nm, n]:
+		if ol > 0:
+			l.add_theme_constant_override("outline_size", ol)
+			l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	b.add_child(col)
+	var fit = func():
+		b.custom_minimum_size.x = col.get_combined_minimum_size().x + 22
+	fit.call()
+	col.minimum_size_changed.connect(fit)
+	b.button_down.connect(func():
+		col.offset_top = drop
+		col.offset_bottom = 0)
+	b.button_up.connect(func():
+		col.offset_top = 0
+		col.offset_bottom = -drop)
+	return b
 
 
 func _set_tab(t: String) -> void:
@@ -428,10 +493,20 @@ func _shop() -> void:
 	purse.mouse_filter = Control.MOUSE_FILTER_STOP
 	# (No word of bosses while the campaign is off the screens: Campaign.ON_SCREEN.)
 	purse.tooltip_text = "You earn 1 coin for every 10 XP you log.\n%s, trophies and missions pay extra." % ("Weekly bounties, bosses" if Campaign.ON_SCREEN else "Weekly bounties")
-	var prow = Kit.hbox(10)
+	var prow = Kit.hbox(12)
 	prow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	prow.add_child(Kit.vcenter(Icons.rect("coin", 40)))
-	prow.add_child(Kit.vcenter(PixelFont.rect(Xp.fmt_int(balance), 4, Pal.ACCENT)))
+	# (2026-11-27 review: the big number was pale gold pixel digits on the sand, the least readable thing on
+	# the screen) The coins sit in a dark cap with gold digits, as the top bar's coin pill, only big.
+	var cap = PanelContainer.new()
+	cap.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cap.add_theme_stylebox_override("panel", PixBox.material("cap", {"pad_h": 10, "pad_v": 6}))
+	var ch = Kit.hbox(8)
+	ch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ch.add_child(Kit.vcenter(Icons.rect("coin", 32)))
+	ch.add_child(Kit.vcenter(Kit.big_number(Xp.fmt_int(balance), Pal.GOLD_TEXT, 170, 4)))
+	cap.add_child(ch)
+	prow.add_child(Kit.vcenter(cap))
 	var pcap = Kit.vbox(0)
 	pcap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pcap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -684,8 +759,16 @@ func _tile(pic: Control, title: String, rc: Color, active: bool, locked: bool, o
 	holder.add_child(top)
 	card.add(holder)
 
-	var n = Kit.clip(title, 12, Pal.MUTED if locked else (Pal.ACCENT if active else null), true)
+	# (2026-11-27 review: names were cut off, "Bounty Hunter's C...") The name wraps onto two centred lines;
+	# every tile keeps room for two, so the tiles of a row stay alike.
+	var n = Kit.label(title, 12, Pal.MUTED if locked else (Pal.GOLD_TEXT if active else Pal.TEXT), true)
 	n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	n.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	n.max_lines_visible = 2
+	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	n.custom_minimum_size = Vector2(20, ceilf(Kit.font_bold().get_height(12)) * 2.0 + 2.0)
 	card.add(n)
 	if progress != null:
 		card.add(Kit.bar(Goals.progress_ratio(progress), rc, 4))

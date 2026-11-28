@@ -99,8 +99,8 @@ func entry() -> Dictionary:
 # ---------------------------------------------------------------------------
 
 func build(parent: Control) -> void:
-	parent.add_child(LogWidgets.topbar("camera", "Edit check-in" if editing != null else "Body check-in", close, remove if editing != null else Callable()))
-	parent.add_child(LogWidgets.date_field(date, _set_date))
+	# (2026-11-27 review: the date sat on the bare planks) On the head's wooden board, the day in gold.
+	parent.add_child(LogWidgets.topbar("camera", "Edit check-in" if editing != null else "Body check-in", close, remove if editing != null else Callable(), "", [LogWidgets.date_field(date, _set_date)]))
 
 	var card = Kit.card(8, Callable(), 12)
 	# Weight: the big number, with a stepper that starts from last time.
@@ -153,16 +153,17 @@ func build(parent: Control) -> void:
 	card.add(frow)
 	parent.add_child(card)
 
-	var head = Kit.section_title("Progress photos", Kit.label("%d/3" % photos.size(), 13, Pal.MUTED, true))
-	head.tooltip_text = "Same spot, same light, same time of day. Photos stay on this computer."
-	head.mouse_filter = Control.MOUSE_FILTER_PASS
-	parent.add_child(head)
+	# The photos and the note in one window under a sign (2026-11-27 review: the note was a dark box on the
+	# dark planks, its edge lost; the photo tiles sat loose on the wood).
+	var shown = Kit.label("%d/3" % photos.size(), 12, Pal.TEXT, true)
+	var pics = Kit.section("body_photos", "PROGRESS PHOTOS", "camera", Pal.SECOND, shown, Callable(), 8, 10)
+	pics.tooltip_text = "Same spot, same light, same time of day. Photos stay on this computer."
 	var slots = Kit.hbox(8)
 	for a in TT.PHOTO_ANGLES:
 		slots.add_child(_photo_slot(a))
-	parent.add_child(slots)
-
-	parent.add_child(LogWidgets.text_area(note, "Note: how are you feeling?", "note", func(t): note = t, 2))
+	pics.add(slots)
+	pics.add(LogWidgets.text_area(note, "Note: how are you feeling?", "note", func(t): note = t, 2))
+	parent.add_child(pics)
 
 	var fb = LogWidgets.finish_block("Save changes" if editing != null else "Check in", close, save, editing == null)
 	_xp_card = fb.card if editing == null else null
@@ -205,7 +206,8 @@ func _photo_slot(angle: String) -> Control:
 		var cam = Icons.rect("camera", 34)
 		cam.modulate.a = 0.85
 		stack.add_child(cam)
-		var plus = Kit.label("+ Add", 12, Pal.MUTED, true)
+		# (on the tile's dark well: light words)
+		var plus = Kit.label("+ Add", 12, Pal.CREAM.darkened(0.12), true)
 		plus.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		stack.add_child(plus)
 		inner.add_child(stack)

@@ -112,8 +112,9 @@ func _draw() -> void:
 	draw_rect(Rect2(s, 0, w - 2.0 * s, h), Pal.OUTLINE)
 	draw_rect(Rect2(0, s, w, h - 2.0 * s), Pal.OUTLINE)
 	var inner = Rect2(s, s, w - 2.0 * s, h - 2.0 * s)
-	draw_rect(inner, Pal.WELL)
-	draw_rect(Rect2(inner.position, Vector2(inner.size.x, s)), Pal.WELL.darkened(0.35))
+	# The Workshop's dark inset track.
+	draw_rect(inner, Color(Pal.MATERIALS["track"].fill))
+	draw_rect(Rect2(inner.position, Vector2(inner.size.x, s)), Color(Pal.MATERIALS["track"].rings[1][0]))
 	var fw = 0.0
 	if _shown > 0.001:
 		fw = clampf(floor(inner.size.x * _shown / s) * s, s, inner.size.x)
@@ -129,10 +130,10 @@ func _draw() -> void:
 	if ghost and _ghost > _shown + 0.001:
 		var gw = clampf(floor(inner.size.x * _ghost / s) * s, 0.0, inner.size.x)
 		if gw > fw:
-			draw_rect(Rect2(inner.position + Vector2(fw, 0), Vector2(gw - fw, inner.size.y)), Pal.with_alpha(Pal.TEXT, 0.9))
+			draw_rect(Rect2(inner.position + Vector2(fw, 0), Vector2(gw - fw, inner.size.y)), Pal.with_alpha(Pal.CREAM, 0.9))
 	if mark >= 0.0:
 		var mx = clampf(floor(inner.size.x * mark / s) * s, 0.0, inner.size.x - s)
-		draw_rect(Rect2(inner.position.x + mx, 0, s, h), Pal.TEXT)
+		draw_rect(Rect2(inner.position.x + mx, 0, s, h), Pal.CREAM)
 	if fw <= 0.0:
 		return
 	# A bright leading edge, like a gauge needle.

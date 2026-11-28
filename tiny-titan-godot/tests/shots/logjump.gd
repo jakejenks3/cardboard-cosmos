@@ -109,9 +109,12 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 
 	# --- a weight's + key ---------------------------------------------------------------------------
 	var steppers = _in(_cards()[2], func(n): return n is Stepper)
-	head_y = _y(_cards()[2])
 	if not steppers.is_empty():
 		var st = steppers[1] if steppers.size() > 1 else steppers[0]
+		# (the third card can sit under the tab bar: bring its key into view first)
+		ShotHelper.reveal(st._plus)
+		await ShotHelper.wait(tree, 0.4)
+		head_y = _y(_cards()[2])
 		var pat = st._plus.get_global_rect().get_center()
 		var before = str(st.text)
 		await _tap(pat)
@@ -123,6 +126,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	# --- an exercise's cross -----------------------------------------------------------------------
 	var c1 = _cards()[1]
 	var xs = _in(c1, func(n): return n is BaseButton and str(n.tooltip_text) == "Remove exercise")
+	if not xs.is_empty():
+		ShotHelper.reveal(xs[0])
+		await ShotHelper.wait(tree, 0.4)
 	var c2_y = _y(_cards()[2])
 	var c1_y = _y(c1)
 	if not xs.is_empty():

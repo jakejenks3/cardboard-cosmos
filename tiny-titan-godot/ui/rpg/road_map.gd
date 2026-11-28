@@ -74,6 +74,8 @@ func setup(stages: Array, rpg: Dictionary, tap: Callable, scene_id: String) -> v
 	var img = tex.get_image() if tex != null else null
 	if img != null and img.get_width() > 0:
 		_ground = img.get_pixel(int(img.get_width() / 2.0), img.get_height() - 3)
+	# The places' names sit on the drawn ground (ui/ink.gd: readable on it).
+	set_meta("ink_bg", _ground.darkened(0.55).lerp(Pal.WELL, 0.35))
 	_places = []
 	_current = -1
 	for i in range(stages.size()):
@@ -334,10 +336,17 @@ class Place extends Button:
 			add_theme_stylebox_override(k, StyleBoxEmpty.new())
 
 	func _ready() -> void:
-		_name = Kit.clip(str(stage.get("name", "")), 11, Pal.TEXT if state != "locked" else Pal.MUTED, state == "open")
+		## (Workshop look: the road's ground is dark, so the names are light words with a dark outline: gold for
+		## the place to go, cream for a place reached, dimmed cream for a locked one.)
+		var ink = Pal.CREAM
+		if state == "open":
+			ink = Pal.GOLD_TEXT
+		elif state == "locked":
+			ink = Pal.with_alpha(Pal.CREAM, 0.6)
+		_name = Kit.clip(str(stage.get("name", "")), 11, ink, state == "open")
 		_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_name.add_theme_color_override("font_outline_color", Pal.OUTLINE)
-		_name.add_theme_constant_override("outline_size", 3)
+		_name.add_theme_constant_override("outline_size", 4)
 		_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_name)
 		resized.connect(_fit)

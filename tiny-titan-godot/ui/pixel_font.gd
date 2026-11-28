@@ -107,6 +107,9 @@ static func tex(text: String, color: Color = Color.WHITE, shadow: bool = true) -
 		if layer == 0 and not shadow:
 			continue
 		var off = 1 if layer == 0 else 0
+		# Light letters cast a dark shadow; dark ones (ink on paper) none (a light one looked doubled).
+		if layer == 0 and Ink.luminance(color) <= 0.18:
+			continue
 		var col = SHADOW if layer == 0 else color
 		var x0 = 0
 		for i in range(text.length()):
@@ -130,6 +133,10 @@ static func rect(text: String, px_scale: int = 2, color: Color = Color.WHITE, sh
 	var t = tex(text, color, shadow)
 	var r = TextureRect.new()
 	r.texture = t
+	# For ui/ink.gd, which draws the caption again in another colour when it would not read where it sits.
+	r.set_meta("pf_text", text)
+	r.set_meta("pf_color", color)
+	r.set_meta("pf_shadow", shadow)
 	r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED

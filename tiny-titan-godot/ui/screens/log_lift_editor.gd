@@ -66,6 +66,8 @@ var _try: Array = []
 var _hit_seen: Dictionary = {}
 ## [exercise] -> built with its name as a title (_named), not a box
 var _titled: Array = []
+## [exercise] -> the plate with its name on the card's top edge (its ring is the card's edge colour)
+var _signs: Array = []
 
 
 func _init(owner_form, edit_id = null) -> void:
@@ -205,6 +207,7 @@ func build(parent: Control) -> void:
 		_have[Xp.normalize_exercise(str(known))] = true
 	_filed = []
 	_titled = []
+	_signs = []
 	_try = []
 	_badges = []
 	_wsteps = []
@@ -260,16 +263,18 @@ func build(parent: Control) -> void:
 			parent.add_child(plan_card)
 		var templates = LiftHistory.recent_workouts(sessions, 3, editing_id)
 		if not templates.is_empty():
-			var tv = Kit.vbox(6)
-			tv.add_child(Kit.section_title("Repeat a workout"))
+			# (2026-11-27 review: the rows sat on the bare planks, their stored names, dashes and all, ran
+			# into each other and were cut off; "1 exercises") A window under a sign; each workout as its
+			# movements, once each.
+			var tv = Kit.section("repeat", "REPEAT A WORKOUT", "repeat", Pal.LIFT, null, Callable(), 6, 10)
 			for t in templates:
 				var names = []
 				for e in t.exercises:
 					if _has_reps(e.sets):
 						names.append(str(e.name).strip_edges())
-				var tile = LogWidgets.template(t.date, " · ".join(PackedStringArray(names)), apply_template.bind(t), "lift", "%d exercises · " % names.size())
+				var tile = LogWidgets.template(t.date, _template_words(names), apply_template.bind(t), "lift", "%d exercise%s · " % [names.size(), "" if names.size() == 1 else "s"])
 				tile.tooltip_text = "Start from this workout, with your latest numbers"
-				tv.add_child(tile)
+				tv.add(tile)
 			parent.add_child(tv)
 
 	_labels = _group_labels()
@@ -283,6 +288,24 @@ func build(parent: Control) -> void:
 		parent.add_child(plan_card)
 	parent.add_child(_picker_card())
 	_building = false
+
+
+## A past workout in a few words: its movements, each once ("Deadlift · Overhead Press · Bench Press"); one
+## exercise alone with its variation ("Bench Press (dumbbell)"), so it never reads as just a lift's name.
+static func _template_words(names: Array) -> String:
+	var moves = []
+	var seen = {}
+	for nm in names:
+		var mv = str(LiftNames.split(str(nm)).move)
+		var k = Xp.normalize_exercise(mv)
+		if k != "" and not seen.has(k):
+			seen[k] = true
+			moves.append(mv)
+	if moves.is_empty():
+		return ""
+	if moves.size() == 1:
+		return Missions.short_name(str(names[0])) if names.size() == 1 else "%s, %d ways" % [str(moves[0]), names.size()]
+	return " · ".join(PackedStringArray(moves))
 
 
 static func _has_reps(sets: Array) -> bool:
@@ -358,25 +381,46 @@ func _exercise_card(i: int) -> Card:
 	_built_names.append(str(e.name).strip_edges())
 	var timed = bool(e.get("timed", false))
 	var c = Kit.card(4, Callable(), 10)
-	# From the day's plan and not touched yet: a quiet edge until it is. Else the colour of the muscle it
-	# works (as on the Today card), green once every set is ticked.
-	c.accent(_edge_color(i))
 	c.set_meta("exercise_card", i)
 	c.set_meta("card_part", str(Missions.part_of(str(e.name))))
 	_cards.append(c)
 
-	# The name and the cross on a line of their own (the user, 2026-11-24, asking for a
-	# PT key: five keys beside it left the name too little room on a phone).
-	var head = Kit.hbox(4)
+	# The lift's name on a plate on the window's top edge, as the mock-up's "BENCH PRESS" (2026-11-27
+	# review: the card's title was a plain line inside the frame, the only one on the page without a sign).
+	# A tap on it renames (a new name: the box to type it is in the first row, the plate says so). The plate's
+	# ring is the card's edge: quiet while as the plan filled it in, else the colour of the muscle it works
+	# (as on the Today card), green once every set is ticked (_edge_color, _paint_edge).
+	_titled.append(_named(i))
+	var plate = _name_title(i) if _titled[i] else _plain_plate(i)
+	var sign_row = SignRow.new()
+	sign_row.add_child(plate)
+	c.section_look(_edge_color(i))
+	c.with_head(sign_row, 10, 4)
+
+	# Under the plate: the muscle's icon, the superset tag, how many sets are ticked (or the box to type a
+	# new name in), how hard it was, More and the red cross (the user, 2026-11-24, asking for a PT key:
+	# five keys beside the name left it too little room on a phone).
+	var head = Kit.hbox(6)
+	var part = str(Missions.part_of(str(e.name)))
+	head.add_child(Kit.vcenter(Kit.badge(TodayView.part_icon(part), JourneyLifts.part_color(part) if part != "" else Pal.LIFT, 16)))
 	var glabel = str(_labels[i]) if i < _labels.size() else ""
 	if glabel != "":
-		var gt = Kit.tag(glabel, Pal.SECOND, true, 11)
+		var gt = Kit.tag(glabel, Pal.SECOND, true, 12)
 		gt.set_meta("superset_tag", glabel)
 		gt.tooltip_text = "Superset: done in turn with the lift next to it"
 		head.add_child(Kit.vcenter(gt))
-	_titled.append(_named(i))
 	if _titled[i]:
-		head.add_child(_name_title(i))
+		var ticked = 0
+		for s in e.sets:
+			if bool(s.get("done", false)):
+				ticked += 1
+		var plural = "" if e.sets.size() == 1 else "s"
+		# (a saved workout opened again has no ticks: its sets are simply counted)
+		var said = ("%d set%s" % [e.sets.size(), plural]) if editing_id != null else ("%d of %d set%s ticked" % [ticked, e.sets.size(), plural])
+		var tl = Kit.clip(said, 12, Pal.GOOD_DARK if ticked > 0 and ticked == e.sets.size() else Pal.MUTED, true)
+		tl.set_meta("ticked_line", ticked)
+		tl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		head.add_child(tl)
 	else:
 		var name_edit = LogWidgets.title_edit(e.name, "Exercise name", 17)
 		name_edit.set_meta(LogWidgets.FKEY, "ex%d.name" % i)
@@ -387,7 +431,7 @@ func _exercise_card(i: int) -> Card:
 		head.add_child(name_edit)
 	var eff = str(e.get("effort", ""))
 	if eff != "":
-		var et = Kit.tag(LogLiftMenu.effort_word(eff).to_upper(), LogLiftMenu.effort_color(eff), true, 10)
+		var et = Kit.tag(LogLiftMenu.effort_word(eff).to_upper(), LogLiftMenu.effort_color(eff), true, 11)
 		et.set_meta("effort_tag", eff)
 		head.add_child(Kit.vcenter(et))
 	var more = LogWidgets.mini_chip("More", false, LogLiftMenu.open.bind(self, i), Pal.LIFT, 8)
@@ -458,7 +502,8 @@ func _exercise_card(i: int) -> Card:
 		_try.append(null)
 	else:
 		var tr = Kit.hbox(6)
-		var cap = Kit.label("TRY", 9, Pal.ACCENT2, true)
+		# (2026-11-27 review: a 9 px caption) 12 px, bold.
+		var cap = Kit.label("TRY", 12, Pal.ACCENT2, true)
 		cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		tr.add_child(cap)
 		var flow = Kit.flow(5)
@@ -558,29 +603,35 @@ func _exercise_card(i: int) -> Card:
 	_badges.append(slots)
 	_wsteps.append(wsteps)
 
-	# + Set · +1 rep · +step (every set) … volume note on the right
-	var acts = Kit.hbox(5)
-	var add_btn = LogWidgets.mini_chip("+ Set", true, add_set.bind(i), Pal.LIFT)
+	# + Set · +1 rep · +step (every set), then the up / down keys.
+	# (2026-11-27 review: the card's most used keys were 28 px chips, "+ Set" a small orange one) As the
+	# mock-up: a big green "+ Set" and wooden keys for the bumps, sharing the row in equal widths. The row
+	# is as wide as the card, so no key moves when another changes; the volume note is on the line under it.
+	var acts = Kit.hbox(6)
+	var add_btn = Kit.button("+ Set", "good", add_set.bind(i), "md")
 	add_btn.tooltip_text = "Add a set (copies the last one)"
+	add_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	acts.add_child(add_btn)
-	var rep_btn = LogWidgets.mini_chip("+1 rep", false, bump_all.bind(i, "reps"))
+	var rep_btn = Kit.button("+1 rep", "secondary", bump_all.bind(i, "reps"), "sm")
 	rep_btn.tooltip_text = "Add one rep to every set"
+	rep_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	acts.add_child(rep_btn)
+	var bump = null
 	if timed:
-		var h_btn = LogWidgets.mini_chip("+5 s", false, bump_all.bind(i, "hold"))
-		h_btn.tooltip_text = "Hold every set five seconds longer"
-		acts.add_child(h_btn)
+		bump = Kit.button("+5 s", "secondary", bump_all.bind(i, "hold"), "sm")
+		bump.tooltip_text = "Hold every set five seconds longer"
 	elif banded:
-		var b_btn = LogWidgets.mini_chip("+1 band", false, bump_all.bind(i, "band"))
+		bump = Kit.button("+1 band", "secondary", bump_all.bind(i, "band"), "sm")
 		# (the tooltip names the lift: after the rebuild the screen finds this
 		# lift's key again and keeps it under the finger, UiScreen)
-		b_btn.tooltip_text = "%s: every set one band heavier" % label_name
-		b_btn.set_meta("band_bump", true)
-		acts.add_child(b_btn)
+		bump.tooltip_text = "%s: every set one band heavier" % label_name
+		bump.set_meta("band_bump", true)
 	elif not e.bodyweight:
-		var w_btn = LogWidgets.mini_chip("+%s %s" % [TTUtil.num_str(_step()), wu], false, bump_all.bind(i, "weight"))
-		w_btn.tooltip_text = "Add one weight step to every set"
-		acts.add_child(w_btn)
+		bump = Kit.button("+%s %s" % [TTUtil.num_str(_step()), wu], "secondary", bump_all.bind(i, "weight"), "sm")
+		bump.tooltip_text = "Add one weight step to every set"
+	if bump != null:
+		bump.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		acts.add_child(bump)
 	# Up and down in the workout's order: two lifts done in turn (a superset)
 	# go next to each other, and there is no scrolling between them. With the
 	# other keys, not at the row's right end: that is under the column of the
@@ -589,17 +640,21 @@ func _exercise_card(i: int) -> Card:
 	if exercises.size() > 1:
 		acts.add_child(_move_key(i, true))
 		acts.add_child(_move_key(i, false))
-	var delta = Kit.vbox(0)
-	delta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	delta.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	acts.add_child(delta)
 	c.add(Kit.pad(acts, 0, 2, 0, 0))
-	_deltas.append(delta)
+	# Under the keys: what goes on the bar (left) and the volume against last time (right).
+	var foot = Kit.hbox(8)
 	var pl = Kit.clip("", 11, Pal.MUTED)
 	pl.set_meta("plates_line", "")
 	pl.visible = false
+	pl.size_flags_stretch_ratio = 3.0
 	_plates.append(pl)
-	c.add(Kit.pad(pl, 6, 0, 4, 0))
+	foot.add_child(pl)
+	var delta = Kit.vbox(0)
+	delta.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	delta.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	foot.add_child(delta)
+	_deltas.append(delta)
+	c.add(Kit.pad(foot, 6, 0, 4, 0))
 	_refresh_exercise(i)
 	_refresh_filed(i)
 	return c
@@ -789,7 +844,8 @@ func _refresh_exercise(i: int) -> void:
 		good = true
 	else:
 		text = "%s to match" % _fmt_w(last_vol - vol)
-	var note = Kit.clip(text, 12, Pal.GOOD if good else Pal.MUTED, true)
+	# (as wide as its words: it shares its line with the plates, which give way)
+	var note = Kit.label(text, 12, Pal.GOOD_DARK if good else Pal.MUTED, true)
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	note.tooltip_text = tip
 	note.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -830,7 +886,9 @@ func _trend_badge(trend):
 		"weight":
 			if absf(Fmt.kg_to_unit(float(trend.deltaKg), wu)) < 0.05:
 				return null
-			var more = "+" + LogWidgets.trim_num(Fmt.kg_to_unit(float(trend.deltaKg), wu))
+			# (2026-11-27 review: "+5.12" lb, a kilogram difference turned into pounds, did not match the weights
+			# shown, 187 against 181.9) In pounds to a tenth, as they are shown; kilograms keep 1.25 steps.
+			var more = "+" + LogWidgets.trim_num(Fmt.kg_to_unit(float(trend.deltaKg), wu), 2 if wu == "kg" else 1)
 			t = LogWidgets.badge(more if Kit.fingers else more + " " + wu, Pal.GOOD, 11)
 			t.tooltip_text = "Heavier than last time"
 		"reps":
@@ -846,19 +904,20 @@ func _trend_badge(trend):
 # The "add an exercise" card: search, your exercises first, weight step chip
 # ---------------------------------------------------------------------------
 
+## (2026-11-27 review: its title was a line of text inside the parchment, unlike the signed windows around
+## it) A window with ADD EXERCISE on its sign; on the sign's note how many are in the workout (an exercise
+## added goes in above, out of sight, and this count says so) and the weight step key.
 func _picker_card() -> Card:
-	var c = Kit.card(6, Callable(), 10)
-	var head = Kit.hbox(6)
-	head.add_child(Kit.vcenter(Icons.rect("plus", 16)))
-	# (how many are in the workout: an exercise added goes in above, out of sight, and this count says so)
 	var in_count = exercises.size()
-	var ht = Kit.clip("Add exercise" + (" · %d in this workout" % in_count if in_count > 0 else ""), 14, null, true)
+	var note = Kit.hbox(6)
+	var ht = Kit.label("%d in workout" % in_count, 12, Pal.TEXT, true)
 	ht.set_meta("picker_count", in_count)
-	head.add_child(Kit.vcenter(ht))
-	var step_chip = LogWidgets.mini_chip("± %s %s" % [TTUtil.num_str(_step()), wu], false, cycle_step)
+	ht.visible = in_count > 0
+	note.add_child(Kit.vcenter(ht))
+	var step_chip = LogWidgets.mini_chip("± %s %s" % [TTUtil.num_str(_step()), wu], false, cycle_step, null, 8)
 	step_chip.tooltip_text = "Weight step: how much one tap of + or − changes a weight (tap to change)"
-	head.add_child(step_chip)
-	c.add(head)
+	note.add_child(Kit.vcenter(step_chip))
+	var c = Kit.section("log_add", "ADD EXERCISE", "plus", Pal.LIFT, note, Callable(), 6, 10)
 
 	var row = Kit.hbox(6)
 	var search = Kit.input(query, "Search or new exercise")
@@ -874,8 +933,9 @@ func _picker_card() -> Card:
 	search.text_changed.connect(_on_query)
 	search.text_submitted.connect(func(_t): add_from_search())
 	row.add_child(search)
-	_add_btn = Kit.button("Add", "secondary", add_from_search, "sm")
-	_add_btn.custom_minimum_size = Vector2(56, LogWidgets.ROW_H)
+	# (a green key that says what it does; the words are the heading the sign has in pixel letters)
+	_add_btn = Kit.button("Add exercise", "good", add_from_search, "sm", "plus")
+	_add_btn.custom_minimum_size.y = LogWidgets.ROW_H
 	_add_btn.disabled = Xp.normalize_exercise(query) == ""
 	row.add_child(_add_btn)
 	c.add(row)
@@ -909,7 +969,8 @@ func _fill_area() -> void:
 	var list = Prep.area_lifts(parts, App.sessions(), names + _shown_names, App.pt(), 8)
 	if list.is_empty():
 		return
-	var cap = Kit.label("SAME MUSCLES · " + ", ".join(PackedStringArray(parts.map(func(p): return LiftLibrary.part_name(str(p)).to_lower()))).to_upper(), 10, Pal.MUTED, true)
+	# (11 px, cut off with "…" rather than widen the card when the day has many muscles)
+	var cap = Kit.clip("SAME MUSCLES · " + ", ".join(PackedStringArray(parts.map(func(p): return LiftLibrary.part_name(str(p)).to_lower()))).to_upper(), 11, Pal.MUTED, true)
 	cap.set_meta("area_caption", parts.size())
 	_area.add_child(cap)
 	var flow = Kit.flow(5)
@@ -1242,8 +1303,7 @@ func _on_band(id: String, i: int, j: int) -> void:
 	exercises[i].sets[j]["band"] = str(id)
 	if bool(exercises[i].get("planned", false)):
 		_touched(i)
-		if i < _cards.size() and is_instance_valid(_cards[i]):
-			_cards[i].accent(_edge_color(i))
+		_paint_edge(i)
 	_refresh_exercise(i)
 	_changed(false)
 
@@ -1352,10 +1412,9 @@ func _on_set_text(text: String, i: int, j: int, field: String) -> void:
 	exercises[i].sets[j][field] = text
 	if bool(exercises[i].get("planned", false)):
 		# The first touch of a planned exercise: it is this workout's now. Its
-		# edge lights up in place (a rebuild would take the keyboard away).
+		# edge (its plate's ring) lights up in place (a rebuild would take the keyboard away).
 		_touched(i)
-		if i < _cards.size() and is_instance_valid(_cards[i]):
-			_cards[i].accent(_edge_color(i))
+		_paint_edge(i)
 	_refresh_exercise(i)
 	_changed(false)
 
@@ -1436,7 +1495,14 @@ func _tick_key(i: int, j: int, label_name: String) -> Button:
 	# (at finger sizes Kit.tick_box adds 4: the row has no room for more than the number had)
 	var box = Kit.tick_box(done, 18 if Kit.fingers else 20)
 	if not done:
-		var num = PixelFont.rect(str(j + 1), 2, Pal.MUTED)
+		# A set still to do: its number in dark ink on a tan key, the mock-up's set key. (2026-11-27 review:
+		# a 14 px pixel digit in a 20 px box lost its top and bottom rows under the rim, pale on white)
+		var tc = PixBox.block_colors("tan")
+		box.add_theme_stylebox_override("panel", PixBox.nine([tc[0], PixBox.bev(tc[1], tc[2])], tc[3], {"cut": 0, "pad_h": 0, "pad_v": 0}))
+		var num = Kit.label(str(j + 1), 13, Pal.INK, true)
+		num.add_theme_constant_override("line_spacing", 0)
+		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		box.get_child(0).add_child(num)
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
 	b.custom_minimum_size = box.custom_minimum_size
@@ -1663,15 +1729,51 @@ func _tidy_groups() -> void:
 			exercises[i].erase("ss")
 
 
-## The line between two linked cards.
+## The line between two linked cards: a blue tag in the middle and two blue rails that run from the card
+## above into the card below. (2026-11-27 review: 10 px blue words straight on the dark planks, hard to
+## read, and nothing joined the two cards)
 func _superset_line(i: int) -> Control:
+	var rail = SupersetRail.new()
+	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rail.set_meta("superset_line", i)
+	var tag = PanelContainer.new()
+	tag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag.add_theme_stylebox_override("panel", Kit.tag_box(Pal.SECOND, 9, 3))
 	var h = Kit.hbox(6)
-	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(Kit.vcenter(Icons.rect("repeat", 16, Pal.SECOND)))
-	h.add_child(Kit.vcenter(Kit.label("SUPERSET · ONE SET EACH IN TURN", 10, Pal.SECOND, true)))
-	h.set_meta("superset_line", i)
-	return h
+	h.add_child(Kit.vcenter(Icons.rect("repeat", 16, Pal.CREAM)))
+	h.add_child(Kit.vcenter(Kit.tag_words("SUPERSET · ONE SET EACH IN TURN", 12, Pal.SECOND)))
+	tag.add_child(h)
+	rail.add_child(tag)
+	return rail
+
+
+## The superset line's ground: two blue rails (a dark edge, a lit side) at its two ends, reaching past its
+## own top and bottom into the wooden frames of the two cards (drawn over them), so the pair reads as one.
+## At the very edges: the plate with a card's name is in the middle, never under them.
+class SupersetRail extends CenterContainer:
+	## How far the rails reach past the line: the screen's gap is 12 on each side, the card above ends in
+	## its shadow, the card below's frame starts half way down its name plate.
+	const REACH_UP = 20.0
+	const REACH_DOWN = 34.0
+	const INSET = 4.0
+	const W = 6.0
+
+	func _init() -> void:
+		z_index = 1
+
+	func _draw() -> void:
+		for x in [INSET, size.x - INSET - W]:
+			var r = Rect2(x, -REACH_UP, W, size.y + REACH_UP + REACH_DOWN)
+			draw_rect(r.grow(2.0), Pal.OUTLINE)
+			draw_rect(r, Pal.SECOND)
+			draw_rect(Rect2(r.position, Vector2(2.0, r.size.y)), Pal.SECOND.lightened(0.35))
+			draw_rect(Rect2(Vector2(r.end.x - 2.0, r.position.y), Vector2(2.0, r.size.y)), Pal.SECOND_DARK)
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			queue_redraw()
 
 
 ## Swap an exercise for another way of doing it: in its place, with as many sets, filled in from that lift's
@@ -1727,6 +1829,8 @@ func _named(i: int) -> bool:
 	return r != null and str(r.name) == nm and str(r.kind) == "exact" and not bool(r.get("pt", false))
 
 
+## The card's title: the movement in cream on a plate (Kit.sign_box, ringed in the card's edge colour) with
+## its variation as a tag, on the card's top edge. A key: a tap renames.
 func _name_title(i: int) -> Button:
 	var nm = str(exercises[i].name).strip_edges()
 	var sp = LiftNames.split(nm)
@@ -1734,21 +1838,81 @@ func _name_title(i: int) -> Button:
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.custom_minimum_size = Vector2(48, 30)
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var none = StyleBoxEmpty.new()
+	for k in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+		b.add_theme_stylebox_override(k, none)
 	# (the tooltip names the lift and never changes: a rebuild finds the same key again)
 	b.tooltip_text = "Rename %s" % nm
 	b.set_meta("name_title", nm)
-	var h = Kit.squeeze(6)
-	h.set_anchors_preset(Control.PRESET_FULL_RECT)
-	h.offset_left = 6
-	h.add_child(Kit.soft_name(str(sp.move), 17, null, true, 230.0))
+	var h = Kit.hbox(6)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# (as wide as the words, up to a width: a long name is cut off with "…", never wider than the card)
+	var mv = Kit.clip_fit(str(sp.move), 16, Pal.CREAM, true, 200.0)
+	mv.add_theme_constant_override("outline_size", Kit.outline_for(16))
+	mv.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	mv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(mv)
 	if str(sp.variation) != "":
-		h.add_child(SessionView.variation_tag(str(sp.variation), 11, true))
-	Kit.passthrough(h)
-	b.add_child(h)
+		var vt = SessionView.variation_tag(str(sp.variation), 11, false)
+		var vl = vt.get_child(0) as Label
+		var vw = Kit.font_bold().get_string_size(str(sp.variation), HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		if vw > 118.0:
+			vl.clip_text = true
+			vl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			vl.custom_minimum_size.x = 118.0
+		h.add_child(Kit.vcenter(vt))
+	var plate = _plate(i, h)
+	b.add_child(plate)
+	_fit_plate(b, plate)
 	b.pressed.connect(_rename.bind(i))
 	return b
+
+
+## The plate of a name not settled yet (a new name being typed, a rename, a lift from the phone note): what
+## it is, in the sign's pixel letters; the name's box is in the first row under it.
+func _plain_plate(i: int) -> Control:
+	var e = exercises[i]
+	var nm = str(e.name).strip_edges()
+	var words = "NEW EXERCISE"
+	if bool(e.get("_rename", false)):
+		words = "RENAME"
+	elif nm != "" and not _files_names:
+		words = "EXERCISE %d" % (i + 1)
+	var plate = _plate(i, PixelFont.rect(words, 2, Pal.CREAM))
+	plate.set_meta("plain_plate", words)
+	return plate
+
+
+## A plate in the card's edge colour holding `content` (kept in _signs, so _paint_edge can recolour it).
+func _plate(i: int, content: Control) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_theme_stylebox_override("panel", Kit.sign_box(_edge_color(i)))
+	p.add_child(content)
+	while _signs.size() <= i:
+		_signs.append(null)
+	_signs[i] = p
+	return p
+
+
+## A Button holding a plate is as big as the plate (and grows with it once its words are measured).
+static func _fit_plate(b: Button, plate: Control) -> void:
+	plate.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var fit = func():
+		if is_instance_valid(b) and is_instance_valid(plate):
+			b.custom_minimum_size = plate.get_combined_minimum_size()
+	fit.call()
+	plate.minimum_size_changed.connect(fit)
+	b.ready.connect(fit)
+
+
+## The card's edge colour changed (the first touch of a lift the plan filled in): its plate's ring follows,
+## in place (a rebuild would take the keyboard away).
+func _paint_edge(i: int) -> void:
+	if i < _signs.size() and _signs[i] != null and is_instance_valid(_signs[i]):
+		(_signs[i] as PanelContainer).add_theme_stylebox_override("panel", Kit.sign_box(_edge_color(i)))
 
 
 ## The title tapped: the name box comes back for typing (a phone opens its keyboard on the next tap).
@@ -1761,8 +1925,11 @@ func _rename(i: int) -> void:
 	_changed(true)
 
 
-## LAST (sets, when, the best as a gold word) and AIM (with Fill) side by side in a sunken box; either
+## LAST (sets, when, the best as a gold word) and AIM (with Fill) side by side on a paper slip; either
 ## alone when there is only one. Null when there is neither.
+## (2026-11-27 review: 9 px captions in orange and gold on a dark well, a wall of small text in the most used
+## card) As the mock-up: a cream slip (a dark well is for numbers being typed), 11 px captions, the sets in
+## 13 px dark ink, and a green Fill key.
 func _ref_block(i: int, lp, best, banded: bool, both: bool):
 	var has_best = best != null and float(best.weightKg) > 0.0
 	var aim = _aim_of(i)
@@ -1770,7 +1937,7 @@ func _ref_block(i: int, lp, best, banded: bool, both: bool):
 		return null
 	var p = PanelContainer.new()
 	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	p.add_theme_stylebox_override("panel", PixBox.well(8, 5))
+	p.add_theme_stylebox_override("panel", PixBox.material("slip", {"pad_h": 9, "pad_v": 6}))
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	p.set_meta("ref_block", true)
 	var h = Kit.hbox(10)
@@ -1779,9 +1946,9 @@ func _ref_block(i: int, lp, best, banded: bool, both: bool):
 		lv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var cap = Kit.hbox(6)
 		var when = ("LAST · " + Dates.relative_day(lp.date, App.today).to_upper()) if lp != null else "BEST"
-		cap.add_child(Kit.clip(when, 9, Pal.MUTED, true))
+		cap.add_child(Kit.clip(when, 11, Pal.MUTED, true))
 		if has_best and lp != null:
-			var bt = Kit.label("BEST " + _fmt_w(best.weightKg), 9, Pal.ACCENT, true)
+			var bt = Kit.label("BEST " + _fmt_w(best.weightKg), 11, Pal.ACCENT_DARK, true)
 			bt.set_meta("best_tag", true)
 			cap.add_child(bt)
 		lv.add_child(cap)
@@ -1795,7 +1962,7 @@ func _ref_block(i: int, lp, best, banded: bool, both: bool):
 				words += " · " + Sides.side_words(lp.sets)
 		else:
 			words = _fmt_w(best.weightKg)
-		var ll = Kit.clip(words, 12, Pal.TEXT, true)
+		var ll = Kit.clip(words, 13, Pal.TEXT, true)
 		ll.set_meta("last_line", words)
 		lv.add_child(ll)
 		lv.tooltip_text = ("Last time: %s" % Dates.relative_day(lp.date, App.today)) if lp != null else "Your best"
@@ -1810,11 +1977,11 @@ func _ref_block(i: int, lp, best, banded: bool, both: bool):
 			h.add_child(line)
 		var av = Kit.vbox(0)
 		av.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		av.add_child(Kit.clip(str(aim.cap), 9, Pal.ACCENT2, true))
-		av.add_child(Kit.clip(str(aim.words), 12, Pal.TEXT, true))
+		av.add_child(Kit.clip(str(aim.cap), 11, Pal.ACCENT2, true))
+		av.add_child(Kit.clip(str(aim.words), 13, Pal.TEXT, true))
 		av.set_meta("aim_line", str(aim.words))
 		h.add_child(av)
-		var fk = LogWidgets.mini_chip("Fill", false, fill_aim.bind(i), Pal.LIFT, 8)
+		var fk = Kit.button("Fill", "good", fill_aim.bind(i), "sm")
 		fk.tooltip_text = "%s: fill in the aim" % label_name_of(i)
 		fk.set_meta("fill_aim", i)
 		h.add_child(Kit.vcenter(fk))

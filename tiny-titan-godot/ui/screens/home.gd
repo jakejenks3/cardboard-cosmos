@@ -29,19 +29,8 @@ func build() -> void:
 		return
 	add_theme_constant_override("separation", SECTION_GAP)
 
-	# --- name, title, settings ------------------------------------------------
-	var top = Kit.hbox(10)
-	var who = Kit.vbox(0)
-	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	who.add_child(Kit.clip(profile.name, 22, null, true))
-	who.add_child(Kit.clip(s.title, 13, Pal.ACCENT, true))
-	top.add_child(who)
-	var purse = Kit.purse_pill(App.coins(), "Coins. Tap to open the shop.", 13)
-	purse.gui_input.connect(_purse_input)
-	purse.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	top.add_child(Kit.vcenter(purse))
-	top.add_child(Kit.vcenter(Kit.icon_button("settings", _open_settings, "Settings")))
-	add_child(top)
+	# --- name, title, coins, settings, the hero's XP: the top bar --------------
+	add_child(_top_bar(s, profile))
 
 	# --- slim notices, only when something is due -----------------------------
 	var notes = _notices()
@@ -137,7 +126,7 @@ func _notices() -> VBoxContainer:
 	var pend = App.inbox.pending() if App.inbox != null else []
 	if not pend.is_empty():
 		var n = pend.size()
-		notes.add_child(Kit.notice("speech", "%d new entr%s from your phone" % [n, "y" if n == 1 else "ies"], "", Pal.GOOD, Kit.tag("Review", Pal.GOOD, true, 12), InboxSheet.open_pending))
+		notes.add_child(Kit.notice("speech", "%d new entr%s from your phone" % [n, "y" if n == 1 else "ies"], "", Pal.GOOD, Kit.button("Review", "good", InboxSheet.open_pending, "sm"), InboxSheet.open_pending))
 	elif App.inbox != null and App.inbox.note_all_in() > 0:
 		# Everything in the note is in the game: the player can clear it.
 		var n_in = App.inbox.note_all_in()
@@ -147,12 +136,12 @@ func _notices() -> VBoxContainer:
 		notes.add_child(PhoneAppCard.update_card())
 	# The phone app: time to make a backup file (the only copy elsewhere).
 	if OS.has_feature("web") and App.backup_due():
-		notes.add_child(Kit.notice("chest", "Back up your log", "Last backup: %s" % App.backup_age_text(), Pal.ACCENT2, Kit.button("Back up", "secondary", SettingsPanel.pick_export, "sm")))
+		notes.add_child(Kit.notice("chest", "Back up your log", "Last backup: %s" % App.backup_age_text(), Pal.ACCENT2, Kit.button("Back up", "good", SettingsPanel.pick_export, "sm")))
 	# A finished week or month has a recap waiting.
 	var ready = _recap_ready()
 	if ready != null:
 		var what = "Last week's recap is ready" if ready[0] == "week" else "Your %s recap is ready" % Recap.MONTHS[int(str(ready[1]).substr(5, 2)) - 1]
-		notes.add_child(Kit.notice("calendar", what, "", Pal.tab("journey"), Kit.tag("Open", Pal.tab("journey"), true, 12), _open_recap.bind(ready[0], ready[1])))
+		notes.add_child(Kit.notice("calendar", what, "", Pal.tab("journey"), Kit.button("Open", "blue", _open_recap.bind(ready[0], ready[1]), "sm"), _open_recap.bind(ready[0], ready[1])))
 	return notes
 
 
@@ -208,11 +197,94 @@ func _open_swap() -> void:
 	s.open()
 
 
-## The hero in the gym (tap to flex), the level under it, and the companion's
-## line in a quiet bubble inside the same card (the companion stands in the gym).
-func _hero_card(s: Dictionary, profile, boss: Dictionary, hp_left, goals: Array) -> Control:
+## The top bar (the Workshop look, 2026-11-27): a wooden board with the hero's face in a gold slot and the
+## level on a gold key under it, the name and title in cream, the coins in a dark cap, the settings key, and
+## the hero's XP bar.
+func _top_bar(s: Dictionary, profile) -> Control:
 	var lv = s.levels.hero
-	var stage = Xp.STAGES[s.stage]
+	var board = PanelContainer.new()
+	board.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	board.add_theme_stylebox_override("panel", PixBox.material("board", {"pad_h": 10, "pad_v": 9, "shadow": 2}))
+	board.set_meta("top_bar", true)
+	var row = Kit.hbox(10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The face: the top of the hero's own picture, in a gold slot.
+	var pic_box = Kit.vbox(0)
+	pic_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var face = PanelContainer.new()
+	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_theme_stylebox_override("panel", PixBox.slot(Pal.ACCENT, false, 6))
+	var tex = Art.hero_texture(s, profile, App.loadout())
+	var at = AtlasTexture.new()
+	at.atlas = tex
+	var w = tex.get_width()
+	at.region = Rect2(floor(w / 2.0) - 13, 0, 26, 24)
+	var pic = TextureRect.new()
+	pic.texture = at
+	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pic.custom_minimum_size = Vector2(52, 48)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_child(pic)
+	pic_box.add_child(face)
+	var badge = PanelContainer.new()
+	badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.add_theme_stylebox_override("panel", PixBox.block_set("gold", 8, 8, 0)["normal"])
+	badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	badge.add_child(PixelFont.rect("LV %d" % int(lv.level), 2, Pal.INK, false))
+	var lift = Control.new()
+	lift.custom_minimum_size = Vector2(0, 4)
+	lift.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pic_box.add_theme_constant_override("separation", -6)
+	pic_box.add_child(badge)
+	row.add_child(Kit.vcenter(pic_box))
+	var right = Kit.vbox(6)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var line = Kit.hbox(8)
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var who = Kit.vbox(0)
+	who.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var name_l = Kit.outlined(profile.name, 21)
+	name_l.clip_text = true
+	name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.add_child(name_l)
+	var title_l = Kit.outlined(s.title, 13, Pal.GOLD_TEXT)
+	title_l.clip_text = true
+	title_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	who.add_child(title_l)
+	line.add_child(who)
+	var purse = Kit.purse_pill(App.coins(), "Coins. Tap to open the shop.", 14)
+	purse.gui_input.connect(_purse_input)
+	purse.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	line.add_child(Kit.vcenter(purse))
+	line.add_child(Kit.vcenter(Kit.icon_button("settings", _open_settings, "Settings")))
+	right.add_child(line)
+	# The XP to the next level, written on the bar.
+	var xp = MarginContainer.new()
+	xp.mouse_filter = Control.MOUSE_FILTER_STOP
+	xp.tooltip_text = "Hero XP to level %d" % (int(lv.level) + 1)
+	xp.add_child(Kit.bar(lv.progress, Pal.BOUNTY, 18))
+	var cap = Kit.outlined("XP %s / %s" % [Xp.fmt_int(lv.into), Xp.fmt_int(lv.toNext)], 12)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var cc = Kit.center(cap)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	xp.add_child(cc)
+	right.add_child(xp)
+	row.add_child(right)
+	board.add_child(row)
+	return board
+
+
+## The hero in the gym (tap to flex) and the companion's line in a bubble inside the same card (the
+## companion stands in the gym). The level is in the top bar.
+func _hero_card(s: Dictionary, profile, boss: Dictionary, hp_left, goals: Array) -> Control:
 	var stage_card = Kit.card(8, Callable(), 8)
 	var hero = HeroView.new()
 	hero.setup(s, profile, App.loadout(), App.active_pet(), true)
@@ -220,24 +292,7 @@ func _hero_card(s: Dictionary, profile, boss: Dictionary, hp_left, goals: Array)
 	hero.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	hero.tooltip_text = "Tap to flex"
 	stage_card.add(hero)
-	var lrow = Kit.hbox(10)
-	var badge = PanelContainer.new()
-	badge.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	badge.add_theme_stylebox_override("panel", PixBox.make(Pal.ACCENT, {"lip": 1, "lip_color": Pal.ACCENT_DARK, "pad_h": 9, "pad_v": 6}))
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	badge.add_child(PixelFont.rect("LV %d" % int(lv.level), 3, Pal.INK, false))
-	Fx.shine(badge, 5.0, 1.4)
-	lrow.add_child(badge)
-	var lmain = Kit.vbox(4)
-	lmain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lmain.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var lhead = Kit.hbox(6)
-	lhead.add_child(Kit.clip(stage.name, 16, null, true))
-	lhead.add_child(Kit.muted("%s / %s" % [Xp.fmt_int(lv.into), Xp.fmt_int(lv.toNext)], 12))
-	lmain.add_child(lhead)
-	lmain.add_child(Kit.bar(lv.progress, Pal.ACCENT, 12))
-	lrow.add_child(lmain)
-	stage_card.add(Kit.pad(lrow, 4, 0, 4, 2))
+	# (The level and its XP are in the top bar since 2026-11-27.)
 	# The companion (or coach) says one thing.
 	var line = Chatter.pet_line({
 		"s": s,

@@ -576,8 +576,14 @@ static func open_paste(before_open: Callable = Callable()) -> void:
 	te.tooltip_text = "One thing per line"
 	te.add_theme_stylebox_override("normal", PixBox.well(12, 10))
 	te.add_theme_stylebox_override("focus", PixBox.well(12, 10, Pal.ACCENT))
-	te.add_theme_color_override("font_color", Pal.TEXT)
-	te.add_theme_color_override("font_placeholder_color", Pal.MUTED)
+	# (2026-11-27 review: dark ink on the dark well could hardly be read, and the placeholder was brighter than
+	# the typed lines) Cream words in the well, the placeholder a faded cream, as every dark well of the look.
+	te.add_theme_color_override("font_color", Pal.CREAM)
+	te.add_theme_color_override("font_readonly_color", Pal.CREAM)
+	te.add_theme_color_override("caret_color", Pal.CREAM)
+	te.add_theme_color_override("font_placeholder_color", Pal.with_alpha(Pal.CREAM, 0.45))
+	te.add_theme_color_override("selection_color", Pal.with_alpha(Pal.ACCENT, 0.35))
+	te.add_theme_color_override("font_selected_color", Pal.CREAM)
 	sheet.box.add_child(te)
 	var read = Kit.button("Read it", "primary", InboxSheet._read_pasted.bind(te, sheet, before_open), "lg", "check")
 	read.size_flags_horizontal = Control.SIZE_EXPAND_FILL
