@@ -2170,6 +2170,17 @@ is the Windows handoff.
     calendar rings every best-ever day (`LiftTrend.calendar` reads `LiftProgress.days`); a workout's row in the history
     and on the Hero tab has a green "▲ 2/3" tag (`Parts.beat_of`, cached; meta `session_beat`), and its sheet a banner
     "Beat last time on 2 of 3 lifts" (meta `session_beat_line`).
+  - REP RECORDS (the same night, the user: "you want to see your heaviest go up and that when you go for reps you can
+    do more at a given weight, that's how you show progress"): `LiftProgress.rep_records(sets, before)` = more reps
+    in one set at a weight than ever before at that weight or heavier, only where that weight (or heavier) was done
+    before (a new weight is the rules' weight record), working sets only (`WORKING_SHARE` 0.8 of the day's top: a
+    warm-up is none), not for holds. `days()` rows carry `rep_records`; `best_reps(history)` = the most reps in a set
+    at each weight, heaviest first. The reel: `App.rep_record_event` -> a gold "REP RECORD" card ("Bench Press: 10
+    reps at 62.5 kg", "Most ever at that weight was 9"; `ResultsOverlay._rep_card`, meta `reel_reprec`; the PR
+    fanfare, fireworks). The chart: a gold star and a gold number over a day with one. The Beat it view: "BEST REPS
+    AT EACH WEIGHT" (`LiftViews._best_reps_card`, section `best_reps`, meta `rep_table`, rows `rep_row` =
+    "<weight>:<reps>", a gold NEW on the latest workout's). History rows: a gold "REP PR" tag (`beat_counts` "reps",
+    meta `session_rep_pr`).
   - NOT changed: the rules (records, XP, trophies, parity), the Compare view, the lift report (it goes by the estimated
     one-rep max, which rises with reps too). A new screen that shows how a lift is going must use LiftProgress, never
     the heaviest set alone.

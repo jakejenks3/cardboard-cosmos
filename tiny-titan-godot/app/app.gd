@@ -1056,7 +1056,11 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	events = _with_extras(events, _split_events(fresh))
 	events = _with_extras(events, _goal_events())
 	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
-		var bt = beat_event(fresh[0], saved.sessions.filter(func(s): return not fresh_ids.has(s.id)))
+		var olds = saved.sessions.filter(func(s): return not fresh_ids.has(s.id))
+		var rr = rep_record_event(fresh[0], olds)
+		if rr != null:
+			events = _with_extras(events, [rr])
+		var bt = beat_event(fresh[0], olds)
 		if bt != null:
 			events = _with_extras(events, [bt])
 	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
@@ -1070,6 +1074,42 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
 		res["replay"] = replay_moves(fresh[0])
 	result_ready.emit(res)
+
+
+## The reel's REP RECORD card (2026-11-27, the user: "you want to see your heaviest go up and that when you
+## go for reps you can do more at a given weight, that's how you show progress"): every lift of the session
+## that did more reps in a set at a weight than ever before at that weight or heavier (LiftProgress.rep_records;
+## the heaviest such weight per lift). {"type": "reprec", "rows": [{"lift", "rung", "reps", "was", "mode",
+## "words": "10 reps at 62.5 kg"}]}; null when there is none. A weight never lifted before is the rules'
+## weight record (a "pr" card), not this.
+func rep_record_event(s: Dictionary, others: Array):
+	var wu = weight_unit()
+	var rows = []
+	var seen = {}
+	for e in s.get("exercises", []):
+		var sets = LiftTrend.real_sets(e.get("sets", []))
+		var nm = str(e.get("name", "")).strip_edges()
+		var k = Xp.normalize_exercise(nm)
+		if sets.is_empty() or seen.has(k):
+			continue
+		seen[k] = true
+		var before = []
+		for o in others:
+			if str(o.get("discipline", "")) != "lift" or str(o.date) > str(s.date):
+				continue
+			for oe in o.get("exercises", []):
+				if Xp.normalize_exercise(str(oe.get("name", ""))) == k:
+					before.append({"sets": oe.get("sets", [])})
+		var recs = LiftProgress.rep_records(sets, before)
+		if recs.is_empty():
+			continue
+		var mode = LiftProgress.mode_of_sets(sets)
+		var r = recs[0]
+		var words = "%d reps" % int(r.reps) if mode == "bw" else "%d reps at %s" % [int(r.reps), str(LiftViews.rung_fmt(mode, wu).call(r.rung))]
+		rows.append({"lift": nm, "rung": float(r.rung), "reps": int(r.reps), "was": int(r.was), "mode": mode, "words": words})
+	if rows.is_empty():
+		return null
+	return {"type": "reprec", "rows": rows}
 
 
 ## The reel's "Beat last time" card for a lift session (LiftProgress, 2026-11-27: progress made a rep at a
@@ -1206,7 +1246,7 @@ func _with_extras(events: Array, extras: Array) -> Array:
 		if ["xp", "import", "bodyxp", "boss"].has(out[i].type):
 			at = i + 1
 	for e in extras:
-		if e.type == "bounty" or e.type == "pr" or e.type == "project" or e.type == "goal" or e.type == "beat":
+		if e.type == "bounty" or e.type == "pr" or e.type == "project" or e.type == "goal" or e.type == "beat" or e.type == "reprec":
 			out.insert(at, e)
 			at += 1
 		else:

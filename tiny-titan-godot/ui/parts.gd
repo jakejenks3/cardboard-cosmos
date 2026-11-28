@@ -284,6 +284,11 @@ static func session_row(session: Dictionary, xp, flat: bool = false) -> Control:
 		pt.set_meta("session_prs", prs)
 		head.add_child(Kit.vcenter(pt))
 	var bc = beat_of(session)
+	if int(bc.get("reps", 0)) > 0:
+		var rt = Kit.tag("REP PR", Pal.ACCENT, true, 10)
+		rt.tooltip_text = "More reps at a weight than ever before"
+		rt.set_meta("session_rep_pr", int(bc.reps))
+		head.add_child(Kit.vcenter(rt))
 	if int(bc.beat) > 0:
 		var bt = Kit.tag("▲ %d/%d" % [int(bc.beat), int(bc.of)], Pal.GOOD, true, 10)
 		bt.tooltip_text = "Beat last time on %d of %d lifts" % [int(bc.beat), int(bc.of)]
@@ -358,12 +363,12 @@ static var _beats: Dictionary = {}
 ## worked out once per change of the log).
 static func beat_of(session: Dictionary) -> Dictionary:
 	if str(session.get("discipline", "")) != "lift":
-		return {"beat": 0, "of": 0}
+		return {"beat": 0, "of": 0, "reps": 0}
 	var key = "%s:%d" % [str(App.saved.get("updatedAt", "")), App.sessions().size()]
 	if key != _beat_key:
 		_beat_key = key
 		_beats = LiftProgress.beat_counts(App.sessions())
-	return _beats.get(str(session.get("id", "")), {"beat": 0, "of": 0})
+	return _beats.get(str(session.get("id", "")), {"beat": 0, "of": 0, "reps": 0})
 
 
 static var _pr_key: String = ""

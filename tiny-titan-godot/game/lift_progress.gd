@@ -88,11 +88,14 @@ static func days(history: Array) -> Array:
 	var top_rung = -INF
 	var rung_index = -1
 	var prev = null
+	var earlier = []
 	for d in order:
 		var k = key(sets_of[d])
 		if int(k.reps) <= 0 and float(k.rung) <= 0.0:
 			continue
-		var row = {"date": d, "key": k, "beat": 0, "record": false, "rung_up": false, "reps_up": false}
+		var row = {"date": d, "key": k, "beat": 0, "record": false, "rung_up": false, "reps_up": false,
+			"rep_records": rep_records(sets_of[d], earlier)}
+		earlier.append({"sets": sets_of[d]})
 		if prev != null:
 			row.beat = cmp(k, prev)
 			row.reps_up = absf(float(k.rung) - float(prev.rung)) <= EPS and int(k.reps) > int(prev.reps)
@@ -107,6 +110,76 @@ static func days(history: Array) -> Array:
 			best = k
 		prev = k
 		out.append(row)
+	return out
+
+
+## A set within this share of the day's top weight is a working set: a warm-up of 10 with the empty bar
+## is no rep record.
+const WORKING_SHARE = 0.8
+
+
+## The REP RECORDS a day's sets set: at a weight (a band, for bands; every set for bodyweight) more reps in
+## one set than ever before at that weight or heavier. Only where that weight (or a heavier one) was done
+## before: a weight never done is a weight record, not a rep record. Holds have none. Working sets only.
+## [{"rung", "reps", "was"}], the heaviest first. `before`: the days before ([{sets}], any order).
+static func rep_records(sets: Array, before: Array) -> Array:
+	var real = LiftTrend.real_sets(sets)
+	var mode = mode_of_sets(real)
+	if mode == "sec" or real.is_empty():
+		return []
+	var top = 0.0
+	for one in real:
+		top = maxf(top, _rung_of(one, mode))
+	var cur = {}
+	for one in real:
+		var r = _rung_of(one, mode)
+		if mode == "kg" and r < top * WORKING_SHARE - EPS:
+			continue
+		var at = snappedf(r, 0.001)
+		cur[at] = maxi(int(cur.get(at, 0)), int(one.reps))
+	var out = []
+	for at in cur:
+		var was = -1
+		for h in before:
+			for one in LiftTrend.real_sets(h.get("sets", [])):
+				if LiftTrend.is_hold(one):
+					continue
+				if _rung_of(one, mode) >= float(at) - EPS:
+					was = maxi(was, int(one.reps))
+		if was >= 0 and int(cur[at]) > was:
+			out.append({"rung": float(at), "reps": int(cur[at]), "was": was})
+	out.sort_custom(func(a, b): return float(a.rung) > float(b.rung))
+	return out
+
+
+## The most reps done in one set at each weight (band; bodyweight: one row), heaviest first:
+## [{"rung", "reps", "date" (when it was first done)}]. Working sets only (WORKING_SHARE of the day's top).
+static func best_reps(history: Array) -> Array:
+	var best = {}
+	var mode = ""
+	for h in history:
+		var real = LiftTrend.real_sets(h.get("sets", []))
+		if real.is_empty():
+			continue
+		var m = mode_of_sets(real)
+		if m == "sec":
+			continue
+		if mode == "":
+			mode = m
+		var top = 0.0
+		for one in real:
+			top = maxf(top, _rung_of(one, m))
+		for one in real:
+			var r = _rung_of(one, m)
+			if m == "kg" and r < top * WORKING_SHARE - EPS:
+				continue
+			var at = snappedf(r, 0.001)
+			var d = str(h.get("date", ""))
+			var b = best.get(at)
+			if b == null or int(one.reps) > int(b.reps) or (int(one.reps) == int(b.reps) and d < str(b.date)):
+				best[at] = {"rung": float(at), "reps": int(one.reps), "date": d}
+	var out = best.values()
+	out.sort_custom(func(a, b): return float(a.rung) > float(b.rung))
 	return out
 
 
@@ -214,16 +287,18 @@ static func change(sets: Array, before: Array, fmt_rung: Callable) -> Dictionary
 
 
 ## For every lift session, how many of its exercises beat the time before (by name, against the last
-## day that exercise was done before this session's date): {session id: {"beat", "of"}}. Exercises done
-## for the first time count in neither.
+## day that exercise was done before this session's date): {session id: {"beat", "of", "reps" (exercises
+## with a rep record: rep_records)}}. Exercises done for the first time count in neither.
 static func beat_counts(sessions: Array) -> Dictionary:
 	var lifts = sessions.filter(func(s): return str(s.get("discipline", "")) == "lift")
 	lifts.sort_custom(func(a, b): return str(a.date) < str(b.date) or (str(a.date) == str(b.date) and float(a.get("createdAt", 0)) < float(b.get("createdAt", 0))))
 	var last_of = {}  # lift -> {date, sets}
+	var all_of = {}  # lift -> [{sets}] every earlier day
 	var out = {}
 	for s in lifts:
 		var beat = 0
 		var of = 0
+		var reps = 0
 		var done_here = {}
 		for e in s.get("exercises", []):
 			var real = LiftTrend.real_sets(e.get("sets", []))
@@ -238,12 +313,17 @@ static func beat_counts(sessions: Array) -> Dictionary:
 				of += 1
 				if cmp(key(real), key(prev.sets)) > 0:
 					beat += 1
+			if not rep_records(real, all_of.get(nm, [])).is_empty():
+				reps += 1
 		for e in s.get("exercises", []):
 			var real2 = LiftTrend.real_sets(e.get("sets", []))
 			if real2.is_empty():
 				continue
 			var nm2 = Xp.normalize_exercise(str(e.get("name", "")))
 			var p2 = last_of.get(nm2)
+			if not all_of.has(nm2):
+				all_of[nm2] = []
+			all_of[nm2].append({"sets": real2})
 			if p2 != null and str(p2.date) == str(s.date):
 				# two sessions of one day are one day of that lift
 				var both = (p2.sets as Array).duplicate()
@@ -251,5 +331,5 @@ static func beat_counts(sessions: Array) -> Dictionary:
 				last_of[nm2] = {"date": str(s.date), "sets": both}
 			else:
 				last_of[nm2] = {"date": str(s.date), "sets": real2}
-		out[str(s.get("id", ""))] = {"beat": beat, "of": of}
+		out[str(s.get("id", ""))] = {"beat": beat, "of": of, "reps": reps}
 	return out

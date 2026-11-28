@@ -101,8 +101,15 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	App._commit()
 	await ShotHelper.wait(tree, 0.8)
 
-	# Today: one rep more than last time, at the same weight: the reel says it.
-	App.commit_sessions([_session(0, 62.5, [9, 9, 8])], "Session logged!")
+	# Today: 10 reps in a set at 62.5 kg, where 9 was the most: a rep record, and beat last time.
+	App.commit_sessions([_session(0, 62.5, [10, 9, 8])], "Session logged!")
+	var rep = null
+	for k in range(40):
+		rep = _one("reel_reprec")
+		if rep != null:
+			break
+		await ShotHelper.wait(tree, 0.4)
+	check(rep != null and ShotHelper.all_text(rep).contains("10 reps at 62.5"), "the reel has a REP RECORD card: 10 reps at 62.5 kg (%s)" % (ShotHelper.all_text(rep) if rep != null else "none"))
 	var beat = null
 	for k in range(40):
 		beat = _one("reel_beat")
@@ -111,7 +118,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		await ShotHelper.wait(tree, 0.4)
 	check(beat != null and int(beat.get_meta("reel_beat")) == 1, "the reel has a Beat last time card")
 	var up_row = _one("beat_row", "up", beat) if beat != null else null
-	check(up_row != null and ShotHelper.all_text(up_row).to_upper().contains("+1 REP AT 62.5"), "which says +1 rep at 62.5 kg (%s)" % (ShotHelper.all_text(up_row) if up_row != null else "none"))
+	check(up_row != null and ShotHelper.all_text(up_row).to_upper().contains("+2 REPS AT 62.5"), "which says +2 reps at 62.5 kg (%s)" % (ShotHelper.all_text(up_row) if up_row != null else "none"))
 	if beat != null:
 		ShotHelper.reveal(beat)
 		await ShotHelper.wait(tree, 0.4)
@@ -129,7 +136,9 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var st = _one("progress_steps", null, _sheet())
 	check(st != null and str(st.get_meta("progress_steps")) == "1", "one step up, 60 to 62.5 kg")
 	var gn = _one("progress_gain", null, _sheet())
-	check(gn != null and str(gn.get_meta("progress_gain")) == "+3", "+3 reps on this step (23 to 26)")
+	check(gn != null and str(gn.get_meta("progress_gain")) == "+4", "+4 reps on this step (23 to 27)")
+	var tb = _one("rep_table", null, _sheet())
+	check(tb != null and _one("rep_row", "62.5:10", tb) != null and _one("rep_row", "60:10", tb) != null, "best reps at each weight: 10 at 62.5 kg (new) and 10 at 60 kg")
 	var bn = _one("progress_banner", null, _sheet())
 	check(bn != null and int(bn.get_meta("progress_banner")) == PLAN.size(), "and the banner says the streak")
 	if chart != null:
@@ -155,5 +164,6 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	App.go("journey")
 	await ShotHelper.wait(tree, 1.0)
 	check(_all("session_beat").size() >= PLAN.size(), "every workout's row in the log has its beat tag (%d)" % _all("session_beat").size())
+	check(not _all("session_rep_pr").is_empty(), "and rows with a rep record say REP PR (%d)" % _all("session_rep_pr").size())
 	await ShotHelper.snap(tree, "rungs_6_history")
 	print("RUNGS %s" % ("ok" if fails == 0 else "%d FAILED" % fails))

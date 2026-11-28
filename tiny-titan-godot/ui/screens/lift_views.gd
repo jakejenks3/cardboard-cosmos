@@ -1009,7 +1009,7 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 	chart.setup(rows, {"fmt_rung": fmt, "next": nxt, "tips": tips})
 	chart.set_meta("rung_chart", rows.size())
 	c.add(chart)
-	var legend = [{"name": "Beat last time", "color": Pal.GOOD}, {"name": "Step up / gold top: best ever", "color": Pal.ACCENT},
+	var legend = [{"name": "Beat last time", "color": Pal.GOOD}, {"name": "Step up / gold top: best ever / gold star: rep record", "color": Pal.ACCENT},
 		{"name": "Same", "color": Pal.with_alpha(Pal.MUTED, 0.7)}, {"name": "Short of it", "color": Pal.ACCENT2}]
 	if nxt != null:
 		legend.append({"name": "Next aim", "color": Pal.SECOND})
@@ -1024,6 +1024,48 @@ static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -
 			how = "Each bar is every rep of that day."
 	c.add(Kit.para(how, 11, Pal.MUTED))
 	holder.add_child(c)
+	var table = _best_reps_card(history, lmode, fmt)
+	if table != null:
+		holder.add_child(table)
+
+
+## "BEST REPS AT EACH WEIGHT": the most reps in one set at every weight done (LiftProgress.best_reps), the
+## heaviest first, a gold NEW on those set in the latest workout. Heavier is better, more reps at a weight
+## is better: both read off one list.
+const BEST_REPS_ROWS = 8
+
+static func _best_reps_card(history: Array, lmode: String, fmt: Callable):
+	if lmode == "sec" or history.is_empty():
+		return null
+	var list = LiftProgress.best_reps(history)
+	if list.is_empty():
+		return null
+	var newest = ""
+	for h in history:
+		if str(h.get("date", "")) > newest:
+			newest = str(h.get("date", ""))
+	var sec = Kit.section("best_reps", "BEST REPS AT EACH WEIGHT" if lmode != "bw" else "BEST SET", "trophy", Pal.ACCENT, null, Callable(), 4, 10)
+	sec.set_meta("rep_table", list.size())
+	for r in list.slice(0, BEST_REPS_ROWS):
+		var fresh = str(r.date) == newest
+		var row = Kit.row(Callable(), Pal.ACCENT if fresh else Pal.LINE, Pal.ACCENT if fresh else null, 6, 0, 0.12)
+		row.set_meta("rep_row", "%s:%d" % [TTUtil.num_str(float(r.rung)), int(r.reps)])
+		var h = Kit.hbox(8)
+		var w = Kit.label(str(fmt.call(r.rung)) if lmode != "bw" else "Bodyweight", 13, null, true)
+		w.custom_minimum_size = Vector2(96, 0)
+		h.add_child(w)
+		h.add_child(Kit.label("%d rep%s" % [int(r.reps), "" if int(r.reps) == 1 else "s"], 13, Pal.ACCENT if fresh else Pal.TEXT, true))
+		var gap = Control.new()
+		gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(gap)
+		if fresh:
+			h.add_child(Kit.vcenter(Kit.tag("NEW", Pal.ACCENT, true, 10)))
+		h.add_child(Kit.vcenter(Kit.label(Dates.format_date(str(r.date), {"month": "short", "day": "numeric"}), 11, Pal.MUTED)))
+		row.add(h)
+		sec.add(row)
+	if list.size() > BEST_REPS_ROWS:
+		sec.add(Kit.clip("+%d lighter weights" % (list.size() - BEST_REPS_ROWS), 11, Pal.MUTED))
+	return sec
 
 
 ## A tile of the Progress view: a big number, what it counts, a line under it.

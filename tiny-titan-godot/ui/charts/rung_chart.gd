@@ -4,14 +4,15 @@ extends ChartBase
 ## the bars stand in RUNGS, one band per weight (or band, or hold), labelled at the top. One more rep at the
 ## same weight is a taller bar; a step heavier starts a new rung (gold label with an arrow, a gold bar). A
 ## bar is green when that day beat the one before (with a gold top when it beat every day before), orange
-## when it fell short, grey when it matched. A dashed bar at the end is next time's aim. (LiftProgress; 2026-11-27.)
+## when it fell short, grey when it matched. A gold star and a gold number: a REP RECORD that day (more reps
+## in a set at a weight than ever before: LiftProgress.rep_records). A dashed bar at the end is next time's aim. (LiftProgress; 2026-11-27.)
 ##
 ##   setup(rows, opts)
 ##     rows: LiftProgress.days (oldest first)
 ##     opts: {"fmt_rung": Callable(rung) -> String, "next": {"rung", "reps"} or null, "tips": [String per row]}
 
 const H = 200.0
-const PAD_T = 30.0
+const PAD_T = 40.0
 const PAD_B = 20.0
 const PAD_X = 8.0
 const NUM_H = 13.0
@@ -174,8 +175,13 @@ func _draw() -> void:
 				draw_rect(Rect2(r.position.x, r.position.y, r.size.x, minf(4.0, r.size.y)), Pal.ACCENT)
 			if i == rows.size() - 1:
 				draw_rect(r.grow(1.0), Pal.OUTLINE, false, 1.0)
+			var rep_rec = not (row.get("rep_records", []) as Array).is_empty()
 			if r.size.x >= 11.0:
-				txt(r.get_center().x, r.position.y - 3.0, str(int(row.key.reps)), Pal.TEXT if int(row.beat) == 1 or bool(row.record) else Pal.MUTED, 1, 10, true)
+				var ncol = Pal.ACCENT if rep_rec else (Pal.TEXT if int(row.beat) == 1 or bool(row.record) else Pal.MUTED)
+				txt(r.get_center().x, r.position.y - 3.0, str(int(row.key.reps)), ncol, 1, 10, true)
+			if rep_rec:
+				# A rep record: a gold star over the bar's number.
+				_star(Vector2(r.get_center().x, r.position.y - (17.0 if r.size.x >= 11.0 else 6.0)))
 		else:
 			# Next time's aim: a dashed outline.
 			var pts = PackedVector2Array([r.position + Vector2(0, r.size.y), r.position, Vector2(r.end.x, r.position.y), r.end])
@@ -197,6 +203,11 @@ func _draw() -> void:
 
 func _rung_at(i: int) -> float:
 	return float(rows[i].key.rung) if i < rows.size() else float(next.rung)
+
+
+func _star(at: Vector2) -> void:
+	draw_rect(Rect2(at.x - 1.0, at.y - 3.0, 2.0, 6.0), Pal.ACCENT)
+	draw_rect(Rect2(at.x - 3.0, at.y - 1.0, 6.0, 2.0), Pal.ACCENT)
 
 
 func _arrow(at: Vector2, col: Color) -> void:

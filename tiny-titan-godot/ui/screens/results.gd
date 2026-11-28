@@ -404,6 +404,12 @@ func _reveal(i: int, animate: bool) -> void:
 				_shake()
 			"receipt":
 				Sfx.claim()
+			"reprec":
+				# A rep record is a record: the same fanfare as a heavier set.
+				Sfx.pr()
+				Sfx.level_up()
+				_confetti.burst(1.0)
+				_shake()
 			"beat":
 				# Beating last time is the point of training: it gets its moment.
 				Sfx.level_up()
@@ -450,7 +456,7 @@ func _reveal(i: int, animate: bool) -> void:
 			var tw = card.create_tween()
 			tw.tween_interval(0.3)
 			tw.tween_callback(func(): Kit.burst(card, col, 20))
-		if ev.type == "pr" or ev.type == "goal" or (ev.type == "beat" and bool(ev.get("big", false))):
+		if ev.type == "pr" or ev.type == "goal" or ev.type == "reprec" or (ev.type == "beat" and bool(ev.get("big", false))):
 			_fireworks(card)
 
 
@@ -602,7 +608,7 @@ func _burst_color(ev: Dictionary):
 				return Pal.rarity(pet.rarity)
 		"rank":
 			return Pal.hex(Xp.RANKS[int(ev.to)].color)
-		"stage", "pr", "coins", "goal":
+		"stage", "pr", "coins", "goal", "reprec":
 			return Pal.ACCENT
 		"beat":
 			return Pal.GOOD
@@ -698,6 +704,8 @@ func _build_card(ev: Dictionary, animate: bool):
 			return _goal_card(ev)
 		"beat":
 			return _beat_card(ev)
+		"reprec":
+			return _rep_card(ev)
 		"receipt":
 			return _receipt_card(ev)
 		"pr":
@@ -1068,6 +1076,26 @@ func _goal_card(ev: Dictionary) -> Control:
 	c.main.add_child(_sub(said))
 	c.panel.set_meta("reel_goal", str(ev.id))
 	return _finish(c, _icon_cell("target", Pal.ACCENT))
+
+
+## REP RECORD (App.rep_record_event): more reps in a set at a weight than ever before. One lift: its reps and
+## weight big, "was 9" under it; several: a row each.
+func _rep_card(ev: Dictionary) -> Control:
+	var rows = ev.rows
+	var c = _rcard(Pal.ACCENT, true)
+	c.panel.set_meta("reel_reprec", rows.size())
+	c.main.add_child(_kicker("REP RECORD" if rows.size() == 1 else "%d REP RECORDS" % rows.size(), Pal.ACCENT))
+	if rows.size() == 1:
+		var r = rows[0]
+		c.main.add_child(_title_l("%s: %s" % [Missions.short_name(str(r.lift)), str(r.words)]))
+		c.main.add_child(_sub("Most ever at that weight was %d" % int(r.was)))
+	else:
+		for r in rows:
+			var h = Kit.hbox(6)
+			h.add_child(Kit.clip(Missions.short_name(str(r.lift)), 13, null, true))
+			h.add_child(Kit.vcenter(Kit.tag("%s · WAS %d" % [str(r.words).to_upper(), int(r.was)], Pal.ACCENT, true, 10)))
+			c.main.add_child(h)
+	return _finish(c, _plate(PixelFont.rect("+%d" % (int(rows[0].reps) - int(rows[0].was)), 3, Pal.ACCENT), Pal.ACCENT, 52))
 
 
 ## "Beat last time" (App.beat_event): how many lifts beat the time before, and a row for each lift: what it

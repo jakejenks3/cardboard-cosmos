@@ -77,5 +77,23 @@ func _init() -> void:
 	var bc = LiftProgress.beat_counts(sessions)
 	ok(int(bc.a.of) == 0 and int(bc.b.beat) == 1 and int(bc.b.of) == 2 and int(bc.d.beat) == 1 and int(bc.d.of) == 2 and not bc.has("c"), "beat counts per session (a first time counts in neither)", bc)
 
+	# Rep records: more reps in a set at a weight than ever before at that weight or heavier.
+	var past = [{"sets": _sets(60.0, [10, 9, 9])}, {"sets": _sets(62.5, [8, 8, 7])}]
+	var rr = LiftProgress.rep_records(_sets(62.5, [9, 8, 8]), past)
+	ok(rr.size() == 1 and is_equal_approx(float(rr[0].rung), 62.5) and int(rr[0].reps) == 9 and int(rr[0].was) == 8, "9 reps at 62.5 kg beats 8 there", rr)
+	ok(LiftProgress.rep_records(_sets(60.0, [10, 10]), past).is_empty(), "10 at 60 kg ties the best: no record")
+	var rr2 = LiftProgress.rep_records(_sets(60.0, [11, 9]), past)
+	ok(rr2.size() == 1 and int(rr2[0].reps) == 11 and int(rr2[0].was) == 10, "11 at 60 kg is one", rr2)
+	ok(LiftProgress.rep_records(_sets(65.0, [5]), past).is_empty(), "a weight never done is a weight record, not a rep record")
+	var warm = [{"reps": 12, "weightKg": 20.0}, {"reps": 8, "weightKg": 62.5}]
+	ok(LiftProgress.rep_records(warm, past).is_empty(), "a warm-up of 12 with the empty bar is no rep record")
+	var heavier_counts = LiftProgress.rep_records(_sets(57.5, [10]), past)
+	ok(heavier_counts.is_empty(), "10 at 57.5 kg is no record: 10 was done at 60 kg, heavier")
+	var rows2 = LiftProgress.days([_h("2026-11-01", 60.0, [8, 8]), _h("2026-11-04", 60.0, [9, 8]), _h("2026-11-08", 60.0, [9, 9])])
+	ok((rows2[1].rep_records as Array).size() == 1 and (rows2[2].rep_records as Array).is_empty(), "each day carries its rep records", rows2.map(func(r): return r.rep_records))
+	var br = LiftProgress.best_reps([_h("2026-11-01", 60.0, [10, 9]), _h("2026-11-04", 62.5, [8, 7]), _h("2026-11-08", 62.5, [9, 8]), _h("2026-11-09", 20.0, [15])])
+	ok(br.size() == 3 and is_equal_approx(float(br[0].rung), 62.5) and int(br[0].reps) == 9 and str(br[0].date) == "2026-11-08" and int(br[1].reps) == 10, "best reps at each weight, heaviest first", br)
+	ok(int(bc.d.get("reps", -1)) == 0 and int(bc.b.reps) == 1, "beat counts also count the lifts with a rep record", bc)
+
 	print("LIFTPROGRESS: %d/%d passed" % [passed, total])
 	quit(0 if passed == total else 1)
