@@ -1591,6 +1591,12 @@ func _store_image(img: Image) -> String:
 	return id
 
 
+## Let go of the photos shown (a phone short of memory takes a new photo better without them; they load again
+## when they are shown).
+func forget_photo_textures() -> void:
+	_photo_cache.clear()
+
+
 ## The photo as a texture (cached), or null when the file is missing.
 func photo_texture(id):
 	if id == null:

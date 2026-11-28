@@ -378,6 +378,134 @@
     // handed over as a JPEG: the browser turns a phone photo the right way up (the
     // game's own reader would not) and a 12 megapixel photo does not have to cross
     // into the game whole.
+    // The picture picked last, read again no longer than maxSide (the game could not take the larger one: an
+    // iPhone short of memory after a photo or two, 2026-11-28). False when there is none to read.
+    again: function (maxSide, cb) {
+      const file = window.ttFile._file;
+      if (!file) return false;
+      window.ttFile.read(file, maxSide, cb || window.ttFile._cb, function () {});
+      return true;
+    },
+    // A picked file to the game: cb(name, base64, why). With maxSide a picture is drawn no longer than that
+    // and handed over as a JPEG. Every decoded picture is let go as soon as it is drawn: an iPhone keeps a
+    // decoded camera photo (about 48 MB) until it gets round to it, and the second and third photo in a row
+    // could find no room (2026-11-28: "Can upload the first... then the other 2 'couldn't load image'").
+    read: function (file, maxSide, cb, done) {
+      const notes = [];
+      const note = function (t) { notes.push(String(t).substring(0, 120)); };
+      const about = function () {
+        return (file.type || 'no type') + ', ' + Math.round((file.size || 0) / 1024) + ' KB';
+      };
+      const end = function (name, b64, why) {
+        window.ttFile.last = (b64 ? 'ok' : 'failed') + ' · ' + about() + (maxSide ? ' · max ' + maxSide : '') + (notes.length ? ' · ' + notes.join('; ') : '');
+        cb(name, b64, why || '');
+        done();
+      };
+      const free = function (img) {
+        if (!img) return;
+        img.onload = null;
+        img.onerror = null;
+        try { img.removeAttribute('src'); img.src = ''; } catch (e) { /* nothing to let go */ }
+      };
+      // The file as it is, base64 (a file that is not a picture to shrink; or the last resort).
+      const whole = function (check) {
+        const r = new FileReader();
+        r.onerror = function () { note('read failed'); end('', '', 'the phone would not hand the file over (' + about() + ')'); };
+        r.onload = function () {
+          const s = String(r.result || '');
+          const b64 = s.substring(s.indexOf(',') + 1);
+          if (check) {
+            // Only what the game can open, and not a camera's full picture: that is too much for it.
+            let head = '';
+            try { head = atob(b64.substring(0, 24)); } catch (e) { head = ''; }
+            const kind = head.indexOf('\xff\xd8') === 0 ? 'jpeg' : (head.indexOf('\x89PNG') === 0 ? 'png'
+              : (head.indexOf('RIFF') === 0 ? 'webp' : (head.indexOf('ftyp') === 4 ? 'heic' : 'unknown')));
+            note('raw ' + kind);
+            if (kind === 'heic') { end('', '', 'the phone gave a HEIC photo this app cannot open (' + about() + ')'); return; }
+            if (kind === 'unknown') { end('', '', 'that file is not a picture this app can open (' + about() + ')'); return; }
+            if ((file.size || 0) > 6 * 1024 * 1024) { end('', '', 'the picture is too big to take as it is (' + about() + ')'); return; }
+          }
+          end(file.name, b64, '');
+        };
+        r.readAsDataURL(file);
+      };
+      if (!maxSide) { whole(false); return; }
+      // Anything the browser can draw becomes a JPEG no longer than maxSide (then 1024, then 640, if the
+      // phone has no room for the larger one). True when one was handed over.
+      const shrink = function (src, w, h, how) {
+        const sides = [maxSide, 1024, 640];
+        for (let i = 0; i < sides.length; i++) {
+          if (i > 0 && sides[i] >= sides[i - 1]) continue;
+          let cv = null;
+          try {
+            if (!w || !h) { note(how + ': no size'); return false; }
+            const k = Math.min(1, sides[i] / Math.max(w, h));
+            cv = document.createElement('canvas');
+            cv.width = Math.max(1, Math.round(w * k));
+            cv.height = Math.max(1, Math.round(h * k));
+            const g = cv.getContext('2d');
+            if (!g) { note(how + ' ' + sides[i] + ': no canvas'); continue; }
+            g.drawImage(src, 0, 0, cv.width, cv.height);
+            const s = cv.toDataURL('image/jpeg', 0.9);
+            if (s.indexOf('data:image/jpeg') === 0 && s.length > 400) {
+              note(how + ' ' + w + 'x' + h + ' -> ' + sides[i]);
+              cv.width = 1;
+              cv.height = 1;
+              end(file.name.replace(/\.[^.]*$/, '') + '.jpg', s.substring(s.indexOf(',') + 1), '');
+              return true;
+            }
+            note(how + ' ' + sides[i] + ': empty picture');
+          } catch (e) {
+            note(how + ' ' + sides[i] + ': ' + e);
+          } finally {
+            // (a canvas's memory goes when it is made tiny, not when it is dropped)
+            if (cv) { cv.width = 1; cv.height = 1; }
+          }
+        }
+        return false;
+      };
+      // Three ways to get at the picture, in turn: an <img> from the file itself, an <img> from the file read
+      // into a data: link (where the first is refused), and the browser's own decoder (at the size wanted).
+      const viaBitmap = function () {
+        if (typeof createImageBitmap !== 'function') { note('no bitmap'); whole(true); return; }
+        let p = null;
+        try { p = createImageBitmap(file, { resizeWidth: maxSide, resizeQuality: 'high' }); }
+        catch (e) { try { p = createImageBitmap(file); } catch (e2) { p = null; note('bitmap: ' + e2); } }
+        if (!p) { whole(true); return; }
+        p.then(function (bm) {
+          const ok = shrink(bm, bm.width, bm.height, 'bitmap');
+          try { if (bm.close) bm.close(); } catch (e) { /* nothing to close */ }
+          if (!ok) whole(true);
+        }, function (e) { note('bitmap: ' + e); whole(true); });
+      };
+      const viaData = function () {
+        const r = new FileReader();
+        r.onerror = function () { note('data: read failed'); viaBitmap(); };
+        r.onload = function () {
+          const img = new Image();
+          img.onload = function () {
+            const ok = shrink(img, img.naturalWidth, img.naturalHeight, 'data img');
+            free(img);
+            if (!ok) viaBitmap();
+          };
+          img.onerror = function () { note('data img: not loaded'); free(img); viaBitmap(); };
+          img.src = String(r.result || '');
+        };
+        r.readAsDataURL(file);
+      };
+      let url = '';
+      try { url = URL.createObjectURL(file); } catch (e) { note('no link: ' + e); }
+      if (!url) { viaData(); return; }
+      const img = new Image();
+      img.onload = function () {
+        const ok = shrink(img, img.naturalWidth, img.naturalHeight, 'img');
+        free(img);
+        URL.revokeObjectURL(url);
+        if (!ok) viaData();
+      };
+      img.onerror = function () { note('img: not loaded'); free(img); URL.revokeObjectURL(url); viaData(); };
+      img.src = url;
+    },
     pick: function (accept, label, cb, maxSide) {
       const open = function () {
         const f = document.createElement('input');
@@ -390,105 +518,10 @@
           actHide();
           const file = f.files && f.files[0];
           if (!file) { cb('', '', ''); f.remove(); return; }
-          const notes = [];
-          const note = function (t) { notes.push(String(t).substring(0, 120)); };
-          const about = function () {
-            return (file.type || 'no type') + ', ' + Math.round((file.size || 0) / 1024) + ' KB';
-          };
-          const end = function (name, b64, why) {
-            window.ttFile.last = (b64 ? 'ok' : 'failed') + ' · ' + about() + (notes.length ? ' · ' + notes.join('; ') : '');
-            cb(name, b64, why || '');
-            f.remove();
-          };
-          // The file as it is, base64 (a file that is not a picture to shrink; or the last resort).
-          const whole = function (check) {
-            const r = new FileReader();
-            r.onerror = function () { note('read failed'); end('', '', 'the phone would not hand the file over (' + about() + ')'); };
-            r.onload = function () {
-              const s = String(r.result || '');
-              const b64 = s.substring(s.indexOf(',') + 1);
-              if (check) {
-                // Only what the game can open, and not a camera's full picture: that is too much for it.
-                let head = '';
-                try { head = atob(b64.substring(0, 24)); } catch (e) { head = ''; }
-                const kind = head.indexOf('\xff\xd8') === 0 ? 'jpeg' : (head.indexOf('\x89PNG') === 0 ? 'png'
-                  : (head.indexOf('RIFF') === 0 ? 'webp' : (head.indexOf('ftyp') === 4 ? 'heic' : 'unknown')));
-                note('raw ' + kind);
-                if (kind === 'heic') { end('', '', 'the phone gave a HEIC photo this app cannot open (' + about() + ')'); return; }
-                if (kind === 'unknown') { end('', '', 'that file is not a picture this app can open (' + about() + ')'); return; }
-                if ((file.size || 0) > 6 * 1024 * 1024) { end('', '', 'the picture is too big to take as it is (' + about() + ')'); return; }
-              }
-              end(file.name, b64, '');
-            };
-            r.readAsDataURL(file);
-          };
-          if (!maxSide) { whole(false); return; }
-          // Anything the browser can draw becomes a JPEG no longer than maxSide (then 1024, then 640, if the
-          // phone has no room for the larger one). True when one was handed over.
-          const shrink = function (src, w, h, how) {
-            const sides = [maxSide, 1024, 640];
-            for (let i = 0; i < sides.length; i++) {
-              if (i > 0 && sides[i] >= sides[i - 1]) continue;
-              try {
-                if (!w || !h) { note(how + ': no size'); return false; }
-                const k = Math.min(1, sides[i] / Math.max(w, h));
-                const cv = document.createElement('canvas');
-                cv.width = Math.max(1, Math.round(w * k));
-                cv.height = Math.max(1, Math.round(h * k));
-                const g = cv.getContext('2d');
-                if (!g) { note(how + ' ' + sides[i] + ': no canvas'); continue; }
-                g.drawImage(src, 0, 0, cv.width, cv.height);
-                const s = cv.toDataURL('image/jpeg', 0.9);
-                cv.width = 1;
-                cv.height = 1;
-                if (s.indexOf('data:image/jpeg') === 0 && s.length > 400) {
-                  note(how + ' ' + w + 'x' + h + ' -> ' + sides[i]);
-                  end(file.name.replace(/\.[^.]*$/, '') + '.jpg', s.substring(s.indexOf(',') + 1), '');
-                  return true;
-                }
-                note(how + ' ' + sides[i] + ': empty picture');
-              } catch (e) {
-                note(how + ' ' + sides[i] + ': ' + e);
-              }
-            }
-            return false;
-          };
-          // Three ways to get at the picture, in turn: an <img> from the file itself, an <img> from the
-          // file read into a data: link (where the first is refused), and the browser's own decoder.
-          const viaBitmap = function () {
-            if (typeof createImageBitmap !== 'function') { note('no bitmap'); whole(true); return; }
-            let p = null;
-            try { p = createImageBitmap(file, { resizeWidth: maxSide, resizeQuality: 'high' }); }
-            catch (e) { try { p = createImageBitmap(file); } catch (e2) { p = null; note('bitmap: ' + e2); } }
-            if (!p) { whole(true); return; }
-            p.then(function (bm) {
-              const ok = shrink(bm, bm.width, bm.height, 'bitmap');
-              try { if (bm.close) bm.close(); } catch (e) { /* nothing to close */ }
-              if (!ok) whole(true);
-            }, function (e) { note('bitmap: ' + e); whole(true); });
-          };
-          const viaData = function () {
-            const r = new FileReader();
-            r.onerror = function () { note('data: read failed'); viaBitmap(); };
-            r.onload = function () {
-              const img = new Image();
-              img.onload = function () { if (!shrink(img, img.naturalWidth, img.naturalHeight, 'data img')) viaBitmap(); };
-              img.onerror = function () { note('data img: not loaded'); viaBitmap(); };
-              img.src = String(r.result || '');
-            };
-            r.readAsDataURL(file);
-          };
-          let url = '';
-          try { url = URL.createObjectURL(file); } catch (e) { note('no link: ' + e); }
-          if (!url) { viaData(); return; }
-          const img = new Image();
-          img.onload = function () {
-            const ok = shrink(img, img.naturalWidth, img.naturalHeight, 'img');
-            URL.revokeObjectURL(url);
-            if (!ok) viaData();
-          };
-          img.onerror = function () { note('img: not loaded'); URL.revokeObjectURL(url); viaData(); };
-          img.src = url;
+          // Kept, so the game can ask for the same picture again, smaller (ttFile.again).
+          window.ttFile._file = file;
+          window.ttFile._cb = cb;
+          window.ttFile.read(file, maxSide, cb, function () { f.remove(); });
         });
         f.click();
       };

@@ -64,6 +64,17 @@ static func pick(accept: String, label: String, done: Callable, max_side: int = 
 	f.pick(accept, label, _picked, max_side)
 
 
+## The picture picked last, again, no longer than `max_side` (the game could not take the larger one: an iPhone
+## short of memory after a photo or two). `done` as for `pick`. False when there is no picture to read again.
+static func again(max_side: int, done: Callable) -> bool:
+	var f = JavaScriptBridge.get_interface("ttFile")
+	if f == null:
+		return false
+	_on_pick = done
+	_picked = JavaScriptBridge.create_callback(WebFiles._got)
+	return bool(f.again(max_side, _picked))
+
+
 ## What became of the file picked last, as the page tells it (how it was read, its kind and size): for
 ## Settings -> Phone app, so a picture that would not load can be told apart from here.
 static func last_pick() -> String:

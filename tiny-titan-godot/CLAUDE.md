@@ -1975,6 +1975,16 @@ is the Windows handoff.
   with no type, a PNG, a HEIC, garbage, and with each way forced to fail): `HTMLInputElement.prototype.click`
   replaced so the chooser "returns" a file. Test a rebuilt page with the browser's copy of tt.js refreshed
   (`fetch('tt.js', {cache: 'reload'})`): it is cached.
+  - Still failing on the iPhone 2026-11-28 ("Can upload the first (usually front view) but then the other 2...
+    'couldn't load image' regardless of if I take photo then or choose from library"); three in a row worked in
+    Chromium. Best guess: memory (an iPhone keeps a decoded 12 MP photo, ~48 MB, until it gets round to it).
+    `ttFile.read(file, maxSide, cb, done)` (the pipeline, out of `pick`) now lets go of every decoded <img> at once
+    (`free`), shrinks canvases in a `finally`; `ttFile.again(maxSide, cb)` reads the picture picked last again
+    (`ttFile._file`). The game (`LogBodyForm._photo_arrived`, PHOTO_SIDE 1600, PHOTO_SIDE_SMALL 900) forgets the
+    photo textures before a pick (`App.forget_photo_textures`), and when a picture does not go in it is tried once
+    more at 900 (`WebFiles.again`); only then the toast, which now ends in the page's notes (`[...]`, the same as
+    "Last photo:"). Tried in the browser: three photos in a row; a failure retried smaller and went in; both
+    failing gives the toast with its reason. NOT tried on an iPhone: ask for a screenshot of that toast if it fails.
   - `sw.js` (tools/build_web.py) now fetches every file with `cache: 'reload'` when a new build installs: two
     builds published minutes apart could leave the newer worker holding the older build's files.
 - The Hero tab's lifts, cleaned up (2026-11-27; the user: "a jumbled mess and hard to look and see and

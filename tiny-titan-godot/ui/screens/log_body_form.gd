@@ -275,24 +275,11 @@ func _set_date(key: String) -> void:
 func pick_photo(angle: String) -> void:
 	if WebFiles.available():
 		# The phone app: the browser's own chooser (take a photo, or the library).
-		WebFiles.pick("image/*", "%s photo: take or choose" % TT.PHOTO_ANGLE_NAMES[angle], func(file_name: String, bytes: PackedByteArray):
-			if file_name == "" or bytes.is_empty():
-				if WebFiles.last_error != "":
-					# The page could not make a picture of it: say why, in its words.
-					Sfx.error()
-					App.toast("Could not use that picture: %s" % WebFiles.last_error, "bad", "warning")
-				return
-			var id = App.import_photo_bytes(bytes, file_name)
-			if id == "":
-				Sfx.error()
-				var kind = WebFiles.kind_of(bytes)
-				App.toast("Could not read that image (%s, %s KB)" % [kind if kind != "" else "not a picture", Xp.fmt_int(int(bytes.size() / 1024.0))], "bad", "warning")
-				return
-			photos[angle] = id
-			Sfx.shutter()
-			if is_instance_valid(screen):
-				screen.rebuild(), 1600)
+		App.forget_photo_textures()
+		WebFiles.pick("image/*", "%s photo: take or choose" % TT.PHOTO_ANGLE_NAMES[angle], _photo_arrived.bind(angle, PHOTO_SIDE), PHOTO_SIDE)
 		return
+
+	# (the PC: a file dialog)
 	if _dialog != null and is_instance_valid(_dialog):
 		return
 	var fd = FileDialog.new()
@@ -306,6 +293,41 @@ func pick_photo(angle: String) -> void:
 	_dialog = fd
 	screen.get_tree().root.add_child(fd)
 	fd.popup_centered_ratio(0.8)
+
+
+## How long a phone photo is on its longer side when it comes in, and the smaller size it is tried at once when
+## the first would not go in (2026-11-28: on the iPhone the first photo went in and the next two did not: "couldn't
+## load image"; the page now lets go of every decoded photo at once, and this is the second chance).
+const PHOTO_SIDE = 1600
+const PHOTO_SIDE_SMALL = 900
+
+
+## A picture from the phone's chooser: stored as the `angle` photo, or tried again smaller once, or a toast that
+## says what went wrong in the page's own words (what it tried: WebFiles.last_pick).
+func _photo_arrived(file_name: String, bytes: PackedByteArray, angle: String, side: int) -> void:
+	var why = ""
+	if file_name == "" or bytes.is_empty():
+		if WebFiles.last_error == "":
+			# (the chooser was closed with nothing picked)
+			return
+		why = WebFiles.last_error
+	else:
+		var id = App.import_photo_bytes(bytes, file_name)
+		if id != "":
+			photos[angle] = id
+			Sfx.shutter()
+			if is_instance_valid(screen):
+				screen.rebuild()
+			return
+		var kind = WebFiles.kind_of(bytes)
+		why = "the game could not open it (%s, %s KB)" % [kind if kind != "" else "not a picture", Xp.fmt_int(int(bytes.size() / 1024.0))]
+	if side > PHOTO_SIDE_SMALL:
+		# Once more, smaller (less for a phone short of memory to hold).
+		App.forget_photo_textures()
+		if WebFiles.again(PHOTO_SIDE_SMALL, _photo_arrived.bind(angle, PHOTO_SIDE_SMALL)):
+			return
+	Sfx.error()
+	App.toast("Could not use that picture: %s. [%s]" % [why, WebFiles.last_pick()], "bad", "warning")
 
 
 func _dialog_picked(path: String, angle: String) -> void:
