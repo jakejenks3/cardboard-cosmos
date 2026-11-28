@@ -50,6 +50,8 @@ var _files_names: bool = true
 var _built_names: Array = []
 var _chips: HFlowContainer = null
 var _no_match: Label = null
+var _area = null
+var _shown_names: Array = []
 var _add_btn: Button = null
 var _building: bool = false
 ## When the first set of this workout was ticked (unix seconds; 0 = none yet): the workout's time is taken from
@@ -228,6 +230,13 @@ func build(parent: Control) -> void:
 			if Xp.normalize_exercise(e.name) == pk:
 				have = true
 		if have or pk == "":
+			continue
+		# A prepped day (game/prep.gd): the lift comes with the sets prepped and its superset.
+		var pd = _prepped_draft(pend)
+		if pd != null:
+			if bool(pair[1]):
+				pd["planned"] = true
+			exercises.append(pd)
 			continue
 		var plp = _last.get(pk)
 		if plp != null:
@@ -875,8 +884,41 @@ func _picker_card() -> Card:
 	c.add(_chips)
 	_no_match = Kit.para("", 11, Pal.MUTED)
 	c.add(_no_match)
+	# The same muscles as this workout (Prep.area_lifts): a key a lift, so a bench press on a push day is one
+	# tap, not typed (the user, 2026-11-27).
+	_area = Kit.vbox(4)
+	_area.set_meta("area_box", true)
+	c.add(_area)
 	_fill_chips()
 	return c
+
+
+## The lifts that work the same muscles as the workout (its lifts', and the day's kind when it is today's):
+## the player's own first, then the library's staples. Hidden while a search is typed.
+func _fill_area() -> void:
+	if _area == null or not is_instance_valid(_area):
+		return
+	Kit.clear(_area)
+	if Xp.normalize_exercise(query) != "":
+		return
+	var f = _form()
+	var kind = str(App.plan().get("kind", "")) if (f != null and str(f.date) == App.today) else ""
+	var names = exercises.map(func(e): return str(e.name))
+	var parts = Prep.area_parts(names.filter(func(n): return str(n).strip_edges() != ""), kind)
+	# (not the keys the list above already shows)
+	var list = Prep.area_lifts(parts, App.sessions(), names + _shown_names, App.pt(), 8)
+	if list.is_empty():
+		return
+	var cap = Kit.label("SAME MUSCLES · " + ", ".join(PackedStringArray(parts.map(func(p): return LiftLibrary.part_name(str(p)).to_lower()))).to_upper(), 10, Pal.MUTED, true)
+	cap.set_meta("area_caption", parts.size())
+	_area.add_child(cap)
+	var flow = Kit.flow(5)
+	for e in list:
+		var k = Xp.normalize_exercise(str(e.name))
+		var chip = _ex_chip({"key": k, "name": str(e.name), "last": _last.get(k)})
+		chip.set_meta("area_lift", str(e.name))
+		flow.add_child(chip)
+	_area.add_child(flow)
 
 
 func _suggestions_have_history() -> bool:
@@ -921,6 +963,7 @@ func _fill_chips() -> void:
 				more_left = true
 				break
 			shown.append(s)
+	_shown_names = shown.map(func(x): return str(x.name))
 	for s in shown:
 		_chips.add_child(_ex_chip(s))
 	if q == "" and (more_left or show_all_chips):
@@ -941,6 +984,7 @@ func _fill_chips() -> void:
 		_no_match.set_meta("filed_as", str(filing.name) if filing != null else "")
 	if is_instance_valid(_add_btn):
 		_add_btn.disabled = q == ""
+	_fill_area()
 
 
 ## One tappable exercise key: "Bench Press  Barbell  85×5" (the movement, its
@@ -1038,8 +1082,10 @@ func plan_toggle(ex_name: String) -> void:
 			App.toast("%s has your sets. Take it out with the cross on its card." % Missions.short_name(ex_name), "info", "lift")
 		return
 	Sfx.pop()
-	var lp = _last.get(key)
-	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else _blank(ex_name)
+	var one = _prepped_draft(ex_name)
+	if one == null:
+		var lp = _last.get(key)
+		one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else _blank(ex_name)
 	one["planned"] = true
 	exercises.append(one)
 	_changed(true)
@@ -1868,3 +1914,19 @@ func _use_try(i: int, o: Dictionary) -> void:
 	_touched(i)
 	App.toast("Set %d: %s. Go for it." % [j + 1, str(o.words)], "info", "target")
 	_changed(true)
+
+
+## A lift prepped for the form's day (game/prep.gd): its draft with the prepped sets and its superset group
+## (prep groups are numbered from 100, so they never meet the form's own); null when not prepped.
+func _prepped_draft(ex_name: String):
+	var f = _form()
+	var day = str(f.date) if f != null else App.today
+	if editing_id != null:
+		return null
+	var x = Prep.lift_on(App.settings(), day, ex_name)
+	if x == null or (x.get("sets", []) as Array).is_empty():
+		return null
+	var one = draft_from_sets(str(x.name), x.sets, wu)
+	if int(x.get("ss", 0)) > 0:
+		one["ss"] = 100 + int(x.ss)
+	return one

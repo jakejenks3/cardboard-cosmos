@@ -1138,6 +1138,12 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		if strength < PLAN_LIFTS:
 			lifts.append(l)
 			strength += 1
+	# A day PREPPED ahead (game/prep.gd): its lifts are the prep's, the exact ways and sets the player picked,
+	# in their order; the game's own guess is left out, and so are the focus's extra lifts.
+	var prep = Prep.of(settings, today)
+	var prepped = prep != null
+	if prepped:
+		lifts = Prep.plan_lifts(prep, before, today, marks).filter(func(l): return not bool(l.pt))
 	var group = kind
 	if kind == "":
 		# The body area most of the likely lifts work (PT and stretches aside).
@@ -1169,7 +1175,7 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	var avoid = lifts.map(func(l): return Xp.normalize_exercise(move_of(str(l.name))))
 	var extra = []
 	if Dose.plan_id(settings) != "":
-		if not off:
+		if not off and not prepped:
 			extra = Dose.extras(lifts, before, today, marks, settings, kind, group, hist, avoid)
 		for x in extra:
 			x["mode"] = str(x.dose.mode)
@@ -1249,7 +1255,8 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 	for l in extra + lifts:
 		_tag_sides(l, settings)
 		_tag_ranges(l, settings)
-		_mark_rotation(l, hist)
+		if not bool(l.get("prep", false)):
+			_mark_rotation(l, hist)
 	# One change offered a day at most: the lift done the same way the longest.
 	var rot = (extra + lifts).filter(func(x): return x.has("rotate"))
 	rot.sort_custom(func(a, b): return int(a.rotateRun) > int(b.rotateRun))
@@ -1275,7 +1282,7 @@ static func day_plan(sessions: Array, today: String, marks: Dictionary = {}, set
 		"cycle": cycle, "kind": kind, "after": dk.after, "afterDate": dk.afterDate, "picked": dk.picked, "moves": avoid, "marks": marks,
 		"focus": focus, "off": off, "call": call, "set_aside": set_aside,
 		"rest": {"due": off, "call": call},
-		"run": run_goal, "runToday": run_today,
+		"run": run_goal, "runToday": run_today, "prepped": prepped,
 		"doseToday": Dose.day_dose(extra + lifts, before, today, marks, settings, kind, group) if (focus != "" and not off) else []}
 
 
@@ -1497,6 +1504,9 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			continue
 		var main = l.options[0]
 		var aim = LiftTrend.next_target(main.last, _step_kg(wu))
+		if l.has("aimSets"):
+			# (a prepped day: the aim is the prep's sets)
+			aim = {"kind": "prep", "sets": l.aimSets}
 		var ways = l.options.map(func(o): return str(o.name))
 		var hist = _history_before(sessions, str(main.name), today)
 		var opts = [] if bool(main.new) else Challenges.options(str(main.name), hist, today, _step_kg(wu), fmt_w)
@@ -1872,7 +1882,11 @@ static func pretend_lift(log: Array, day: String, plan: Dictionary, with_new: bo
 		if have.has(k):
 			continue
 		var lp = last.get(k)
-		if lp != null:
+		if l.has("aimSets") and not (l.aimSets as Array).is_empty():
+			# (a prepped day: as prepped)
+			have[k] = true
+			exercises.append({"name": str(l.name), "sets": (l.aimSets as Array).duplicate(true)})
+		elif lp != null:
 			have[k] = true
 			exercises.append({"name": str(lp.name), "sets": lp.sets.duplicate(true)})
 		elif with_new and l.has("dose"):
@@ -2088,6 +2102,10 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String, du
 		if l.has("dose"):
 			# An extra lift of the focus: say what it is for.
 			lead = "For your %s, %d sets: " % [Dose.part_name(str(l.dose.part)).to_lower(), int(l.dose.sets)]
+		if l.has("aimSets"):
+			# (a prepped day: the lift as prepped, with its sets)
+			lines.append(short_name(str(l.name)) + ": " + Prep.describe(l.aimSets, str(l.name), fmt_w))
+			continue
 		lines.append(lead + str(way.call(l.options[0])))
 		# The other ways the player has done (an extra lift of the focus: all of
 		# them, they are what it is about); the card has the rest.

@@ -858,6 +858,9 @@ func aim_for(lift_name: String, both: bool = false):
 	for l in p.get("lifts", []):
 		if bool(l.get("pt", false)):
 			continue
+		if l.has("aimSets") and Xp.normalize_exercise(str(l.name)) == k:
+			# (a prepped day: the prep's sets)
+			return {"cap": "YOUR PREP", "sets": l.aimSets, "kind": "prep"}
 		for o in l.get("options", []):
 			if Xp.normalize_exercise(str(o.name)) == k and not bool(o.get("new", false)) and not (o.get("last", []) as Array).is_empty():
 				var t = LiftTrend.next_target(o.last, step)
@@ -877,6 +880,12 @@ func aim_for(lift_name: String, both: bool = false):
 	if str(t2.kind) == "none":
 		return null
 	return {"cap": LiftTrend.aim_cap(t2), "sets": t2.sets, "kind": str(t2.kind)}
+
+
+## Prep a day's workout (game/prep.gd): its lifts, the way of each, its sets and supersets become that day's
+## plan. [] takes the prep off (back to the game's plan).
+func set_prep(date: String, lifts: Array) -> void:
+	update_settings({Prep.KEY: Prep.with_prep(saved.settings, date, lifts, today, now_ms())})
 
 
 ## The next days as they will probably go (Missions.ahead; cached). Read only:

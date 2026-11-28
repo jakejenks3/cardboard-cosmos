@@ -338,6 +338,9 @@ static func aim_words(l: Dictionary, main: Dictionary, wu: String, got: int = 0)
 	var dose = l.get("dose")
 	if bool(l.pt):
 		return {"cap": "AS LAST TIME", "said": LiftHistory.describe_sets(l.last.sets, fmt_w), "col": Pal.PT}
+	if l.has("aimSets") and str(main.get("name", "")) == str(l.name):
+		# A prepped day (game/prep.gd): the sets the player prepped.
+		return {"cap": "YOUR PREP", "said": Prep.describe(l.aimSets, str(l.name), fmt_w), "col": Pal.ACCENT}
 	if dose != null:
 		var cap = ("%d OF %d SETS" % [got, int(dose.sets)]) if got > 0 else ("ADD · %d SETS" % int(dose.sets))
 		if bool(main.new):

@@ -2227,6 +2227,37 @@ is the Windows handoff.
   `_apply_look`, a change rebuilds the shell like a theme). Walkthrough `tests/shots/looks.gd` (year data): the same
   six screens in every look, put side by side in `looks_<screen>.png`. Waiting for the user's pick: then make it the
   look and take the others out.
+- PREP A DAY AHEAD, AND THE SAME MUSCLES' LIFTS IN THE LOG TAB (2026-11-27, night; the user: "I want to be able to
+  plan my workout based on variation and equipment for the next day so I can look ahead at weights, reps, and
+  equipment. I can still change once I go to log it, but like tomorrow the plan for me has a bunch of stuff I can't
+  use... Add a prep next day plan in the planning/future days area. 2. When logging, add a few recommended other lifts
+  that cover the same area at the bottom so that I have to type less").
+  - `game/prep.gd` (`Prep`, pure). STORED in `settings.preps` = {date: {lifts: [{name, sets: [{reps, weightKg[, band]
+    [, holdSec]}], ss}], at}} (`with_prep` drops days older than KEPT_DAYS 14; `of`, `lifts_of`, `lift_on`).
+    `from_plan(plan_lifts, step_kg)`: a prep to start from (each lift the way done last, its next_target aim; never
+    done: START_SETS x START_REPS). `plan_lifts(prep, before, today, marks)`: likely_lifts-shaped entries with
+    "prep", "aimSets", "ss", "why": "Your prep". `describe(sets, lift, fmt_w)`: "3x8, pick the weight" for a weighted
+    lift prepped without one. Unit test: `tests/prep_test.gd`.
+  - A PREPPED DAY'S PLAN IS THE PREP: `Missions.day_plan` replaces its lifts with `Prep.plan_lifts` (the game's guess
+    and the focus's extra lifts left out; `plan.prepped`), options as usual (the prepped way first). The aim of a
+    prepped lift is its prepped sets everywhere: `TodayView.aim_words` ("YOUR PREP"), `App.aim_for`, the challenge's
+    `aim`, `AheadView._aim`, the morning text; `Missions.pretend_lift` pretends it as prepped; no rotation hint.
+    `LogLiftEditor._prepped_draft`: Start workout, the plan card's keys and `App.pending_workout` bring a prepped lift
+    with its sets and its superset (prep groups as 100 + ss).
+  - `ui/screens/prep_view.gd` (`PrepView.open(date)`, sheet meta `prep_sheet`): a card a lift (meta `prep_lift`): its
+    WAY chips (meta `prep_way`: `_ways` = itself, Missions.options_for, the library's variations, MAX_WAYS 8), LAST
+    and BEST, RECORDS TO BEAT (Challenges.options, meta `prep_record`: a tap puts it in set 1), sets as reps / weight
+    steppers (metas `prep_reps`, `prep_weight`), + Set, "Superset with next" (meta `prep_ss`; a line between, meta
+    `prep_superset_line`), up / down / remove; "Add a lift" (search, or the same muscles: `Prep.area_lifts`, metas
+    `prep_area`, `prep_suggest`); Save prep (meta `prep_save`, `App.set_prep`) and "Use the game's plan" (meta
+    `prep_clear`). Opened from Coming up: the card's "Prep tomorrow's workout" key (meta `prep_tomorrow` = prepped)
+    and each lift day's "Prep this day" / "Edit prep" in the sheet (meta `ahead_prep`); a prepped day says so.
+  - The same muscles: `Prep.area_parts(lift_names, kind)` (the day kind's parts and the lifts' own) and
+    `Prep.area_lifts(parts, sessions, taken, marks, limit)` (the player's own lifts of those parts, the most done first,
+    one variation a movement, then the library's STAPLES; never a movement in `taken`, never PT). The Log tab's
+    Add exercise card ends in "SAME MUSCLES · CHEST, SHOULDERS, TRICEPS" and a key a lift (`LogLiftEditor._fill_area`,
+    metas `area_caption`, `area_lift`; hidden while a search is typed; not the keys already listed above it).
+  - Walkthrough `tests/shots/prepday.gd` (year data, also --fingers).
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2405,6 +2436,7 @@ godot --headless --path . --script res://tests/bands_test.gd
 godot --headless --path . --script res://tests/tracking_test.gd
 godot --headless --path . --script res://tests/lift_progress_test.gd
 godot --headless --path . --script res://tests/challenges_test.gd
+godot --headless --path . --script res://tests/prep_test.gd
 godot --headless --path . --script res://tests/rpg_shell_test.gd
 godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
@@ -2473,6 +2505,7 @@ curls (a lift done for the first time by another variation: FIRST TIME, not beat
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
 looks (the mock-ups: the same screens in every Kit.look, side by side; year data),
+prepday (prep tomorrow from Coming up: ways, records, a superset, saved; the day's plan and the Log tab start from it; the same muscles' keys; year data, also --fingers),
 challenges (the day's lift challenges: the Hero section, the Log tab's TRY keys, done and claimed; year data, also --fingers),
 rungs (a lift done by double progression: the Beat it step chart, the reel's Beat last time card, beat tags in the history; `new` data, also --fingers),
 tidy (the exercise card's title, last / aim box and green done sets, the plan's done rows, Journey -> Log by week with a filter, a workout's sheet; year data, also --fingers),

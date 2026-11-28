@@ -62,12 +62,26 @@ static func card():
 		v.add_child(tag)
 		cells.add_child(v)
 	c.add(cells)
+	# Prep tomorrow (PrepView): its lifts the way you'll do them, with what you'll have.
+	var tomorrow = Dates.add_days(App.today, 1)
+	var t_ahead = days.filter(func(a): return str(a.date) == tomorrow)
+	# (any day but one called rest: a day the game sees no lifts for can be prepped from nothing)
+	if not t_ahead.is_empty() and (not bool(t_ahead[0].rest) or Prep.of(App.settings(), tomorrow) != null):
+		var prepped = Prep.of(App.settings(), tomorrow) != null
+		var pk = Kit.button("Tomorrow is prepped · Edit" if prepped else "Prep tomorrow's workout", "secondary" if prepped else "primary", PrepView.open.bind(tomorrow), "md", "check" if prepped else "edit")
+		pk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pk.tooltip_text = "Pick each lift's way and equipment, its weights and reps, and supersets for tomorrow"
+		pk.set_meta("prep_tomorrow", prepped)
+		c.add(pk)
 	return c
 
 
 ## What to aim for on a planned lift, in a few words.
 static func _aim(l: Dictionary, wu: String) -> String:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	if l.has("aimSets"):
+		# (a prepped day: the sets prepped)
+		return Prep.describe(l.aimSets, str(l.name), fmt_w)
 	var opts = l.get("options", [])
 	var first = opts[0] if not opts.is_empty() else {"new": false, "last": l.last.sets}
 	var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
@@ -198,6 +212,8 @@ static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Contr
 		c.add(_line("moon", "Your call: a rest from lifting", Pal.SECOND))
 		c.add(Kit.clip("%s. A run, PT and a walk are fine." % Missions.off_moves(plan, "the day after"), 11, Pal.MUTED))
 	elif bool(a.lift):
+		if bool(plan.get("prepped", false)):
+			c.add(_line("check", "Prepped: your lifts, ways and sets", Pal.GOOD))
 		for l in plan.lifts:
 			if not bool(l.pt):
 				c.add(_lift_row(l, wu))
@@ -207,6 +223,16 @@ static func _day_card(a: Dictionary, wu: String, du: String, sh = null) -> Contr
 		c.add(Kit.clip("Nothing to plan for this day yet", 12, Pal.MUTED))
 	else:
 		c.add(Kit.clip("No lifts to plan yet", 11, Pal.MUTED))
+	if sh != null and not bool(a.rest):
+		# Prep the day (PrepView): the way of each lift with what you'll have, its sets, supersets; any day not
+		# called rest, a day with no lifts planned too (from nothing).
+		var prepped = Prep.of(App.settings(), str(a.date)) != null
+		var pk = Kit.button("Edit prep" if prepped else "Prep this day", "secondary", func():
+			sh.close()
+			PrepView.open(str(a.date)), "md", "edit")
+		pk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pk.set_meta("ahead_prep", str(a.date))
+		c.add(pk)
 	if not plan.pt.is_empty():
 		c.add(_line("pt", "PT: %s" % ", ".join(PackedStringArray(plan.pt.map(func(r): return str(r.name)))), Pal.PT))
 	for o in a.others:
