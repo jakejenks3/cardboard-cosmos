@@ -88,7 +88,7 @@ func _init() -> void:
 	var state = {"levels": {"hero": {"level": 10}}, "sessionXp": {}, "body": {"entries": 0}}
 	var day = Missions.daily(TODAY, data, state, [])
 	var ids = day.map(func(m): return str(m.id))
-	ok(find(day, ":show") != null and day.filter(func(m): return str(m.id).contains(":beat:")).size() == 2 and find(day, ":new") != null and find(day, ":pt") != null, "show up, beat it on two lifts, try something new, PT", ids)
+	ok(find(day, ":show") != null and day.filter(func(m): return str(m.id).contains(":beat:")).size() == Missions.BEAT_MISSIONS and find(day, ":new") != null and find(day, ":pt") != null, "show up, a challenge on three lifts (2026-11-28: it was two), try something new, PT", ids)
 	ok(day.all(func(m): return str(m.unit) != "min"), "no mission is about minutes")
 	var beat = day.filter(func(m): return str(m.id).contains(":beat:"))[0]
 	# (2026-11-27: a lift's mission is a challenge: records to pick from, Challenges)

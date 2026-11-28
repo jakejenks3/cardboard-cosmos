@@ -1,9 +1,10 @@
 extends RefCounted
-## The day's lift challenges (Challenges, ChallengeView; run with "year" data, also --fingers): the Hero tab's
-## CHALLENGES section (a card a lift, records to pick from: heavier than ever, a rep record at a weight done
-## before, the best for N reps), the Log tab's TRY keys on the lift's card (a tap fills the next set, the key
-## lights when a set does it), and the challenge done and claimed once the workout is saved.
-## Prints CHECK lines.
+## The day's lift challenges (Challenges, ChallengeView; run with "year" data, also --fingers). Since 2026-11-28
+## a challenge is a MISSION strip inside its lift's row of the Hero tab's TODAY card (the CHALLENGES section is
+## gone: "too muddled", each lift was in two places): records to pick from (heavier than ever, a rep record at
+## a weight done before, the best for N reps); the Log tab's TRY keys on the lift's card (a tap fills the next
+## set, the key lights when a set does it); the challenge done and claimed from its strip once the workout is
+## saved. Prints CHECK lines.
 
 var main: Node
 var tree: SceneTree
@@ -83,21 +84,41 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	App.go("home")
 	await ShotHelper.wait(tree, 1.0)
 
-	var sec = _section("challenges")
-	check(sec != null, "the Hero tab has a CHALLENGES section")
+	check(_section("challenges") == null, "no CHALLENGES section of its own any more")
+	var sec = _section("today")
+	check(sec != null, "the Hero tab has its TODAY card")
 	var daily = App.quests().daily.filter(func(m): return bool(m.get("challenge", false)))
-	check(not daily.is_empty() and daily.all(func(m): return str(m.title).ends_with(" challenge")), "today's lifts have challenges (%s)" % str(daily.map(func(m): return m.title)))
-	var cards = _all("challenge", sec) if sec != null else []
-	check(cards.size() == daily.size() and cards.all(func(c): return _all("challenge_option", c).size() >= 2), "a card each, with records to pick from")
+	check(not daily.is_empty() and daily.size() <= 3 and daily.all(func(m): return str(m.title).ends_with(" challenge")), "today's lifts have challenges, three at most (%s)" % str(daily.map(func(m): return m.title)))
+	var strips = _all("challenge", sec) if sec != null else []
+	check(strips.size() == daily.size() and strips.all(func(c): return _all("challenge_option", c).size() >= 2), "a MISSION strip each, with records to pick from (%d strips)" % strips.size())
+	# Each strip is inside the row of its own lift, and every lift is listed once.
+	var in_rows = true
+	for st in strips:
+		var holder = st.get_parent()
+		while holder != null and not (holder is Control and holder.has_meta("today_lift")):
+			holder = holder.get_parent()
+		var mm = daily.filter(func(x): return str(x.id) == str(st.get_meta("challenge")))
+		if holder == null or mm.is_empty() or Xp.normalize_exercise(str(holder.get_meta("today_lift"))) != Xp.normalize_exercise(str(mm[0].lift)):
+			in_rows = false
+	check(in_rows, "each strip sits in the row of its lift")
+	var rows = _all("today_lift", sec) if sec != null else []
+	var row_names = rows.map(func(r): return Xp.normalize_exercise(str(r.get_meta("today_lift"))))
+	var once = true
+	for k in row_names:
+		if row_names.count(k) > 1:
+			once = false
+	check(not rows.is_empty() and once, "every lift is listed once (%d rows)" % rows.size())
+	check(ShotHelper.all_text(sec).contains("PICK ONE"), "a strip without a goal says PICK ONE")
 	var bench = daily.filter(func(m): return str(m.lift).begins_with("Bench Press"))
 	check(not bench.is_empty(), "bench press is one of them")
 	if not bench.is_empty():
 		var types = bench[0].options.map(func(o): return str(o.type))
 		check(types.has("heavier") and types.has("reps"), "its picks: heavier than ever and a rep record at a weight done before (%s)" % str(types))
 		print("BENCH options: ", bench[0].options.map(func(o): return "%s %s (%s)" % [o.title, o.words, o.sub]))
-	if sec != null:
-		ShotHelper.reveal(sec)
-		await ShotHelper.wait(tree, 0.4)
+		var bs = _one("challenge", str(bench[0].id), sec)
+		if bs != null:
+			ShotHelper.reveal(bs)
+			await ShotHelper.wait(tree, 0.4)
 	await ShotHelper.snap(tree, "challenges_1_hero")
 	if bench.is_empty():
 		print("CHALLENGES %d FAILED" % fails)
@@ -141,8 +162,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	check(not after.is_empty() and bool(after[0].done) and (after[0].hit as Array).has("reps"), "the challenge is done by the rep record")
 	App.go("home")
 	await ShotHelper.wait(tree, 1.0)
-	var claim = _one("challenge_claim", str(m.id))
-	check(claim != null, "its card has a Claim key")
+	var claim = _one("challenge_claim", str(m.id), _section("today"))
+	check(claim != null, "its strip in the Today card has a Claim key")
 	if claim != null:
 		ShotHelper.reveal(claim)
 		await ShotHelper.wait(tree, 0.4)

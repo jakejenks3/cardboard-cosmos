@@ -38,8 +38,8 @@ const LOOKBACK = 42
 ## its one row and its one mission, from plan.pt (the PT still needed this
 ## week), and nothing else of the plan names a PT exercise on its own.
 const PLAN_LIFTS = 6
-## "Beat last time" missions a day.
-const BEAT_MISSIONS = 2
+## Lift challenges a day (2026-11-28, the user: "Give me a mission for 3 things"; it was 2).
+const BEAT_MISSIONS = 3
 ## Records to set in a week (the weekly "Record week").
 const RECORDS_A_WEEK = 3
 
@@ -1499,6 +1499,8 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	if focus:
 		var rank = func(l): return {"build": 0, "keep": 1}.get(str(l.get("mode", "")), 2)
 		TTUtil.stable_sort(ranked, func(a, b): return int(rank.call(a)) < int(rank.call(b)))
+	# A lift the player gave a goal in the day's prep (Prep.with_goal) is challenged first: they picked it.
+	TTUtil.stable_sort(ranked, func(a, b): return (not (a.get("goal", {}) as Dictionary).is_empty()) and (b.get("goal", {}) as Dictionary).is_empty())
 	for l in ranked:
 		if beats >= BEAT_MISSIONS or bool(l.pt) or l.has("dose"):
 			continue
@@ -1510,6 +1512,18 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 		var ways = l.options.map(func(o): return str(o.name))
 		var hist = _history_before(sessions, str(main.name), today)
 		var opts = [] if bool(main.new) else Challenges.options(str(main.name), hist, today, _step_kg(wu), fmt_w)
+		# The goal picked in the prep is one of the records to go for, first (picked on another day, it may no
+		# longer be among today's three: it is put in front of them).
+		var goal: Dictionary = l.get("goal", {}) if l.get("goal") is Dictionary else {}
+		if not goal.is_empty():
+			var same = opts.filter(func(o): return Challenges.same_option(o, goal))
+			var g = same[0] if not same.is_empty() else goal.duplicate()
+			if not g.has("tip"):
+				g["tip"] = Challenges._tip(str(g.get("type", "")), 0)
+			if not g.has("chip"):
+				g["chip"] = str(g.get("words", ""))
+			opts = [g] + opts.filter(func(o): return not Challenges.same_option(o, goal))
+			opts = opts.slice(0, Challenges.MAX_OPTIONS)
 		var alts = []
 		for o in l.options.slice(1):
 			alts.append(way_word(o, str(main.move)))
@@ -1528,6 +1542,8 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 				did = true
 				hit_types.append("other")
 			desc = "Pick one: " + "; ".join(PackedStringArray(opts.map(func(o): return "%s, %s" % [str(o.title).to_lower(), str(o.words)]))) + "."
+			if not goal.is_empty():
+				desc = "Your goal: %s, %s. Or any of: " % [str(goal.get("title", "")).to_lower(), str(goal.get("words", ""))] + "; ".join(PackedStringArray(opts.slice(1).map(func(o): return "%s, %s" % [str(o.title).to_lower(), str(o.words)]))) + "."
 			if int(main.get("sides", 1)) > 1:
 				desc += " Reps are both sides added up."
 			desc += " Try: " + str(opts[0].tip)
@@ -1535,7 +1551,8 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			desc += (" Or another way (%s): beat its last time." % ", ".join(PackedStringArray(alts))) if not opts.is_empty() else (" Or: %s." % ", ".join(PackedStringArray(alts)))
 		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "%s challenge" % str(main.move), desc, "sword", "lift",
 			1, 1 if did else 0, "", 250, claims,
-			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "planned": str(l.name), "options": opts, "hit": hit_types, "challenge": true}))
+			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "planned": str(l.name), "options": opts, "hit": hit_types, "challenge": true,
+			"goal": goal}))
 		beats += 1
 
 	# Record hunter: any record on any lift today (a lift day only).

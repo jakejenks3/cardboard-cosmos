@@ -194,7 +194,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		chip = _find("rest_chip")
 		check(bool(plan.off) and str(plan.rest.call) == "rest" and text.contains("REST DAY · YOUR CALL") and text.contains("Push day moves to tomorrow") and text.contains("Your call: push day moves to tomorrow"), "Rest: today is a rest day by the player's call, and the card says what moves")
 		check(chip != null and absf(chip.get_global_rect().position.y - y0) < 1.0, "the chip stays under the cursor")
-		check(not text.contains("YOUR FOCUS ADDS") and not text.contains("Chest Fly") and not App.quests().daily.any(func(m): return str(m.id).contains(":beat:") or str(m.id).contains(":dose:")), "no lift on the card, none in the missions")
+		check(not text.contains("YOUR FOCUS ADDS") and not text.contains("Chest Fly") and not App.quests().daily.any(func(m): return str(m.id).contains(":beat:") or str(m.id).contains(":dose:")), "no lift on the card, none in the missions (%s)" % str([text.contains("YOUR FOCUS ADDS"), text.contains("Chest Fly"), App.quests().daily.filter(func(m): return str(m.id).contains(":beat:") or str(m.id).contains(":dose:")).map(func(m): return m.id)]))
 		var words_after = App.ahead().map(func(a): return str(Missions.ahead_word(a).text))
 		print("AHEAD before ", words_before, " after ", words_after)
 		check(words_after[0] == "Push" and words_after[1] == "Legs" and words_after[2] == "Pull", "Coming up: the push day is tomorrow now, and the days after follow (%s)" % ", ".join(PackedStringArray(words_after)))
@@ -228,7 +228,8 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	plan = App.plan()
 	text = ShotHelper.all_text(main)
 	check(plan.kind == "legs" and plan.lifts.all(func(l): return str(l.get("mode", "")) == "keep") and not plan.lifts.any(func(l): return l.has("dose")) and not text.contains("YOUR FOCUS ADDS") and text.contains("AIM"), "a leg day: nothing is added for the legs, and their lifts have an aim")
-	check(App.quests().daily.filter(func(m): return str(m.title).ends_with(" challenge")).size() == 2, "its missions are challenges, as for any lift")
+	var leg_ch = App.quests().daily.filter(func(m): return str(m.title).ends_with(" challenge")).size()
+	check(leg_ch >= 2 and leg_ch <= Missions.BEAT_MISSIONS, "its missions are challenges, as for any lift (%d)" % leg_ch)
 	await ShotHelper.snap(tree, "focus_6_legs")
 
 	# --- Settings -------------------------------------------------------------------------------------

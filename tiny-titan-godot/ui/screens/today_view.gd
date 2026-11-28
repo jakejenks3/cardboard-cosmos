@@ -8,23 +8,51 @@ extends RefCounted
 ##   - the date (and, with a training split, why the day is what it is);
 ##   - the day's kind as a pick-one track (the split's kinds, or Lift, and
 ##     Rest), the combo pill beside it; on a rest day a banner with "Lift today";
+##   - the day's lifts as one list, a row per lift (see ONE LIST below: its ways
+##     and its challenge are in the row);
+##   - Prep today and Start workout, side by side;
 ##   - the body: the muscle map as a small tile beside the weekly sets of the
 ##     day's muscles (a training focus), the recovering parts in one line;
-##   - "YOUR FOCUS ADDS" and "PROBABLY TODAY", a flat row per lift: the movement
-##     as it was done last with its variation and tags, what to aim for on a
-##     line of its own (white; gold is kept for rewards), why it is likely
-##     (unless it is the reason the heading already gives), the warm-up for a
-##     barbell, the other ways to do it after an "OR" as small tan keys, each
-##     with its own aim under it (light blue: never done; `_way_key`);
-##   - the movement to try, the physical therapy still needed (one row, pips),
-##     the Start workout key, the likely climb or run, the perfect-day chest.
-## One tap on a lift opens its page on Compare; any way of a lift, or any
-## variation, completes its mission. Every row ends in the same box: an empty
+##   - the movement to try (its others after an "OR" as small tan keys, each
+##     with "new to you" under it: `_way_key`), the physical therapy still
+##     needed (one row, pips), the likely climb or run, the perfect-day chest.
+## One tap on a lift opens its page on Compare; a way done instead counts for
+## its mission. Every row ends in the same box: an empty
 ## well while still to do, solid green with a tick once done today. A row's
 ## stripe only says a state: green done, the muscle's colour for a lift the
 ## focus adds, blue for something new, the PT and discipline colours.
 ## Coming up (AheadView) is its own section under this one (home.gd).
 ## The morning message on the phone says the same (MorningAlert).
+##
+## (2026-11-28, the user: "I want it to show the exercises I might do that day at the top, and be able to prep
+## my day from there or from the coming up section. Now it's day of my workout and I can't prep one for TODAY")
+## The order is now: the date, the day's track (or the rest banner), THE LIFTS OF THE DAY right under them,
+## then one row of two keys, "Prep today" (PrepView for today; "Edit prep" once it is prepped, meta
+## `prep_today` = prepped) and Start / Continue workout, then the body row, the movement to try, the PT, the
+## run or climb and the perfect-day chest.
+##
+## ONE LIST (2026-11-28, later: "It like almost works but is too muddled for some reason"). The CHALLENGES
+## section under this card is gone; each lift appears once, in one list ("TODAY'S WORKOUT", or "YOUR PREP FOR
+## TODAY" once prepped; the focus's extra lifts first, with their FOR <MUSCLE> tag), and its row holds:
+##   - the head as before: the part's icon, the lift, how it stands, and the block on the right (the orange
+##     AIM, the GOLD goal block with a star that twinkles when a record is the lift's goal (meta `today_goal`
+##     = its type), the green DONE);
+##   - "TODAY'S WAY": the lift's ways as keys (ChallengeView.way_key: today's lit orange, one never done light
+##     blue, the others tan; metas `lift_option` and `challenge_way` = the way's name). A tap makes it today's
+##     way in today's prep (App.prep_way), for the equipment there is; the row then shows that way. The keys
+##     keep the order they were first shown in today (`_stable_ways`), whatever the prep puts first;
+##   - for the day's three challenge missions, the MISSION strip (ChallengeView.strip, meta `challenge` = the
+##     mission's id): PICK ONE / YOUR GOAL, the reward or the Claim key, and the records as tiles; a tap makes
+##     one the lift's goal in today's prep (App.prep_goal), a tap on the goal takes it off.
+## A tap anywhere else on the row opens the lift's page, as before.
+
+## The challenge missions the last card drew in its rows (their ids): home.gd's MISSIONS leaves those out.
+static var shown_challenges = {}
+## The ways of each lift row in the order first shown today (`_stable_ways`): [{"ref": the movement the ways
+## are named against, "names": the ways}]. Kept while the game runs; a new day starts again.
+static var _ways_day = ""
+static var _ways_groups = []
+
 
 static func card() -> Control:
 	var plan = App.plan()
@@ -49,6 +77,32 @@ static func card() -> Control:
 		c.add(_day_row(plan))
 	if off:
 		c.add(_rest_row(plan))
+	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
+	## (2026-11-28) The lifts of the day first, right under the date: what the user opens the card to see.
+	if nothing and not off:
+		c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for. Prep today to pick your own lifts.", 13, Pal.MUTED))
+	# One list: what the focus adds (a muscle that is short this week) first, the heavy lift before the usual
+	# ones; each row with its ways and, for the day's challenges, its MISSION strip.
+	shown_challenges = {}
+	var lifts = plan.lifts.filter(func(l): return l.has("dose")) + plan.lifts.filter(func(l): return not l.has("dose"))
+	if not lifts.is_empty():
+		var usual = lifts.filter(func(l): return not l.has("dose"))
+		var shared = _shared_why(usual)
+		_lifts_head(c, plan, lifts, shared)
+		var missions = App.quests().get("daily", []).filter(func(m): return bool(m.get("challenge", false)))
+		var slots = _stable_ways(lifts.map(func(l): return _ways_of(l)))
+		# (what the player has ever logged: a way never done is a light blue key, a way done has its aim)
+		var known = LiftLibrary.stats(App.sessions())
+		for i in range(lifts.size()):
+			var l = lifts[i]
+			var m = _mission_of(l, missions)
+			if m != null:
+				shown_challenges[str(m.id)] = true
+			c.add(_lift_row(l, wu, {} if bool(l.pt) else Missions.same_of(str(l.name), plan), shared, slots[i], known, m))
+	# The two keys of the day: prep it, then start it.
+	var keys = _keys_row(plan)
+	if keys != null:
+		c.add(keys)
 	# The body: what is recovering, and (a training focus, game/dose.gd) the
 	# sets the day's muscles got this week.
 	var lifted = App.sessions().any(func(s): return str(s.get("discipline", "")) == "lift")
@@ -59,34 +113,8 @@ static func card() -> Control:
 		c.add(RecoveryView.row())
 	elif focus:
 		c.add(DoseView.row(plan))
-	# The main key of the day, first, as in the mock-up the user picked.
-	var start = _start_row(plan)
-	if start != null:
-		c.add(start)
-	var nothing = plan.lifts.is_empty() and plan.others.is_empty() and plan.pt.is_empty() and plan.new == null
 	if nothing:
-		if not off:
-			c.add(Kit.para("No pattern for today yet. After a few weeks of workouts this card guesses what is next and what to aim for.", 13, Pal.MUTED))
 		return c
-	# What the focus adds (a muscle that is short this week) goes first: the
-	# heavy lift before the usual ones.
-	var extra = plan.lifts.filter(func(l): return l.has("dose"))
-	var usual = plan.lifts.filter(func(l): return not l.has("dose"))
-	if not extra.is_empty():
-		c.add(Kit.sub_head("YOUR FOCUS ADDS", JourneyLifts.part_color(str(extra[0].dose.part)), null, "What a muscle still needs this week, from your training focus"))
-		for l in extra:
-			c.add(_lift_row(l, wu, Missions.same_of(str(l.name), plan)))
-	if not usual.is_empty():
-		var shared = _shared_why(usual)
-		var n_done = usual.filter(func(l): return _done_name(l, plan) != "").size()
-		# How many are done in the heading; the reason most of them share said
-		# once, in full, on its own line under it (the rows then leave it out).
-		var count = Kit.label("%d of %d done" % [n_done, usual.size()], 11, Pal.GOOD if n_done > 0 else Pal.MUTED, true)
-		c.add(Kit.sub_head("PROBABLY TODAY", Pal.LIFT, count, "From the days and gaps of your last six weeks"))
-		if shared != "":
-			c.add(Kit.para(shared, 12, Pal.MUTED))
-		for l in usual:
-			c.add(_lift_row(l, wu, {} if bool(l.pt) else Missions.same_of(str(l.name), plan), shared))
 	if plan.new != null:
 		c.add(_new_row(plan.new))
 	if not plan.pt.is_empty():
@@ -97,6 +125,110 @@ static func card() -> Control:
 	if not perfect.is_empty():
 		c.add(_perfect_row(perfect[0]))
 	return c
+
+
+## The list's head: "TODAY'S WORKOUT" ("YOUR PREP FOR TODAY" once the day is prepped) with how many are done,
+## then ONE line under it, always there so prepping the day moves nothing: the reason most of the lifts share
+## (the rows then leave it out), else what a tap on a way does.
+static func _lifts_head(c: Card, plan: Dictionary, lifts: Array, shared: String) -> void:
+	var prepped = bool(plan.get("prepped", false))
+	var n_done = lifts.filter(func(l): return _done_name(l, plan) != "").size()
+	var count = Kit.label("%d of %d done" % [n_done, lifts.size()], 11, Pal.GOOD if n_done > 0 else Pal.MUTED, true)
+	if prepped:
+		c.add(Kit.sub_head("YOUR PREP FOR TODAY", Pal.LIFT, count, "The lifts, ways and sets you prepped for today"))
+	else:
+		c.add(Kit.sub_head("TODAY'S WORKOUT", Pal.LIFT, count, "From the days and gaps of your last six weeks"))
+	var line = ""
+	if prepped:
+		line = "Your prep. Tap a way or a record to change it."
+	elif shared != "":
+		line = shared
+	else:
+		line = "Tap a way for the equipment you have today."
+	var l = Kit.clip(line, 12, Pal.MUTED)
+	l.tooltip_text = line
+	l.mouse_filter = Control.MOUSE_FILTER_PASS
+	l.set_meta("today_list_line", line)
+	c.add(l)
+
+
+## A row's ways: the lift as the day does it first, then its other ways (Missions.options_for), each once.
+static func _ways_of(l: Dictionary) -> Array:
+	var names = []
+	var seen = {}
+	var list = l.get("options", [])
+	if list.is_empty():
+		list = [{"name": str(l.name)}]
+	for o in list:
+		var k = Xp.normalize_exercise(str(o.name))
+		if k == "" or seen.has(k):
+			continue
+		seen[k] = true
+		names.append(str(o.name))
+	return names
+
+
+## The ways of every row in the order first shown today, so a way key never moves when the prep puts another
+## way first: [{"gi": the row's place, "names", "ref"}] for `lists` (a list of names per row, the row's lift
+## first). A row is the row shown before when its lift was one of that row's ways (the first pass), else when
+## they share any way; else it is new. Its ways are ALL the ways shown for it before today, in that order (a
+## way picked offers other ways than the one before it: none of the keys already there goes away, so none
+## moves), then any new one at the end.
+static func _stable_ways(lists: Array) -> Array:
+	if _ways_day != App.today:
+		_ways_day = App.today
+		_ways_groups = []
+	var keys = lists.map(func(names): return (names as Array).map(func(n): return Xp.normalize_exercise(str(n))))
+	var at = []
+	at.resize(lists.size())
+	at.fill(-1)
+	var used = {}
+	for pass_n in [0, 1]:
+		for j in range(lists.size()):
+			if int(at[j]) >= 0 or (keys[j] as Array).is_empty():
+				continue
+			for i in range(_ways_groups.size()):
+				if used.has(i):
+					continue
+				var gk = (_ways_groups[i].names as Array).map(func(n): return Xp.normalize_exercise(str(n)))
+				var hit = gk.has(keys[j][0]) if pass_n == 0 else (keys[j] as Array).any(func(k): return gk.has(k))
+				if hit:
+					at[j] = i
+					used[i] = true
+					break
+	var out = []
+	for j in range(lists.size()):
+		var names = lists[j]
+		var gi = int(at[j])
+		if gi < 0:
+			var first = str(names[0]) if not (names as Array).is_empty() else ""
+			_ways_groups.append({"ref": str(LiftNames.split(first).move), "names": (names as Array).duplicate()})
+			gi = _ways_groups.size() - 1
+		else:
+			var kept = (_ways_groups[gi].names as Array).duplicate()
+			var kept_keys = kept.map(func(n): return Xp.normalize_exercise(str(n)))
+			for q in range((names as Array).size()):
+				if not kept_keys.has(keys[j][q]):
+					kept.append(names[q])
+					kept_keys.append(keys[j][q])
+			_ways_groups[gi]["names"] = kept
+		out.append({"gi": gi, "names": _ways_groups[gi].names, "ref": str(_ways_groups[gi].ref)})
+	return out
+
+
+## The day's challenge mission of a planned lift: the one whose lift is the row's (the way it is done today),
+## else the one planned for it; null when it has none.
+static func _mission_of(l: Dictionary, missions: Array):
+	var opts = l.get("options", [])
+	var lk = Xp.normalize_exercise(str(opts[0].name) if not opts.is_empty() else str(l.name))
+	for m in missions:
+		if Xp.normalize_exercise(str(m.get("lift", ""))) == lk:
+			return m
+	var pk = Xp.normalize_exercise(str(l.name))
+	for m in missions:
+		if Xp.normalize_exercise(str(m.get("planned", ""))) == pk:
+			return m
+	return null
 
 
 ## The head of the day: a calendar in a slot, the date, and the kind of day (or why) under it.
@@ -202,6 +334,32 @@ static func _start_row(plan: Dictionary):
 	b.tooltip_text = "The Log tab with %s and last time's sets" % ("your workout as you left it" if draft else ("%d lift%s" % [names.size(), "" if names.size() == 1 else "s"]))
 	b.set_meta("start_workout", true)
 	return b
+
+
+## The row under the day's lifts (2026-11-28): "Prep today" (a wooden key: PrepView for today, where each
+## lift's way, sets, supersets and a record to go for are picked; "Edit prep" once today is prepped;
+## meta `prep_today` = prepped) and Start / Continue workout (green, meta `start_workout`). Side by side when
+## they fit, else one under the other (a flow: never wider than the card). A rest day has no Prep key; null
+## when there is neither key.
+static func _keys_row(plan: Dictionary):
+	var start = _start_row(plan)
+	var prep = null
+	if not bool(plan.get("off", false)):
+		var prepped = Prep.of(App.settings(), App.today) != null
+		# ("Edit prep", not "Edit today's prep": short enough to stay beside Start workout, so the two keys never
+		# fall to two lines when the day gets prepped from a way or a record above them)
+		prep = Kit.button("Edit prep" if prepped else "Prep today", "secondary", PrepView.open.bind(App.today), "lg", "edit")
+		prep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		prep.tooltip_text = "Pick today's lifts the way you'll do them, with what you have: their sets, supersets and a record to go for"
+		prep.set_meta("prep_today", prepped)
+	if prep == null:
+		return start
+	if start == null:
+		return prep
+	var row = Kit.flow(8)
+	row.add_child(prep)
+	row.add_child(start)
+	return row
 
 
 static func _start(names: Array) -> void:
@@ -420,11 +578,14 @@ static func _when(date: String) -> String:
 
 ## A likely lift (the Workshop look, 2026-11-27, as in the mock-up the user picked): a paper slip with the body
 ## part's icon in a framed slot ringed in its colour, the lift and how it stands in the middle, and a solid block
-## on the right: an ORANGE AIM block (the numbers to beat, big) while it is still to do, a GREEN DONE block (what
-## was done) once it is. Not done: the part and why it is likely, LAST (and when), the warm-up for a barbell,
-## then the other ways, each with its own aim. Done: how it went against THAT lift before (first time, beat last
-## time, same, lighter) and the last time it is compared with.
-static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_why: String = "") -> Card:
+## on the right: an ORANGE AIM block (the numbers to beat, big) while it is still to do, a GOLD block when a
+## record is its goal today, a GREEN DONE block (what was done) once it is. Not done: the part and why it is
+## likely, LAST (and when); then (2026-11-28) "TODAY'S WAY", its ways as keys (`_ways_row`), the warm-up for a
+## barbell, and the MISSION strip of its challenge (ChallengeView.strip). Done: how it went against THAT lift
+## before (first time, beat last time, same, lighter), the last time it is compared with, and the mission strip
+## (its Claim key). `slot`: the row's ways in a stable order ({"gi", "names", "ref"}, `_stable_ways`);
+## `known`: LiftLibrary.stats of the log (a way never done, a way's aim); `m`: its challenge mission or null.
+static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_why: String = "", slot: Dictionary = {}, known: Dictionary = {}, m = null) -> Card:
 	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
 	var opts = l.get("options", [])
 	var main = opts[0] if not opts.is_empty() else {"name": str(l.name), "new": false, "last": l.last.sets, "lastDate": str(l.last.get("date", ""))}
@@ -437,6 +598,7 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 		part = str(Missions.part_of(shown))
 	var part_col = JourneyLifts.part_color(part)
 	var ring = JourneyLifts.part_color(str(dose.part)) if dose != null else part_col
+	var gi = int(slot.get("gi", 0))
 	var c = Kit.row(JourneyLifts.open_named.bind(shown, {"view": "compare"}), ring, Pal.GOOD if done_name != "" else null, 6, 6)
 	c.tooltip_text = "Last time, and what to beat"
 	c.set_meta("today_lift", str(main.name))
@@ -471,6 +633,13 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 		var st = Kit.tag(word, tag_col, true, 11)
 		st.set_meta("today_done", str(dw.kind))
 		line2.add_child(Kit.vcenter(st))
+		# (2026-11-28) the record picked as today's goal, met by today's sets of that lift
+		var g_done = _goal_of(l, main)
+		if not g_done.is_empty() and Challenges.hit(g_done, Missions.sets_on(App.sessions(), str(l.name), App.today)):
+			var gm = _gold_tag("GOAL MET", 11, 90.0)
+			gm.set_meta("today_goal", str(g_done.get("type", "")))
+			gm.tooltip_text = "Today's goal: %s" % goal_words(g_done, wu)
+			line2.add_child(Kit.vcenter(gm))
 		if not (dw.last as Array).is_empty():
 			var was = Kit.clip("last %s · %s" % [LiftHistory.describe_sets(dw.last, fmt_w), _when(str(dw.lastDate))], 12, Pal.MUTED)
 			was.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -486,21 +655,31 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 		main_row.add_child(left)
 		main_row.add_child(_done_block(LiftHistory.describe_sets(Missions.sets_on(App.sessions(), done_name, App.today), fmt_w)))
 		c.add(main_row)
+		# (its challenge: done, with its Claim key, or still open: a record can still be set today)
+		if m != null:
+			c.add(ChallengeView.strip(m, gi))
 		return c
 	# Line 2: the body part in its colour, and why it is likely (unless the heading said it).
 	var why = str(l.why)
 	if dose != null:
-		why = "Added by your training focus"
+		why = ""
 	if why == shared_why:
 		why = ""
+	# A record picked as today's goal (Prep.with_goal): the block on the right says it, in gold.
+	var goal = _goal_of(l, main)
 	var kick = Kit.hbox(6)
 	kick.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if dose != null:
 		# An extra lift of the focus: the muscle it is for, on a tag (the line under the name, so the name keeps
-		# its room).
+		# its room), and who put it there.
 		var ft = Kit.tag("FOR " + Dose.part_name(str(dose.part)).to_upper(), JourneyLifts.part_color(str(dose.part)), true, 11)
 		ft.tooltip_text = "Added by your training focus"
 		kick.add_child(Kit.vcenter(ft))
+		var fl = Kit.clip("YOUR FOCUS ADDS IT", 11, Pal.MUTED, true)
+		fl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		fl.tooltip_text = "What a muscle still needs this week, from your training focus"
+		fl.mouse_filter = Control.MOUSE_FILTER_PASS
+		kick.add_child(Kit.vcenter(fl))
 	elif part != "":
 		var pl = Kit.label(LiftLibrary.part_name(part).to_upper(), 11, part_col, true)
 		pl.set_meta("today_part", part)
@@ -518,14 +697,24 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 		ll.set_meta("today_last", str(main.get("lastDate", "")))
 		left.add_child(ll)
 	main_row.add_child(left)
-	var aim = aim_words(l, main, wu, int(Dose.extra_done(l, App.sessions(), App.today, same).sets) if dose != null else 0)
-	main_row.add_child(_aim_block(aim))
+	if not goal.is_empty():
+		main_row.add_child(_goal_block(goal, wu))
+	else:
+		var aim = aim_words(l, main, wu, int(Dose.extra_done(l, App.sessions(), App.today, same).sets) if dose != null else 0)
+		main_row.add_child(_aim_block(aim))
 	c.add(main_row)
+	# Today's way: the lift's ways as keys, today's lit (the equipment there is).
+	var names = slot.get("names", [])
+	if (names as Array).size() > 1:
+		c.add(_ways_row(l, main, names, str(slot.get("ref", sp.move)), gi, known, wu))
 	# A barbell lift: the warm-up and what goes on the bar.
 	if not bool(l.pt) and not bool(main.new) and Plates.is_barbell(shown):
 		var top_kg = 0.0
 		for one in LiftTrend.next_target(main.last, _step_kg(wu)).sets:
 			top_kg = maxf(top_kg, float(one.get("weightKg", 0.0)))
+		# (a goal's top set is what to warm up for)
+		if not goal.is_empty() and str(goal.get("band", "")) == "":
+			top_kg = maxf(top_kg, float(goal.get("kg", 0.0)))
 		var wt = snappedf(Fmt.kg_to_unit(top_kg, wu), 0.5)
 		var bits = []
 		if Plates.warmup_text(wt, wu) != "":
@@ -536,32 +725,43 @@ static func _lift_row(l: Dictionary, wu: String, same: Dictionary = {}, shared_w
 			var wl2 = Kit.para(" · ".join(PackedStringArray(bits)), 11, Pal.MUTED)
 			wl2.tooltip_text = "Warm-up sets, then the plates on each side of the bar"
 			c.add(wl2)
-	# The other ways, each with ITS OWN aim (a way never done: new to you), each opening its own page.
-	## (2026-11-27 review: one long outlined box a line, taller than the lift itself) "OR" and small tan keys
-	## that wrap a few to a line, as in the mock-up: the way on top, its aim (or "new to you") small under it.
-	if opts.size() > 1:
-		var flow = Kit.flow(6)
-		flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		flow.add_child(_or_word())
-		var main_move = str(main.get("move", LiftNames.split(str(main.name)).move))
-		for o in opts.slice(1):
-			var same_move = str(o.move) == main_move
-			var word2 = str(o.variation) if same_move and str(o.variation) != "" else Missions.way_word(o, main_move)
-			var o_last = o.get("last", [])
-			var tail = "new to you"
-			if not bool(o.new) and o_last is Array and not o_last.is_empty():
-				tail = "aim " + LiftHistory.describe_sets(LiftTrend.next_target(o_last, _step_kg(wu)).sets, fmt_w)
-			# Done the same way many times in a row: this way is offered as a change (Missions._mark_rotation).
-			var rot = str(l.get("rotate", "")) == str(o.name)
-			var b = _way_key(word2, ("try a change · " if rot else "") + tail, Pal.ACCENT2 if rot else (Pal.SECOND if bool(o.new) else null), JourneyLifts.open_named.bind(str(o.name), {"view": "compare"}))
-			b.tooltip_text = ("Try a change: " if rot else ("New to you: " if bool(o.new) else "")) + Missions.short_name(str(o.name)) + ("" if bool(o.new) else " · " + tail)
-			b.set_meta("lift_option", str(o.name))
-			b.set_meta("anchor_id", "way:%s:%s" % [str(main.name), str(o.name)])
-			if rot:
-				b.set_meta("rotate_option", str(o.name))
-			flow.add_child(b)
-		c.add(flow)
+	# Its challenge: records to pick one from as today's goal.
+	if m != null:
+		c.add(ChallengeView.strip(m, gi))
 	return c
+
+
+## "TODAY'S WAY" and a key per way of a lift (ChallengeView.way_key), in the order first shown today: the one
+## the day uses lit orange, one never done light blue, the others tan; a tap makes it today's way in today's
+## prep. A way's own aim (or "new to you") is in its tooltip; a way offered as a change after many times the
+## same way (Missions._mark_rotation) says so there too (meta `rotate_option`).
+static func _ways_row(l: Dictionary, main: Dictionary, names: Array, ref: String, gi: int, known: Dictionary, wu: String) -> Control:
+	var fmt_w = func(kg): return Fmt.fmt_weight(float(kg), wu)
+	var flow = Kit.flow(4)
+	flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flow.set_meta("today_ways", str(main.name))
+	var cap = Kit.label("TODAY'S WAY", 11, Pal.MUTED, true)
+	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cap.tooltip_text = "Pick the way you'll do it today, with the equipment you have: it goes into today's prep"
+	cap.mouse_filter = Control.MOUSE_FILTER_PASS
+	flow.add_child(cap)
+	var cur = Xp.normalize_exercise(str(main.name))
+	for n in names:
+		var k = Xp.normalize_exercise(str(n))
+		var st = known.get(k)
+		var on = k == cur
+		var fresh = not on and st == null
+		var tip = ""
+		if not on and st != null and not (st.history as Array).is_empty():
+			tip = "aim " + LiftHistory.describe_sets(LiftTrend.next_target(st.history[0].sets, _step_kg(wu)).sets, fmt_w)
+		var rot = str(l.get("rotate", "")) == str(n)
+		if rot:
+			tip = "try a change" + (" · " + tip if tip != "" else "")
+		var b = ChallengeView.way_key(str(n), ChallengeView.way_word(str(n), ref), on, fresh, str(l.name), str(main.name), "tway:%d:%s" % [gi, k], tip)
+		if rot:
+			b.set_meta("rotate_option", str(n))
+		flow.add_child(b)
+	return flow
 
 
 ## The "OR" before the other ways (in the flow, so the keys start on its line).
@@ -696,6 +896,88 @@ static func _done_block(sets_words: String) -> Control:
 	b.set_meta("done_tick", true)
 	b.tooltip_text = "Done today: %s" % sets_words
 	return b
+
+
+## The goal picked for a planned lift (its prep's "goal", Prep.with_goal), or {}: only when the lift is
+## done the way it was prepped (`main`, its first way), since a goal belongs to one way.
+static func _goal_of(l: Dictionary, main: Dictionary) -> Dictionary:
+	var g = l.get("goal")
+	if not (g is Dictionary) or (g as Dictionary).is_empty():
+		return {}
+	if Xp.normalize_exercise(str(main.get("name", l.name))) != Xp.normalize_exercise(str(l.name)):
+		return {}
+	return g
+
+
+## A goal (a record of Challenges, kept in a prep) in words, in the player's unit now (the words stored with
+## it were made in the unit of the day it was picked): "52.5 kg × 6", "10 reps at 60 kg", "12 reps with the
+## green band", "15 reps in a set", "Hold 35 s".
+static func goal_words(g: Dictionary, wu: String) -> String:
+	var type = str(g.get("type", ""))
+	var reps = int(g.get("reps", 0))
+	var band = str(g.get("band", ""))
+	var kg = float(g.get("kg", 0.0))
+	match type:
+		"set_reps":
+			return "%d reps in a set" % reps
+		"day_reps":
+			return "%d reps in all" % reps
+		"hold":
+			return "Hold %d s" % int(g.get("sec", 0))
+	if band != "":
+		return "%d reps with the %s" % [reps, Bands.words(band)]
+	if kg > 0.0:
+		if type == "reps":
+			return "%d reps at %s" % [reps, Fmt.fmt_weight(kg, wu)]
+		return "%s × %d" % [Fmt.fmt_weight(kg, wu), reps]
+	return str(g.get("words", ""))
+
+
+## A goal's numbers for a block: {"big", "small"}: "1×6" over "GOAL @ 52.5 kg" (one top set), "15 reps" over
+## "GOAL · ONE SET", "35 s" over "GOAL · HOLD".
+static func _goal_parts(g: Dictionary, wu: String) -> Dictionary:
+	var reps = int(g.get("reps", 0))
+	var band = str(g.get("band", ""))
+	var kg = float(g.get("kg", 0.0))
+	match str(g.get("type", "")):
+		"set_reps":
+			return {"big": "%d reps" % reps, "small": "GOAL · ONE SET"}
+		"day_reps":
+			return {"big": "%d reps" % reps, "small": "GOAL · IN A DAY"}
+		"hold":
+			return {"big": "%d s" % int(g.get("sec", 0)), "small": "GOAL · HOLD"}
+	if band != "":
+		return {"big": "1×%d" % reps, "small": "GOAL · " + Bands.words(band)}
+	if kg > 0.0:
+		return {"big": "1×%d" % reps, "small": "GOAL @ " + Fmt.fmt_weight(kg, wu)}
+	return {"big": goal_words(g, wu), "small": "GOAL"}
+
+
+## The GOLD block of a lift with a goal (2026-11-28): the goal's numbers in dark ink on gold, a star, a twinkle
+## (gold is a goal or a reward). Metas as the aim block's: "done_tick" false, "today_aim" the goal's words; and
+## "today_goal" = the goal's type (the one place on the row that says the goal: the mission strip under it lights
+## the same record).
+static func _goal_block(g: Dictionary, wu: String) -> Control:
+	var gp = _goal_parts(g, wu)
+	var b = _block("gold", str(gp.big), str(gp.small), "star")
+	b.set_meta("done_tick", false)
+	b.set_meta("today_aim", goal_words(g, wu))
+	b.set_meta("today_goal", str(g.get("type", "")))
+	b.tooltip_text = "Your goal today: %s, %s (set 1 of your prep)" % [str(g.get("title", "a record")).to_lower(), goal_words(g, wu)]
+	Fx.twinkle(b, Pal.CREAM, 3)
+	return b
+
+
+## A small gold tag whose words end in "…" past `max_w` (so it never widens its row).
+static func _gold_tag(text: String, px: int, max_w: float) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.add_theme_stylebox_override("panel", Kit.tag_box(Pal.ACCENT))
+	p.add_child(Kit.clip_fit(text, px, Kit.on_color(Pal.ACCENT), true, max_w))
+	return p
 
 
 ## The caption under a block's numbers, fitted to `avail` px (2026-11-27 review: it was cut off with "…"):

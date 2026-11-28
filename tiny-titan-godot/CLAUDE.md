@@ -2205,7 +2205,8 @@ is the Windows handoff.
     (`beat_any(..., exclude)`: the planned lift itself must set a record). A lift never done keeps the old words.
     "Record hunter" (`t:<date>:records`, 150 XP): any record on any lift today. Weekly "Record week"
     (`tw:<wk>:record`): RECORDS_A_WEEK (3) records, one per lift a day. `morning_text` lists "Challenge, <lift>: ...".
-  - Screens: the Hero tab's CHALLENGES section right under TODAY (`ChallengeView.section`, section `challenges`; a card
+  - Screens (2026-11-28: the CHALLENGES section was merged into the Today card's lift rows, see "GOALS, ONE WORKOUT
+    LIST, LOCK-IN"; what follows is how it was): the Hero tab's CHALLENGES section right under TODAY (`ChallengeView.section`, section `challenges`; a card
     a challenge, meta `challenge` = its id: the lift, "PICK ONE", a row an option (meta `challenge_option` = type,
     `challenge_hit`) with its icon and colour (`ChallengeView.look`: gold up arrow heavier, green plus rep record, blue
     crown best for N), a tick, "Try: ...", and its Claim key (meta `challenge_claim`)). MISSIONS no longer lists them.
@@ -2317,6 +2318,51 @@ is the Windows handoff.
     Add exercise card ends in "SAME MUSCLES · CHEST, SHOULDERS, TRICEPS" and a key a lift (`LogLiftEditor._fill_area`,
     metas `area_caption`, `area_lift`; hidden while a search is typed; not the keys already listed above it).
   - Walkthrough `tests/shots/prepday.gd` (year data, also --fingers).
+- GOALS, ONE WORKOUT LIST, LOCK-IN (2026-11-28). The user: "Still not understanding and liking the daily workout
+  stuff. I want it to show the exercises I might do that day at the top, and be able to prep my day from there or from
+  the coming up section... I can't prep one for TODAY... Give me a mission for 3 things, and be able to pick and choose
+  each a mission ahead of time that gets put into my prep and then into my workout... click on chest fly dumbbell for
+  today because that's the equipment I have, and then click on the heavier challenge... with a twinkle or highlighted
+  overlay... editable but shows the specific exercises I have missions for"; then "too muddled"; then "Make a way to
+  finish or complete each set and rep... locks in that set and then the exercise... maybe changing that boxes color".
+  - A GOAL (game/prep.gd) = a Challenges option picked for a prepped lift: the entry's `goal` (Prep.clean_goal: type,
+    kind, title, words, sub, kg, reps, band, sec) and its SET 1 the record, `"goal": true` (Prep.apply_goal; a
+    "day_reps" goal marks no set). `Prep.with_goal(settings, date, lift, option, today, plan_lifts, step_kg, last_sets)`
+    (option {} takes it off), `Prep.with_way(...)` (the movement's prepped lift done another way, no goal), both making
+    the day's prep FROM THE PLAN when it has none; `goal_of`. `with_prep` keeps goals; `plan_lifts` carries "goal".
+    App: `prep_goal(lift, option, date)`, `prep_way(planned, way, date)`, `goal_on(lift, date)`, `plan_on(date)`.
+    `Challenges.same_option`, `Challenges.WEIGHT_SLACK` 0.02 kg (a weight typed in pounds comes back a few grams off).
+  - Missions: `BEAT_MISSIONS` 3 (was 2); a lift with a goal is challenged first and its goal is its first record
+    (mission field `goal`); the desc says "Your goal: ...".
+  - The Hero tab's TODAY card (TodayView) is ONE list: the day head, the split track, the day's lifts ("TODAY'S
+    WORKOUT", "YOUR PREP FOR TODAY" when prepped; the focus's extra lifts first, tagged), then "Prep today" / "Edit
+    prep" (meta `prep_today`) and Start / Continue workout, then the body row, try something new, PT, run / climb, the
+    chest. Each lift row: "TODAY'S WAY" keys (`challenge_way` = `lift_option` = the way; a tap = App.prep_way; order kept
+    by `_stable_ways`), its aim block (gold with a star and twinkle for a goal, meta `today_goal`), and for the day's
+    challenge lifts a MISSION strip in the row (`ChallengeView.strip`, meta `challenge`: "PICK ONE" / "YOUR GOAL",
+    three record tiles, `challenge_option`, `challenge_picked`, `challenge_claim`; a tap = App.prep_goal, again = off).
+    The separate CHALLENGES section is GONE (`ChallengeView.section` / `card` removed; look, chip_text, way_key, strip,
+    pick_way stay); MISSIONS leaves out the challenges the card drew (`TodayView.shown_challenges`); "Swap one" counts
+    all of today's missions. Coming up has "Prep today" too (meta `ahead_prep_today`). Its card's middle is the Prep
+    keys: a test opens the sheet by a day tile.
+  - The prep sheet (PrepView) works for today ("(today)" in its title); RECORDS TO BEAT (`prep_record`) set the lift's
+    goal (gold, twinkle, `prep_goal`), set 1 gets a gold wash and a star (`prep_goal_set`), a line under the name
+    (`prep_goal_line`); switching the way or removing the goal set drops the goal; Save keeps it.
+  - The Log tab: `LogLiftEditor._prepped_draft` brings a lift's goal and its set's mark (draft "goal"); a gold MISSION
+    banner under the card's head (`goal_banner`; "MISSION DONE" in green once a TICKED set meets it, a cheer), the goal
+    set gold with a star (`goal_set` "i:j"), its TRY key lit gold (`try_goal`), the plan card's row a GOAL tag
+    (`plan_goal`). `sync_with_prep()`: a kept draft's untouched planned lifts follow today's prep. None of it is saved
+    (session_exercises builds sets from scratch).
+  - LOCK-IN: a set ticked by its number (draft "done") is a slim green LINE of the same height (`SET_ROW_H` 30, 40 at
+    finger sizes; the number key and the line share anchor `set:<name>:<j>`); a tap unlocks it; a locked goal set has a
+    gold rim and "GOAL MET" / "GOAL". Every card of a new workout ends in a full-width "Lock in" key (meta
+    `lock_exercise`; wood, green and shining once all sets with reps are locked); it locks them and folds the card into
+    ONE green bar (meta `exercise_done`, same anchor as the key; "MISSION DONE" in gold when met); a tap reopens it.
+    Draft "closed" (kept in draft-lift.json, never saved). The form's head shows "N of M exercises done" with pips
+    (`LogLiftEditor.progress_row`, meta `lock_progress`). +1 rep / +step / +1 band / Fill skip locked sets; + Set never
+    copies "done". Folding the FIRST card near the page's top cannot keep the bar under the finger (no scroll room).
+  - Tests: prep_test, missions_test, dose_test; walkthroughs `goals` (the whole flow: way, goal, prep, workout, save,
+    prep tomorrow; year, also --fingers) and `lockin` (year, also --fingers); challenges, today, home updated.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2564,6 +2610,8 @@ curls (a lift done for the first time by another variation: FIRST TIME, not beat
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
 prepday (prep tomorrow from Coming up: ways, records, a superset, saved; the day's plan and the Log tab start from it; the same muscles' keys; year data, also --fingers),
+goals (a way and a record picked on the Today card into today's prep, the prep sheet, the workout with its goal set, saved, tomorrow prepped; year data, also --fingers),
+lockin (sets locked in as green lines, an exercise folded into a green bar, the progress line, saved clean; year data, also --fingers),
 challenges (the day's lift challenges: the Hero section, the Log tab's TRY keys, done and claimed; year data, also --fingers),
 rungs (a lift done by double progression: the Beat it step chart, the reel's Beat last time card, beat tags in the history; `new` data, also --fingers),
 tidy (the exercise card's title, last / aim box and green done sets, the plan's done rows, Journey -> Log by week with a filter, a workout's sheet; year data, also --fingers),

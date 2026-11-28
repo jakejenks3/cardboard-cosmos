@@ -7,7 +7,8 @@ extends UiScreen
 ## reads as groups before a word is read. Top to bottom:
 ##   the name, title, coins and settings; slim notices when due (the phone
 ##   note, a new version, a backup, a recap); TODAY (the plan, to read before
-##   the workout); COMING UP; TO DO; READING (its page box is filled daily);
+##   the workout: the day's lifts with their ways and challenges, Prep today,
+##   Start workout); COMING UP; TO DO; READING (its page box is filled daily);
 ##   MISSIONS (ready ones with their Claim key, the rest as small tiles; the
 ##   perfect day is the Today card's chest, not listed twice); the hero in the
 ##   gym with the level and the companion's line; ADVENTURE (the weekly bounty;
@@ -41,11 +42,9 @@ func build() -> void:
 
 	# --- today: the plan, first on the page, to read before the workout ------
 	# (also sent to the phone in the morning: MorningAlert / PhonePush)
+	# (the day's lift challenges, records to go for, are inside its lift rows since 2026-11-28: the CHALLENGES
+	# section that was under it made the page "too muddled", each lift in two places)
 	add_child(TodayView.card())
-	# The day's lift challenges: records to go for (ChallengeView, 2026-11-27).
-	var ch = ChallengeView.section()
-	if ch != null:
-		add_child(ch)
 	# The days after it, to look ahead (nothing in it is logged).
 	var coming = AheadView.card()
 	if coming != null:
@@ -151,13 +150,16 @@ func _notices() -> VBoxContainer:
 func _missions() -> Control:
 	var q = App.quests()
 	var yesterday = q.get("yesterday", [])
-	# (the perfect day is the Today card's chest; the lift challenges have their own section above)
-	var daily = q.daily.filter(func(m): return not bool(m.get("perfect", false)) and not bool(m.get("challenge", false)))
+	# (the perfect day is the Today card's chest; a lift challenge is in its lift's row of the Today card, so
+	# one is listed here only if no row showed it: TodayView.shown_challenges, filled as the card was drawn)
+	var shown = TodayView.shown_challenges
+	var daily = q.daily.filter(func(m): return not bool(m.get("perfect", false)) and not (bool(m.get("challenge", false)) and shown.has(str(m.id))))
 	var done = daily.filter(func(m): return bool(m.done))
 	var still = daily.filter(func(m): return not bool(m.done))
 	var right = Kit.hbox(8)
 	# One free swap a day, for a mission that cannot be done today (Missions.rerolled).
-	var swappable = daily.filter(func(m): return Missions.can_reroll(m))
+	# (all of today's, the challenges in the Today rows too: the swap sheet lists them all)
+	var swappable = q.daily.filter(func(m): return Missions.can_reroll(m))
 	if App.reroll_left() and not swappable.is_empty():
 		var sw = Kit.link("Swap one", _open_swap, 13, Pal.ACCENT.lightened(0.45))
 		sw.set_meta("mission_swap", swappable.size())

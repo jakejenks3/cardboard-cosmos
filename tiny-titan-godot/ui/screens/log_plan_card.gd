@@ -25,6 +25,11 @@ extends RefCounted
 ## The other ways to do a lift are chips under it, each a key of its own, for
 ## the day the equipment is not there.
 ##
+## A lift with a GOAL picked for today (2026-11-28: the prep or the Challenges
+## card, Prep.goal_of) has a gold GOAL tag (meta `plan_goal` = its type), the
+## goal where the aim would be and a gold rim; a tap brings it in with the set
+## set up for the goal (LogLiftEditor._prepped_draft).
+##
 ## Nothing moves under the finger: a key keeps its place, its size and its
 ## (unseen) name whatever its state, so the screen's rebuild finds it again and
 ## keeps it where it was (UiScreen) while the exercise cards above come and go.
@@ -224,6 +229,17 @@ static func _open_with(lift: String) -> void:
 	App.open_log("lift")
 
 
+## The goal picked for a row's lift today ({} when none): the plan's lift has it on a prepped day
+## (Missions.day_plan), else today's prep (App.goal_on).
+static func _goal_of_row(r: Dictionary) -> Dictionary:
+	var l = r.get("lift")
+	if l is Dictionary and l.get("goal") is Dictionary and not (l.goal as Dictionary).is_empty():
+		return l.goal
+	if str(r.get("kind", "")) == "new":
+		return {}
+	return App.goal_on(str(r.name))
+
+
 static func _group(r: Dictionary) -> String:
 	if str(r.kind) == "extra" or str(r.kind) == "new":
 		return str(r.kind)
@@ -297,11 +313,20 @@ static func _row(ctx: Dictionary, r: Dictionary, here: Dictionary) -> Control:
 		top.add_child(Kit.vcenter(Kit.tag("NEW", Pal.SECOND, true, 10)))
 	if bool(r.pt):
 		top.add_child(Kit.vcenter(SessionView.pt_tag()))
+	# A lift with a goal picked for today (the prep or the Challenges card): a gold GOAL tag, and the goal itself
+	# where the aim would be (its set comes in set up for it).
+	var goal = _goal_of_row(r) if state != "done" else {}
+	if not goal.is_empty():
+		var gt = LogWidgets.goal_tag("GOAL", 10)
+		gt.set_meta("plan_goal", str(goal.get("type", "")))
+		top.add_child(gt)
 	v.add_child(top)
 	# What to aim for on a line of its own, so the name never cuts it short.
 	var words = _words(ctx, r, state)
+	if not goal.is_empty():
+		words = {"cap": "GOAL", "said": "%s: %s" % [str(goal.get("title", "")), str(goal.get("words", ""))], "col": Pal.ACCENT_DARK}
 	var line = Kit.hbox(6)
-	var cap = Kit.label(str(words.cap), 10, Pal.GOOD_DARK if state == "done" else Pal.MUTED, true)
+	var cap = Kit.label(str(words.cap), 10, Pal.GOOD_DARK if state == "done" else (Pal.ACCENT_DARK if not goal.is_empty() else Pal.MUTED), true)
 	cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	line.add_child(cap)
 	var said = Kit.clip(str(words.said), 12, words.col, true)
@@ -312,15 +337,17 @@ static func _row(ctx: Dictionary, r: Dictionary, here: Dictionary) -> Control:
 	Kit.passthrough(h)
 	# A cream slip with its rim in what it is: orange once in this workout, green when done today (a light
 	# green wash too). (2026-11-27 review: a lift in the workout was a salmon pink key, off the palette)
-	var tint = Pal.LIFT if state == "in" else (Pal.GOOD if state == "done" else null)
-	var face = Pal.PANEL2.lerp(Pal.GOOD, 0.14) if state == "done" else Pal.PANEL2
+	var tint = Pal.LIFT if state == "in" else (Pal.GOOD if state == "done" else (Pal.ACCENT if not goal.is_empty() else null))
+	var face = Pal.PANEL2.lerp(Pal.GOOD, 0.14) if state == "done" else (Pal.PANEL2.lerp(Pal.ACCENT, 0.14) if not goal.is_empty() else Pal.PANEL2)
 	var tap: Callable = ctx.tap
 	# The key's own (unseen) text never changes, so a rebuild finds it again.
 	var b = LogWidgets.key("Plan: %s" % str(r.name), face, h, tap.bind(str(r.name)), 8, 6, 2, Pal.LINE if tint == null else tint)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b.tooltip_text = "In this workout. Tap to take it back (while its sets are untouched)." if state == "in" else "Add it to this workout, with last time's sets"
+	b.tooltip_text = "In this workout. Tap to take it back (while its sets are untouched)." if state == "in" else ("Add it to this workout, set up for your goal" if not goal.is_empty() else "Add it to this workout, with last time's sets")
 	b.set_meta("plan_pick", str(r.name))
 	b.set_meta("plan_state", state)
+	if not goal.is_empty():
+		Fx.twinkle(b, Pal.ACCENT, 1)
 	var out = Kit.vbox(4)
 	out.add_child(b)
 	if not r.ways.is_empty():

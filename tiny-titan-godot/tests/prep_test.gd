@@ -68,6 +68,39 @@ func _init() -> void:
 	var tm = ah.filter(func(a): return str(a.date) == TOMORROW)
 	ok(not tm.is_empty() and bool(tm[0].plan.get("prepped", false)) and tm[0].plan.lifts.size() == 2, "Coming up shows the prepped day as prepped")
 
+	# A GOAL (2026-11-28): a record picked for a lift of the day goes into the day's prep, set 1 that record.
+	var heavier = {"type": "heavier", "kind": "weight", "kg": 85.0, "reps": 3, "title": "Heavier than ever", "words": "85 kg × 3", "tip": "x", "chip": "85 × 3"}
+	var gp = Prep.with_goal(settings, TODAY, "Bench Press - Barbell", heavier, TODAY, plain.lifts, 2.5, [{"reps": 5, "weightKg": 80.0}])
+	var st3 = settings.duplicate()
+	st3["preps"] = gp
+	var gx = Prep.lift_on(st3, TODAY, "Bench Press - Barbell")
+	ok(gx != null and str(Prep.goal_of(gx).get("type", "")) == "heavier" and not Prep.goal_of(gx).has("tip"), "with_goal: the prep is made from the plan, the lift has the goal (without its tip)", gx)
+	ok(gx != null and bool(gx.sets[0].get("goal", false)) and int(gx.sets[0].reps) == 3 and is_equal_approx(float(gx.sets[0].weightKg), 85.0) and not gx.sets.slice(1).any(func(x): return x.has("goal")), "its set 1 is the record, marked; the others are not", gx.sets if gx != null else null)
+	ok(Prep.lifts_of(Prep.of(st3, TODAY)).size() >= 2, "the other planned lifts are in the prep too")
+	var tp = Missions.day_plan(log, TODAY, {}, st3)
+	var tb = tp.lifts.filter(func(l): return str(l.name) == "Bench Press - Barbell")
+	ok(not tb.is_empty() and str(tb[0].get("goal", {}).get("type", "")) == "heavier", "the day's plan carries the goal")
+	var td = Missions.daily(TODAY, {"sessions": log, "pt": {}, "settings": st3, "reading": []}, {"levels": {"hero": {"level": 5}}, "sessionXp": {}}, [])
+	var tch = td.filter(func(m): return bool(m.get("challenge", false)))
+	ok(not tch.is_empty() and str(tch[0].lift) == "Bench Press - Barbell" and str(tch[0].goal.get("type", "")) == "heavier" and Challenges.same_option(tch[0].options[0], heavier), "the lift with a goal is the first challenge, its goal the first record", tch.map(func(m): return [m.lift, m.options.map(func(o): return o.type)]))
+	ok(tch.size() <= Missions.BEAT_MISSIONS and Missions.BEAT_MISSIONS == 3, "three lift challenges a day at most")
+	var ungo = Prep.with_goal(st3, TODAY, "Bench Press - Barbell", {}, TODAY, plain.lifts, 2.5)
+	var st4 = settings.duplicate()
+	st4["preps"] = ungo
+	var ux = Prep.lift_on(st4, TODAY, "Bench Press - Barbell")
+	ok(ux != null and Prep.goal_of(ux).is_empty() and not ux.sets.any(func(x): return x.has("goal")), "an empty goal takes it off, and the mark")
+	# Another way, for the equipment there is: the movement's prepped lift is swapped; its goal goes with the old way.
+	var wp = Prep.with_way(st3, TODAY, "Bench Press - Barbell", "Bench Press - Dumbbell", TODAY, plain.lifts, 2.5, [{"reps": 10, "weightKg": 30.0}])
+	var st5 = settings.duplicate()
+	st5["preps"] = wp
+	ok(Prep.lift_on(st5, TODAY, "Bench Press - Barbell") == null and Prep.lift_on(st5, TODAY, "Bench Press - Dumbbell") != null and Prep.goal_of(Prep.lift_on(st5, TODAY, "Bench Press - Dumbbell")).is_empty(), "with_way: the dumbbell bench in the barbell's place, no goal")
+	var g2 = Prep.with_goal(st5, TODAY, "Bench Press - Dumbbell", {"type": "reps", "kg": 30.0, "reps": 11, "title": "Rep record", "words": "11 reps at 30 kg"}, TODAY, plain.lifts, 2.5)
+	var st6 = settings.duplicate()
+	st6["preps"] = g2
+	var dx = Prep.lift_on(st6, TODAY, "Bench Press - Dumbbell")
+	ok(dx != null and int(dx.sets[0].reps) == 11 and bool(dx.sets[0].goal), "a goal on the way picked")
+	ok(Prep.apply_goal([{"reps": 5, "weightKg": 80.0}], {"type": "day_reps", "reps": 40}).all(func(x): return not x.has("goal")), "a day's total marks no set")
+
 	# The same muscles.
 	ok(Prep.area_parts([], "push") == ["chest", "shoulders", "triceps"], "a push day: chest, shoulders, triceps", Prep.area_parts([], "push"))
 	ok(Prep.area_parts(["Bicep Curl - Dumbbell"], "").has("biceps"), "a workout's own lifts name their parts")

@@ -126,7 +126,7 @@ func _init() -> void:
 	ok(find(day_off, ":dose:chest") == null and find(day_off, ":rest") == null and find(day_off, ":show") != null, "no focus: no such missions", day_off.map(func(m): return str(m.id)))
 	ok(dm != null and dm.title == "Chest: add a press" and int(dm.target) == 3 and int(dm.progress) == 0 and int(dm.xp) == 250 and dm.lift == "Bench Press - Barbell", "a mission for the press", dm)
 	ok(str(dm.desc) == "Chest: 6 of 10 weekly sets, no press in two weeks. A press loads the chest far heavier than flyes can. Do 3 sets of Bench Press (barbell): 6 to 12 reps, the last ones hard. Or: incline dumbbell, machine, Push-up (weighted), Dip.", "it says why, how much and what else counts", dm.desc)
-	ok(day.filter(func(m): return str(m.id).contains(":beat:")).size() == 2 and not day.any(func(m): return str(m.id).contains(":beat:bench press")) and day.filter(func(m): return str(m.id).contains(":beat:")).all(func(m): return str(m.title).ends_with(" challenge")), "the two challenges are still the usual lifts", day.map(func(m): return str(m.title)))
+	ok(day.filter(func(m): return str(m.id).contains(":beat:")).size() == Missions.BEAT_MISSIONS and not day.any(func(m): return str(m.id).contains(":beat:bench press")) and day.filter(func(m): return str(m.id).contains(":beat:")).all(func(m): return str(m.title).ends_with(" challenge")), "the (three) challenges are still the usual lifts", day.map(func(m): return str(m.title)))
 	data.sessions = two
 	ok(int(find(Missions.daily(today, data, state, []), ":dose:chest").progress) == 2 and not find(Missions.daily(today, data, state, []), ":dose:chest").done, "two sets: two of three")
 	data.sessions = done3
@@ -190,7 +190,7 @@ func _init() -> void:
 	var ld = Missions.daily(leg_day, {"sessions": leg_log, "pt": marks, "settings": st, "reading": [], "now": leg_day}, state, [])
 	var ld_off = Missions.daily(leg_day, {"sessions": leg_log, "pt": marks, "settings": off, "reading": [], "now": leg_day}, state, [])
 	var beats = ld.filter(func(m): return str(m.id).contains(":beat:"))
-	ok(beats.size() == 2 and beats.all(func(m): return str(m.title).ends_with(" challenge") and str(m.desc).begins_with("Pick one: ") and not (m.options as Array).is_empty()), "its lifts still have records to go for", beats.map(func(m): return [m.title, m.desc]))
+	ok(beats.size() == Missions.BEAT_MISSIONS and beats.all(func(m): return str(m.title).ends_with(" challenge") and str(m.desc).begins_with("Pick one: ") and not (m.options as Array).is_empty()), "its lifts still have records to go for", beats.map(func(m): return [m.title, m.desc]))
 	ok(beats.map(func(m): return [m.id, m.title, m.desc, m.aim]) == ld_off.filter(func(m): return str(m.id).contains(":beat:")).map(func(m): return [m.id, m.title, m.desc, m.aim]), "the same missions as without a focus")
 	var b0 = beats[0]
 	var lighter = leg_log + [lift(leg_day, {str(b0.lift): [[5, 60]]})]

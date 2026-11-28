@@ -22,6 +22,8 @@ extends RefCounted
 
 const LADDER_NS = [1, 3, 5, 8, 10, 12]
 const MAX_OPTIONS = 3
+## How far under a record's weight a set may be and still be that weight (kilograms; pounds round-trip a little off).
+const WEIGHT_SLACK = 0.02
 
 const TIPS = {
 	"heavier": ["Warm up in three jumps, then one top set before your usual sets.", "Do it first, right after warm-ups, while you're fresh.",
@@ -199,7 +201,8 @@ static func hit(opt: Dictionary, sets: Array) -> bool:
 			if str(opt.get("band", "")) != "":
 				var lv = Bands.level(opt.band)
 				return real.any(func(one): return Bands.is_band(one) and Bands.level(one.band) >= lv and int(one.reps) >= int(opt.reps))
-			return real.any(func(one): return float(one.get("weightKg", 0)) >= float(opt.kg) - 1e-6 and int(one.reps) >= int(opt.reps))
+			# (a weight typed in pounds comes back a few grams off the kilograms a record was made from)
+			return real.any(func(one): return float(one.get("weightKg", 0)) >= float(opt.kg) - WEIGHT_SLACK and int(one.reps) >= int(opt.reps))
 		"band":
 			var lv2 = Bands.level(opt.band)
 			return real.any(func(one): return Bands.is_band(one) and Bands.level(one.band) >= lv2 and int(one.reps) >= int(opt.reps))
@@ -213,6 +216,14 @@ static func hit(opt: Dictionary, sets: Array) -> bool:
 		"hold":
 			return real.any(func(one): return int(one.get("holdSec", 0)) >= int(opt.sec))
 	return false
+
+
+## Are two options the same record (a goal kept in a prep against today's options)?
+static func same_option(a: Dictionary, b: Dictionary) -> bool:
+	if str(a.get("type", "")) != str(b.get("type", "")):
+		return false
+	return absf(float(a.get("kg", 0.0)) - float(b.get("kg", 0.0))) < 1e-6 and int(a.get("reps", 0)) == int(b.get("reps", 0)) \
+		and str(a.get("band", "")) == str(b.get("band", "")) and int(a.get("sec", 0)) == int(b.get("sec", 0))
 
 
 ## The options met by `sets`, by type.

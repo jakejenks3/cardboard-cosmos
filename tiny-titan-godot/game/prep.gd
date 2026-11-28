@@ -12,6 +12,16 @@ extends RefCounted
 ## A prepped day's plan IS the prep (Missions.day_plan, `plan_lifts`): its lifts, its aims ("aimSets"), no
 ## lift of the game's own guess. The Log tab starts from it; anything can still be changed there.
 ##
+## A GOAL (2026-11-28, the user: "be able to pick and choose each a mission ahead of time that gets put into my
+## prep and then into my workout once I start it... click on chest fly dumbbell for today because that's the
+## equipment I have, and then click on the heavier challenge. This will add that rep/weight scheme with a
+## twinkle or highlighted overlay... to my prep and then to my workout"): a record to go for (one of
+## Challenges.options) picked for a prepped lift. Stored on the lift as "goal" = the option (type, title,
+## words, kg / reps / band / sec), and its first set becomes that record, marked "goal": true. It is the
+## day's challenge mission for that lift (Missions.daily puts the lifts with a goal first), the Log tab brings
+## the goal set in highlighted (LogLiftEditor), and anything can still be changed there. `with_goal`,
+## `with_way` (another variation of a prepped lift, for the equipment there is) and `goal_of` do it.
+##
 ## Also here: the lifts that work the same muscles as a workout (`area_parts`, `area_lifts`), for the Log tab's
 ## "same muscles" keys and the prep's "add a lift" (the user, the same message: "add a few recommended other lifts
 ## that cover the same area at the bottom so that I have to type less").
@@ -60,8 +70,13 @@ static func with_prep(settings: Dictionary, date: String, lifts: Array, today: S
 				s["band"] = str(one.band)
 			if int(one.get("holdSec", 0)) > 0:
 				s["holdSec"] = int(one.holdSec)
+			if bool(one.get("goal", false)):
+				s["goal"] = true
 			sets.append(s)
-		clean.append({"name": nm, "sets": sets, "ss": int(x.get("ss", 0))})
+		var entry = {"name": nm, "sets": sets, "ss": int(x.get("ss", 0))}
+		if x.get("goal") is Dictionary and not (x.goal as Dictionary).is_empty():
+			entry["goal"] = clean_goal(x.goal)
+		clean.append(entry)
 	if not clean.is_empty():
 		out[date] = {"lifts": clean, "at": at_ms}
 	return out
@@ -120,7 +135,8 @@ static func plan_lifts(prep, before: Array, today: String, marks: Dictionary) ->
 			since = Dates.days_between(str(st.history[0].date), today)
 		out.append({"name": n, "score": 100.0 - i, "why": "Your prep", "part": Missions.part_of(n), "pt": Pt.is_pt(marks, n),
 			"kind": Missions.kind_of(n), "variations": [n], "last": last, "since": since, "gap": 0.0, "same": 0,
-			"prep": true, "aimSets": (x.get("sets", []) as Array).duplicate(true), "ss": int(x.get("ss", 0))})
+			"prep": true, "aimSets": (x.get("sets", []) as Array).duplicate(true), "ss": int(x.get("ss", 0)),
+			"goal": goal_of(x)})
 		i += 1
 	return out
 
@@ -240,3 +256,121 @@ static func area_lifts(parts: Array, sessions: Array, taken: Array, marks: Dicti
 			taken_moves[mk4] = true
 			out.append({"name": LiftNames.join(str(e.name), Missions.variation_for(e)), "part": str(e.part), "own": false})
 	return out
+
+
+# ---------------------------------------------------------------------------
+# Goals: a record picked for a prepped lift (see the top)
+# ---------------------------------------------------------------------------
+
+## The goal of a prepped lift entry ({} when none).
+static func goal_of(x) -> Dictionary:
+	if x is Dictionary and x.get("goal") is Dictionary:
+		return x.goal
+	return {}
+
+
+## What of a Challenges option is kept as a goal (not the tip or the chip's words).
+static func clean_goal(o: Dictionary) -> Dictionary:
+	var out = {}
+	for k in ["type", "kind", "title", "words", "sub", "kg", "reps", "band", "sec"]:
+		if o.has(k):
+			out[k] = o[k]
+	return out
+
+
+## `sets` with the goal `o` as the first set, marked "goal": true (the other sets keep their numbers and lose
+## any older mark). A day's total ("day_reps") has no one set: nothing is marked.
+static func apply_goal(sets: Array, o: Dictionary) -> Array:
+	var out = []
+	for one in sets:
+		var c = (one as Dictionary).duplicate()
+		c.erase("goal")
+		out.append(c)
+	if str(o.get("type", "")) == "day_reps":
+		return out
+	if out.is_empty():
+		out.append({"reps": START_REPS, "weightKg": 0.0})
+	var first: Dictionary = out[0]
+	match str(o.get("type", "")):
+		"hold":
+			first["holdSec"] = int(o.get("sec", 0))
+		"set_reps":
+			first["reps"] = int(o.get("reps", first.get("reps", 0)))
+		_:
+			first["reps"] = int(o.get("reps", first.get("reps", 0)))
+			if str(o.get("band", "")) != "":
+				first["band"] = str(o.band)
+				first["weightKg"] = 0.0
+			elif float(o.get("kg", 0.0)) > 0.0:
+				first["weightKg"] = float(o.kg)
+	first["goal"] = true
+	return out
+
+
+## The day's prepped lifts to change: the prep there is, else one made from the day's plan (`plan_lifts`,
+## as Missions.day_plan / Missions.ahead give them).
+static func _lifts_for(settings: Dictionary, date: String, plan_lifts: Array, step_kg: float) -> Array:
+	var have = lifts_of(of(settings, date))
+	if not have.is_empty():
+		return have.duplicate(true)
+	return from_plan(plan_lifts, step_kg)
+
+
+## The index of the prepped lift `lift_name` stands for: the same name, else the same movement
+## (Missions.move_of); -1 when none.
+static func _index_of(lifts: Array, lift_name: String) -> int:
+	var k = Xp.normalize_exercise(lift_name)
+	for i in range(lifts.size()):
+		if Xp.normalize_exercise(str(lifts[i].name)) == k:
+			return i
+	var mk = Xp.normalize_exercise(Missions.move_of(lift_name))
+	for i in range(lifts.size()):
+		if Xp.normalize_exercise(Missions.move_of(str(lifts[i].name))) == mk:
+			return i
+	return -1
+
+
+## The settings' preps with `o` (a Challenges option) as the goal of `lift_name` on `date` (the lift added to
+## the prep when it is not in it); `o` empty takes the goal off again. The prep is made from the plan first
+## when the day has none.
+static func with_goal(settings: Dictionary, date: String, lift_name: String, o: Dictionary, today: String, plan_lifts: Array, step_kg: float, last_sets: Array = [], at_ms: int = 0) -> Dictionary:
+	var lifts = _lifts_for(settings, date, plan_lifts, step_kg)
+	var i = _index_of(lifts, lift_name)
+	if i < 0:
+		lifts.append({"name": lift_name, "sets": aim_of(last_sets, step_kg), "ss": 0})
+		i = lifts.size() - 1
+	var x: Dictionary = lifts[i]
+	if Xp.normalize_exercise(str(x.name)) != Xp.normalize_exercise(lift_name):
+		# Another variation of the movement was prepped: the goal is for this one.
+		x = {"name": lift_name, "sets": aim_of(last_sets, step_kg), "ss": int(x.get("ss", 0))}
+	if o.is_empty():
+		x.erase("goal")
+		var plain = []
+		for one in x.get("sets", []):
+			var c = (one as Dictionary).duplicate()
+			c.erase("goal")
+			plain.append(c)
+		x["sets"] = plain
+	else:
+		x["goal"] = clean_goal(o)
+		x["sets"] = apply_goal(x.get("sets", []), o)
+	lifts[i] = x
+	return with_prep(settings, date, lifts, today, at_ms)
+
+
+## The settings' preps with the prepped lift of `planned`'s movement done as `way` on `date` (its sets the
+## aim after `last_sets`, its goal dropped: a goal belongs to one way). The prep is made from the plan first
+## when the day has none; a lift not in it is added.
+static func with_way(settings: Dictionary, date: String, planned: String, way: String, today: String, plan_lifts: Array, step_kg: float, last_sets: Array = [], at_ms: int = 0) -> Dictionary:
+	var lifts = _lifts_for(settings, date, plan_lifts, step_kg)
+	var i = _index_of(lifts, planned)
+	var x = {"name": way, "sets": aim_of(last_sets, step_kg), "ss": 0}
+	if i < 0:
+		lifts.append(x)
+	else:
+		if Xp.normalize_exercise(str(lifts[i].name)) == Xp.normalize_exercise(way):
+			return settings.get(KEY, {})
+		x["ss"] = int(lifts[i].get("ss", 0))
+		lifts[i] = x
+	return with_prep(settings, date, lifts, today, at_ms)
+

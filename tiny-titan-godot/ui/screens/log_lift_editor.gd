@@ -18,7 +18,9 @@ var editing_id = null
 ## sides added up, or are not (Sides): stored for the lift when the workout
 ## is saved. `band: true` = done with a resistance band (the "Band" key): its
 ## sets have `band` (a Bands id) where the weight would be, and are saved with
-## weight 0 and that band. Band, Hold and BW are one at a time.
+## weight 0 and that band. Band, Hold and BW are one at a time. `goal` (a dict, Prep.goal_of) = a record picked
+## for the lift in the day's prep, and `goal: true` on the set set up for it: shown, kept in the draft file,
+## never saved (see "Goals" near the end).
 var exercises: Array = []
 var query: String = ""
 var wu: String = "kg"
@@ -68,6 +70,17 @@ var _hit_seen: Dictionary = {}
 var _titled: Array = []
 ## [exercise] -> the plate with its name on the card's top edge (its ring is the card's edge colour)
 var _signs: Array = []
+## GOALS (2026-11-28): a lift brought in from the day's prep with a goal (a record picked for it, Prep.goal_of)
+## has it as "goal" on its draft, and the set set up for it "goal": true (_prepped_draft). Never saved
+## (session_exercises / sets_from_draft copy neither); kept in the draft file. [exercise] -> the slot of its
+## MISSION banner (or null), refilled when the goal is met or no longer is (_refresh_goal).
+var _goal_slots: Array = []
+## Lifts ("<lift>|<type>") whose goal was just met by a tick: their banner bursts once it is built again.
+var _goal_cheer: Dictionary = {}
+## LOCK-IN (2026-11-28): a set ticked is LOCKED IN (draft set field "done"), drawn as a slim green line; an exercise
+## locked in (draft field "closed") is one green bar (_closed_bar). Neither is ever saved. Cards just locked in
+## (their anchor names, _lock_anchor): the bar bursts once it is built.
+var _bar_cheer: Dictionary = {}
 
 
 func _init(owner_form, edit_id = null) -> void:
@@ -151,6 +164,8 @@ func _touched(i: int) -> void:
 
 
 ## The exercises as they will be saved: named, with at least one real set.
+## (A goal and its set's mark never reach the saved session: the sets are made afresh by sets_from_draft, and
+## "goal" is not copied. The mission is worked out from the log, Missions.daily.)
 func session_exercises() -> Array:
 	var out = []
 	var labels = _group_labels()
@@ -209,6 +224,7 @@ func build(parent: Control) -> void:
 	_titled = []
 	_signs = []
 	_try = []
+	_goal_slots = []
 	_badges = []
 	_wsteps = []
 	_deltas = []
@@ -282,7 +298,8 @@ func build(parent: Control) -> void:
 	for i in range(exercises.size()):
 		if i > 0 and linked_next(i - 1):
 			parent.add_child(_superset_line(i - 1))
-		parent.add_child(_exercise_card(i))
+		# (a card locked in is one green bar, in its place in the list: _closed_bar)
+		parent.add_child(_closed_bar(i) if is_closed(i) else _exercise_card(i))
 
 	if plan_card != null and not exercises.is_empty():
 		parent.add_child(plan_card)
@@ -415,8 +432,9 @@ func _exercise_card(i: int) -> Card:
 			if bool(s.get("done", false)):
 				ticked += 1
 		var plural = "" if e.sets.size() == 1 else "s"
-		# (a saved workout opened again has no ticks: its sets are simply counted)
-		var said = ("%d set%s" % [e.sets.size(), plural]) if editing_id != null else ("%d of %d set%s ticked" % [ticked, e.sets.size(), plural])
+		# (a saved workout opened again has no ticks: its sets are simply counted; a new one says how to lock a
+		# set in until one is)
+		var said = ("%d set%s" % [e.sets.size(), plural]) if editing_id != null else ("Tap a set's number once it's done" if ticked == 0 else "%d of %d set%s locked in" % [ticked, e.sets.size(), plural])
 		var tl = Kit.clip(said, 12, Pal.GOOD_DARK if ticked > 0 and ticked == e.sets.size() else Pal.MUTED, true)
 		tl.set_meta("ticked_line", ticked)
 		tl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -441,6 +459,15 @@ func _exercise_card(i: int) -> Card:
 	head.add_child(Kit.vcenter(more))
 	head.add_child(LogWidgets.quiet_icon("close", remove_exercise.bind(i), "Remove exercise", 28))
 	c.add(head)
+	# The day's mission for this lift, right under its title (a goal from the prep or the Challenges card): a gold
+	# banner, green once a ticked set does it (_refresh_goal fills the slot).
+	if _goal_shown(i):
+		var gslot = Kit.vbox(0)
+		gslot.mouse_filter = Control.MOUSE_FILTER_PASS
+		c.add(gslot)
+		_goal_slots.append(gslot)
+	else:
+		_goal_slots.append(null)
 	# What goes beside the reps, one of four (a pick-one track: every key is always
 	# there, so none moves when one is tapped): a weight, nothing (bodyweight), a
 	# resistance band (Bands) or seconds held (a stretch). Then two switches:
@@ -528,11 +555,21 @@ func _exercise_card(i: int) -> Card:
 	if label_name == "":
 		label_name = "Exercise %d" % (i + 1)
 	var fill = _band_fill(e) if banded else ""
+	var goal_on = _goal_shown(i)
 	for j in range(e.sets.size()):
 		var s = e.sets[j]
+		var is_goal = goal_on and bool(s.get("goal", false))
+		if bool(s.get("done", false)):
+			# A set locked in (2026-11-28): a slim green line of the same height, read only; a tap unlocks it.
+			var locked = _locked_row(i, j, label_name, is_goal)
+			c.add(locked.row)
+			slots.append(locked.slot)
+			wsteps.append(locked.row)
+			continue
 		var ref_set = _ref_set(lp, j)
 		var row = Kit.hbox(3 if Kit.fingers else 4)
-		var row_bg = _set_bg(bool(s.get("done", false)))
+		# (the set set up for the goal: a gold wash and a star in its badge slot; every key of it works as usual)
+		var row_bg = _set_bg(false, is_goal)
 		row_bg.add_child(row)
 		row.add_child(_tick_key(i, j, label_name))
 		var reps_opts = {"placeholder": "–", "width": 32, "min": 0, "compact": true}
@@ -582,7 +619,7 @@ func _exercise_card(i: int) -> Card:
 				row.add_child(Kit.vcenter(Kit.label(wu, 11, Pal.MUTED)))
 		else:
 			row.add_child(Kit.vcenter(Kit.label("reps", 11, Pal.MUTED)))
-		var slot = Kit.hbox(0)
+		var slot = Kit.hbox(3)
 		slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot.alignment = BoxContainer.ALIGNMENT_BEGIN
 		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -655,6 +692,9 @@ func _exercise_card(i: int) -> Card:
 	foot.add_child(delta)
 	_deltas.append(delta)
 	c.add(Kit.pad(foot, 6, 0, 4, 0))
+	# The card's last key: lock the exercise in (2026-11-28). It folds the card into one green bar.
+	if editing_id == null:
+		c.add(Kit.pad(_lock_key(i), 0, 2, 0, 0))
 	_refresh_exercise(i)
 	_refresh_filed(i)
 	return c
@@ -762,12 +802,24 @@ func _refresh_exercise(i: int) -> void:
 	var best_kg = float(best.weightKg) if best != null else 0.0
 	var banded = bool(e.get("band", false)) and not bool(e.get("timed", false))
 	var slots = _badges[i]
+	var goal_on = _goal_shown(i)
 	for j in range(mini(slots.size(), e.sets.size())):
 		var slot = slots[j]
 		if not is_instance_valid(slot):
 			continue
 		Kit.clear(slot)
 		var s = e.sets[j]
+		if goal_on and bool(s.get("goal", false)):
+			# The set set up for the goal: a star first (the word too where there is room). Locked in, its line has
+			# room for the words: "GOAL MET" when that set alone does it.
+			var locked = bool(s.get("done", false))
+			var met = locked and _set_meets_goal(i, j)
+			var gt = LogWidgets.goal_tag(("GOAL MET" if met else "GOAL") if locked else ("" if Kit.fingers else "GOAL"), 10)
+			gt.set_meta("goal_set", "%d:%d" % [i, j])
+			gt.set_meta("goal_met", met)
+			gt.tooltip_text = ("Set %d met your goal: %s" if met else "Set %d is set up for your goal: %s") % [j + 1, str(_goal_of(i).get("words", ""))]
+			gt.mouse_filter = Control.MOUSE_FILTER_PASS
+			slot.add_child(gt)
 		var cur = {"reps": TTUtil.jsround(LogWidgets.num(s.reps)), "weightKg": 0.0 if (e.bodyweight or bool(e.get("timed", false)) or banded) else Fmt.unit_to_kg(LogWidgets.num(s.weight), wu)}
 		var prev = null
 		if lp != null and j < lp.sets.size():
@@ -786,6 +838,7 @@ func _refresh_exercise(i: int) -> void:
 			_celebrate_pr(i, j)
 	_refresh_plates(i)
 	_refresh_try(i)
+	_refresh_goal(i)
 	var dslot = _deltas[i] if i < _deltas.size() else null
 	if dslot == null or not is_instance_valid(dslot):
 		return
@@ -1105,7 +1158,13 @@ func add_exercise(ex_name: String, from_search: bool = false) -> void:
 		return
 	Sfx.tick()
 	var lp = _last.get(key)
-	if lp != null:
+	# A lift with a goal in the day's prep comes with it (its goal set too), however it is added; out of the
+	# prep's superset, since it goes in at the end.
+	var pd = _prepped_draft(ex_name)
+	if pd != null and not _goal_in(pd).is_empty():
+		pd.erase("ss")
+		exercises.append(pd)
+	elif lp != null:
 		exercises.append(draft_from_sets(str(lp.name), lp.sets, wu))
 	else:
 		exercises.append(_blank(ex_name))
@@ -1181,6 +1240,10 @@ func add_set(i: int) -> void:
 	_touched(i)
 	var sets = exercises[i].sets
 	var copy = sets[sets.size() - 1].duplicate() if not sets.is_empty() else {"reps": "", "weight": ""}
+	# (a copy of the goal set is a set like any other: one set is set up for the goal; and a copy of a set
+	# locked in is a set still to do)
+	copy.erase("goal")
+	copy.erase("done")
 	sets.append(copy)
 	_changed(true)
 
@@ -1234,10 +1297,17 @@ func remove_exercise(i: int) -> void:
 
 
 func bump_all(i: int, field: String) -> void:
+	# (the sets locked in stay as they were done; only the sets still to do move)
+	if not exercises[i].sets.any(func(x): return not bool(x.get("done", false))):
+		Sfx.error()
+		App.toast("Every set is locked in. Tap one to change it.", "info", "lock")
+		return
 	if field == "band":
 		# Every set one band heavier; at the heaviest band already, nothing moves.
 		var any = false
 		for s in exercises[i].sets:
+			if bool(s.get("done", false)):
+				continue
 			var was = str(s.get("band", "")).strip_edges()
 			if was == "":
 				was = _band_fill(exercises[i])
@@ -1254,6 +1324,8 @@ func bump_all(i: int, field: String) -> void:
 	Sfx.tick()
 	_touched(i)
 	for s in exercises[i].sets:
+		if bool(s.get("done", false)):
+			continue
 		if field == "reps":
 			s.reps = TTUtil.num_str(LogWidgets.num(s.reps) + 1.0)
 		elif field == "hold":
@@ -1489,9 +1561,16 @@ func _tick_key(i: int, j: int, label_name: String) -> Button:
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	# (no margins of the theme's: exactly as wide as its box, which sits where the locked line's tick does)
+	var none = StyleBoxEmpty.new()
+	for k in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+		b.add_theme_stylebox_override(k, none)
 	b.tooltip_text = "%s: set %d done" % [label_name, j + 1]
 	b.set_meta("set_tick", "%d:%d" % [i, j])
 	b.set_meta("set_done", done)
+	# (the same name as the set's locked line, and as tall as the row like the line: a tap that locks the set
+	# leaves the line where the key was, and a tap on the line leaves this key there; UiScreen)
+	b.set_meta("anchor_id", _set_anchor(i, j))
 	# (at finger sizes Kit.tick_box adds 4: the row has no room for more than the number had)
 	var box = Kit.tick_box(done, 18 if Kit.fingers else 20)
 	if not done:
@@ -1504,12 +1583,21 @@ func _tick_key(i: int, j: int, label_name: String) -> Button:
 		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		box.get_child(0).add_child(num)
-	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var mid = CenterContainer.new()
+	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mid.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mid.add_child(box)
 	b.custom_minimum_size = box.custom_minimum_size
-	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.add_child(box)
+	b.size_flags_vertical = Control.SIZE_FILL
+	b.add_child(mid)
 	b.pressed.connect(toggle_set_done.bind(i, j))
 	return b
+
+
+## The name a set's tick key and its locked line share (UiScreen finds the one by the other after a rebuild).
+func _set_anchor(i: int, j: int) -> String:
+	var k = Xp.normalize_exercise(str(exercises[i].name)) if i < exercises.size() else ""
+	return "set:%s:%d" % [k if k != "" else "#%d" % i, j]
 
 
 ## Tick a set off (or take the tick back). An empty set is filled in from last time first; a set with no
@@ -1533,6 +1621,7 @@ func toggle_set_done(i: int, j: int) -> void:
 		s.reps = str(int(ref.reps))
 		if not e.bodyweight and not bool(e.get("timed", false)) and not bool(e.get("band", false)) and str(s.weight).strip_edges() == "" and float(ref.get("weightKg", 0)) > 0.0:
 			s.weight = LogWidgets.trim_num(Fmt.kg_to_unit(float(ref.weightKg), wu))
+	var goal_was = _goal_met(i)
 	s["done"] = true
 	_touched(i)
 	if started <= 0.0:
@@ -1540,10 +1629,18 @@ func toggle_set_done(i: int, j: int) -> void:
 	Sfx.pop()
 	Sfx.buzz(1)
 	var nxt = _superset_next(i)
-	if nxt != "":
+	if _goal_shown(i) and not goal_was and _goal_met(i):
+		# The tick that meets the mission: the record's fanfare, and the banner (green now) bursts once rebuilt.
+		var g = _goal_of(i)
+		_goal_cheer[_goal_key(i)] = true
+		Sfx.pr()
+		Sfx.buzz(2)
+		App.toast("Mission done: %s, %s!%s" % [str(g.get("title", "")), str(g.get("words", "")), (" " + nxt) if nxt != "" else ""], "good", "trophy")
+	elif nxt != "":
 		App.toast(nxt, "info", "repeat")
 	elif all_ticked(i):
-		App.toast("%s: every set done" % Missions.short_name(label_name_of(i)), "good", "check")
+		# (the card's "Lock in" key has just turned green: say where it is)
+		App.toast(("%s: every set done. Lock it in at the foot of its card." if editing_id == null else "%s: every set done") % Missions.short_name(label_name_of(i)), "good", "lock" if editing_id == null else "check")
 	_changed(true)
 
 
@@ -1555,7 +1652,7 @@ func _superset_next(i: int) -> String:
 	var n = exercises.size()
 	for step in range(1, n):
 		var k = (i + step) % n
-		if exercises[k].get("ss") != g:
+		if exercises[k].get("ss") != g or bool(exercises[k].get("closed", false)):
 			continue
 		for j in range(exercises[k].sets.size()):
 			if not bool(exercises[k].sets[j].get("done", false)):
@@ -1568,7 +1665,8 @@ func _superset_next(i: int) -> String:
 func unticked_count() -> int:
 	var n = 0
 	for e in exercises:
-		if not e.sets.any(func(x): return bool(x.get("done", false))):
+		# (a card locked in counts as all its sets done)
+		if bool(e.get("closed", false)) or not e.sets.any(func(x): return bool(x.get("done", false))):
 			continue
 		for x in e.sets:
 			if LogWidgets.num(x.reps) > 0.0 and not bool(x.get("done", false)):
@@ -1578,7 +1676,7 @@ func unticked_count() -> int:
 
 func drop_unticked() -> void:
 	for e in exercises:
-		if not e.sets.any(func(x): return bool(x.get("done", false))):
+		if bool(e.get("closed", false)) or not e.sets.any(func(x): return bool(x.get("done", false))):
 			continue
 		e.sets = e.sets.filter(func(x): return bool(x.get("done", false)) or LogWidgets.num(x.reps) <= 0.0)
 
@@ -1605,13 +1703,27 @@ func fill_aim(i: int) -> void:
 	_touched(i)
 	var e = exercises[i]
 	var rows = draft_from_sets(str(e.name), a.sets, wu).sets
+	# A prepped aim holds the goal set (marked): Fill sets it up again, and brings the goal when the card
+	# had none (a lift added before the goal was picked).
+	var marked = false
+	for j in range(mini(rows.size(), (a.sets as Array).size())):
+		if bool(a.sets[j].get("goal", false)) and not (j < e.sets.size() and bool(e.sets[j].get("done", false))):
+			rows[j]["goal"] = true
+			marked = true
+	if marked:
+		for s in e.sets:
+			if not bool(s.get("done", false)):
+				s.erase("goal")
+		if _goal_of(i).is_empty():
+			var g = App.goal_on(str(e.name).strip_edges())
+			if not g.is_empty():
+				e["goal"] = g.duplicate(true)
 	for j in range(rows.size()):
 		var row = rows[j]
 		if j < e.sets.size():
-			var keep_done = bool(e.sets[j].get("done", false))
-			e.sets[j] = row
-			if keep_done:
-				row["done"] = true
+			# (a set locked in stays as it was done)
+			if not bool(e.sets[j].get("done", false)):
+				e.sets[j] = row
 		else:
 			e.sets.append(row)
 	_changed(true)
@@ -1736,6 +1848,11 @@ func _superset_line(i: int) -> Control:
 	var rail = SupersetRail.new()
 	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rail.set_meta("superset_line", i)
+	# (a card locked in is a slim bar with no frame or plate to reach into: the rails only touch it)
+	if is_closed(i):
+		rail.reach_up = SupersetRail.REACH_BAR
+	if is_closed(i + 1):
+		rail.reach_down = SupersetRail.REACH_BAR
 	var tag = PanelContainer.new()
 	tag.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1757,15 +1874,19 @@ class SupersetRail extends CenterContainer:
 	## its shadow, the card below's frame starts half way down its name plate.
 	const REACH_UP = 20.0
 	const REACH_DOWN = 34.0
+	## Into a card locked in (a bar): just touching it.
+	const REACH_BAR = 4.0
 	const INSET = 4.0
 	const W = 6.0
+	var reach_up: float = REACH_UP
+	var reach_down: float = REACH_DOWN
 
 	func _init() -> void:
 		z_index = 1
 
 	func _draw() -> void:
 		for x in [INSET, size.x - INSET - W]:
-			var r = Rect2(x, -REACH_UP, W, size.y + REACH_UP + REACH_DOWN)
+			var r = Rect2(x, -reach_up, W, size.y + reach_up + reach_down)
 			draw_rect(r.grow(2.0), Pal.OUTLINE)
 			draw_rect(r, Pal.SECOND)
 			draw_rect(Rect2(r.position, Vector2(2.0, r.size.y)), Pal.SECOND.lightened(0.35))
@@ -1784,9 +1905,18 @@ func swap_exercise(i: int, new_name: String) -> void:
 	var old = exercises[i]
 	var n = maxi(1, old.sets.size())
 	var lp = _last.get(Xp.normalize_exercise(new_name))
+	# (a goal belongs to one way: the old one's goes; the new way's, when the day's prep gives it one, comes
+	# with its sets as prepped)
+	var pd = _prepped_draft(new_name)
 	var one = draft_from_sets(str(lp.name), lp.sets, wu) if lp != null else _blank(new_name)
+	if pd != null and not _goal_in(pd).is_empty():
+		pd.erase("ss")
+		one = pd
+		n = maxi(n, one.sets.size())
 	while one.sets.size() < n:
-		one.sets.append(one.sets[one.sets.size() - 1].duplicate())
+		var more = one.sets[one.sets.size() - 1].duplicate()
+		more.erase("goal")
+		one.sets.append(more)
 	while one.sets.size() > n:
 		one.sets.remove_at(one.sets.size() - 1)
 	for s in one.sets:
@@ -1991,15 +2121,19 @@ func _ref_block(i: int, lp, best, banded: bool, both: bool):
 
 ## The ground under a set's row: a green wash once the set is ticked, nothing before (no margins either
 ## way, so a tick never changes the row's size).
-static func _set_bg(done: bool) -> PanelContainer:
+## The set set up for a goal (`goal`) has a gold wash until it is ticked (then green, as any done set).
+static func _set_bg(done: bool, goal: bool = false) -> PanelContainer:
 	var p = PanelContainer.new()
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	# (as tall as a locked set's line: a set locked in or unlocked moves nothing under it)
+	p.custom_minimum_size.y = set_row_h()
 	var sb = StyleBoxFlat.new()
-	sb.bg_color = Pal.with_alpha(Pal.GOOD, 0.16) if done else Color(0, 0, 0, 0)
+	sb.bg_color = Pal.with_alpha(Pal.GOOD, 0.16) if done else (Pal.with_alpha(Pal.ACCENT, 0.24) if goal else Color(0, 0, 0, 0))
 	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
 		sb.set_content_margin(side, 0)
 	p.add_theme_stylebox_override("panel", sb)
 	p.set_meta("set_row_done", done)
+	p.set_meta("set_row_goal", goal)
 	return p
 
 
@@ -2016,7 +2150,28 @@ func _try_options(i: int) -> Array:
 	var nm = str(exercises[i].name).strip_edges()
 	if nm == "" or not _have.has(Xp.normalize_exercise(nm)):
 		return []
-	return App.challenge_options(nm)
+	var opts = App.challenge_options(nm)
+	# The goal picked for it is one of them, first (as the day's challenge mission has it: picked on another day,
+	# it may not be among today's, and is put in front of them).
+	var g = _goal_of(i)
+	if g.is_empty():
+		return opts
+	var same = opts.filter(func(o): return Challenges.same_option(o, g))
+	var first = same[0] if not same.is_empty() else _as_option(g)
+	return ([first] + opts.filter(func(o): return not Challenges.same_option(o, g))).slice(0, Challenges.MAX_OPTIONS)
+
+
+## A goal kept in a prep as a Challenges option (the prep keeps no chip or tip).
+static func _as_option(g: Dictionary) -> Dictionary:
+	var o = g.duplicate(true)
+	for k in ["title", "words", "sub"]:
+		if not o.has(k):
+			o[k] = ""
+	if not o.has("chip"):
+		o["chip"] = str(o.words)
+	if not o.has("reps"):
+		o["reps"] = 0
+	return o
 
 
 func _refresh_try(i: int) -> void:
@@ -2027,17 +2182,27 @@ func _refresh_try(i: int) -> void:
 	var e = exercises[i]
 	var sets = sets_from_draft(e, wu)
 	var nm = label_name_of(i)
+	var g = _goal_of(i) if _goal_shown(i) else {}
 	for o in _try_options(i):
 		var lk = ChallengeView.look(str(o.type))
 		var hit = Challenges.hit(o, sets)
+		# The goal's key is lit gold, the picked one (green once a ticked set meets it, as the banner); it
+		# cheers through the banner, not here.
+		var picked = not g.is_empty() and Challenges.same_option(o, g)
+		var col = (Pal.GOOD if _goal_met(i) else Pal.ACCENT) if picked else lk[1]
 		# (the text and tooltip never change with the state: the screen finds the key again after a rebuild)
-		var k = LogWidgets.mini_chip(ChallengeView.chip_text(o), hit, _use_try.bind(i, o), lk[1], 7)
+		var k = LogWidgets.mini_chip(ChallengeView.chip_text(o), hit or picked, _use_try.bind(i, o), col, 7)
 		k.tooltip_text = "%s: %s, %s (%s)" % [nm, str(o.title), str(o.words), str(o.sub)]
 		k.set_meta("try_key", str(o.type))
 		k.set_meta("try_hit", hit)
+		k.set_meta("try_goal", picked)
+		if picked:
+			Fx.twinkle(k, Pal.CREAM, 1)
 		flow.add_child(k)
 		var seen = "%s|%s|%s" % [Xp.normalize_exercise(nm), str(o.type), str(o.chip)]
-		if hit and not _hit_seen.has(seen):
+		if picked:
+			_hit_seen[seen] = true
+		elif hit and not _hit_seen.has(seen):
 			_hit_seen[seen] = true
 			if not _building:
 				Kit.burst(k, Pal.ACCENT, 22)
@@ -2063,9 +2228,18 @@ func _use_try(i: int, o: Dictionary) -> void:
 		var last = e.sets[e.sets.size() - 1] if not e.sets.is_empty() else {"reps": "", "weight": ""}
 		var fresh = last.duplicate()
 		fresh.erase("done")
+		fresh.erase("goal")
 		e.sets.append(fresh)
 		j = e.sets.size() - 1
 	var s = e.sets[j]
+	# The goal's own key: that set is the one set up for it now (a second go after a set that fell short keeps
+	# its mark on the ticked one; the sets still to do give theirs up).
+	var g = _goal_of(i)
+	if not g.is_empty() and Challenges.same_option(o, g) and str(o.type) != "day_reps":
+		for k in range(e.sets.size()):
+			if k != j and not bool(e.sets[k].get("done", false)):
+				e.sets[k].erase("goal")
+		s["goal"] = true
 	match str(o.type):
 		"hold":
 			s["hold"] = str(int(o.sec))
@@ -2096,4 +2270,446 @@ func _prepped_draft(ex_name: String):
 	var one = draft_from_sets(str(x.name), x.sets, wu)
 	if int(x.get("ss", 0)) > 0:
 		one["ss"] = 100 + int(x.ss)
+	# The goal picked for it (2026-11-28), and the set set up for it, highlighted on the card (both editable).
+	var g = Prep.goal_of(x)
+	if not g.is_empty():
+		one["goal"] = g.duplicate(true)
+		for j in range(mini((x.sets as Array).size(), one.sets.size())):
+			if bool(x.sets[j].get("goal", false)):
+				one.sets[j]["goal"] = true
 	return one
+
+
+# ---------------------------------------------------------------------------
+# Goals (2026-11-28, the user: "be able to pick and choose each a mission ahead of time that gets put into my
+# prep and then into my workout once I start it... when I workout it shows up there set up with the top set
+# being that goal, and I can edit it and everything like normal if I don't reach that top set or I do
+# better"). A goal is a record (a Challenges option) picked for a prepped lift: Prep.goal_of. It comes in with
+# the prepped lift (_prepped_draft) as the draft's "goal" and the set set up for it; the card shows a MISSION
+# banner, the set a gold wash and a star, the TRY key of that record gold. Nothing is forced: every number can
+# be changed, and the goal is met by the sets as typed once they are TICKED (the set set up for it is filled
+# in from the start, so the typed sets alone would meet it before it was tried).
+# ---------------------------------------------------------------------------
+
+## The goal of an exercise of the workout ({} when none).
+func _goal_of(i: int) -> Dictionary:
+	if i < 0 or i >= exercises.size():
+		return {}
+	return _goal_in(exercises[i])
+
+
+static func _goal_in(e) -> Dictionary:
+	if e is Dictionary and e.get("goal") is Dictionary:
+		return e.goal
+	return {}
+
+
+## Is the goal shown: one there is, on a new workout of today (the day's mission; a workout moved to another
+## day keeps it in its draft, unseen, until it is back on today).
+func _goal_shown(i: int) -> bool:
+	if _goal_of(i).is_empty() or editing_id != null:
+		return false
+	var f = _form()
+	return f == null or str(f.date) == App.today
+
+
+func _goal_key(i: int) -> String:
+	return "%s|%s" % [Xp.normalize_exercise(label_name_of(i)), str(_goal_of(i).get("type", ""))]
+
+
+## Do the ticked sets meet the goal?
+func _goal_met(i: int) -> bool:
+	var g = _goal_of(i)
+	if g.is_empty():
+		return false
+	var e = exercises[i]
+	var ticked = e.duplicate()
+	ticked["sets"] = (e.sets as Array).filter(func(x): return bool(x.get("done", false)))
+	return Challenges.hit(g, sets_from_draft(ticked, wu))
+
+
+## The banner's slot: filled again when the goal is met or no longer is (a tick rebuilds the card; a number
+## typed into a ticked set only refreshes it). A goal met by a typed number cheers here; by a tick, in
+## toggle_set_done (the card is being rebuilt then), and the new banner bursts.
+func _refresh_goal(i: int) -> void:
+	if i >= _goal_slots.size() or _goal_slots[i] == null or not is_instance_valid(_goal_slots[i]):
+		return
+	var slot: VBoxContainer = _goal_slots[i]
+	var met = _goal_met(i)
+	if slot.get_child_count() > 0 and slot.has_meta("goal_met") and bool(slot.get_meta("goal_met", false)) == met:
+		return
+	# (get_meta with a null default still errors on a missing key: ask first)
+	var was = slot.get_meta("goal_met") if slot.has_meta("goal_met") else null
+	Kit.clear(slot)
+	slot.set_meta("goal_met", met)
+	var g = _goal_of(i)
+	var banner = LogWidgets.goal_banner(g, met, _goal_words(i, met))
+	slot.add_child(banner)
+	var k = _goal_key(i)
+	var typed_in = was is bool and not bool(was) and not _building
+	if met and (_goal_cheer.has(k) or typed_in):
+		_goal_cheer.erase(k)
+		if typed_in:
+			Sfx.pr()
+			Sfx.buzz(2)
+			App.toast("Mission done: %s, %s!" % [str(g.get("title", "")), str(g.get("words", ""))], "good", "trophy")
+		var at = banner
+		var pop = func():
+			if is_instance_valid(at) and at.is_inside_tree():
+				Kit.burst(at, Pal.GOOD, 26)
+		if banner.is_inside_tree():
+			banner.get_tree().create_timer(0.08).timeout.connect(pop)
+		else:
+			banner.ready.connect(func():
+				if is_instance_valid(at) and at.is_inside_tree():
+					at.get_tree().create_timer(0.08).timeout.connect(pop))
+
+
+## The banner's second line: which set is set up for it and how it counts, or that it is done.
+func _goal_words(i: int, met: bool) -> String:
+	if met:
+		return "Nailed it. It counts when you save the workout."
+	var e = exercises[i]
+	if str(_goal_of(i).get("type", "")) == "day_reps":
+		return "Every rep of the day counts: tick your sets as you go."
+	for j in range(e.sets.size()):
+		if bool(e.sets[j].get("goal", false)):
+			return "Set %d is set up for it: tick it once it's done." % (j + 1)
+	return "Change any set to it, then tick it once it's done."
+
+
+## A workout under way (the kept draft, LogSessionForm._take_draft) when today's prep changed since: a goal
+## picked on the Challenges card, another way picked for the equipment there is, sets changed in the prep. An
+## exercise still as the plan filled it in (untouched) is made again from the prep, its goal and goal set with
+## it; one that was prepped as another variation of its movement since becomes that one. A touched exercise is
+## left alone. True when something changed.
+func sync_with_prep() -> bool:
+	var f = _form()
+	if editing_id != null or f == null or str(f.date) != App.today:
+		return false
+	var prepped = Prep.lifts_of(Prep.of(App.settings(), App.today))
+	if prepped.is_empty():
+		return false
+	var names = {}
+	for e in exercises:
+		names[Xp.normalize_exercise(str(e.name))] = true
+	var changed = false
+	for i in range(exercises.size()):
+		var e = exercises[i]
+		if not bool(e.get("planned", false)):
+			continue
+		var nm = str(e.name).strip_edges()
+		var target = nm
+		if Prep.lift_on(App.settings(), App.today, nm) == null:
+			# Prepped as another way of its movement (that way not in the workout yet): that one.
+			target = ""
+			var mk = Xp.normalize_exercise(Missions.move_of(nm))
+			for y in prepped:
+				var yk = Xp.normalize_exercise(str(y.name))
+				if not names.has(yk) and Xp.normalize_exercise(Missions.move_of(str(y.name))) == mk:
+					target = str(y.name)
+					break
+			if target == "":
+				continue
+		var pd = _prepped_draft(target)
+		if pd == null:
+			continue
+		if target == nm and _same_draft(pd, e) and Challenges.same_option(_goal_in(pd), _goal_of(i)):
+			continue
+		# (its place in a superset and the keys touched stay as they are in this workout)
+		pd.erase("ss")
+		for k in ["ss", "both", "pt", "effort"]:
+			if e.get(k) != null:
+				pd[k] = e[k]
+		pd["planned"] = true
+		names.erase(Xp.normalize_exercise(nm))
+		names[Xp.normalize_exercise(target)] = true
+		exercises[i] = pd
+		changed = true
+	return changed
+
+
+## The same lift as it would be saved, with the same set set up for a goal.
+func _same_draft(a: Dictionary, b: Dictionary) -> bool:
+	if _mode_of(a) != _mode_of(b) or sets_from_draft(a, wu) != sets_from_draft(b, wu):
+		return false
+	var ga = (a.sets as Array).map(func(x): return bool(x.get("goal", false)))
+	var gb = (b.sets as Array).map(func(x): return bool(x.get("goal", false)))
+	return ga == gb
+
+
+# ---------------------------------------------------------------------------
+# LOCK-IN (2026-11-28, the user: "once in a workout. Make a way to finish or complete each set and rep... when
+# scrolling or looking you can't tell which has been done yet. So that way it locks in that set and then the
+# exercise once you lock in a few sets and then lock in that exercise, maybe changing that boxes color"). A set
+# whose number is tapped is LOCKED IN: its row becomes a slim green line of the same height, the set in words, no
+# keys; a tap on the line unlocks it. "Lock in" at the foot of a card (green once every set with reps is locked)
+# locks the rest and folds the card into one green bar where the key was; a tap on the bar opens it again. The
+# form's head counts the exercises done. "done" and "closed" live in the kept draft only.
+# ---------------------------------------------------------------------------
+
+## A set's row, editable or locked in: the same height (a Stepper's, finger sized on a phone).
+const SET_ROW_H = 30
+const SET_ROW_H_FINGERS = 40
+
+
+static func set_row_h() -> int:
+	return SET_ROW_H_FINGERS if Kit.fingers else SET_ROW_H
+
+
+func is_closed(i: int) -> bool:
+	return i >= 0 and i < exercises.size() and bool(exercises[i].get("closed", false))
+
+
+## How many exercises are locked in (their cards folded).
+func closed_count() -> int:
+	var n = 0
+	for i in range(exercises.size()):
+		if is_closed(i):
+			n += 1
+	return n
+
+
+## The name the "Lock in" key and the bar it folds into share: UiScreen keeps the one where the other was.
+func _lock_anchor(i: int) -> String:
+	var k = Xp.normalize_exercise(str(exercises[i].name)) if i < exercises.size() else ""
+	return "exlock:" + (k if k != "" else "#%d" % i)
+
+
+## A set in words, as its locked line says it: "8 × 60 kg", "3 × 30 s hold", "12 · green band", "8 reps BW".
+func _set_words(e: Dictionary, s: Dictionary) -> String:
+	var reps = int(LogWidgets.num(s.get("reps", "")))
+	var said = ""
+	if bool(e.get("timed", false)):
+		var sec = int(LogWidgets.num(s.get("hold", "")))
+		said = ("%d s hold" % sec) if reps <= 1 else ("%d × %d s hold" % [reps, sec])
+	elif bool(e.get("band", false)):
+		said = "%d · %s" % [reps, Bands.words(str(s.get("band", Bands.DEFAULT)))]
+	elif bool(e.get("bodyweight", false)):
+		said = "%d reps BW" % reps
+	else:
+		var w = LogWidgets.num(s.get("weight", ""))
+		said = ("%d × %s %s" % [reps, LogWidgets.trim_num(w), wu]) if w > 0.0 else ("%d reps" % reps)
+	if _both(e) and not bool(e.get("timed", false)):
+		said += " " + Sides.SHORT
+	return said
+
+
+## Does this one set do the exercise's goal by itself?
+func _set_meets_goal(i: int, j: int) -> bool:
+	var g = _goal_of(i)
+	if g.is_empty() or j >= exercises[i].sets.size():
+		return false
+	var one = exercises[i].duplicate()
+	one["sets"] = [exercises[i].sets[j]]
+	return Challenges.hit(g, sets_from_draft(one, wu))
+
+
+## A set locked in: one key the width of the row (a tap unlocks it), a pale green line with the green tick where
+## the number was, the set in words, its trend badges (the slot _refresh_exercise fills) and a lock at the end. A
+## goal set's line has a gold rim (green and gold) and its star. {"row": Button, "slot": HBoxContainer}.
+func _locked_row(i: int, j: int, label_name: String, goal: bool) -> Dictionary:
+	var e = exercises[i]
+	var s = e.sets[j]
+	var b = Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	b.custom_minimum_size = Vector2(0, set_row_h())
+	var looks = LogWidgets.locked_line_looks(goal)
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.tooltip_text = "%s: set %d locked in (tap to change it)" % [label_name, j + 1]
+	b.set_meta("anchor_id", _set_anchor(i, j))
+	b.set_meta("set_line", "%d:%d" % [i, j])
+	b.set_meta("set_row_done", true)
+	b.set_meta("set_row_goal", goal)
+	b.pressed.connect(toggle_set_done.bind(i, j))
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.set_anchors_preset(Control.PRESET_FULL_RECT)
+	h.offset_right = -8
+	# (where the number's key was, the same size: the green tick of a set done)
+	var tick = Kit.tick_box(true, 18 if Kit.fingers else 20)
+	tick.set_meta("set_tick", "%d:%d" % [i, j])
+	tick.set_meta("set_done", true)
+	h.add_child(tick)
+	var said = _set_words(e, s)
+	var words = Kit.label(said, 15, LogWidgets.locked_ink(), true)
+	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	words.set_meta("set_words", said)
+	h.add_child(words)
+	var slot = Kit.hbox(3)
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var clipper = Control.new()
+	clipper.clip_contents = true
+	clipper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clipper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slot.set_anchors_preset(Control.PRESET_FULL_RECT)
+	slot.offset_left = 2
+	clipper.add_child(slot)
+	h.add_child(clipper)
+	h.add_child(Kit.vcenter(Icons.rect("lock", 16, LogWidgets.locked_ink())))
+	b.add_child(h)
+	if goal and _set_meets_goal(i, j):
+		Fx.shine(b, 3.0, 0.3, 0.4)
+	return {"row": b, "slot": slot}
+
+
+## The key at the foot of a card: lock the exercise in. Wood until every set with reps is locked in, then green
+## and shining; switched off while no set is. The words never change (UiScreen finds the key by its name).
+func _lock_key(i: int) -> Button:
+	var e = exercises[i]
+	var any = e.sets.any(func(x): return bool(x.get("done", false)))
+	var all = all_ticked(i)
+	var b = Kit.button("Lock in", "good" if all else "secondary", lock_exercise.bind(i), "md", "lock")
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.disabled = not any
+	b.tooltip_text = "Lock in %s: every set with reps, and fold the card" % label_name_of(i)
+	b.set_meta("lock_exercise", i)
+	b.set_meta("lock_ready", all)
+	b.set_meta("anchor_id", _lock_anchor(i))
+	if all:
+		Fx.shine(b, 2.4, 0.2, 0.5)
+	return b
+
+
+## Lock an exercise in: every set with reps (an empty set is left as it is), and its card folds into a bar.
+func lock_exercise(i: int) -> void:
+	if i < 0 or i >= exercises.size():
+		return
+	var e = exercises[i]
+	var goal_was = _goal_met(i)
+	var any = false
+	for s in e.sets:
+		if LogWidgets.num(s.reps) > 0.0:
+			s["done"] = true
+			any = true
+	if not any:
+		Sfx.error()
+		App.toast("Put in the reps of a set first, then lock it in", "info", "lock")
+		return
+	e["closed"] = true
+	_touched(i)
+	if started <= 0.0:
+		started = Time.get_unix_time_from_system()
+	_bar_cheer[_lock_anchor(i)] = true
+	if _goal_shown(i) and not goal_was and _goal_met(i):
+		var g = _goal_of(i)
+		Sfx.pr()
+		Sfx.buzz(2)
+		App.toast("Mission done: %s, %s!" % [str(g.get("title", "")), str(g.get("words", ""))], "good", "trophy")
+	else:
+		Sfx.achievement()
+		Sfx.buzz(2)
+		if closed_count() == exercises.size():
+			App.toast("Every exercise locked in. Finish the session when you are ready.", "good", "check")
+	_changed(true)
+
+
+## A tap on a folded card's bar: open it again (its sets stay locked in).
+func open_exercise(i: int) -> void:
+	if not is_closed(i):
+		return
+	Sfx.tap()
+	exercises[i].erase("closed")
+	_changed(true)
+
+
+## A card locked in: one green bar in its place in the list, with the green tick, the movement and its variation,
+## the sets in short words ("8, 8, 7 @ 60 kg") and MISSION DONE in gold when its goal was met. A key: a tap opens
+## the card again, its "Lock in" key where the bar was (they share a name).
+func _closed_bar(i: int) -> Button:
+	var e = exercises[i]
+	var nm = str(e.name).strip_edges()
+	# (every list kept per exercise gets this one's place, so the cards after it keep their numbers)
+	_built_names.append(nm)
+	_cards.append(null)
+	_titled.append(true)
+	_filed.append(null)
+	_try.append(null)
+	_goal_slots.append(null)
+	_badges.append([])
+	_wsteps.append([])
+	_deltas.append(null)
+	_plates.append(null)
+	var sp = LiftNames.split(nm if nm != "" else label_name_of(i))
+	var h = Kit.hbox(10)
+	h.add_child(Kit.vcenter(Kit.tick_box(true, 24)))
+	var v = Kit.vbox(1)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var top = Kit.squeeze(6)
+	top.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var mv = Kit.soft_name(str(sp.move), 15, Pal.CREAM, true, 220.0)
+	mv.add_theme_constant_override("outline_size", Kit.outline_for(15))
+	mv.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	mv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(mv)
+	if str(sp.variation) != "":
+		top.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+	var glabel = str(_labels[i]) if i < _labels.size() else ""
+	if glabel != "":
+		var gt = Kit.tag(glabel, Pal.SECOND, true, 11)
+		gt.set_meta("superset_tag", glabel)
+		top.add_child(Kit.vcenter(gt))
+	v.add_child(top)
+	var words = LiftHistory.describe_sets(sets_from_draft(e, wu), _fmt_w)
+	if words == "":
+		words = "Locked in"
+	var sl = Kit.clip(words, 13, Pal.CREAM, true)
+	sl.add_theme_constant_override("outline_size", Kit.outline_for(13))
+	sl.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	sl.set_meta("bar_sets", words)
+	v.add_child(sl)
+	h.add_child(v)
+	var mission = _goal_shown(i) and _goal_met(i)
+	if mission:
+		var mt = LogWidgets.goal_tag("MISSION DONE", 11)
+		mt.set_meta("bar_mission", true)
+		h.add_child(Kit.vcenter(mt))
+	h.add_child(Kit.vcenter(Icons.rect("chevron_down", 16, Pal.CREAM)))
+	var b = LogWidgets.block_key("", "green", h, open_exercise.bind(i), 10, 7, 2)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.tooltip_text = "%s is locked in: tap to open it again" % label_name_of(i)
+	b.set_meta("anchor_id", _lock_anchor(i))
+	b.set_meta("exercise_done", nm)
+	b.set_meta("bar_of", i)
+	b.set_meta("bar_mission", mission)
+	if mission:
+		Fx.shine(b, 3.0, 0.4, 0.45)
+	var ck = _lock_anchor(i)
+	if _bar_cheer.has(ck):
+		_bar_cheer.erase(ck)
+		var at = b
+		var pop = func():
+			if is_instance_valid(at) and at.is_inside_tree():
+				Kit.burst(at, Pal.ACCENT if mission else Pal.GOOD, 24)
+		b.ready.connect(func():
+			if is_instance_valid(at) and at.is_inside_tree():
+				at.get_tree().create_timer(0.06).timeout.connect(pop))
+	return b
+
+
+## The form head's line (LogSessionForm puts it under the day and the time): "2 of 5 exercises done" with a pip a
+## exercise, green as cards are locked in. Null with no exercise yet, or for a saved workout opened again.
+func progress_row():
+	if editing_id != null or exercises.is_empty():
+		return null
+	var total = exercises.size()
+	var done = closed_count()
+	var h = Kit.hbox(8)
+	h.set_meta("lock_progress", "%d of %d" % [done, total])
+	h.add_child(Kit.vcenter(Icons.rect("lock", 16)))
+	var said = "%d of %d exercise%s done" % [done, total, "" if total == 1 else "s"]
+	var l = Kit.clip(said, 13, Pal.GOLD_TEXT if done == total else Pal.CREAM, true)
+	l.add_theme_constant_override("outline_size", Kit.outline_for(13))
+	l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	l.set_meta("lock_words", said)
+	h.add_child(l)
+	h.add_child(Kit.vcenter(Kit.pips(done, total, Pal.GOOD, 12)))
+	return h

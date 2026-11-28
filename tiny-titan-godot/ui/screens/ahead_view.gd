@@ -46,7 +46,18 @@ static func card():
 	for a in days.slice(0, STRIP_DAYS):
 		cells.add_child(_day_tile(a))
 	c.add(cells)
-	# Prep tomorrow (PrepView): its lifts the way you'll do them, with what you'll have.
+	## (2026-11-28, the user: "Now it's day of my workout and I can't prep one for TODAY") Prep today and prep
+	## tomorrow (PrepView): the lifts the way you'll do them, with what you'll have. Side by side when they fit,
+	## else one under the other.
+	var keys = Kit.flow(6)
+	# Today, on a lift day (not one called rest).
+	if not bool(App.plan().get("off", false)):
+		var t_prepped = Prep.of(App.settings(), App.today) != null
+		var tk = Kit.button("Edit today's prep" if t_prepped else "Prep today", "secondary", PrepView.open.bind(App.today), "md", "check" if t_prepped else "edit")
+		tk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tk.tooltip_text = "Pick each lift's way and equipment, its weights and reps, supersets and a record to go for today"
+		tk.set_meta("ahead_prep_today", t_prepped)
+		keys.add_child(tk)
 	var tomorrow = Dates.add_days(App.today, 1)
 	var t_ahead = days.filter(func(a): return str(a.date) == tomorrow)
 	# (any day but one called rest: a day the game sees no lifts for can be prepped from nothing)
@@ -56,7 +67,9 @@ static func card():
 		pk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		pk.tooltip_text = "Pick each lift's way and equipment, its weights and reps, and supersets for tomorrow"
 		pk.set_meta("prep_tomorrow", prepped)
-		c.add(pk)
+		keys.add_child(pk)
+	if keys.get_child_count() > 0:
+		c.add(keys)
 	return c
 
 
@@ -174,6 +187,12 @@ static func _lift_row(l: Dictionary, wu: String) -> Control:
 	if l.has("dose"):
 		top.add_child(Kit.vcenter(Kit.tag("FOR " + Dose.part_name(str(l.dose.part)).to_upper(), JourneyLifts.part_color(str(l.dose.part)), true, 10)))
 	left.add_child(top)
+	# (2026-11-28) a record picked as that day's goal in its prep (Prep.with_goal): a gold tag under the name.
+	var goal = l.get("goal") if l.get("goal") is Dictionary else {}
+	if not goal.is_empty():
+		var gt = TodayView._gold_tag("GOAL · " + TodayView.goal_words(goal, wu), 10, 200.0)
+		gt.set_meta("ahead_goal", str(goal.get("type", "")))
+		left.add_child(gt)
 	# The way done last in a word: its variation, or the equipment of a plain
 	# one ("cable", "bodyweight"); nothing for a lift with neither.
 	var main_word = str(sp.variation)
@@ -207,8 +226,10 @@ static func _lift_row(l: Dictionary, wu: String) -> Control:
 	var aim = PanelContainer.new()
 	aim.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	aim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	aim.add_theme_stylebox_override("panel", PixBox.block_set("blue" if first_time else "orange", 6, 2, 1)["normal"])
-	var al = Kit.outlined(_aim(l, wu), 12)
+	# (a day with a goal on this lift: its aim, the prep's sets with the goal as set 1, on gold)
+	var face = "gold" if not goal.is_empty() else ("blue" if first_time else "orange")
+	aim.add_theme_stylebox_override("panel", PixBox.block_set(face, 6, 2, 1)["normal"])
+	var al = Kit.outlined(_aim(l, wu), 12) if face != "gold" else Kit.label(_aim(l, wu), 12, Pal.INK, true)
 	al.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	aim.add_child(al)
 	aim.set_meta("ahead_aim", al.text)

@@ -180,7 +180,13 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	App.go("home")
 	await ShotHelper.wait(tree, 1.0)
 	var sw = _one("mission_swap")
-	check(sw != null and App.reroll_left(), "MISSIONS offers one swap today")
+	# (only when some mission of today can be swapped: on some weekdays the demo player's day has only Show up
+	# and XP, done already)
+	var can_swap = App.quests().daily.any(func(m): return Missions.can_reroll(m))
+	if can_swap:
+		check(sw != null and App.reroll_left(), "MISSIONS offers one swap today")
+	else:
+		check(sw == null, "nothing to swap today, so no swap key")
 	if sw != null:
 		ShotHelper.reveal(sw)
 		await ShotHelper.wait(tree, 0.4)

@@ -65,7 +65,13 @@ func _open_card() -> void:
 		return
 	ShotHelper.reveal(card)
 	await ShotHelper.frames(tree, 3)
-	await ShotHelper.click(tree, card)
+	# (a tap on a day's tile: the card's middle is the Prep keys since 2026-11-28)
+	var tile = null
+	for n in ShotHelper.walk(card):
+		if n is Control and n.has_meta("ahead_tile") and n.is_visible_in_tree():
+			tile = n
+			break
+	await ShotHelper.click(tree, tile if tile != null else card)
 	await ShotHelper.wait(tree, 0.7)
 
 

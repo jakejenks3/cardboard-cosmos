@@ -170,10 +170,19 @@ func _take_draft() -> void:
 						row["band"] = str(s.band)
 					if bool(s.get("done", false)):
 						row["done"] = true
+					# (the set set up for the lift's goal: LogLiftEditor's goals)
+					if bool(s.get("goal", false)):
+						row["goal"] = true
 					sets.append(row)
 			var one = {"name": str(e.get("name", "")), "bodyweight": bool(e.get("bodyweight", false)), "timed": bool(e.get("timed", false)), "sets": sets}
 			if bool(e.get("planned", false)):
 				one["planned"] = true
+			# (an exercise locked in comes back folded: LogLiftEditor's lock-in; never saved with the workout)
+			if bool(e.get("closed", false)):
+				one["closed"] = true
+			# The goal picked for it in the day's prep comes back with the workout (it is never saved with it).
+			if e.get("goal") is Dictionary and not (e.goal as Dictionary).is_empty():
+				one["goal"] = e.goal
 			# (a band instead of a weight, and the L+R and PT keys once touched)
 			if bool(e.get("band", false)):
 				one["band"] = true
@@ -204,6 +213,11 @@ func _take_draft() -> void:
 	lift.started = float(d.get("started", 0.0))
 	restored = true
 	_draft_text = JSON.stringify(_draft_dict())
+	# A goal (or another way) picked in today's prep since the workout was started: the exercises still as the plan
+	# filled them in take it (LogLiftEditor.sync_with_prep); touched ones stay as they are. Written out at the next
+	# refresh.
+	if discipline == "lift" and lift.sync_with_prep():
+		_draft_text = ""
 
 
 func _draft_dict() -> Dictionary:
@@ -371,6 +385,13 @@ func build(parent: Control) -> void:
 	if discipline == "lift" or discipline == "climb":
 		_chip_row = Kit.hbox(4)
 		under.append(_chip_row)
+	# A lift workout's exercises done (locked in), under the day and the time: filled once the lift part is built
+	# (it takes in the lifts sent over from the plan), hidden while there is nothing to count.
+	var progress_slot = null
+	if discipline == "lift":
+		progress_slot = Kit.vbox(0)
+		progress_slot.visible = false
+		under.append(progress_slot)
 	if discipline == TT.MISC:
 		var mm = Misc.meta(kind)
 		parent.add_child(LogWidgets.topbar(discipline, "%s %s" % [verb, str(mm.short).to_lower()], close, remove if editing != null else Callable(), str(mm.icon), under))
@@ -405,6 +426,10 @@ func build(parent: Control) -> void:
 	match discipline:
 		"lift":
 			lift.build(parent)
+			var pr = lift.progress_row()
+			if pr != null and progress_slot != null:
+				progress_slot.add_child(pr)
+				progress_slot.visible = true
 		"climb":
 			_build_climb(parent)
 		_:

@@ -888,6 +888,45 @@ func set_prep(date: String, lifts: Array) -> void:
 	update_settings({Prep.KEY: Prep.with_prep(saved.settings, date, lifts, today, now_ms())})
 
 
+## The day's plan (today's, or a day of Missions.ahead), or null: what a prep starts from.
+func plan_on(date: String):
+	if date == today:
+		return plan()
+	for a in ahead():
+		if str(a.date) == date:
+			return a.plan
+	return null
+
+
+## The last sets of `lift_name` before `date` ([] when never done).
+func _last_sets_before(lift_name: String, date: String) -> Array:
+	var hist = Missions._history_before(sessions(), lift_name, date)
+	return hist[0].sets if not hist.is_empty() else []
+
+
+## A record picked as the goal of `lift_name` on `date` (Prep.with_goal: into the day's prep, made from the
+## plan when there is none; set 1 becomes the record). `o` empty takes the goal off.
+func prep_goal(lift_name: String, o: Dictionary, date: String = "") -> void:
+	var d = today if date == "" else date
+	var p = plan_on(d)
+	var lifts = p.get("lifts", []) if p != null else []
+	update_settings({Prep.KEY: Prep.with_goal(saved.settings, d, lift_name, o, today, lifts, Missions._step_kg(weight_unit()), _last_sets_before(lift_name, d), now_ms())})
+
+
+## The prepped lift of `planned`'s movement done as `way` on `date` (the equipment there is: Prep.with_way).
+func prep_way(planned: String, way: String, date: String = "") -> void:
+	var d = today if date == "" else date
+	var p = plan_on(d)
+	var lifts = p.get("lifts", []) if p != null else []
+	update_settings({Prep.KEY: Prep.with_way(saved.settings, d, planned, way, today, lifts, Missions._step_kg(weight_unit()), _last_sets_before(way, d), now_ms())})
+
+
+## The goal picked for `lift_name` on `date` in its prep ({} when none).
+func goal_on(lift_name: String, date: String = "") -> Dictionary:
+	var x = Prep.lift_on(saved.settings, today if date == "" else date, lift_name)
+	return Prep.goal_of(x)
+
+
 ## The next days as they will probably go (Missions.ahead; cached). Read only:
 ## nothing of it is stored.
 func ahead() -> Array:

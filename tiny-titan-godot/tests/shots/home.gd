@@ -4,6 +4,8 @@ extends RefCounted
 ## "section"): their order, the gap between them, and that nothing in MISSIONS
 ## repeats a Today done box. Since 2026-11-26: a level tile of YOUR WEEK opens
 ## the discipline's sheet (ui/screens/discipline_sheet.gd), not the log form.
+## Since 2026-11-28: no CHALLENGES section (the day's lift challenges are
+## strips in the Today card's lift rows).
 
 var fails = 0
 
@@ -124,7 +126,7 @@ func _sections(main: Node) -> void:
 			order.append(str(n.get_meta("section")))
 			nodes[str(n.get_meta("section"))] = n
 	print("sections: ", order)
-	var want = ["today", "challenges", "ahead", "todo", "reading", "missions", "adventure", "week", "goals", "recent"]
+	var want = ["today", "ahead", "todo", "reading", "missions", "adventure", "week", "goals", "recent"]
 	var last = -1
 	var in_order = true
 	for id in want:
@@ -136,6 +138,16 @@ func _sections(main: Node) -> void:
 		last = at
 	check(in_order, "the sections come in order: today, coming up, to do, reading, missions, adventure, your week, almost there, recent")
 	check(order.size() > 0 and order[0] == "today", "Today is the first section")
+	# (2026-11-28) The day's lift challenges are inside the Today card's lift rows: no section of their own, and
+	# MISSIONS does not list a challenge the card shows.
+	check(not order.has("challenges"), "no CHALLENGES section: the challenges are in the Today card's rows")
+	var ch = App.quests().daily.filter(func(m): return bool(m.get("challenge", false)))
+	if nodes.has("today"):
+		var strips = ShotHelper.walk(nodes.today).filter(func(n): return n.has_meta("challenge"))
+		check(strips.size() == ch.size(), "the Today card has a MISSION strip per challenge (%d of %d)" % [strips.size(), ch.size()])
+	if nodes.has("missions"):
+		var listed = ch.filter(func(m): return ShotHelper.find_text(nodes.missions, str(m.title)) != null)
+		check(listed.is_empty(), "MISSIONS does not list them again")
 	for id in ["today", "todo", "reading", "missions", "adventure", "week"]:
 		check(order.has(id), "the %s section is there" % id)
 	check(screen.get_theme_constant("separation") == HomeScreen.SECTION_GAP, "sections are %d apart" % HomeScreen.SECTION_GAP)

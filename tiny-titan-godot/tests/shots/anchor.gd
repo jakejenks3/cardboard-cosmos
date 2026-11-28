@@ -33,6 +33,10 @@ func click_at(pos: Vector2) -> void:
 
 
 func button(text: String):
+	# A key whose words are exactly these, else the first that contains them ("Add" is also in "Add exercise").
+	for n in ShotHelper.walk(main):
+		if n is Button and n.is_visible_in_tree() and str(n.text).strip_edges().to_lower() == text.to_lower():
+			return n
 	return ShotHelper.find_button(main, text)
 
 
@@ -68,15 +72,11 @@ func hammer(text: String, times: int, before_each: Callable = Callable()) -> voi
 func run(m: Node, t: SceneTree) -> void:
 	main = m
 	tree = t
+	# (the bench is put in the workout directly: which key names it on the Log tab's first screen depends on
+	# the day's plan, and this walkthrough is about keys that must not move, not about how a lift is added)
+	App.pending_workout = ["Bench Press - Barbell"]
 	App.open_log("lift")
-	await ShotHelper.frames(tree, 6)
-	# Bring up Bench Press (pre-filled from history), then add sets with repeated clicks.
-	var l = ShotHelper.find_text(main, "Bench Press")
-	var n = l
-	while n != null and not (n is Card or n is BaseButton):
-		n = n.get_parent()
-	await ShotHelper.click(tree, n)
-	await ShotHelper.frames(tree, 6)
+	await ShotHelper.frames(tree, 8)
 	var form = main.find_children("*", "LogScreen", true, false)[0].form()
 	var sets_before = form.lift.exercises[0].sets.size() if "lift" in form else -1
 	await hammer("+ Set", 4)

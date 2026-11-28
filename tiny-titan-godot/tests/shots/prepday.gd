@@ -81,11 +81,36 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	var sh = _sheet()
 	check(sh != null and str(sh.get_meta("prep_sheet", "")) == tomorrow, "it opens tomorrow's prep")
 	var cards = _all("prep_lift", sh)
-	check(cards.size() >= 2, "a card a lift of tomorrow's plan (%d)" % cards.size())
+	# (some weekdays the demo's plan for tomorrow has one lift only: a lift of the same muscles is added then)
+	if cards.size() == 1:
+		var sug0 = _one("prep_suggest", null, sh)
+		if sug0 != null:
+			await _press(sug0)
+			sh = _sheet()
+			cards = _all("prep_lift", sh)
+	check(cards.size() >= 2, "a card a lift of tomorrow's plan, two or more (%d)" % cards.size())
 	await ShotHelper.snap(tree, "prepday_2_sheet")
 	if cards.size() < 2:
 		print("PREPDAY %d FAILED" % fails)
 		return
+
+	# A record to beat into the first set of a lift that has one (before any way is switched: a way never done
+	# has no records).
+	var rec = null
+	var rec_i = -1
+	for i in range(cards.size()):
+		var r = _one("prep_record", null, cards[i])
+		if r != null:
+			rec = r
+			rec_i = i
+			break
+	check(rec != null, "a lift shows its records to beat")
+	if rec != null:
+		await _press(rec)
+		var s0 = PrepView._lifts[rec_i].sets[0]
+		check(int(s0.reps) > 0, "a tap puts the record in its first set (%s reps, %s)" % [str(s0.reps), str(s0.w)])
+	sh = _sheet()
+	cards = _all("prep_lift", sh)
 
 	# Another way for the first lift.
 	var first_name = str(cards[0].get_meta("prep_lift"))
@@ -102,21 +127,6 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 		cards = _all("prep_lift", sh)
 		check(str(cards[0].get_meta("prep_lift")) == way and PrepView._lifts[0].name == way, "a tap makes it that way: %s" % way)
 		first_name = way
-
-	# A record to beat into the first set of a lift that has one.
-	var rec = null
-	var rec_i = -1
-	for i in range(cards.size()):
-		var r = _one("prep_record", null, cards[i])
-		if r != null:
-			rec = r
-			rec_i = i
-			break
-	check(rec != null, "a lift shows its records to beat")
-	if rec != null:
-		await _press(rec)
-		var s0 = PrepView._lifts[rec_i].sets[0]
-		check(int(s0.reps) > 0, "a tap puts the record in its first set (%s reps, %s)" % [str(s0.reps), str(s0.w)])
 
 	# A lift of the same muscles.
 	sh = _sheet()

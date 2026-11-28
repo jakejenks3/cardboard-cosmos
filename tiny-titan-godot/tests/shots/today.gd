@@ -4,6 +4,9 @@ extends RefCounted
 ## something new, PT), the missions made from the log (no minutes), a lift
 ## mission opening its page, beating a lift and claiming it, yesterday's
 ## missions, and the Morning goals card in Settings (nothing is sent).
+## Since 2026-11-28 the day's lifts are ONE list ("TODAY'S WORKOUT"): a row per
+## lift with its ways as keys (a tap makes one today's way, into today's prep)
+## and, for the day's challenges, a MISSION strip of records in the row.
 ## Prints CHECK lines.
 
 var main: Node
@@ -51,6 +54,32 @@ func _home() -> void:
 	await ShotHelper.wait(tree, 0.8)
 
 
+## A way key of a Today row (meta lift_option = the way's lift), or null.
+func _way(lift_name: String):
+	for n in ShotHelper.walk(main):
+		if n is Button and n.has_meta("challenge_way") and str(n.get_meta("lift_option", "")) == lift_name and n.is_visible_in_tree():
+			return n
+	return null
+
+
+## A real click at a point of the window (the pointer moved there first, as a mouse would: the screen keeps
+## what is under it in place when it is drawn again).
+func _click_at(pos: Vector2) -> void:
+	var mv = InputEventMouseMotion.new()
+	mv.position = pos
+	mv.global_position = pos
+	tree.root.push_input(mv)
+	await tree.process_frame
+	for down in [true, false]:
+		var ev = InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = down
+		ev.position = pos
+		ev.global_position = pos
+		tree.root.push_input(ev)
+		await tree.process_frame
+
+
 ## The done boxes on the Today card: [true / false per row].
 func _ticks() -> Array:
 	var out = []
@@ -94,13 +123,14 @@ func run(m: Node, t: SceneTree) -> void:
 	var plan = App.plan()
 	print("PLAN ", plan.label, " | ", plan.lifts.map(func(l): return "%s (%s)" % [l.name, l.why]), " | new ", plan.new.name if plan.new != null else "-")
 	var said = ShotHelper.all_text(main)
-	check(said.contains("TODAY") or ShotHelper.find_text(main, "PROBABLY TODAY") != null, "the Hero tab starts with Today")
-	check(not plan.lifts.is_empty() and ShotHelper.find_text(main, "PROBABLY TODAY") != null and said.contains("AIM"), "the likely lifts, each with what to aim for (%d)" % plan.lifts.size())
+	check(said.contains("TODAY") or ShotHelper.find_text(main, "TODAY'S WORKOUT") != null, "the Hero tab starts with Today")
+	check(not plan.lifts.is_empty() and ShotHelper.find_text(main, "TODAY'S WORKOUT") != null and said.contains("AIM"), "the likely lifts, one list, each with what to aim for (%d)" % plan.lifts.size())
 	var q = App.quests()
 	var beats = q.daily.filter(func(x): return str(x.id).contains(":beat:"))
 	check(not beats.is_empty() and q.daily.all(func(x): return str(x.unit) != "min") and q.weekly.all(func(x): return str(x.unit) != "min"), "missions to beat a lift, and none about minutes (%s)" % str(q.daily.map(func(x): return x.title)))
-	# (2026-11-27: a lift's mission is a challenge, records to pick from, in its own section under TODAY)
-	check(said.contains("PICK ONE") and ShotHelper.find_text(main, "Bench Press") != null, "the challenges are on the Hero tab")
+	# (2026-11-28: a lift's mission is a challenge, records to pick from, in a strip inside its lift's row)
+	var strips = ShotHelper.walk(main).filter(func(n): return n.has_meta("challenge"))
+	check(said.contains("PICK ONE") and ShotHelper.find_text(main, "Bench Press") != null and strips.size() == beats.size(), "the challenges are in the Today card's rows (%d strips)" % strips.size())
 	if not plan.pt.is_empty():
 		# 8 of 9 sets still to do this week, at most 3 of an exercise a day: today's goal is 3 sets.
 		var pt_goal = Missions.pt_goal(plan)
@@ -140,21 +170,44 @@ func run(m: Node, t: SceneTree) -> void:
 	check(t0.size() >= plan.lifts.size() + 1 and not t0.slice(0, plan.lifts.size()).has(true), "every Today row ends in a box; the lifts not done yet are empty (%s; the demo rides today)" % str(t0))
 
 	# The bench was done two ways (barbell, and dumbbells ten days ago): one row,
-	# the other way as a chip that opens it.
+	# its ways as keys under it, the barbell (today's way) lit; a tap on the
+	# dumbbell makes it today's way, in today's prep, and the key stays put.
 	await _home()
 	var bp = App.plan().lifts.filter(func(l): return str(LiftNames.split(str(l.name)).move) == "Bench Press")
 	check(bp.size() == 1 and bp[0].options.map(func(o): return str(o.name)).has("Bench Press - Dumbbell"), "one bench row, its dumbbell way among the options (%s)" % str(bp[0].options.map(func(o): return o.name) if not bp.is_empty() else []))
-	var db_chip = ShotHelper.find_button(main, "Dumbbell")
-	check(db_chip != null and ShotHelper.find_text(main, "OR") != null, "the other way is a chip under the row")
+	var db_chip = _way("Bench Press - Dumbbell")
+	var bar_chip = _way("Bench Press - Barbell")
+	check(db_chip != null and str(db_chip.text) == "Dumbbell" and ShotHelper.find_text(main, "TODAY'S WAY") != null, "the other way is a key in the row, under TODAY'S WAY")
+	check(bar_chip != null and bool(bar_chip.get_meta("challenge_way_on", false)) and not bool(db_chip.get_meta("challenge_way_on", false)) if db_chip != null else false, "the barbell, today's way, is lit")
 	check(ShotHelper.find_button(main, "Home") == null and ShotHelper.find_button(main, "Gym") == null, "no Gym / Home keys")
 	if db_chip != null:
 		ShotHelper.reveal(db_chip)
 		await ShotHelper.frames(tree, 3)
 		await ShotHelper.snap(tree, "today_7_ways")
-		await ShotHelper.click(tree, db_chip)
-		await ShotHelper.wait(tree, 0.7)
-		check(_sheet() != null and ShotHelper.all_text(_sheet()).contains("Dumbbell"), "the chip opens that way's page")
-		await _close_sheets()
+		db_chip = _way("Bench Press - Dumbbell")
+		var y_db = db_chip.get_global_rect().position.y
+		await _click_at(db_chip.get_global_rect().get_center())
+		await ShotHelper.wait(tree, 0.8)
+		var pp = App.plan()
+		check(bool(pp.get("prepped", false)) and Prep.lift_on(App.settings(), App.today, "Bench Press - Dumbbell") != null and Prep.lift_on(App.settings(), App.today, "Bench Press - Barbell") == null, "a tap on it preps today with the dumbbell in the barbell's place")
+		check(_sheet() == null, "and opens no page")
+		db_chip = _way("Bench Press - Dumbbell")
+		check(db_chip != null and bool(db_chip.get_meta("challenge_way_on", false)) and absf(db_chip.get_global_rect().position.y - y_db) < 1.0, "the dumbbell key is lit now, where it was")
+		var drow = ShotHelper.walk(main).filter(func(n): return n.has_meta("today_lift") and str(n.get_meta("today_lift")) == "Bench Press - Dumbbell")
+		check(drow.size() == 1 and ShotHelper.find_text(main, "YOUR PREP FOR TODAY") != null, "the row is the dumbbell bench now, in YOUR PREP FOR TODAY")
+		await ShotHelper.snap(tree, "today_7b_way_picked")
+		# The barbell again, then back to the game's own plan (this walkthrough goes on with it).
+		bar_chip = _way("Bench Press - Barbell")
+		if bar_chip != null:
+			await ShotHelper.wait(tree, 0.4)
+			await _click_at(bar_chip.get_global_rect().get_center())
+			await ShotHelper.wait(tree, 0.8)
+		check(Prep.lift_on(App.settings(), App.today, "Bench Press - Barbell") != null, "the barbell key puts it back")
+		var preps = (App.settings().get(Prep.KEY, {}) as Dictionary).duplicate(true)
+		preps.erase(App.today)
+		App.update_settings({Prep.KEY: preps})
+		await _home()
+		check(not bool(App.plan().get("prepped", false)), "today's prep cleared: the game's plan again")
 
 
 	# A likely lift opens its page on Compare.
@@ -167,7 +220,8 @@ func run(m: Node, t: SceneTree) -> void:
 	if row != null:
 		ShotHelper.reveal(row)
 		await ShotHelper.frames(tree, 3)
-		await ShotHelper.click(tree, row)
+		# (on the lift's name: the row's ways and its mission strip are keys of their own)
+		await _click_at(row.global_position + Vector2(row.size.x * 0.4, 18.0))
 		await ShotHelper.wait(tree, 0.7)
 		# (a lift not done today: its Compare is about its LATEST time, and says so)
 		check(_sheet() != null and (ShotHelper.all_text(_sheet()).contains("THIS TIME") or ShotHelper.all_text(_sheet()).contains("LATEST")), "it opens the lift on Compare")

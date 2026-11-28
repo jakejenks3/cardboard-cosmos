@@ -7,15 +7,32 @@ extends RefCounted
 ##   open(date)   the sheet: the day's lifts (the prep, else the day's plan as it stands), each a card: the WAY
 ##                to do it (the variations and equipment the player has used, other places and gear, the family's
 ##                stand-ins), the sets to aim for (reps and weight steppers), what it was last time and its best,
-##                the RECORDS TO BEAT that way (Challenges: a tap puts one in the first set), up / down / remove,
+##                the RECORDS TO BEAT that way (Challenges: a tap makes one the GOAL, see below), up / down / remove,
 ##                and "Superset with next". Under them: add a lift (the same muscles first, Prep.area_lifts, or a
 ##                search). Save prep makes it the day's plan (Missions.day_plan); "Use the game's plan" drops it.
-## Opened from Coming up (AheadView: the card's "Prep tomorrow" key and each day's "Prep" key).
+## Opened from Coming up (AheadView: the card's "Prep tomorrow" / "Prep today" keys and each day's "Prep" key)
+## and from the Today card's "Prep today" key.
+##
+## GOALS (2026-11-28, the user: "be able to pick and choose each a mission ahead of time that gets put into my
+## prep and then into my workout... click on the heavier challenge. This will add that rep/weight scheme with a
+## twinkle or highlighted overlay or something to my prep"): any day, TODAY included (the Today card's "Prep
+## today" key). A record under RECORDS TO BEAT is now a key that makes it the lift's GOAL (Prep.clean_goal on
+## the lift, Prep.apply_goal: set 1 becomes the record, marked "goal"); the same key again takes it off (set 1
+## goes back to how it was when the goal was picked in this sheet and not edited since). The picked record is
+## a gold key with a star and a twinkle (meta `prep_goal` = type), the card has a line under its name that
+## says the goal (meta `prep_goal_line` = type; without one it says how to pick one, meta `prep_goal_none`),
+## and the goal set's row has a gold wash, a star for its number and a "GOAL" tag where there is room (meta
+## `prep_goal_set` = "i:j"). Removing the goal set or another way drops the goal; "+ Set" never copies the
+## mark. Save stores it (`_to_store`). Nothing moves under the finger: the goal line is always there, and a
+## record key keeps its words and its width whether picked or not (only its face and icon change). The WAY
+## chips of a card keep their order when another way is picked (`_ways` kept on the entry).
 
 const MAX_WAYS = 8
 
 static var _date: String = ""
-static var _lifts: Array = []  # [{name, sets: [{reps: int, w: float (the player's unit; 0 = none)[, band][, holdSec]}], ss: int}]
+## [{name, sets: [{reps: int, w: float (the player's unit; 0 = none)[, band][, holdSec][, goal: true]}], ss: int,
+## goal: {} or the goal (Prep.clean_goal)[, _ways: the WAY chips][, _pre: set 1 before the goal was picked]}]
+static var _lifts: Array = []
 static var _kind: String = ""
 static var _label: String = ""
 static var _query: String = ""
@@ -51,22 +68,54 @@ static func open(date: String) -> void:
 	for x in src:
 		_lifts.append(_to_edit(x, wu))
 	_hist = LiftLibrary.stats(App.sessions().filter(func(s): return str(s.get("date", "")) < date))
-	_sheet = Kit.sheet("Prep · %s" % Dates.format_date(date, {"weekday": "long", "month": "short", "day": "numeric"}))
+	_sheet = Kit.sheet("Prep · %s" % _day_words(date))
 	_sheet.set_meta("prep_sheet", date)
 	_fill()
 	_sheet.open()
 
 
+## "Saturday, Nov 28 (today)": the sheet's head says when it is today's (or tomorrow's) prep.
+static func _day_words(date: String) -> String:
+	var words = Dates.format_date(date, {"weekday": "long", "month": "short", "day": "numeric"})
+	if date == App.today:
+		return words + " (today)"
+	if date == Dates.add_days(App.today, 1):
+		return words + " (tomorrow)"
+	return words
+
+
 static func _to_edit(x: Dictionary, wu: String) -> Dictionary:
+	var goal = Prep.goal_of(x).duplicate(true)
 	var sets = []
 	for one in x.get("sets", []):
-		var s = {"reps": int(one.get("reps", 0)), "w": snappedf(Fmt.kg_to_unit(float(one.get("weightKg", 0.0)), wu), 0.01)}
-		if str(one.get("band", "")) != "":
-			s["band"] = str(one.band)
-		if int(one.get("holdSec", 0)) > 0:
-			s["holdSec"] = int(one.holdSec)
+		var s = _set_to_edit(one, wu)
+		if goal.is_empty():
+			# (a set mark with no goal on the lift, as a plan's aim can carry, is no goal)
+			s.erase("goal")
 		sets.append(s)
-	return {"name": str(x.name), "sets": sets, "ss": int(x.get("ss", 0))}
+	return {"name": str(x.name), "sets": sets, "ss": int(x.get("ss", 0)), "goal": goal}
+
+
+static func _set_to_edit(one: Dictionary, wu: String) -> Dictionary:
+	var s = {"reps": int(one.get("reps", 0)), "w": snappedf(Fmt.kg_to_unit(float(one.get("weightKg", 0.0)), wu), 0.01)}
+	if str(one.get("band", "")) != "":
+		s["band"] = str(one.band)
+	if int(one.get("holdSec", 0)) > 0:
+		s["holdSec"] = int(one.holdSec)
+	if bool(one.get("goal", false)):
+		s["goal"] = true
+	return s
+
+
+static func _set_to_store(s: Dictionary, wu: String) -> Dictionary:
+	var one = {"reps": int(s.reps), "weightKg": Fmt.unit_to_kg(float(s.w), wu) if float(s.w) > 0.0 else 0.0}
+	if s.has("band"):
+		one["band"] = s.band
+	if s.has("holdSec"):
+		one["holdSec"] = s.holdSec
+	if bool(s.get("goal", false)):
+		one["goal"] = true
+	return one
 
 
 static func _to_store(wu: String) -> Array:
@@ -74,14 +123,35 @@ static func _to_store(wu: String) -> Array:
 	for x in _lifts:
 		var sets = []
 		for s in x.sets:
-			var one = {"reps": int(s.reps), "weightKg": Fmt.unit_to_kg(float(s.w), wu) if float(s.w) > 0.0 else 0.0}
-			if s.has("band"):
-				one["band"] = s.band
-			if s.has("holdSec"):
-				one["holdSec"] = s.holdSec
-			sets.append(one)
-		out.append({"name": x.name, "sets": sets, "ss": int(x.ss)})
+			sets.append(_set_to_store(s, wu))
+		var entry = {"name": x.name, "sets": sets, "ss": int(x.ss)}
+		var g = x.get("goal", {})
+		if g is Dictionary and not (g as Dictionary).is_empty():
+			entry["goal"] = g
+		out.append(entry)
 	return out
+
+
+## The goal of an edited lift ({} when none).
+static func _goal(x: Dictionary) -> Dictionary:
+	var g = x.get("goal", {})
+	return g if g is Dictionary else {}
+
+
+## The set that carries the goal (-1: none; a day's total marks no set).
+static func _goal_index(x: Dictionary) -> int:
+	for j in range(x.sets.size()):
+		if bool(x.sets[j].get("goal", false)):
+			return j
+	return -1
+
+
+## The lift loses its goal (its set marks too); set 1 keeps its numbers.
+static func _drop_goal(x: Dictionary) -> void:
+	x["goal"] = {}
+	x.erase("_pre")
+	for s in x.sets:
+		s.erase("goal")
 
 
 static func _fmt_w() -> Callable:
@@ -103,7 +173,7 @@ static func _fill() -> void:
 		sh.box.remove_child(ch)
 		ch.queue_free()
 	var head = Kit.hbox(8)
-	var intro = Kit.para("Pick how you'll do each lift with what you'll have, the weights and reps to aim for, and what to superset. This becomes the day's plan; you can still change anything when you log it.", 12, Pal.MUTED)
+	var intro = Kit.para("Pick how you'll do each lift with what you'll have, its sets, and what to superset. Tap a record to beat to make it the lift's goal: set 1 goes for it. This becomes the day's plan; you can still change anything when you log it.", 12, Pal.MUTED)
 	intro.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(intro)
 	if _label != "":
@@ -184,8 +254,26 @@ static func _lift_card(i: int, glabel: String) -> Control:
 	head.add_child(Kit.vcenter(down))
 	head.add_child(Kit.vcenter(LogWidgets.quiet_icon("close", PrepView._remove.bind(i), "Take %s out" % str(x.name), 28)))
 	c.add(head)
-	# The way to do it: variation and equipment.
-	var ways = _ways(str(x.name))
+	# Last time and the best, that way; the records to beat that way (Challenges: the day's, as the Hero tab's
+	# CHALLENGES have them for today), the goal first when it is no longer among them (as Missions.daily does).
+	var st = _hist.get(Xp.normalize_exercise(str(x.name)))
+	var done_before = st != null and not (st.history as Array).is_empty()
+	var recs = []
+	if done_before:
+		recs = App.challenge_options(str(x.name)) if _date == App.today else Challenges.options(str(x.name), st.history, _date, Missions._step_kg(wu), fmt_w)
+	var goal = _goal(x)
+	if not goal.is_empty() and not recs.any(func(o): return Challenges.same_option(o, goal)):
+		var g = goal.duplicate()
+		if not g.has("chip"):
+			g["chip"] = str(g.get("words", ""))
+		recs = ([g] + recs).slice(0, Challenges.MAX_OPTIONS)
+	# ## The goal, right under the name: always there (a line of one height), so picking a record moves nothing.
+	c.add(_goal_line(x, not recs.is_empty(), done_before))
+	# The way to do it: variation and equipment. (The chips keep their order when another is picked.)
+	var ways = x.get("_ways", [])
+	if not (ways is Array and (ways as Array).any(func(w): return Xp.normalize_exercise(str(w)) == Xp.normalize_exercise(str(x.name)))):
+		ways = _ways(str(x.name))
+		x["_ways"] = ways
 	if ways.size() > 1:
 		var wr = Kit.flow(5)
 		var cap = Kit.label("WAY", 9, Pal.MUTED, true)
@@ -198,36 +286,39 @@ static func _lift_card(i: int, glabel: String) -> Control:
 			k.set_meta("prep_way", str(w))
 			wr.add_child(k)
 		c.add(wr)
-	# Last time and the best, that way.
-	var st = _hist.get(Xp.normalize_exercise(str(x.name)))
-	var info = ""
-	if st != null and not (st.history as Array).is_empty():
-		info = "LAST %s: %s" % [Dates.format_date(str(st.history[0].date), {"month": "short", "day": "numeric"}).to_upper(), LiftHistory.describe_sets(st.history[0].sets, fmt_w)]
+	# Last time and the best, that way. (Never done: the goal line says "new to you".)
+	if done_before:
+		var info = "LAST %s: %s" % [Dates.format_date(str(st.history[0].date), {"month": "short", "day": "numeric"}).to_upper(), LiftHistory.describe_sets(st.history[0].sets, fmt_w)]
 		var best = 0.0
 		for h in st.history:
 			for one in LiftTrend.real_sets(h.get("sets", [])):
 				best = maxf(best, float(one.get("weightKg", 0)))
 		if best > 0.0:
 			info += " · BEST %s" % Fmt.fmt_weight(best, wu)
-	else:
-		info = "NEW TO YOU: find a weight for good, hard reps"
-	var il = Kit.clip(info, 11, Pal.MUTED, true)
-	il.set_meta("prep_last", info)
-	c.add(il)
-	# The records to beat that way (Challenges): a tap puts one in the first set.
-	var recs = []
-	if st != null:
-		recs = Challenges.options(str(x.name), st.history, _date, Missions._step_kg(wu), fmt_w)
+		var il = Kit.clip(info, 11, Pal.MUTED, true)
+		il.set_meta("prep_last", info)
+		c.add(il)
+	# ## The records to beat that way: a tap makes one the lift's GOAL (set 1 becomes it), a tap on the goal
+	# takes it off. A key has the same words and width either way; the goal's is gold, with a star and a twinkle.
 	if not recs.is_empty():
 		var rr = Kit.flow(5)
 		var rcap = Kit.label("RECORDS TO BEAT", 9, Pal.ACCENT, true)
 		rcap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		rr.add_child(rcap)
 		for o in recs:
+			var picked = not goal.is_empty() and Challenges.same_option(goal, o)
 			var lk = ChallengeView.look(str(o.type))
-			var rk = LogWidgets.mini_chip(ChallengeView.chip_text(o), false, PrepView._use_record.bind(i, o), lk[1], 7)
-			rk.tooltip_text = "%s: %s, %s (%s). Tap to aim for it in the first set." % [str(x.name), str(o.title), str(o.words), str(o.sub)]
+			var rk = LogWidgets.mini_chip(ChallengeView.chip_text(o), picked, Callable(), Pal.ACCENT if picked else lk[1], 7)
+			rk.icon = Icons.tex("star", Pal.CREAM) if picked else Icons.tex(str(lk[0]), lk[1])
+			rk.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			if picked:
+				rk.tooltip_text = "%s: your goal, %s (%s). Tap again to take it off." % [str(x.name), str(o.get("words", "")), str(o.get("title", ""))]
+				rk.set_meta("prep_goal", str(o.type))
+				Fx.twinkle(rk, Pal.CREAM, 3)
+			else:
+				rk.tooltip_text = "%s: %s, %s (%s). Tap to make it the goal: set 1 goes for it." % [str(x.name), str(o.get("title", "")), str(o.get("words", "")), str(o.get("sub", ""))]
 			rk.set_meta("prep_record", str(o.type))
+			rk.pressed.connect(PrepView._tap_record.bind(rk, i, o))
 			rr.add_child(rk)
 		c.add(rr)
 	# The sets to aim for.
@@ -251,11 +342,18 @@ static func _set_row(i: int, j: int) -> Control:
 	var x = _lifts[i]
 	var s = x.sets[j]
 	var wu = App.weight_unit()
+	var is_goal = bool(s.get("goal", false))
 	var row = Kit.hbox(4)
-	var n = Kit.label("%d" % (j + 1), 13, Pal.MUTED, true)
-	n.custom_minimum_size = Vector2(16, 0)
-	n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(n)
+	if is_goal:
+		# ## The goal set: a star where its number was (the same width, so nothing in the row moves).
+		var star = Icons.rect("star", 16)
+		star.custom_minimum_size = Vector2(16, 16)
+		row.add_child(star)
+	else:
+		var n = Kit.label("%d" % (j + 1), 13, Pal.MUTED, true)
+		n.custom_minimum_size = Vector2(16, 0)
+		n.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(n)
 	var rs = Kit.stepper(str(int(s.reps)), 1.0, PrepView._on_reps.bind(i, j), {"min": 0, "width": 34, "compact": true, "placeholder": "–"})
 	rs.tooltip_text = "%s: reps of set %d" % [str(x.name), j + 1]
 	rs.set_meta("prep_reps", "%d:%d" % [i, j])
@@ -275,8 +373,80 @@ static func _set_row(i: int, j: int) -> Control:
 	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(gap)
+	if is_goal:
+		# The "GOAL" tag lives in the room the row has left (it asks for none, and hides when there is too
+		# little, at finger sizes): the row never gets wider than the card.
+		var tag = Kit.tag("GOAL", Pal.ACCENT, true, 10)
+		tag.visible = false
+		tag.set_meta("prep_goal_tag", true)
+		gap.clip_contents = true
+		gap.add_child(tag)
+		gap.resized.connect(PrepView._place_tag.bind(gap, tag))
 	row.add_child(LogWidgets.quiet_icon("close", PrepView._remove_set.bind(i, j), "%s: take set %d out" % [str(x.name), j + 1], 26))
-	return row
+	# Every row sits on a wash with no margins (clear unless it is the goal set's), so the goal set's row is
+	# exactly as big as the others: gold, twinkling.
+	var bg = PanelContainer.new()
+	bg.mouse_filter = Control.MOUSE_FILTER_PASS
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Pal.with_alpha(Pal.ACCENT, 0.3) if is_goal else Color(0, 0, 0, 0)
+	sb.anti_aliasing = false
+	for side in [SIDE_LEFT, SIDE_RIGHT, SIDE_TOP, SIDE_BOTTOM]:
+		sb.set_content_margin(side, 0)
+	if is_goal:
+		# (drawn a little past the row, which takes no room)
+		sb.expand_margin_left = 4
+		sb.expand_margin_right = 4
+		sb.expand_margin_top = 2
+		sb.expand_margin_bottom = 2
+	bg.add_theme_stylebox_override("panel", sb)
+	bg.add_child(row)
+	if is_goal:
+		bg.set_meta("prep_goal_set", "%d:%d" % [i, j])
+		bg.tooltip_text = "%s: set %d goes for the goal" % [str(x.name), j + 1]
+		Fx.twinkle(bg, Pal.ACCENT, 3)
+	return bg
+
+
+## The "GOAL" tag of the goal set, just after the weight, shown only when the row has room for it.
+static func _place_tag(gap: Control, tag: Control) -> void:
+	if not is_instance_valid(gap) or not is_instance_valid(tag):
+		return
+	var m = tag.get_combined_minimum_size()
+	tag.size = m
+	tag.position = Vector2(4, floorf((gap.size.y - m.y) / 2.0))
+	tag.visible = gap.size.x >= m.x + 6.0
+
+
+## The line under a lift's name: its goal (a gold tag and the record), else how to pick one (or that the
+## lift is new to the player). Always one line of the same height.
+static func _goal_line(x: Dictionary, has_recs: bool, done_before: bool) -> Control:
+	var line = Kit.hbox(6)
+	line.custom_minimum_size = Vector2(0, 24)
+	var g = _goal(x)
+	if not g.is_empty():
+		line.add_child(Kit.icon_chip("star", "GOAL", Pal.ACCENT))
+		var words = str(g.get("words", ""))
+		if str(g.get("title", "")) != "":
+			words = "%s · %s" % [str(g.title), words]
+		var w = Kit.clip(words, 12, Pal.ACCENT, true)
+		w.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.add_child(w)
+		line.set_meta("prep_goal_line", str(g.get("type", "")))
+		line.tooltip_text = "%s: the goal. Set 1 goes for it; you can still change it when you log it." % str(x.name)
+		line.mouse_filter = Control.MOUSE_FILTER_PASS
+		return line
+	var text = "No goal yet: tap a record to beat below"
+	if not done_before:
+		text = "NEW TO YOU: find a weight for good, hard reps"
+	elif not has_recs:
+		text = "No record to beat this way yet"
+	var l = Kit.clip(text, 11, Pal.MUTED, not done_before)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if not done_before:
+		l.set_meta("prep_last", text)
+	line.add_child(l)
+	line.set_meta("prep_goal_none", true)
+	return line
 
 
 ## Add a lift: the same muscles as the day (Prep.area_lifts) or, typed, a search of everything.
@@ -370,28 +540,43 @@ static func _changed(rebuild: bool = true) -> void:
 		_fill()
 
 
+## (The goal set keeps its mark when its numbers are changed: the player may aim a little off the record.
+## Once changed, taking the goal off leaves set 1 as it is.)
 static func _on_reps(text: String, i: int, j: int) -> void:
 	if i < _lifts.size() and j < _lifts[i].sets.size():
 		_lifts[i].sets[j].reps = int(LogWidgets.num(text))
+		if bool(_lifts[i].sets[j].get("goal", false)):
+			_lifts[i].erase("_pre")
 		_dirty = true
 
 
 static func _on_weight(text: String, i: int, j: int) -> void:
 	if i < _lifts.size() and j < _lifts[i].sets.size():
 		_lifts[i].sets[j].w = LogWidgets.num(text)
+		if bool(_lifts[i].sets[j].get("goal", false)):
+			_lifts[i].erase("_pre")
 		_dirty = true
 
 
 static func _add_set(i: int) -> void:
 	Sfx.pop()
 	var sets = _lifts[i].sets
-	sets.append(sets[sets.size() - 1].duplicate() if not sets.is_empty() else {"reps": Prep.START_REPS, "w": 0.0})
+	var copy = sets[sets.size() - 1].duplicate() if not sets.is_empty() else {"reps": Prep.START_REPS, "w": 0.0}
+	# (a copy of the goal set is a plain set: one set goes for the goal)
+	copy.erase("goal")
+	sets.append(copy)
 	_changed()
 
 
+## Taking the goal set out takes the goal off with it.
 static func _remove_set(i: int, j: int) -> void:
 	Sfx.unpop()
-	_lifts[i].sets.remove_at(j)
+	var x = _lifts[i]
+	var was_goal = bool(x.sets[j].get("goal", false))
+	x.sets.remove_at(j)
+	if was_goal:
+		_drop_goal(x)
+		App.toast("%s: the goal went with its set" % Missions.short_name(str(x.name)), "info", "close")
 	_changed()
 
 
@@ -413,37 +598,62 @@ static func _remove(i: int) -> void:
 
 
 ## Another way: the sets become that way's aim (its last time + a step), or a plain start when never done.
+## A goal belongs to one way: it is dropped (the new way's records are there to pick from). The WAY chips stay
+## in their order.
 static func _set_way(i: int, way: String) -> void:
 	if Xp.normalize_exercise(way) == Xp.normalize_exercise(str(_lifts[i].name)):
 		return
 	Sfx.tick()
+	var had_goal = not _goal(_lifts[i]).is_empty()
 	var st = _hist.get(Xp.normalize_exercise(way))
 	var last = st.history[0].sets if (st != null and not (st.history as Array).is_empty()) else []
 	var x = _to_edit({"name": way, "sets": Prep.aim_of(last, Missions._step_kg(App.weight_unit()))}, App.weight_unit())
 	x["ss"] = int(_lifts[i].ss)
+	if _lifts[i].get("_ways") is Array:
+		x["_ways"] = _lifts[i]._ways
 	_lifts[i] = x
+	if had_goal:
+		App.toast("The goal was for the other way: pick a record for %s" % Missions.short_name(way), "info", "star")
 	_changed()
 
 
-## A record to beat, into the first set (its reps and weight; a band or a hold its own).
-static func _use_record(i: int, o: Dictionary) -> void:
+## ## A record to beat, tapped: it becomes the lift's goal (set 1 becomes the record, marked), or, when it is
+## the goal already, the goal comes off (set 1 back to how it was before, unless it was changed since).
+static func _tap_record(key: Control, i: int, o: Dictionary) -> void:
+	if i < 0 or i >= _lifts.size():
+		return
+	var x = _lifts[i]
+	var wu = App.weight_unit()
+	var nm = Missions.short_name(str(x.name))
+	var had = _goal(x)
+	if not had.is_empty() and Challenges.same_option(had, o):
+		Sfx.unpop()
+		var gi = _goal_index(x)
+		if gi >= 0 and x.get("_pre") is Dictionary:
+			x.sets[gi] = (x._pre as Dictionary).duplicate()
+		_drop_goal(x)
+		App.toast("Goal taken off %s" % nm, "info", "close")
+		_changed()
+		return
+	if had.is_empty():
+		# (set 1 as it is, to put back if this goal is taken off again)
+		if not x.sets.is_empty():
+			x["_pre"] = (x.sets[0] as Dictionary).duplicate()
+		else:
+			x.erase("_pre")
+	var stored = []
+	for s in x.sets:
+		stored.append(_set_to_store(s, wu))
+	var sets = []
+	for one in Prep.apply_goal(stored, o):
+		sets.append(_set_to_edit(one, wu))
+	x["sets"] = sets
+	x["goal"] = Prep.clean_goal(o)
 	Sfx.pop()
-	var sets = _lifts[i].sets
-	if sets.is_empty():
-		sets.append({"reps": 0, "w": 0.0})
-	var s = sets[0]
-	match str(o.type):
-		"hold":
-			s["holdSec"] = int(o.sec)
-		"day_reps":
-			pass
-		_:
-			s.reps = int(o.reps)
-			if str(o.get("band", "")) != "":
-				s["band"] = str(o.band)
-			elif float(o.get("kg", 0.0)) > 0.0:
-				s.w = snappedf(Fmt.kg_to_unit(float(o.kg), App.weight_unit()), 0.01)
-	App.toast("%s: set 1 aims for %s" % [Missions.short_name(str(_lifts[i].name)), str(o.words)], "info", "target")
+	if key != null and is_instance_valid(key):
+		Kit.burst(key, Pal.ACCENT, 14)
+		Kit.floater(key, "GOAL", Pal.ACCENT)
+	App.toast("Goal set: %s, %s. Save prep to keep it." % [nm, str(o.get("words", ""))], "good", "star")
 	_changed()
 
 
@@ -484,7 +694,9 @@ static func _save() -> void:
 	Sfx.claim()
 	App.set_prep(_date, _to_store(App.weight_unit()))
 	_dirty = false
-	App.toast("%s is prepped: %d lift%s" % [Dates.format_date(_date, {"weekday": "long"}), _lifts.size(), "" if _lifts.size() == 1 else "s"], "good", "check")
+	var goals = _lifts.filter(func(x): return not (x.get("goal", {}) as Dictionary).is_empty()).size()
+	var day = "Today" if _date == App.today else Dates.format_date(_date, {"weekday": "long"})
+	App.toast("%s is prepped: %d lift%s%s" % [day, _lifts.size(), "" if _lifts.size() == 1 else "s", (", %d goal%s" % [goals, "" if goals == 1 else "s"]) if goals > 0 else ""], "good", "check")
 	if _sheet != null and is_instance_valid(_sheet):
 		_sheet.close()
 

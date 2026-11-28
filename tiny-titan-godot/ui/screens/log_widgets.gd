@@ -115,6 +115,77 @@ static func key(text: String, face: Color, content: Control, on_press: Callable 
 	return b
 
 
+## A raised key in one of the Workshop's block faces (a Pal.BLOCKS name: "green", "gold"...) with any `content`
+## laid on it, sinking with it while held (LogWidgets.key, for a block face). `text` stays the Button's own,
+## unseen ("" for a key that must never be wider than its content lets it: its words are in `content`).
+static func block_key(text: String, face: String, content: Control, on_press: Callable = Callable(), pad_h: int = 10, pad_v: int = 6, lip: int = 2) -> Button:
+	var b = Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var looks = PixBox.block_set(face, pad_h, pad_v, lip)
+	for k in looks:
+		b.add_theme_stylebox_override(k, looks[k])
+	b.add_theme_stylebox_override("hover_pressed", looks["pressed"])
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	b.add_theme_font_size_override("font_size", 8)
+	for k in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color", "font_disabled_color"]:
+		b.add_theme_color_override(k, Color(0, 0, 0, 0))
+	var drop = (lip + 1) * PixBox.S
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.offset_left = pad_h
+	content.offset_right = -pad_h
+	content.offset_top = pad_v
+	content.offset_bottom = -pad_v - drop
+	b.add_child(content)
+	# (as tall as its content, and taller again once its words are measured on screen)
+	var fit = func():
+		if is_instance_valid(b) and is_instance_valid(content):
+			b.custom_minimum_size.y = content.get_combined_minimum_size().y + pad_v * 2 + drop
+	fit.call()
+	content.minimum_size_changed.connect(fit)
+	b.ready.connect(fit)
+	b.button_down.connect(func():
+		content.offset_top = pad_v + drop
+		content.offset_bottom = -pad_v)
+	b.button_up.connect(func():
+		content.offset_top = pad_v
+		content.offset_bottom = -pad_v - drop)
+	Kit.juice(b)
+	if on_press.is_valid():
+		b.pressed.connect(on_press)
+	return b
+
+
+## The looks of a set LOCKED IN (LogLiftEditor's lock-in): a pale green line with a deep green rim; a goal set's
+## has a gold rim and a gold ring inside it (green and gold). {"normal", "hover", "pressed", "disabled"}.
+static func locked_line_looks(goal: bool = false) -> Dictionary:
+	var fill = locked_fill()
+	var out = {}
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var f = fill
+		if state == "hover":
+			f = fill.lightened(0.1)
+		elif state == "pressed":
+			f = fill.darkened(0.07)
+		var rings = [Pal.ACCENT_DARK.darkened(0.2), Pal.ACCENT] if goal else [Pal.GOOD_DARK.darkened(0.3)]
+		rings.append(PixBox.bev(f.lightened(0.35), f.darkened(0.12)))
+		out[state] = PixBox.nine(rings, f, {"cut": 1, "pad_h": 0, "pad_v": 0})
+	return out
+
+
+## The fill of a locked set's line: the good green, pale.
+static func locked_fill() -> Color:
+	return Pal.GOOD.lerp(Pal.PANEL2, 0.58)
+
+
+## Words on a locked set's line: a deep green ink.
+static func locked_ink() -> Color:
+	return Pal.GOOD_DARK.darkened(0.45)
+
+
 ## A centred [icon] Text row for a key.
 static func key_row(icon: String, text: String, size: int, fg: Color, icon_px: int = 16, outline: bool = false) -> HBoxContainer:
 	var row = Kit.hbox(6)
@@ -147,6 +218,65 @@ static func badge(text: String, color: Color, size: int = 11) -> PanelContainer:
 	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	p.add_child(Kit.label(text, size, Pal.INK, true))
+	return p
+
+
+## A small gold tag with a star: a lift with a GOAL (a record picked for it in the day's prep or on the
+## Challenges card, Prep.goal_of), or the set that is set up for it. `text` "" is the star alone (a set row on
+## a phone has little room).
+static func goal_tag(text: String = "GOAL", size: int = 10) -> PanelContainer:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	p.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	p.add_theme_stylebox_override("panel", Kit.tag_box(Pal.ACCENT, 4 if text != "" else 2, 1))
+	var h = Kit.hbox(2)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Icons.rect("star", 16, Pal.INK)))
+	if text != "":
+		h.add_child(Kit.vcenter(Kit.tag_words(text, size, Pal.ACCENT)))
+	p.add_child(h)
+	return p
+
+
+## The MISSION banner of an exercise card (2026-11-28, the user: "when I workout it shows up there set up with
+## the top set being that goal... but shows the specific exercises I have missions for that day somehow"): a
+## gold block with a star in a slot, "MISSION · Heavier than ever: 52.5 kg × 6" and a line under it; green
+## "MISSION DONE" with a tick once it is met (`met`). The same two lines either way, so it never changes height.
+## A twinkle while it is to do, a glint once done. Not a key (a tap on it scrolls the page).
+static func goal_banner(goal: Dictionary, met: bool, under: String) -> PanelContainer:
+	var face = "green" if met else "gold"
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.add_theme_stylebox_override("panel", PixBox.block_set(face, 8, 4, 1)["normal"])
+	p.set_meta("goal_banner", str(goal.get("type", "")))
+	p.set_meta("goal_done", met)
+	var dark = PixBox.dark_words(face)
+	var fg = Pal.INK if dark else Pal.CREAM
+	var h = Kit.hbox(8)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(Kit.vcenter(Kit.badge("check" if met else "star", Pal.GOOD if met else Pal.ACCENT, 16)))
+	var v = Kit.vbox(0)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var said = "%s · %s: %s" % ["MISSION DONE" if met else "MISSION", str(goal.get("title", "Your goal")), str(goal.get("words", ""))]
+	var l1 = Kit.clip(said, 13, fg, true)
+	var l2 = Kit.clip(under, 11, fg, true)
+	for l in [l1, l2]:
+		if not dark:
+			l.add_theme_constant_override("outline_size", Kit.outline_for(13))
+			l.add_theme_color_override("font_outline_color", Pal.OUTLINE)
+		v.add_child(l)
+	l1.set_meta("goal_words", said)
+	h.add_child(v)
+	p.add_child(h)
+	p.tooltip_text = "%s: %s%s" % [str(goal.get("title", "Your goal")), str(goal.get("words", "")), (" (%s)" % str(goal.sub)) if str(goal.get("sub", "")) != "" else ""]
+	if met:
+		Fx.shine(p, 3.0, 0.3, 0.45)
+	else:
+		Fx.twinkle(p, Pal.CREAM, 2)
 	return p
 
 
