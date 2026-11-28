@@ -168,11 +168,9 @@ static func _row(e: Dictionary, rows: Array) -> Card:
 		# The last few times of the variation done most recently, as small bars.
 		var latest = e.get("done", [])
 		if not latest.is_empty() and latest[0].st != null and latest[0].st.history.size() >= 2:
-			var days = LiftTrend.by_day(latest[0].st.history)
-			var in_band = LiftTrend.banded(latest[0].st.history)
-			var vals = []
-			for d in days.slice(maxi(0, days.size() - 8)):
-				vals.append(LiftTrend.main_value(d, in_band))
+			# (by LiftProgress: one more rep at the same weight is a taller bar; 2026-11-27)
+			var prows = LiftProgress.days(latest[0].st.history)
+			var vals = LiftProgress.ranks(prows.slice(maxi(0, prows.size() - 8)))
 			var sb = SparkBars.new()
 			sb.setup(vals, Pal.LIFT)
 			sb.tooltip_text = "The last %d times" % vals.size()

@@ -404,6 +404,12 @@ func _reveal(i: int, animate: bool) -> void:
 				_shake()
 			"receipt":
 				Sfx.claim()
+			"beat":
+				# Beating last time is the point of training: it gets its moment.
+				Sfx.level_up()
+				_confetti.burst(1.0 if bool(ev.get("big", false)) else 0.6)
+				if bool(ev.get("big", false)):
+					_shake()
 			"pr":
 				# A record is the big moment: a fanfare, confetti and a shake.
 				Sfx.pr()
@@ -444,7 +450,7 @@ func _reveal(i: int, animate: bool) -> void:
 			var tw = card.create_tween()
 			tw.tween_interval(0.3)
 			tw.tween_callback(func(): Kit.burst(card, col, 20))
-		if ev.type == "pr" or ev.type == "goal":
+		if ev.type == "pr" or ev.type == "goal" or (ev.type == "beat" and bool(ev.get("big", false))):
 			_fireworks(card)
 
 
@@ -598,6 +604,8 @@ func _burst_color(ev: Dictionary):
 			return Pal.hex(Xp.RANKS[int(ev.to)].color)
 		"stage", "pr", "coins", "goal":
 			return Pal.ACCENT
+		"beat":
+			return Pal.GOOD
 	return null
 
 
@@ -688,6 +696,8 @@ func _build_card(ev: Dictionary, animate: bool):
 			return _project_card(ev)
 		"goal":
 			return _goal_card(ev)
+		"beat":
+			return _beat_card(ev)
 		"receipt":
 			return _receipt_card(ev)
 		"pr":
@@ -1058,6 +1068,44 @@ func _goal_card(ev: Dictionary) -> Control:
 	c.main.add_child(_sub(said))
 	c.panel.set_meta("reel_goal", str(ev.id))
 	return _finish(c, _icon_cell("target", Pal.ACCENT))
+
+
+## "Beat last time" (App.beat_event): how many lifts beat the time before, and a row for each lift: what it
+## did and how it did against last time (green up, gold for a new step or a best ever).
+func _beat_card(ev: Dictionary) -> Control:
+	var card = Kit.card(6, Callable(), 12)
+	card.accent(Pal.GOOD, true)
+	card.set_meta("reel_beat", int(ev.beat))
+	var head = Kit.hbox(10)
+	head.add_child(_plate(PixelFont.rect("+%d" % int(ev.beat), 3, Pal.GOOD), Pal.GOOD, 52))
+	var hv = Kit.vbox(2)
+	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hv.add_child(_kicker("BEAT LAST TIME", Pal.GOOD))
+	var said = "You beat last time on every lift!" if int(ev.beat) == int(ev.of) else "%d of %d lifts beat last time" % [int(ev.beat), int(ev.of)]
+	hv.add_child(_title_l(said))
+	head.add_child(hv)
+	card.add(head)
+	for r in ev.rows:
+		var up = str(r.kind) == "up"
+		var gold = up and (bool(r.record) or bool(r.rung_up))
+		var col = Pal.ACCENT if gold else (Pal.GOOD if up else (Pal.ACCENT2 if str(r.kind) == "down" else Pal.MUTED))
+		var row = Kit.row(Callable(), col, col if up else null, 8, 2, 0.14)
+		row.set_meta("beat_row", str(r.kind))
+		var top = Kit.hbox(6)
+		var sp = LiftNames.split(str(r.lift))
+		var nm = Kit.squeeze(6)
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nm.add_child(Kit.soft_name(str(sp.move), 13, null, true, 170.0))
+		if str(sp.variation) != "":
+			nm.add_child(SessionView.variation_tag(str(sp.variation), 10, true))
+		top.add_child(nm)
+		var pill = Kit.tag(("BEST EVER · " if bool(r.record) and up and not bool(r.rung_up) else "") + str(r.words).to_upper() if up else str(r.words), col, up, 10)
+		top.add_child(Kit.vcenter(pill))
+		row.add(top)
+		row.add(Kit.clip(str(r.sets), 11, Pal.MUTED))
+		card.add(row)
+	return card
 
 
 ## The workout's receipt (App.receipt_of): the muscle map of what was worked, each muscle's sets today and its

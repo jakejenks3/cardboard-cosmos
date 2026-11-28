@@ -824,17 +824,17 @@ static func calendar(history: Array, today: String, weeks: int) -> Array:
 	var biggest = 0.0
 	var loaded = weighted(history)
 	var in_band = banded(history)
+	# A ring on every day that beat all the days before it, a rep more at the same weight included
+	# (LiftProgress; it used to ring only a heavier top set).
 	var pr_days = {}
-	var best = -1.0
+	for pr_row in LiftProgress.days(history):
+		if bool(pr_row.record):
+			pr_days[str(pr_row.date)] = true
 	for i in range(rows.size()):
 		var r = rows[i]
 		var v = float(r.volumeKg) if loaded else float(r.reps + r.holdTotal)
 		size_of[r.date] = {"v": v, "sets": int(r.sets)}
 		biggest = maxf(biggest, v)
-		var m = main_value(r, in_band)
-		if i > 0 and m > best + 1e-9:
-			pr_days[r.date] = true
-		best = maxf(best, m)
 	var start = Dates.add_weeks(Dates.week_key(today), -(weeks - 1))
 	var out = []
 	for w in range(weeks):

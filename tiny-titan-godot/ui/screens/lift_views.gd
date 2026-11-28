@@ -680,15 +680,18 @@ static func _next_card(cur: Dictionary, mode: String, wu: String):
 # Progress
 # ---------------------------------------------------------------------------
 
+## "Beat it" first for every lift (LiftProgress, the rung chart): the one view where a rep more at the same
+## weight shows (2026-11-27). The others are single numbers over time.
 static func metric_options(mode: String) -> Array:
+	var first = {"value": "rungs", "label": "Beat it"}
 	match mode:
 		"kg":
-			return [{"value": "weight", "label": "Top set"}, {"value": "e1rm", "label": "Est. 1RM"}, {"value": "reps", "label": "Reps"}, {"value": "volume", "label": "Moved"}]
+			return [first, {"value": "weight", "label": "Top set"}, {"value": "e1rm", "label": "Est. 1RM"}, {"value": "volume", "label": "Moved"}]
 		"sec":
-			return [{"value": "hold", "label": "Hold"}, {"value": "reps", "label": "Reps"}]
+			return [first, {"value": "hold", "label": "Hold"}, {"value": "reps", "label": "Reps"}]
 		"band":
-			return [{"value": "band", "label": "Band"}, {"value": "reps", "label": "Reps"}]
-	return [{"value": "best", "label": "Best set"}, {"value": "reps", "label": "Reps in all"}]
+			return [first, {"value": "band", "label": "Band"}, {"value": "reps", "label": "Reps"}]
+	return [first, {"value": "best", "label": "Best set"}, {"value": "reps", "label": "Reps in all"}]
 
 
 ## A number of the chart with its unit: "52.5 lb", "3.4k lb", "30 s", "68",
@@ -723,6 +726,10 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 		metric = str(options[0].value)
 	var picker = Kit.segmented(options, metric, LiftViews._set_metric.bind(ctx), Pal.LIFT)
 	holder.add_child(picker)
+	if metric == "rungs":
+		_rungs(holder, ctx, mode, wu)
+		_tail(holder, ctx, mode, wu)
+		return
 	# Every day of the lift as a point, its sets in the tooltip and its work as a bar.
 	var sets_of = {}
 	var note_day = ""
@@ -863,7 +870,13 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 	elif both and (metric == "reps" or metric == "best"):
 		c.add(Kit.para("Reps as you log them: both sides added up.", 11, Pal.MUTED))
 	holder.add_child(c)
+	_tail(holder, ctx, mode, wu)
 
+
+## Under every Progress chart: the records and the rep ladder.
+static func _tail(holder: Control, ctx: Dictionary, mode: String, wu: String) -> void:
+	var history = ctx.history
+	var both = int(ctx.get("sides", 1)) > 1
 	if ctx.st != null:
 		var side_e1rm = -1.0
 		if both:
@@ -882,6 +895,152 @@ static func progress(holder: Control, ctx: Dictionary) -> void:
 			lad.setup(steps, _fmt_w(wu), Pal.LIFT)
 			lad.tooltip_text = "The heaviest weight you did for at least that many reps"
 			holder.add_child(lad)
+
+
+## How a step of the chart is said: "62.5 kg", "Green band", "30 s hold", "Bodyweight".
+static func rung_fmt(mode: String, wu: String) -> Callable:
+	match mode:
+		"kg":
+			return func(r): return Fmt.fmt_weight(float(r), wu)
+		"band":
+			return func(r): return (Bands.name_of(Bands.LADDER[int(r) - 1]) + " band") if int(r) >= 1 and int(r) <= Bands.LADDER.size() else "Band"
+		"sec":
+			return func(r): return "%d s hold" % int(r)
+	return func(_r): return "Bodyweight"
+
+
+## Progress, the way it is earned (LiftProgress): how often it beat the time before, the steps up, the reps
+## gained on this step; the rung chart with next time's aim; a line on how to read it.
+static func _rungs(holder: Control, ctx: Dictionary, mode: String, wu: String) -> void:
+	var history = ctx.history
+	var all_rows = LiftProgress.days(history)
+	if all_rows.is_empty():
+		holder.add_child(Kit.para("Nothing to chart here yet.", 12, Pal.MUTED))
+		return
+	var lmode = str(all_rows[all_rows.size() - 1].key.mode)
+	var fmt = rung_fmt(lmode, wu)
+	var span = Dates.days_between(str(all_rows[0].date), App.today)
+	var range_id = str(ctx.get("range", "all"))
+	var days = 0
+	for r in RANGES:
+		if str(r.id) == range_id:
+			days = int(r.days)
+	var rows = all_rows
+	if days > 0:
+		var from = Dates.add_days(App.today, -days)
+		rows = all_rows.filter(func(r): return str(r.date) >= from)
+		if rows.size() < 2:
+			rows = all_rows
+	var sm = LiftProgress.summary(rows)
+
+	# Three tiles: beat last time, steps up, this step.
+	var tiles = Kit.grid(3, 6)
+	tiles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tiles.set_meta("progress_tiles", true)
+	var tries = maxi(0, int(sm.days) - 1)
+	tiles.add_child(_ptile(str(int(sm.beat)), "beat last time", "of %d workout%s" % [tries, "" if tries == 1 else "s"], Pal.GOOD if int(sm.beat) > 0 else Pal.MUTED, "progress_beat"))
+	if lmode == "bw":
+		tiles.add_child(_ptile(str(int(sm.rung_reps)), "reps last time", "from %d" % int(rows[0].key.reps), Pal.LIFT, "progress_steps"))
+	else:
+		var sub = ("%s to %s" % [str(fmt.call(sm.first_rung)), str(fmt.call(sm.top_rung))]) if int(sm.rungs) > 0 else ("all at %s" % str(fmt.call(sm.rung)))
+		tiles.add_child(_ptile(str(int(sm.rungs)), "step%s up" % ("" if int(sm.rungs) == 1 else "s"), sub, Pal.ACCENT if int(sm.rungs) > 0 else Pal.MUTED, "progress_steps"))
+	var gain = int(sm.rung_reps) - int(sm.rung_first_reps)
+	if lmode == "bw":
+		tiles.add_child(_ptile(str(int(sm.best_streak)), "best run", "beats in a row", Pal.SECOND, "progress_gain"))
+	else:
+		tiles.add_child(_ptile(("+%d" % gain) if gain > 0 else str(gain), "reps on this step", "%d to %d at %s" % [int(sm.rung_first_reps), int(sm.rung_reps), str(fmt.call(sm.rung))], Pal.GOOD if gain > 0 else Pal.MUTED, "progress_gain"))
+	holder.add_child(tiles)
+
+	# How the last one went, as a banner.
+	var last = all_rows[all_rows.size() - 1]
+	var said = ""
+	var col = Pal.PANEL2
+	var icon = "arrow_up"
+	if int(sm.streak) >= 2:
+		said = "Beat last time %d times in a row" % int(sm.streak)
+		col = Pal.GOOD
+	elif bool(last.rung_up):
+		said = "Up a step last time: %s" % str(fmt.call(last.key.rung))
+		col = Pal.ACCENT
+	elif int(last.beat) == 1:
+		said = "Your last workout beat the one before"
+		col = Pal.GOOD
+	elif int(last.beat) == 0 and all_rows.size() > 1:
+		said = "Last workout matched the one before. One more rep is a win."
+		icon = "target"
+	elif int(last.beat) == -1:
+		said = "Last workout was lighter. Next time, beat the one before it."
+		col = Pal.ACCENT2
+		icon = "target"
+	if said != "":
+		var bn = banner(icon, said, col, col != Pal.PANEL2)
+		bn.set_meta("progress_banner", int(sm.streak))
+		holder.add_child(bn)
+
+	var c = Kit.card(6, Callable(), 10)
+	var chips = Kit.hbox(6)
+	for r in RANGES:
+		if int(r.days) > 0 and int(r.days) >= span:
+			continue
+		chips.add_child(LogWidgets.mini_chip(str(r.label), str(r.id) == range_id, LiftViews._set_range.bind(str(r.id), ctx), Pal.LIFT))
+	if chips.get_child_count() > 1:
+		var top = Kit.hbox(6)
+		top.add_child(Kit.vcenter(Kit.label("Show", 12, Pal.MUTED, true)))
+		top.add_child(chips)
+		c.add(top)
+	else:
+		chips.queue_free()
+	# Next time's aim (not for physical therapy: no aim there).
+	var nxt = null
+	if int(ctx.get("goal", 0)) <= 0 and not history.is_empty():
+		var step = 2.5 if wu == "kg" else Fmt.unit_to_kg(5.0, wu)
+		var t = LiftTrend.next_target(history[0].get("sets", []), step)
+		if str(t.kind) != "none":
+			var nk = LiftProgress.key(t.sets)
+			nxt = {"rung": float(nk.rung), "reps": int(nk.reps)}
+	var sets_of = {}
+	for h in history:
+		var d = str(h.date)
+		if not sets_of.has(d):
+			sets_of[d] = []
+		sets_of[d].append_array(h.get("sets", []))
+	var tips = rows.map(func(r): return LiftHistory.describe_sets(sets_of.get(str(r.date), []), _fmt_w(wu)))
+	var chart = RungChart.new()
+	chart.setup(rows, {"fmt_rung": fmt, "next": nxt, "tips": tips})
+	chart.set_meta("rung_chart", rows.size())
+	c.add(chart)
+	var legend = [{"name": "Beat last time", "color": Pal.GOOD}, {"name": "Step up / gold top: best ever", "color": Pal.ACCENT},
+		{"name": "Same", "color": Pal.with_alpha(Pal.MUTED, 0.7)}, {"name": "Short of it", "color": Pal.ACCENT2}]
+	if nxt != null:
+		legend.append({"name": "Next aim", "color": Pal.SECOND})
+	c.add(Charts.legend(legend))
+	var how = "Each bar is the reps you did at that day's top weight. One more rep at the same weight is a taller bar; a heavier weight starts a new step."
+	match lmode:
+		"band":
+			how = "Each bar is the reps you did with that day's heaviest band. More reps make a taller bar; a heavier band starts a new step."
+		"sec":
+			how = "Each bar is how many holds you did at that day's longest hold. A longer hold starts a new step."
+		"bw":
+			how = "Each bar is every rep of that day."
+	c.add(Kit.para(how, 11, Pal.MUTED))
+	holder.add_child(c)
+
+
+## A tile of the Progress view: a big number, what it counts, a line under it.
+static func _ptile(value: String, cap: String, sub: String, color: Color, meta: String) -> Control:
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.add_theme_stylebox_override("panel", PixBox.well(6, 7))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.set_meta(meta, value)
+	var v = Kit.vbox(2)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(JourneyScreen.big_num(value, 3, color))
+	v.add_child(JourneyScreen.caption(cap, 11, Pal.TEXT))
+	v.add_child(JourneyScreen.caption(sub, 10))
+	p.add_child(v)
+	return p
 
 
 static func _set_metric(metric, ctx: Dictionary) -> void:

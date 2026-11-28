@@ -693,24 +693,29 @@ static func lift_card(s: Dictionary, sessions: Array, wu: String, exercise, pick
 		for e in top:
 			chips.add_child(Kit.chip(title_case(e.name), e.name == selected, pick.bind(e.name), Pal.LIFT))
 		card.add(chips)
-		var series = []
+		# The lift's progress the way it is earned (LiftProgress, 2026-11-27): a bar of the reps at each
+		# session's top weight, standing in steps of weight. It was a line of the heaviest set, which stayed
+		# flat through every rep added at the same weight.
+		var hist = []
 		for x in lift_sessions:
-			var best = 0.0
 			for ex in x.exercises:
-				if Xp.normalize_exercise(ex.name) != selected:
-					continue
-				# The weight really on the bar: the heaviest set of the session, not
-				# an estimated one-rep max (a number nobody lifted).
-				for st in ex.sets:
-					if float(st.weightKg) > 0.0 and int(st.reps) > 0:
-						best = maxf(best, float(st.weightKg))
-			if best > 0.0:
-				series.append({"x": x.date, "y": Fmt.kg_to_unit(best, wu)})
-		if series.size() >= 2:
-			var ln = Charts.line(series, Pal.LIFT, func(v): return "%s %s" % [TTUtil.num_str(snappedf(v, 0.1)), wu])
-			ln.tooltip_text = "The heaviest set of each session"
-			card.add(ln)
-			card.add(caption("Heaviest set of each session", 11))
+				if Xp.normalize_exercise(ex.name) == selected and not LiftTrend.real_sets(ex.sets).is_empty():
+					hist.append({"date": str(x.date), "sets": ex.sets})
+		var prow = LiftProgress.days(hist)
+		if prow.size() >= 2:
+			var shown = prow.slice(maxi(0, prow.size() - 16))
+			var mode = str(shown[shown.size() - 1].key.mode)
+			var sm = LiftProgress.summary(prow)
+			var line = Kit.hbox(6)
+			line.add_child(Kit.vcenter(Kit.tag("%d of %d beat last time" % [int(sm.beat), int(sm.days) - 1], Pal.GOOD if int(sm.beat) > 0 else Pal.PANEL2, int(sm.beat) > 0, 11)))
+			if int(sm.rungs) > 0:
+				line.add_child(Kit.vcenter(Kit.tag("%d step%s up" % [int(sm.rungs), "" if int(sm.rungs) == 1 else "s"], Pal.ACCENT, true, 11)))
+			card.add(line)
+			var rc = RungChart.new()
+			rc.setup(shown, {"fmt_rung": LiftViews.rung_fmt(mode, wu)})
+			rc.set_meta("stats_rungs", shown.size())
+			card.add(rc)
+			card.add(caption("Reps at each session's top weight. A heavier weight starts a new step.", 11))
 		else:
 			card.add(caption("Log it again to see a trend", 12))
 

@@ -127,14 +127,12 @@ static func lift_rows(data: Dictionary, opts: Dictionary = {}) -> Control:
 		elif data.get("id") != null:
 			page["session_id"] = data.id
 		# The last few times it was done, and this time, as small bars.
+		# (by LiftProgress: one more rep at the same weight is a taller bar; 2026-11-27)
 		var spark = []
 		if not hist.is_empty():
-			var days = LiftTrend.by_day(hist)
-			# (a band lift: its days from before bands below its band days)
-			var in_band = LiftTrend.banded(hist) or LiftTrend.banded([{"sets": sets}])
-			for d in days.slice(maxi(0, days.size() - 7)):
-				spark.append(LiftTrend.main_value(d, in_band))
-			spark.append(LiftTrend.main_value(LiftTrend.day(sets), in_band))
+			var recent = hist.slice(0, 7)
+			recent.append({"date": "9999-12-31", "sets": sets})
+			spark = LiftProgress.ranks(LiftProgress.days(recent))
 		box.add_child(_lift_row(lift, sets, cmp, bool(ex.get("pt", false)) or Pt.is_pt(marks, lift), wu, page, spark, str(ex.get("effort", "")), str(ex.get("superset", ""))))
 	return box
 
@@ -259,6 +257,14 @@ static func open(session: Dictionary) -> void:
 	box.add_child(head)
 	if d == "lift":
 		box.add_child(lift_tiles(session))
+		var bc = Parts.beat_of(session)
+		if int(bc.of) > 0:
+			var all_beat = int(bc.beat) == int(bc.of)
+			var bl = LiftViews.banner("arrow_up" if int(bc.beat) > 0 else "target",
+				("Beat last time on every lift" if all_beat else "Beat last time on %d of %d lifts" % [int(bc.beat), int(bc.of)]) if int(bc.beat) > 0 else "Matched or short of last time on every lift",
+				Pal.GOOD if int(bc.beat) > 0 else Pal.PANEL2, int(bc.beat) > 0)
+			bl.set_meta("session_beat_line", int(bc.beat))
+			box.add_child(bl)
 
 	if d == "lift":
 		box.add_child(lift_rows(session))

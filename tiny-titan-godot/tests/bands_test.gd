@@ -199,7 +199,7 @@ func _run() -> void:
 		ok(views.mode_of([{"sets": bands([[10, "red"]])}]) == "band" and views.mode_of([{"sets": sets([[5, 60]])}]) == "kg" and views.mode_of([{"sets": sets([[5, 0]])}]) == "reps", "a lift's page goes by the band")
 		ok(views.set_text({"reps": 15, "weightKg": 0.0, "band": "green"}, "lb") == "15 × green band" and views.set_text({"reps": 5, "weightKg": 0.0}, "lb") == "5 reps", "a set in words")
 		ok(views.metric_text("band", 4.0, "lb") == "Green" and views.metric_text("band", 0.0, "lb") == "" and views.record_value({"id": "band", "unit": "band", "value": 5, "band": "blue"}, "lb") == "Blue band", "the chart's axis and the record say the band's name")
-		ok(views.metric_options("band").map(func(o): return o.value) == ["band", "reps"], "the band chart: Band and Reps")
+		ok(views.metric_options("band").map(func(o): return o.value) == ["rungs", "band", "reps"], "the band chart: Beat it, Band and Reps")
 		var sv = load("res://ui/screens/session_view.gd")
 		ok(sv.delta_text({"kind": "up", "kg": 0.0, "reps": 0, "sec": 0, "band": 1}, "lb") == "+1 band" and sv.band_change(-2) == "-2 bands" and sv.delta_text({"kind": "up", "kg": 0.0, "reps": 2, "sec": 0}, "lb") == "+2 reps", "the change tag")
 		var jl = load("res://ui/screens/journey_lifts.gd")

@@ -2135,6 +2135,46 @@ is the Windows handoff.
     and PR tags, number tiles for a lift (`SessionView.lift_tiles`: sets, reps, weight moved, minutes; meta
     `session_tiles`), and "WHERE THE XP CAME FROM" as a plain list (meta `xp_parts`; it was brown chips).
   - Walkthrough `tests/shots/tidy.gd` (year data, also --fingers).
+- PROGRESS COUNTED THE WAY IT IS EARNED (2026-11-27, night; the user: "History still is weird. Same line graph for
+  doing an extra rep at same weight. Progress doesn't feel important. Do a deep dive into this, you keep making small
+  unsatisfying changes"). What the deep dive found: the game's own aims are double progression (a rep more at the same
+  weight, then a step heavier), but nearly every screen measured a lift by its HEAVIEST SET: eight workouts that each
+  added a rep at 60 kg drew a flat line ("+2.5 kg since Oct 18" for twelve workouts that all beat the one before), flat
+  spark bars, no "new best" ring on the calendar, a flat line on Journey -> Stats' lifting card, and the reel said
+  nothing (the rules only call a heavier set or a higher estimate a record). Only Compare saw the rep.
+  - `game/lift_progress.gd` (`LiftProgress`, pure, REAL numbers only): a day's `key` = {rung, reps}: the rung is the
+    heaviest weight (a band's level, a hold's seconds, 0 for bodyweight) and reps are every rep AT that rung. `cmp`:
+    a higher rung wins, else more reps there. `days(history)` (oldest first: beat / record / rung_up / reps_up /
+    rung_index), `ranks` (bar heights that climb with every gain), `summary` (beat, streak, best_streak, rungs, the
+    current rung's first and last reps), `change(sets, before, fmt_rung)` ("+1 rep at 62.5 kg", "New rung: 62.5 kg", "2
+    reps short of last time"), `beat_counts(sessions)` ({session id: {beat, of}}). Unit test: `tests/lift_progress_test.gd`.
+  - `ui/charts/rung_chart.gd` (`RungChart`): a STAIRCASE. Every workout is a bar; each weight is a step (the heavier,
+    the higher: `_height_of`, the distinct rungs `levels`) and the reps fill the bar within its step, so a rep more is a
+    taller bar and a heavier weight lifts it a whole step. Bands behind runs of one weight with the weight on top (gold
+    with an arrow for a new one); green = beat the time before (a gold top when it beat every day before), gold = a step
+    up, grey = the same, orange = short; the reps over each bar; a dashed blue bar "next" = next time's aim
+    (`LiftTrend.next_target` of the newest sets, not for PT).
+  - The lift page's Progress view opens on "Beat it" (`LiftViews.metric_options`: value "rungs" first for every mode;
+    kg lifts: Beat it, Top set, Est. 1RM, Moved: "Reps" left kg lifts) = `LiftViews._rungs`: three tiles (beat last time
+    N of M, steps up "60 kg to 62.5 kg", reps on this step "+3"; metas `progress_beat`, `progress_steps`,
+    `progress_gain`), a banner (streak "Beat last time 11 times in a row", meta `progress_banner`), range chips, the
+    chart (meta `rung_chart`), a legend and how to read it; then `_tail` (records, rep ladder) as under every metric.
+    `LiftViews.rung_fmt(mode, wu)` says a rung.
+  - Journey -> Stats' lifting card: the step chart of the chosen lift (last 16 workouts, meta `stats_rungs`) with "N of
+    M beat last time" and "N steps up" tags; it was a line of the heaviest set.
+  - The reel: `App.beat_event(session, others)` -> a "beat" card after a lift workout where something beat the time
+    before (`ResultsOverlay._beat_card`, meta `reel_beat`, rows `beat_row` = up | same | down): "+1" plate, "You beat
+    last time on every lift!" / "2 of 3 lifts beat last time", a row per lift with its change (gold for a new step or a
+    best ever). Level-up sound and confetti; a shake and fireworks when it holds a new step or a best ever (`big`).
+  - Lists: spark bars (the session sheet's exercise rows, Journey -> Lifts) use `LiftProgress.ranks`; the Logbook
+    calendar rings every best-ever day (`LiftTrend.calendar` reads `LiftProgress.days`); a workout's row in the history
+    and on the Hero tab has a green "▲ 2/3" tag (`Parts.beat_of`, cached; meta `session_beat`), and its sheet a banner
+    "Beat last time on 2 of 3 lifts" (meta `session_beat_line`).
+  - NOT changed: the rules (records, XP, trophies, parity), the Compare view, the lift report (it goes by the estimated
+    one-rep max, which rises with reps too). A new screen that shows how a lift is going must use LiftProgress, never
+    the heaviest set alone.
+  - Walkthrough `tests/shots/rungs.gd` (`new` data, also --fingers): a bench press done by double progression; the
+    progress, journey, detail walkthroughs now open Progress on Beat it and press Top set for the line.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2311,6 +2351,7 @@ godot --headless --path . --script res://tests/sfx_test.gd
 godot --headless --path . --script res://tests/books_test.gd
 godot --headless --path . --script res://tests/bands_test.gd
 godot --headless --path . --script res://tests/tracking_test.gd
+godot --headless --path . --script res://tests/lift_progress_test.gd
 godot --headless --path . --script res://tests/rpg_shell_test.gd
 godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
@@ -2378,6 +2419,7 @@ logjump (a workout edited with finger events: + Set, a set's cross, a weight's +
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
+rungs (a lift done by double progression: the Beat it step chart, the reel's Beat last time card, beat tags in the history; `new` data, also --fingers),
 tidy (the exercise card's title, last / aim box and green done sets, the plan's done rows, Journey -> Log by week with a filter, a workout's sheet; year data, also --fingers),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
 realdoc (the real Google Doc, see below). Demo data: fresh, new, week, year.

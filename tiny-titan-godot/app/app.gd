@@ -1056,6 +1056,10 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	events = _with_extras(events, _split_events(fresh))
 	events = _with_extras(events, _goal_events())
 	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
+		var bt = beat_event(fresh[0], saved.sessions.filter(func(s): return not fresh_ids.has(s.id)))
+		if bt != null:
+			events = _with_extras(events, [bt])
+	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
 		var rc = receipt_of(fresh[0], events)
 		if rc != null:
 			events = _with_extras(events, [rc])
@@ -1066,6 +1070,46 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	if fresh.size() == 1 and str(fresh[0].get("discipline", "")) == "lift":
 		res["replay"] = replay_moves(fresh[0])
 	result_ready.emit(res)
+
+
+## The reel's "Beat last time" card for a lift session (LiftProgress, 2026-11-27: progress made a rep at a
+## time was never said): every exercise against the last day it was done before, the ones that beat it
+## first. {"type": "beat", "beat", "of", "rows": [{"lift", "kind", "words", "sets", "record", "rung_up"}],
+## "big": a new step or a best ever among them}; null when nothing beat the time before.
+func beat_event(s: Dictionary, others: Array):
+	var wu = weight_unit()
+	var rows = []
+	var beat = 0
+	var of = 0
+	var seen = {}
+	for e in s.get("exercises", []):
+		var sets = LiftTrend.real_sets(e.get("sets", []))
+		var nm = str(e.get("name", "")).strip_edges()
+		var k = Xp.normalize_exercise(nm)
+		if sets.is_empty() or seen.has(k):
+			continue
+		seen[k] = true
+		var before = []
+		for o in others:
+			if str(o.get("discipline", "")) != "lift" or str(o.date) > str(s.date):
+				continue
+			for oe in o.get("exercises", []):
+				if Xp.normalize_exercise(str(oe.get("name", ""))) == k and not LiftTrend.real_sets(oe.get("sets", [])).is_empty():
+					before.append({"date": str(o.date), "sets": oe.sets})
+		before.sort_custom(func(a, b): return str(a.date) > str(b.date))
+		var ch = LiftProgress.change(sets, before, LiftViews.rung_fmt(LiftProgress.mode_of_sets(sets), wu))
+		if str(ch.kind) == "first" or str(ch.kind) == "none":
+			continue
+		of += 1
+		if str(ch.kind) == "up":
+			beat += 1
+		rows.append({"lift": nm, "kind": str(ch.kind), "words": str(ch.words), "sets": LiftHistory.describe_sets(sets, func(kg): return Fmt.fmt_weight(float(kg), wu)),
+			"record": bool(ch.record), "rung_up": bool(ch.rung_up)})
+	if beat == 0:
+		return null
+	var order = {"up": 0, "same": 1, "down": 2}
+	rows.sort_custom(func(a, b): return int(order.get(a.kind, 3)) < int(order.get(b.kind, 3)))
+	return {"type": "beat", "beat": beat, "of": of, "rows": rows, "big": rows.any(func(r): return str(r.kind) == "up" and (bool(r.record) or bool(r.rung_up)))}
 
 
 ## Record cards for the reel: a run's time over a distance (its best mile,
@@ -1162,7 +1206,7 @@ func _with_extras(events: Array, extras: Array) -> Array:
 		if ["xp", "import", "bodyxp", "boss"].has(out[i].type):
 			at = i + 1
 	for e in extras:
-		if e.type == "bounty" or e.type == "pr" or e.type == "project" or e.type == "goal":
+		if e.type == "bounty" or e.type == "pr" or e.type == "project" or e.type == "goal" or e.type == "beat":
 			out.insert(at, e)
 			at += 1
 		else:

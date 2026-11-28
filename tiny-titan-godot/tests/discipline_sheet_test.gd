@@ -294,7 +294,7 @@ func _run() -> void:
 	await _frames(5)
 	var stats_wide = main._scroll.get_children().filter(func(c): return c is Control and not (c is ScrollBar) and c.get_combined_minimum_size().x > main._scroll.size.x + 0.5)
 	var j_words = _words(main._screen)
-	ok(stats_wide.is_empty() and _with_meta(main._screen, "copy_dosage").size() == 1 and j_words.has("Heaviest set of each session") and j_words.has("Best pace") and j_words.has("Reps"), "Journey -> Stats still builds its lifting and running cards, and fits", j_words.size())
+	ok(stats_wide.is_empty() and _with_meta(main._screen, "copy_dosage").size() == 1 and j_words.has("Reps at each session's top weight. A heavier weight starts a new step.") and j_words.has("Best pace") and j_words.has("Reps"), "Journey -> Stats still builds its lifting and running cards, and fits", j_words.size())
 	ok(not j_words.is_empty(), "the Journey page has words")
 
 	# --- nothing logged -------------------------------------------------------------------------
