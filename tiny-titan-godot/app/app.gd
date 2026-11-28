@@ -1076,6 +1076,25 @@ func commit_sessions(new_sessions: Array, title: String) -> void:
 	result_ready.emit(res)
 
 
+## A lift's records to go for today (Challenges.options, from its days before today), cached until the log
+## changes. The Log tab's exercise cards show them as keys; the day's challenges are the same.
+var _ch_key: String = ""
+var _ch_cache: Dictionary = {}
+
+func challenge_options(lift_name: String) -> Array:
+	var key = "%s|%s" % [str(saved.get("updatedAt", "")), today]
+	if key != _ch_key:
+		_ch_key = key
+		_ch_cache = {}
+	var k = Xp.normalize_exercise(lift_name)
+	if k == "":
+		return []
+	if not _ch_cache.has(k):
+		var wu = weight_unit()
+		_ch_cache[k] = Challenges.options(lift_name, Missions._history_before(sessions(), lift_name, today), today, Missions._step_kg(wu), func(kg): return Fmt.fmt_weight(float(kg), wu))
+	return _ch_cache[k]
+
+
 ## The reel's REP RECORD card (2026-11-27, the user: "you want to see your heaviest go up and that when you
 ## go for reps you can do more at a given weight, that's how you show progress"): every lift of the session
 ## that did more reps in a set at a weight than ever before at that weight or heavier (LiftProgress.rep_records;

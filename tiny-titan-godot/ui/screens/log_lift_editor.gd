@@ -58,6 +58,10 @@ var started: float = 0.0
 var _plates: Array = []  # [exercise] -> Label: what goes on the bar (barbell lifts)
 ## The superset label of each exercise ("A1", "A2", "B1"... or ""), worked out on every build.
 var _labels: Array = []
+## [exercise] -> HFlowContainer of the records to try (or null): refilled as sets change (_refresh_try)
+var _try: Array = []
+## "<lift>|<type>": a record to try already hit and cheered while this form is open
+var _hit_seen: Dictionary = {}
 ## [exercise] -> built with its name as a title (_named), not a box
 var _titled: Array = []
 
@@ -199,6 +203,7 @@ func build(parent: Control) -> void:
 		_have[Xp.normalize_exercise(str(known))] = true
 	_filed = []
 	_titled = []
+	_try = []
 	_badges = []
 	_wsteps = []
 	_deltas = []
@@ -438,6 +443,21 @@ func _exercise_card(i: int) -> Card:
 	var ref_box = _ref_block(i, lp, best, banded, both)
 	if ref_box != null:
 		c.add(ref_box)
+	# Records to try today (Challenges): a key each, lit once a set does it; a tap puts it in the next set.
+	var opts = _try_options(i)
+	if opts.is_empty():
+		_try.append(null)
+	else:
+		var tr = Kit.hbox(6)
+		var cap = Kit.label("TRY", 9, Pal.ACCENT2, true)
+		cap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tr.add_child(cap)
+		var flow = Kit.flow(5)
+		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		flow.set_meta("try_row", i)
+		tr.add_child(flow)
+		c.add(Kit.pad(tr, 6, 0, 4, 0))
+		_try.append(flow)
 	var note = App.lift_note(str(e.name)) if str(e.name).strip_edges() != "" else ""
 	if note != "":
 		var nb = Kit.link("Note: " + note, LogLiftMenu.open.bind(self, i), 12, Pal.ACCENT2)
@@ -701,6 +721,7 @@ func _refresh_exercise(i: int) -> void:
 		if trend != null and str(trend.kind) == "pr":
 			_celebrate_pr(i, j)
 	_refresh_plates(i)
+	_refresh_try(i)
 	var dslot = _deltas[i] if i < _deltas.size() else null
 	if dslot == null or not is_instance_valid(dslot):
 		return
@@ -1767,3 +1788,83 @@ static func _set_bg(done: bool) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", sb)
 	p.set_meta("set_row_done", done)
 	return p
+
+
+# ---------------------------------------------------------------------------
+# Records to try (Challenges, 2026-11-27): on a workout of today, each lift with a history shows the day's
+# records to go for (heavier than ever, a rep record at a weight done before, the best for N reps). A key
+# lights up the moment the sets do it (a cheer, once); a tap puts it into the next set not ticked.
+# ---------------------------------------------------------------------------
+
+func _try_options(i: int) -> Array:
+	var f = _form()
+	if editing_id != null or f == null or str(f.date) != App.today or i >= exercises.size():
+		return []
+	var nm = str(exercises[i].name).strip_edges()
+	if nm == "" or not _have.has(Xp.normalize_exercise(nm)):
+		return []
+	return App.challenge_options(nm)
+
+
+func _refresh_try(i: int) -> void:
+	if i >= _try.size() or _try[i] == null or not is_instance_valid(_try[i]):
+		return
+	var flow = _try[i]
+	Kit.clear(flow)
+	var e = exercises[i]
+	var sets = sets_from_draft(e, wu)
+	var nm = label_name_of(i)
+	for o in _try_options(i):
+		var lk = ChallengeView.look(str(o.type))
+		var hit = Challenges.hit(o, sets)
+		# (the text and tooltip never change with the state: the screen finds the key again after a rebuild)
+		var k = LogWidgets.mini_chip(ChallengeView.chip_text(o), hit, _use_try.bind(i, o), lk[1], 7)
+		k.tooltip_text = "%s: %s, %s (%s)" % [nm, str(o.title), str(o.words), str(o.sub)]
+		k.set_meta("try_key", str(o.type))
+		k.set_meta("try_hit", hit)
+		flow.add_child(k)
+		var seen = "%s|%s|%s" % [Xp.normalize_exercise(nm), str(o.type), str(o.chip)]
+		if hit and not _hit_seen.has(seen):
+			_hit_seen[seen] = true
+			if not _building:
+				Kit.burst(k, Pal.ACCENT, 22)
+				Sfx.pr()
+				Sfx.buzz(2)
+				App.toast("%s: %s!" % [str(o.title), str(o.words)], "good", "trophy")
+		elif not hit:
+			_hit_seen.erase(seen)
+
+
+## A record to try, put into the next set not ticked (a set more when all are): its reps and its weight
+## (band, seconds).
+func _use_try(i: int, o: Dictionary) -> void:
+	if i >= exercises.size():
+		return
+	var e = exercises[i]
+	var j = -1
+	for k in range(e.sets.size()):
+		if not bool(e.sets[k].get("done", false)):
+			j = k
+			break
+	if j < 0:
+		var last = e.sets[e.sets.size() - 1] if not e.sets.is_empty() else {"reps": "", "weight": ""}
+		var fresh = last.duplicate()
+		fresh.erase("done")
+		e.sets.append(fresh)
+		j = e.sets.size() - 1
+	var s = e.sets[j]
+	match str(o.type):
+		"hold":
+			s["hold"] = str(int(o.sec))
+		"day_reps":
+			pass
+		_:
+			s.reps = str(int(o.reps))
+			if str(o.get("band", "")) != "":
+				s["band"] = str(o.band)
+			elif float(o.get("kg", 0.0)) > 0.0:
+				s.weight = LogWidgets.trim_num(Fmt.kg_to_unit(float(o.kg), wu))
+	Sfx.pop()
+	_touched(i)
+	App.toast("Set %d: %s. Go for it." % [j + 1, str(o.words)], "info", "target")
+	_changed(true)

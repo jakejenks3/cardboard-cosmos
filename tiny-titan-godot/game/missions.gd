@@ -40,6 +40,8 @@ const LOOKBACK = 42
 const PLAN_LIFTS = 6
 ## "Beat last time" missions a day.
 const BEAT_MISSIONS = 2
+## Records to set in a week (the weekly "Record week").
+const RECORDS_A_WEEK = 3
 
 ## The body areas a day is named after.
 const GROUP = {"back": "back", "chest": "chest", "shoulders": "shoulders", "biceps": "arms", "triceps": "arms",
@@ -670,7 +672,8 @@ static func same_of(lift_name: String, plan: Dictionary) -> Dictionary:
 ## Did any of these lifts, any variation of the movement `move`, or (with
 ## `same`) another movement standing in for it beat its last time on `date`,
 ## or get done for the first time?
-static func beat_any(sessions: Array, names: Array, move: String, date: String, same: Dictionary = {}) -> bool:
+static func beat_any(sessions: Array, names: Array, move: String, date: String, same: Dictionary = {}, exclude: String = "") -> bool:
+	var skip = Xp.normalize_exercise(exclude) if exclude != "" else ""
 	var keys = names.map(func(n): return Xp.normalize_exercise(str(n)))
 	var mk = Xp.normalize_exercise(move)
 	var seen = {}
@@ -680,7 +683,7 @@ static func beat_any(sessions: Array, names: Array, move: String, date: String, 
 		for ex in s.get("exercises", []):
 			var n = str(ex.get("name", ""))
 			var k = Xp.normalize_exercise(n)
-			if seen.has(k) or LiftTrend.real_sets(ex.get("sets", [])).is_empty():
+			if seen.has(k) or LiftTrend.real_sets(ex.get("sets", [])).is_empty() or (skip != "" and k == skip):
 				continue
 			if keys.has(k) or (mk != "" and Xp.normalize_exercise(move_of(n)) == mk) or stands_in(n, same):
 				seen[k] = n
@@ -1478,9 +1481,12 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 			int(d.sets), mini(int(d.sets), int(got.sets)), "", 250, claims,
 			{"lift": str(first.name), "why": str(l.why), "ways": l.options.map(func(o): return str(o.name)), "dose": str(d.part)}))
 
-	# Beat last time: the likeliest lifts that are not physical therapy. With a
-	# training focus the lifts of the muscles being built come first; a kept
-	# muscle's lifts are beaten like any other when it is their day.
+	# The day's lift CHALLENGES (Challenges, 2026-11-27: "give me variation to either increase weight or try
+	# to put up more reps at a weight I've done before"): for the likeliest lifts that are not physical
+	# therapy, a menu of records to go for, picked from the lift's history and rotated by the date: heavier
+	# than ever, a rep record at a weight done before, the best for N reps. Any one of them does it; on another
+	# way of the movement (equipment taken) any record of that way counts. With a training focus the lifts of
+	# the muscles being built come first; a kept muscle's lifts are challenged like any other on their day.
 	var beats = 0
 	var ranked = plan.lifts.duplicate()
 	if focus:
@@ -1489,35 +1495,53 @@ static func daily(today: String, data: Dictionary, state: Dictionary, claims: Ar
 	for l in ranked:
 		if beats >= BEAT_MISSIONS or bool(l.pt) or l.has("dose"):
 			continue
-		# The lift as done last, the other ways after "Or"; done by any of them or
-		# any variation of the movement (the id stays the planned lift's).
 		var main = l.options[0]
 		var aim = LiftTrend.next_target(main.last, _step_kg(wu))
-		var desc = ""
-		if bool(main.new):
-			desc = "New: %s. Find a weight you can do for 8 to 12 good reps." % short_name(str(main.name))
-		else:
-			desc = "Last time %s. Aim for %s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
-			if str(aim.get("range", "")) != "":
-				desc += " %s: %d to %d reps." % [str(LiftTrend.RANGE_NAMES[aim.range]), int(LiftTrend.RANGES[aim.range][0]), int(LiftTrend.RANGES[aim.range][1])]
-			if int(aim.get("sides", 1)) > 1:
-				desc += " Both sides added up: %s." % Sides.side_words(LiftTrend.real_sets(aim.sets))
-			if str(aim.get("kind", "")) == "band":
-				if bool(aim.get("heavier", false)):
-					desc += " Past %d reps a %s the band is too light: the next band up, fewer reps." % [LiftTrend.BAND_HIGH_REPS, "side" if int(aim.get("sides", 1)) > 1 else "set"]
-			elif bool(aim.get("heavier", false)):
-				desc += " Past %d reps a %s the weight is too light to build much: heavier, fewer reps." % [LiftTrend.HIGH_REPS, "side" if int(aim.get("sides", 1)) > 1 else "set"]
+		var ways = l.options.map(func(o): return str(o.name))
+		var hist = _history_before(sessions, str(main.name), today)
+		var opts = [] if bool(main.new) else Challenges.options(str(main.name), hist, today, _step_kg(wu), fmt_w)
 		var alts = []
 		for o in l.options.slice(1):
 			alts.append(way_word(o, str(main.move)))
+		var desc = ""
+		var hit_types = []
+		var did = false
+		if opts.is_empty():
+			desc = "New: %s. Find a weight you can do for 8 to 12 good reps." % short_name(str(main.name)) if bool(main.new) else "Last time %s. Aim for %s." % [LiftHistory.describe_sets(main.last, fmt_w), LiftHistory.describe_sets(aim.sets, fmt_w)]
+			did = beat_any(sessions, ways, move_of(str(l.name)), today, same_of(str(l.name), plan))
+		else:
+			hit_types = Challenges.hits(opts, sets_on(sessions, str(main.name), today))
+			did = not hit_types.is_empty()
+			# Another way of the movement (the day the equipment is taken): beating its last time, or doing it for
+			# the first time, counts; the lift itself has to set one of its records.
+			if not did and beat_any(sessions, ways, move_of(str(l.name)), today, same_of(str(l.name), plan), str(main.name)):
+				did = true
+				hit_types.append("other")
+			desc = "Pick one: " + "; ".join(PackedStringArray(opts.map(func(o): return "%s, %s" % [str(o.title).to_lower(), str(o.words)]))) + "."
+			if int(main.get("sides", 1)) > 1:
+				desc += " Reps are both sides added up."
+			desc += " Try: " + str(opts[0].tip)
 		if not alts.is_empty():
-			desc += " Or: %s." % ", ".join(PackedStringArray(alts))
-		var ways = l.options.map(func(o): return str(o.name))
-		var did = beat_any(sessions, ways, move_of(str(l.name)), today, same_of(str(l.name), plan))
-		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "Beat it: %s" % str(main.move), desc, "sword", "lift",
-			1, 1 if did else 0, "", 200, claims,
-			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "planned": str(l.name)}))
+			desc += (" Or another way (%s): beat its last time." % ", ".join(PackedStringArray(alts))) if not opts.is_empty() else (" Or: %s." % ", ".join(PackedStringArray(alts)))
+		out.append(_mission("t:%s:beat:%s" % [today, Xp.normalize_exercise(str(l.name))], "daily", today, "%s challenge" % str(main.move), desc, "sword", "lift",
+			1, 1 if did else 0, "", 250, claims,
+			{"lift": str(main.name), "why": str(l.why), "aim": aim.sets, "ways": ways, "planned": str(l.name), "options": opts, "hit": hit_types, "challenge": true}))
 		beats += 1
+
+	# Record hunter: any record on any lift today (a lift day only).
+	if beats > 0:
+		var any_rec = 0
+		for s in todays:
+			if str(s.get("discipline", "")) != "lift":
+				continue
+			for ex in s.get("exercises", []):
+				var nm = str(ex.get("name", ""))
+				if Pt.is_pt(marks, nm):
+					continue
+				if Challenges.any_record(sets_on(sessions, nm, today), _history_before(sessions, nm, today)):
+					any_rec = 1
+		out.append(_mission("t:%s:records" % today, "daily", today, "Record hunter", "Set any record today: heavier than ever, or more reps at a weight than ever, on any lift.", "trophy", "lift",
+			1, any_rec, "", 150, claims))
 
 	if plan.new != null:
 		# Done by the movement suggested, or by any movement never done before.
@@ -1739,10 +1763,13 @@ static func weekly(wk: String, today: String, data: Dictionary, state: Dictionar
 			var mv = Xp.normalize_exercise(move_of(n))
 			if not seen_before.has(mv):
 				new_moves[mv] = true
-			var hist = _history_before(sessions, n, str(s.date))
-			if not LiftTrend.records(LiftTrend.real_sets(ex.get("sets", [])), hist).is_empty():
-				record_days[str(s.date)] = true
-	out.append(_mission("tw:%s:record" % wk, "weekly", wk, "Set a record", "Beat a best on any lift this week: weight, reps or estimated strength.", "trophy", "lift", 1, record_days.size(), "", 400, claims))
+			if Pt.is_pt(marks, n):
+				continue
+			# A record: heavier than ever, or more reps at a weight than ever (Challenges.any_record); one per
+			# lift and day.
+			if Challenges.any_record(LiftTrend.real_sets(ex.get("sets", [])), _history_before(sessions, n, str(s.date))):
+				record_days["%s|%s" % [str(s.date), Xp.normalize_exercise(n)]] = true
+	out.append(_mission("tw:%s:record" % wk, "weekly", wk, "Record week", "Set %d records this week: heavier than ever, or more reps at a weight than ever. One per lift a day." % RECORDS_A_WEEK, "trophy", "lift", RECORDS_A_WEEK, mini(RECORDS_A_WEEK, record_days.size()), "", 400, claims))
 	out.append(_mission("tw:%s:new" % wk, "weekly", wk, "Explore", "Try a movement you have never done this week.", "sparkle", "lift", 1, new_moves.size(), "", 300, claims))
 
 	if not marks.is_empty():
@@ -2069,6 +2096,10 @@ static func morning_text(plan: Dictionary, daily_missions: Array, wu: String, du
 				lines.append("  or " + str(way.call(o)))
 	if plan.new != null:
 		lines.append("Try: %s" % new_words(plan.new))
+	# The day's challenges: a record to go for on each, pick one (Challenges).
+	for m in daily_missions:
+		if bool(m.get("challenge", false)) and not (m.get("options", []) as Array).is_empty():
+			lines.append("Challenge, %s: %s" % [short_name(str(m.lift)), " or ".join(PackedStringArray(m.options.map(func(o): return "%s %s" % [str(o.title).to_lower(), str(o.words)])))])
 	if not plan.pt.is_empty():
 		var names = []
 		for r in plan.pt:

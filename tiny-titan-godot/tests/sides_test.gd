@@ -147,7 +147,7 @@ func _run() -> void:
 	var state = {"levels": {"hero": {"level": 10}}, "sessionXp": {}, "body": {"entries": 0}}
 	var missions = Missions.daily(day, {"sessions": log2, "pt": {}, "settings": st, "reading": []}, state, [])
 	var beat = missions.filter(func(m): return str(m.id).contains(":beat:") and str(m.title).contains("Lateral Raise"))
-	ok(beat.size() == 1 and str(beat[0].desc).contains("Aim for 23, 22, 25 @ 8 kg. Both sides added up: 11 to 13 a side.") and not str(beat[0].desc).contains("too light"), "beat it: the aim, and what it is a side", beat.map(func(m): return m.desc))
+	ok(beat.size() == 1 and str(beat[0].desc).contains("Reps are both sides added up.") and LiftTrend.real_sets(beat[0].aim).all(func(one): return int(one.get("sides", 1)) == 2), "the challenge says its reps are both sides added up; its aim goes by a side", beat.map(func(m): return m.desc))
 	# The days ahead are made from pretended sessions: the plan is the same after them.
 	var ahead = Missions.ahead(log, day, {}, st, 4)
 	var again = null

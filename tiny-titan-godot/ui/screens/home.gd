@@ -53,6 +53,10 @@ func build() -> void:
 	# --- today: the plan, first on the page, to read before the workout ------
 	# (also sent to the phone in the morning: MorningAlert / PhonePush)
 	add_child(TodayView.card())
+	# The day's lift challenges: records to go for (ChallengeView, 2026-11-27).
+	var ch = ChallengeView.section()
+	if ch != null:
+		add_child(ch)
 	# The days after it, to look ahead (nothing in it is logged).
 	var coming = AheadView.card()
 	if coming != null:
@@ -158,7 +162,8 @@ func _notices() -> VBoxContainer:
 func _missions() -> Control:
 	var q = App.quests()
 	var yesterday = q.get("yesterday", [])
-	var daily = q.daily.filter(func(m): return not bool(m.get("perfect", false)))
+	# (the perfect day is the Today card's chest; the lift challenges have their own section above)
+	var daily = q.daily.filter(func(m): return not bool(m.get("perfect", false)) and not bool(m.get("challenge", false)))
 	var done = daily.filter(func(m): return bool(m.done))
 	var still = daily.filter(func(m): return not bool(m.done))
 	var right = Kit.hbox(8)

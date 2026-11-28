@@ -91,7 +91,8 @@ func _init() -> void:
 	ok(find(day, ":show") != null and day.filter(func(m): return str(m.id).contains(":beat:")).size() == 2 and find(day, ":new") != null and find(day, ":pt") != null, "show up, beat it on two lifts, try something new, PT", ids)
 	ok(day.all(func(m): return str(m.unit) != "min"), "no mission is about minutes")
 	var beat = day.filter(func(m): return str(m.id).contains(":beat:"))[0]
-	ok(beat.has("aim") and str(beat.desc).begins_with("Last time") and str(beat.desc).contains("Aim for") and not beat.done, "beat it says last time and what to aim for", beat.desc)
+	# (2026-11-27: a lift's mission is a challenge: records to pick from, Challenges)
+	ok(beat.has("aim") and str(beat.title).ends_with(" challenge") and str(beat.desc).begins_with("Pick one: heavier than ever") and (beat.options as Array).size() >= 2 and not beat.done, "a lift's challenge: records to pick from", beat.desc)
 	ok(find(day, ":read") == null and find(day, ":climb") == null, "no reading mission without any reading, no climb on a Friday")
 
 	# Today's workout: more reps on the pulldown, a new back movement, the PT.
@@ -186,7 +187,7 @@ func _init() -> void:
 	var week = Missions.weekly(Dates.week_key(TODAY), TODAY, data, state, [])
 	var wids = week.map(func(m): return str(m.id))
 	ok(find(week, ":days") != null and find(week, ":record") != null and find(week, ":new") != null and find(week, ":pt") != null and find(week, ":climb") != null and find(week, ":xp") != null, "days, a record, explore, PT, climbing and XP", wids)
-	ok(int(find(week, ":days").progress) == 4 and find(week, ":record").done and find(week, ":new").done and find(week, ":pt").done, "this week: 4 days, a record, a new movement, PT on target (3 days of 3 sets)", [find(week, ":days").progress, find(week, ":record").progress])
+	ok(int(find(week, ":days").progress) == 4 and int(find(week, ":record").progress) >= 1 and find(week, ":new").done and find(week, ":pt").done, "this week: 4 days, a record, a new movement, PT on target (3 days of 3 sets)", [find(week, ":days").progress, find(week, ":record").progress])
 	ok(str(find(week, ":pt").desc) == "Reach every physical therapy exercise's sets for the week (its days a week, 3 sets a day).", "the weekly PT mission says sets", find(week, ":pt").desc)
 	var thin_week = data.duplicate()
 	thin_week.sessions = log.map(func(s): return s if not s.get("exercises", []).any(func(e): return str(e.get("name", "")) == "Neck 4 Way") else lift(str(s.date), {"Neck 4 Way": [[20, 4.5]]})) + [lift(TODAY, {"Neck 4 Way": [[20, 4.5]]})]
@@ -320,7 +321,7 @@ func _init() -> void:
 	var old_week = base_set.duplicate()
 	old_week["deloadUntil"] = "2026-11-25"
 	old_week["feels"] = {sat: 1, "2026-11-20": 1}
-	ok(shape.call(Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": old_week, "reading": []}, state, [])) == plain_day and plain_day.any(func(m): return str(m[1]).begins_with("Beat it: ")) and not plain_day.any(func(m): return str(m[1]).begins_with("Easy day")), "a lighter week set before, tired two days running: still the same goals")
+	ok(shape.call(Missions.daily(sat, {"sessions": split_log, "pt": {}, "settings": old_week, "reading": []}, state, [])) == plain_day and plain_day.any(func(m): return str(m[1]).ends_with(" challenge")) and not plain_day.any(func(m): return str(m[1]).begins_with("Easy day")), "a lighter week set before, tired two days running: still the same goals")
 	ok(Missions.feel_of({}, sat) == 0, "no mark: nothing")
 
 	# --- split combos ----------------------------------------------------------------------------------
@@ -357,7 +358,7 @@ func _init() -> void:
 	var vdata = {"sessions": vlog, "pt": {}, "settings": {"weightUnit": "kg", "split": "pull_push_legs"}, "reading": []}
 	var vday = Missions.daily(sat, vdata, state, [])
 	var vfm = find(vday, ":beat:chest fly - gym cable")
-	ok(vfm != null and vfm.title == "Beat it: Chest Fly" and vfm.lift == "Chest Fly - Gym cable" and str(vfm.desc).begins_with("Last time") and str(vfm.desc).contains("Or: home cable, Pullover (dumbbell)."), "the mission: last time on the gym cable, or the home cable, or a pullover", vfm.desc if vfm != null else null)
+	ok(vfm != null and vfm.title == "Chest Fly challenge" and vfm.lift == "Chest Fly - Gym cable" and str(vfm.desc).begins_with("Pick one: ") and str(vfm.desc).contains("Or another way (home cable, Pullover (dumbbell)): beat its last time."), "the challenge: records on the gym cable, or beat the home cable or a pullover", vfm.desc if vfm != null else null)
 	var beat_with = func(exs: Dictionary) -> Dictionary:
 		var d = vdata.duplicate()
 		d.sessions = vlog + [lift(sat, exs)]

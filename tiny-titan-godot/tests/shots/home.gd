@@ -124,7 +124,7 @@ func _sections(main: Node) -> void:
 			order.append(str(n.get_meta("section")))
 			nodes[str(n.get_meta("section"))] = n
 	print("sections: ", order)
-	var want = ["today", "ahead", "todo", "reading", "missions", "adventure", "week", "goals", "recent"]
+	var want = ["today", "challenges", "ahead", "todo", "reading", "missions", "adventure", "week", "goals", "recent"]
 	var last = -1
 	var in_order = true
 	for id in want:

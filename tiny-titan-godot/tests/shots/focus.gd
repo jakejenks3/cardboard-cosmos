@@ -228,7 +228,7 @@ func run(p_main: Node, p_tree: SceneTree) -> void:
 	plan = App.plan()
 	text = ShotHelper.all_text(main)
 	check(plan.kind == "legs" and plan.lifts.all(func(l): return str(l.get("mode", "")) == "keep") and not plan.lifts.any(func(l): return l.has("dose")) and not text.contains("YOUR FOCUS ADDS") and text.contains("AIM"), "a leg day: nothing is added for the legs, and their lifts have an aim")
-	check(App.quests().daily.filter(func(m): return str(m.title).begins_with("Beat it: ")).size() == 2, "its missions are Beat it, as for any lift")
+	check(App.quests().daily.filter(func(m): return str(m.title).ends_with(" challenge")).size() == 2, "its missions are challenges, as for any lift")
 	await ShotHelper.snap(tree, "focus_6_legs")
 
 	# --- Settings -------------------------------------------------------------------------------------

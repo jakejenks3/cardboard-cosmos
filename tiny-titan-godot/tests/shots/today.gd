@@ -99,7 +99,8 @@ func run(m: Node, t: SceneTree) -> void:
 	var q = App.quests()
 	var beats = q.daily.filter(func(x): return str(x.id).contains(":beat:"))
 	check(not beats.is_empty() and q.daily.all(func(x): return str(x.unit) != "min") and q.weekly.all(func(x): return str(x.unit) != "min"), "missions to beat a lift, and none about minutes (%s)" % str(q.daily.map(func(x): return x.title)))
-	check(said.contains("Beat it: "), "the missions are on the Hero tab")
+	# (2026-11-27: a lift's mission is a challenge, records to pick from, in its own section under TODAY)
+	check(said.contains("PICK ONE") and ShotHelper.find_text(main, "Bench Press") != null, "the challenges are on the Hero tab")
 	if not plan.pt.is_empty():
 		# 8 of 9 sets still to do this week, at most 3 of an exercise a day: today's goal is 3 sets.
 		var pt_goal = Missions.pt_goal(plan)
@@ -124,7 +125,7 @@ func run(m: Node, t: SceneTree) -> void:
 		var off_plan = App.plan()
 		var off_text = ShotHelper.all_text(main)
 		check(bool(off_plan.off) and str(off_plan.rest.call) == "rest" and off_plan.lifts.all(func(l): return bool(l.pt)) and off_plan.new == null and off_text.contains("REST DAY · YOUR CALL") and off_text.contains("%s moves to tomorrow" % str(plan.label)), "Rest: a rest day by the player's call, no lift on the card, and it says the %s moves to tomorrow" % str(plan.label).to_lower())
-		check(App.quests().daily[0].get("rest", false) and not App.quests().daily.any(func(x): return str(x.id).contains(":beat:")) and not off_text.contains("Beat it: "), "the missions follow: rest first, nothing to beat")
+		check(App.quests().daily[0].get("rest", false) and not App.quests().daily.any(func(x): return str(x.id).contains(":beat:")) and not off_text.contains("PICK ONE"), "the missions follow: rest first, nothing to beat")
 		for n in ShotHelper.walk(main):
 			if n.has_meta("rest_chip"):
 				rest_chip = n
@@ -132,7 +133,7 @@ func run(m: Node, t: SceneTree) -> void:
 		await ShotHelper.snap(tree, "today_1b_rest_day")
 		await ShotHelper.click(tree, rest_chip)
 		await ShotHelper.wait(tree, 0.7)
-		check(not bool(App.plan().off) and (App.settings().get("dayCalls", {}) as Dictionary).is_empty() and ShotHelper.all_text(main).contains("Beat it: "), "Rest again: a lift day as before")
+		check(not bool(App.plan().off) and (App.settings().get("dayCalls", {}) as Dictionary).is_empty() and ShotHelper.all_text(main).contains("PICK ONE"), "Rest again: a lift day as before")
 		await _home()
 	var t0 = _ticks()
 	var t_base = t0.count(true)
@@ -175,17 +176,18 @@ func run(m: Node, t: SceneTree) -> void:
 	# The Adventure tab lists them with what to aim for.
 	App.go("adventure", "quests")
 	await ShotHelper.wait(tree, 0.8)
-	check(ShotHelper.all_text(main).contains("Aim for") and ShotHelper.all_text(main).contains("Set a record"), "Adventure: the missions say what to aim for; the week has a record to set")
+	check(ShotHelper.all_text(main).contains("Pick one") and ShotHelper.all_text(main).contains("Record week"), "Adventure: the challenges say the records to pick from; the week has records to set")
 	await ShotHelper.snap(tree, "today_2_adventure")
 
 	# Beat the likeliest lift today: the mission is done and can be claimed.
 	var target = beats[0]
-	var aim = target.aim
+	# (its first record, heavier than ever; a lift never done goes by its aim)
+	var aim = target.aim if (target.get("options", []) as Array).is_empty() else [{"reps": int(target.options[0].reps), "weightKg": float(target.options[0].kg)}]
 	App.commit_sessions([{"id": "today1", "discipline": "lift", "date": App.today, "createdAt": App.now_ms(), "source": "manual",
 		"exercises": [{"name": str(target.lift), "sets": aim}]}], "Workout logged!")
 	await _dismiss_reels()
 	var after = App.quests().daily.filter(func(x): return x.id == target.id)
-	check(after.size() == 1 and after[0].done, "doing what it aimed for beats it (%s)" % str(target.lift))
+	check(after.size() == 1 and after[0].done, "doing one of its records does it (%s)" % str(target.lift))
 	await _home()
 	var claim = null
 	for n in ShotHelper.walk(main):

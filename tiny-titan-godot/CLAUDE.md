@@ -2186,6 +2186,34 @@ is the Windows handoff.
     the heaviest set alone.
   - Walkthrough `tests/shots/rungs.gd` (`new` data, also --fingers): a bench press done by double progression; the
     progress, journey, detail walkthroughs now open Progress on Beat it and press Top set for the line.
+- DAILY CHALLENGES ARE RECORDS TO GO FOR (2026-11-27, night; the user: "Make sure those get built into daily
+  challenges. The whole goal is to give me variation to either increase weight or try to put up more reps at a weight
+  I've done before... Daily challenges are boring right now, they don't give me things to work at like that. Do a big
+  dive into those and make them give me some variance and things to think about trying when I go to gym"). The "Beat
+  it: <lift>" missions (beat last time) are GONE; the Today card's AIM is still last time + a step.
+  - `game/challenges.gd` (`Challenges`, pure): `options(lift, history before today (newest first), today, step_kg,
+    fmt_w)` -> up to 3 records to pick from, rotated by a seed of the date and the lift so the days differ:
+    `heavier` (the heaviest weight + a step, for its reps there - 2, 1 to 8), `reps` (one more rep in a set than ever at a
+    working weight done before: the last workout's top weight every other day, else one of the heaviest few),
+    `ladder` (the best for N reps + a step, N of 1, 3, 5, 8, 10, 12 whose best is BELOW the heaviest weight);
+    bodyweight `set_reps` / `day_reps`, bands `band` (the next band) / `reps`, holds `hold` (+5 s). Each has a title,
+    words, what it beats (`sub`), a short `chip` and a `tip` (`TIPS`, something to try). `hit(o, sets)`, `hits`,
+    `any_record(sets, before)` (a rep record or a heavier set than ever). Unit test: `tests/challenges_test.gd`.
+  - Missions (`Missions.daily`): for the BEAT_MISSIONS (2) likeliest non-PT lifts a "<Movement> challenge" (id still
+    `t:<date>:beat:<lift>`, 250 XP, `challenge: true`, `options`, `hit` = the types done, "other"): done by hitting any
+    option on the lift itself, or on another way of the movement by beating its last time / doing it a first time
+    (`beat_any(..., exclude)`: the planned lift itself must set a record). A lift never done keeps the old words.
+    "Record hunter" (`t:<date>:records`, 150 XP): any record on any lift today. Weekly "Record week"
+    (`tw:<wk>:record`): RECORDS_A_WEEK (3) records, one per lift a day. `morning_text` lists "Challenge, <lift>: ...".
+  - Screens: the Hero tab's CHALLENGES section right under TODAY (`ChallengeView.section`, section `challenges`; a card
+    a challenge, meta `challenge` = its id: the lift, "PICK ONE", a row an option (meta `challenge_option` = type,
+    `challenge_hit`) with its icon and colour (`ChallengeView.look`: gold up arrow heavier, green plus rep record, blue
+    crown best for N), a tick, "Try: ...", and its Claim key (meta `challenge_claim`)). MISSIONS no longer lists them.
+    The Log tab's exercise card (a workout of today, a lift in the log): a "TRY" row of keys (`LogLiftEditor._refresh_try`,
+    metas `try_row`, `try_key` = type, `try_hit`; `App.challenge_options(lift)`, cached): a tap puts the record into the
+    next set not ticked (`_use_try`), and a key lights up the moment the sets do it (burst, the PR sound, a toast, once).
+  - Walkthrough `tests/shots/challenges.gd` (year data, also --fingers); the home walkthrough's section order has
+    "challenges" after "today".
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2363,6 +2391,7 @@ godot --headless --path . --script res://tests/books_test.gd
 godot --headless --path . --script res://tests/bands_test.gd
 godot --headless --path . --script res://tests/tracking_test.gd
 godot --headless --path . --script res://tests/lift_progress_test.gd
+godot --headless --path . --script res://tests/challenges_test.gd
 godot --headless --path . --script res://tests/rpg_shell_test.gd
 godot --headless --path . --script res://tests/rpg_stats_test.gd
 godot --headless --path . --script res://tests/rpg_boosts_test.gd
@@ -2430,6 +2459,7 @@ logjump (a workout edited with finger events: + Set, a set's cross, a weight's +
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
+challenges (the day's lift challenges: the Hero section, the Log tab's TRY keys, done and claimed; year data, also --fingers),
 rungs (a lift done by double progression: the Beat it step chart, the reel's Beat last time card, beat tags in the history; `new` data, also --fingers),
 tidy (the exercise card's title, last / aim box and green done sets, the plan's done rows, Journey -> Log by week with a filter, a workout's sheet; year data, also --fingers),
 fx (a fight's effects filmed frame by frame into sheets, the result as it plays, every effect on a catalogue page; year data),
