@@ -73,6 +73,7 @@ var _speed_lows = []
 
 func _ready() -> void:
 	Pal.apply(App.settings().get("theme", "arcade"))
+	_apply_look()
 	if OS.has_feature("web"):
 		# A phone's browser has no fonts to fall back on for arrows and triangles.
 		SymbolFont.install(ThemeDB.fallback_font, Kit.font_bold())
@@ -428,7 +429,18 @@ func _layout() -> void:
 		_floor.visible = _inset_bottom > 0.0
 
 
+## The look of sections and rows picked in Settings (Kit.look; the mock-ups of 2026-11-27).
+func _apply_look() -> void:
+	var lk = str(App.settings().get("look", "stripe"))
+	Kit.look = lk if Kit.LOOKS.has(lk) else "stripe"
+
+
 func _on_changed() -> void:
+	var want_look = str(App.settings().get("look", "stripe"))
+	if Kit.LOOKS.has(want_look) and want_look != Kit.look:
+		_apply_look()
+		call_deferred("_retheme")
+		return
 	if str(App.settings().get("theme", "arcade")) != Pal.theme_id and Pal.THEMES.has(str(App.settings().get("theme", "arcade"))):
 		# Deferred: this runs inside the button press that asked for the change.
 		call_deferred("_retheme")

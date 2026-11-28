@@ -2214,6 +2214,19 @@ is the Windows handoff.
     next set not ticked (`_use_try`), and a key lights up the moment the sets do it (burst, the PR sound, a toast, once).
   - Walkthrough `tests/shots/challenges.gd` (year data, also --fingers); the home walkthrough's section order has
     "challenges" after "today".
+- THE LOOK, MOCK-UPS (2026-11-27, night; the user, with a screenshot of the mission tiles: "that rectangle with the left
+  edge being a color with the slightly darker blue on that blue background. Looks really ugly and like bad word art...
+  experiment with new designs... Maybe work toward a few mock ups and send to me"). `Kit.look` (`Kit.LOOKS`): "stripe"
+  (as it was, the default), "arcade" (raised tiles with a lip in their colour, solid coloured section headers with dark
+  pixel titles, sub-heads as coloured tags), "clean" (sections as soft rounded cards with a shadow and no border, plain
+  bold headings, rows without boxes split by hairlines, icons in round washes, open missions as a list:
+  `Parts._mission_list`), "rpg" (gold-trimmed windows, sunken slots, gold sub-heads), "neon" (rows and sections
+  outlined in their colour with a glow). Read by `Kit.section`, `Card._section_box` / `_row_box` (Card.flat),
+  `Kit.badge` (icons on plates: mission rows and tiles, challenge options), `Kit.sub_head`; `Kit.soft_box` is a box
+  with real rounding and a glow. Settings -> "Look (trying out)" (`settings.look`, meta `look_key`; main.gd
+  `_apply_look`, a change rebuilds the shell like a theme). Walkthrough `tests/shots/looks.gd` (year data): the same
+  six screens in every look, put side by side in `looks_<screen>.png`. Waiting for the user's pick: then make it the
+  look and take the others out.
 - Also 2026-11-23, found by running the walkthroughs on a Monday:
   - An exercise key of the Log tab's "Add exercise" list wrote the whole variation: a long one
     ("Single arm incline home cable") made the key, the card and so the page wider than the window
@@ -2459,6 +2472,7 @@ logjump (a workout edited with finger events: + Set, a set's cross, a weight's +
 curls (a lift done for the first time by another variation: FIRST TIME, not beat it; a page about a past day says so; `new` data),
 logplus (the Log tab's set ticks, aim and Fill, plates, the More sheet: superset, note, how hard, swap; unticked sets at Finish; year data, also --fingers),
 tracking (a goal with a date set and reached, the reel's receipt, Journey's weekly sets / lift report / body trend, the mission swap; year data),
+looks (the mock-ups: the same screens in every Kit.look, side by side; year data),
 challenges (the day's lift challenges: the Hero section, the Log tab's TRY keys, done and claimed; year data, also --fingers),
 rungs (a lift done by double progression: the Beat it step chart, the reel's Beat last time card, beat tags in the history; `new` data, also --fingers),
 tidy (the exercise card's title, last / aim box and green done sets, the plan's done rows, Journey -> Log by week with a filter, a workout's sheet; year data, also --fingers),

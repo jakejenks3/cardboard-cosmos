@@ -83,7 +83,7 @@ static func card(m: Dictionary) -> Control:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.set_meta("challenge_option", str(o.type))
 		row.set_meta("challenge_hit", is_hit)
-		row.add_child(Kit.vcenter(Icons.rect(str(lk[0]), 16, lk[1])))
+		row.add_child(Kit.vcenter(Icons.rect(str(lk[0]), 16, lk[1]) if Kit.look == "stripe" else Kit.badge(str(lk[0]), lk[1], 14)))
 		var v = Kit.vbox(0)
 		v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v.mouse_filter = Control.MOUSE_FILTER_IGNORE

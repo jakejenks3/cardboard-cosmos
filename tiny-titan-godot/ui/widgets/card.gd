@@ -25,6 +25,9 @@ const FRAME = 4
 ## A flat row's stripe, down its left edge (screen px).
 const STRIPE = 4
 var _flat = false
+## A section (Kit.section): its frame follows Kit.look, in `_section_color`.
+var _section = false
+var _section_color = Color()
 var _stripe = Color()
 var _tint = null
 var _tint_amount = 0.16
@@ -123,6 +126,14 @@ func flat(stripe: Color, tint = null, amount: float = 0.16) -> Card:
 	return self
 
 
+## This card is a section in colour `c`: its frame follows Kit.look.
+func section_look(c: Color) -> Card:
+	_section = true
+	_section_color = c
+	_restyle()
+	return self
+
+
 ## A section: `head` across the top inside the frame, the body under it
 ## (padded `pad_px` from the frame, `sep` between its rows). From then on
 ## `add()` and `box` are the body.
@@ -148,19 +159,71 @@ func with_head(head: Control, pad_px: int = 10, sep: int = 8) -> Card:
 
 func _restyle() -> void:
 	if _flat:
-		var fill = Pal.slot() if _tint == null else Pal.slot().lerp(_tint, _tint_amount)
-		if _hot:
-			fill = fill.lightened(0.06)
-		var sb = Kit.sbox(fill, 3, null, 0, _pad, _pad)
-		sb.border_width_left = STRIPE
-		sb.border_color = _stripe
-		sb.content_margin_left = _pad + STRIPE
-		add_theme_stylebox_override("panel", sb)
+		add_theme_stylebox_override("panel", _row_box())
 		return
 	var bg = Pal.PANEL if _bg == null else _bg
 	if _hot:
 		bg = bg.lightened(0.07)
+	if _section and Kit.look != "stripe":
+		add_theme_stylebox_override("panel", _section_box(bg))
+		return
 	add_theme_stylebox_override("panel", PixBox.panel(bg, _border, _pad))
+
+
+## A section's frame by the look (Kit.look).
+func _section_box(bg: Color) -> StyleBox:
+	var c = _section_color
+	match Kit.look:
+		"arcade":
+			return PixBox.make(bg, {"ring": c, "lip": 3, "lip_color": c.darkened(0.55), "pad_h": _pad, "pad_v": _pad})
+		"clean":
+			# A soft card on the page: real rounding, no border, a shadow under it.
+			return Kit.soft_box(bg.lerp(Pal.BG2, 0.25), 16, null, 0, _pad, _pad, Pal.with_alpha(Pal.OUTLINE, 0.55), 10, Vector2(0, 4))
+		"rpg":
+			return PixBox.make(Pal.WELL.lerp(bg, 0.55), {"ring": Pal.ACCENT_DARK, "lip": 2, "lip_color": Pal.OUTLINE, "pad_h": _pad, "pad_v": _pad})
+		_:
+			return Kit.soft_box(Pal.with_alpha(Pal.WELL, 0.85), 10, c, 2, _pad, _pad, Pal.with_alpha(c, 0.35), 10)
+
+
+## A row's box by the look (Kit.look): the stripe down the left edge ("stripe"), a raised tile with a lip in
+## its colour (arcade), nothing but a line under it (clean), a sunken slot (rpg), an outline (neon).
+func _row_box() -> StyleBox:
+	var base = Pal.slot()
+	var c = _stripe
+	match Kit.look:
+		"arcade":
+			var fill = Pal.PANEL2.lightened(0.04) if _tint == null else Pal.PANEL2.lerp(_tint, _tint_amount + 0.12)
+			if _hot:
+				fill = fill.lightened(0.06)
+			return PixBox.make(fill, {"ring": c.darkened(0.1), "lip": 3, "lip_color": c.darkened(0.4), "pad_h": _pad, "pad_v": _pad})
+		"clean":
+			# No box: a hairline under the row; a done or chosen row a soft wash.
+			var cs = Kit.soft_box(Color(0, 0, 0, 0) if _tint == null else Pal.with_alpha(_tint, _tint_amount * 0.8), 10, null, 0, _pad, _pad)
+			if _hot:
+				cs.bg_color = Pal.with_alpha(Pal.TEXT, 0.05)
+			if _tint == null:
+				cs.set_corner_radius_all(0)
+				cs.border_width_bottom = 1
+				cs.border_color = Pal.with_alpha(Pal.MUTED, 0.18)
+			return cs
+		"rpg":
+			var rf = Pal.WELL.lerp(Pal.PANEL, 0.35) if _tint == null else Pal.WELL.lerp(_tint, _tint_amount + 0.05)
+			if _hot:
+				rf = rf.lightened(0.06)
+			return PixBox.make(rf, {"inset": true, "lip": 0, "ring": Pal.OUTLINE.lerp(c, 0.25), "pad_h": _pad, "pad_v": _pad})
+		"neon":
+			var nf = Pal.with_alpha(Pal.BG, 0.7) if _tint == null else Pal.with_alpha(Pal.WELL.lerp(_tint, _tint_amount + 0.1), 0.9)
+			if _hot:
+				nf = nf.lightened(0.06)
+			return Kit.soft_box(nf, 8, Pal.with_alpha(c, 0.9), 2, _pad, _pad, Pal.with_alpha(c, 0.3), 5)
+	var f = base if _tint == null else base.lerp(_tint, _tint_amount)
+	if _hot:
+		f = f.lightened(0.06)
+	var sb = Kit.sbox(f, 3, null, 0, _pad, _pad)
+	sb.border_width_left = STRIPE
+	sb.border_color = _stripe
+	sb.content_margin_left = _pad + STRIPE
+	return sb
 
 
 ## Pressed in a little while the mouse is down, popping back on release. A

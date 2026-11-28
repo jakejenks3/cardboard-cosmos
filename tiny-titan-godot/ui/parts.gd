@@ -73,7 +73,7 @@ static func quest_list(quests: Array, compact: bool = false, flat: bool = false)
 		var row = Kit.hbox(10)
 		if flat:
 			row.custom_minimum_size.y = 44 if Kit.fingers else 40
-		row.add_child(Kit.vcenter(Icons.rect("check" if q.claimed else Icons.for_emoji(q.icon), 28 if flat else 30)))
+		row.add_child(Kit.vcenter(Kit.badge("check" if q.claimed else Icons.for_emoji(q.icon), Pal.GOOD if q.done else color, 22 if Kit.look != "stripe" else (28 if flat else 30))))
 		var main = Kit.vbox(4)
 		main.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		main.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -107,7 +107,9 @@ static func quest_list(quests: Array, compact: bool = false, flat: bool = false)
 ## The missions still open as small flat tiles, two across: the icon and the
 ## mission's own title (two lines at most), a thin bar and the reward. A
 ## mission about one lift opens that lift's page, any other the Missions list.
-static func mission_grid(quests: Array) -> GridContainer:
+static func mission_grid(quests: Array) -> Container:
+	if Kit.look == "clean":
+		return _mission_list(quests)
 	var g = Kit.grid(2, 6)
 	for q in quests:
 		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
@@ -117,7 +119,7 @@ static func mission_grid(quests: Array) -> GridContainer:
 		t.tooltip_text = Icons.strip_emoji(str(q.get("desc", "")))
 		var line = Kit.hbox(6)
 		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		line.add_child(Kit.vcenter(Icons.rect(Icons.for_emoji(q.icon), 20)))
+		line.add_child(Kit.vcenter(Kit.badge(Icons.for_emoji(q.icon), color, 18 if Kit.look != "stripe" else 20)))
 		var title = Kit.para(Icons.strip_emoji(q.title), 12, Pal.TEXT, true)
 		title.max_lines_visible = 2
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -134,6 +136,32 @@ static func mission_grid(quests: Array) -> GridContainer:
 		t.add(foot)
 		g.add_child(t)
 	return g
+
+
+## The clean look's open missions: one line each, the badge, the title over its words, the bar, the reward.
+static func _mission_list(quests: Array) -> VBoxContainer:
+	var v = Kit.vbox(0)
+	for q in quests:
+		var color = Pal.disc(q.discipline) if q.get("discipline") != null else Pal.ACCENT
+		var tap = JourneyLifts.open_named.bind(str(q.lift), {"view": "compare"}) if q.has("lift") else App.go.bind("adventure", "quests")
+		var t = Kit.row(tap, color, null, 8, 4)
+		t.tooltip_text = Icons.strip_emoji(str(q.get("desc", "")))
+		var line = Kit.hbox(10)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		line.add_child(Kit.vcenter(Kit.badge(Icons.for_emoji(q.icon), color, 20)))
+		var mid = Kit.vbox(4)
+		mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		mid.add_child(Kit.clip(Icons.strip_emoji(q.title), 14, Pal.TEXT, true))
+		var ratio = 0.0
+		if float(q.target) > 0.0:
+			ratio = float(q.progress) / float(q.target)
+		mid.add_child(Kit.bar(ratio, color, 4))
+		line.add_child(mid)
+		line.add_child(Kit.vcenter(Kit.label("+%s XP" % Xp.fmt_int(q.xp), 12, Pal.ACCENT, true)))
+		t.add(line)
+		v.add_child(t)
+	return v
 
 
 ## One "next goal" row (from App.next_goals): icon, title, a bar and the percentage.

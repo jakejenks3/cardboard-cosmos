@@ -30,6 +30,15 @@ func fill() -> void:
 	for id in Pal.THEME_ORDER:
 		themes.add_child(_theme_tile(id))
 	add_child(themes)
+	# The look of sections and rows (Kit.look): the mock-ups of 2026-11-27, to try on the real log.
+	add_child(Kit.section_title("Look (trying out)"))
+	var looks = []
+	for lk in Kit.LOOKS:
+		var k = Kit.choice({"stripe": "Now", "arcade": "Arcade", "clean": "Clean", "rpg": "RPG", "neon": "Neon"}[lk], Kit.look == lk, _on_ui_look.bind(lk), Pal.ACCENT, 12)
+		k.tooltip_text = "Sections and rows: %s" % lk
+		k.set_meta("look_key", lk)
+		looks.append(k)
+	add_child(Kit.choice_track(looks))
 
 	# --- hero -------------------------------------------------------------------
 	if p != null:
@@ -898,6 +907,14 @@ func _theme_tile(id: String) -> Button:
 	b.pressed.connect(_on_theme.bind(id))
 	Kit.juice(b)
 	return b
+
+
+func _on_ui_look(id: String) -> void:
+	if id == Kit.look:
+		return
+	Sfx.claim()
+	# The shell rebuilds itself in the new look (main.gd) and reopens this sheet.
+	App.update_settings({"look": id})
 
 
 func _on_theme(id: String) -> void:

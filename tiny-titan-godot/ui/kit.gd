@@ -12,6 +12,15 @@ extends RefCounted
 ## top), rows inside it flat (row: a stripe down the left edge), groups inside
 ## it under a sub_head, done boxes as tick_box, counts as pips.
 
+## THE LOOK of sections, rows and their icons (2026-11-27, the user: "that rectangle with the left edge being a
+## color... looks really ugly... experiment with new designs"). "stripe" is how it was; the others are the
+## mock-ups shown to the user: "arcade" (chunky raised tiles, solid coloured headers), "clean" (no boxes in
+## boxes: rows split by thin lines, colour in rounded icon badges, plain bold headings), "rpg" (gold-trimmed
+## windows, sunken item slots), "neon" (dark rows outlined in their colour). Read by section, row (Card.flat),
+## badge and sub_head; nothing else changes with it.
+const LOOKS = ["stripe", "arcade", "clean", "rpg", "neon"]
+static var look: String = "stripe"
+
 ## Where modal sheets and overlays are added. Set by main.gd.
 static var overlay_root: Control = null
 ## A phone or tablet (set by main.gd): small keys are made big enough for a finger.
@@ -616,18 +625,41 @@ static func tag(text, color: Color, dark_text: bool = true, size: int = 11) -> P
 static func section(id: String, title: String, icon: String, color: Color, right: Control = null, tap: Callable = Callable(), sep: int = 8, pad_px: int = 10) -> Card:
 	var c = card(sep, tap, pad_px)
 	c.accent(color)
+	c.section_look(color)
 	var head = PanelContainer.new()
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	head.custom_minimum_size = Vector2(0, 40 if fingers else 34)
 	var sb = sbox(Pal.band(color), 0, null, 0, 8, 3)
 	sb.border_width_bottom = 2
 	sb.border_color = Pal.with_alpha(color, 0.85)
+	var title_col = color.lightened(0.25)
+	match look:
+		"arcade":
+			sb = sbox(color, 0, null, 0, 8, 3)
+			sb.border_width_bottom = 3
+			sb.border_color = color.darkened(0.45)
+			title_col = Pal.INK
+		"clean":
+			sb = sbox(Color(0, 0, 0, 0), 0, null, 0, 12, 8)
+		"rpg":
+			sb = sbox(Pal.deep(color).lerp(Pal.OUTLINE, 0.35), 0, null, 0, 8, 3)
+			sb.border_width_bottom = 2
+			sb.border_color = Pal.ACCENT_DARK
+			title_col = Pal.ACCENT
+		"neon":
+			sb = sbox(Color(0, 0, 0, 0), 0, null, 0, 10, 3)
+			sb.border_width_bottom = 2
+			sb.border_color = color
 	head.add_theme_stylebox_override("panel", sb)
 	var h = hbox(8)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if icon != "":
-		h.add_child(vcenter(Icons.rect(icon, 16)))
-	var t = PixelFont.rect(title, 2, color.lightened(0.25))
+		h.add_child(vcenter(badge(icon, color, 16) if look == "clean" else Icons.rect(icon, 16)))
+	var t
+	if look == "clean":
+		t = label(_title_words(title), 18, Pal.TEXT, true)
+	else:
+		t = PixelFont.rect(title, 2, title_col)
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	h.add_child(vcenter(t))
 	h.add_child(spacer())
@@ -637,6 +669,59 @@ static func section(id: String, title: String, icon: String, color: Color, right
 	c.with_head(head, pad_px, sep)
 	c.set_meta("section", id)
 	return c
+
+
+## "NOV 9 - 15" -> "Nov 9 - 15", "LIFT REPORT · 4 WEEKS" -> "Lift report · 4 weeks" (the first word capital).
+static func _title_words(t: String) -> String:
+	var low = t.to_lower()
+	return low.substr(0, 1).to_upper() + low.substr(1) if low != "" else low
+
+
+## A soft box with real rounding (the clean and neon looks; sbox stays blocky), an optional glow or shadow.
+static func soft_box(bg: Color, radius: int, border = null, bw: int = 0, pad_h: int = 12, pad_v: int = 10, glow = null, glow_size: int = 0, offset: Vector2 = Vector2.ZERO) -> StyleBoxFlat:
+	var s = StyleBoxFlat.new()
+	s.bg_color = bg
+	s.set_corner_radius_all(radius)
+	if border != null and bw > 0:
+		s.border_color = border
+		s.set_border_width_all(bw)
+	s.content_margin_left = pad_h
+	s.content_margin_right = pad_h
+	s.content_margin_top = pad_v
+	s.content_margin_bottom = pad_v
+	if glow != null and glow_size > 0:
+		s.shadow_color = glow
+		s.shadow_size = glow_size
+		s.shadow_offset = offset
+	s.anti_aliasing = true
+	s.corner_detail = 8
+	return s
+
+
+## An icon on a small plate in `color`, by the look (Kit.look): solid with a lip (arcade), a soft rounded
+## wash (clean), a sunken slot (rpg), an outline (neon); the plain icon in the "stripe" look.
+static func badge(icon: String, color: Color, px: int = 20) -> Control:
+	var ic = Icons.rect(icon, px)
+	if look == "stripe":
+		return ic
+	var p = PanelContainer.new()
+	p.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var pad = maxi(4, int(px / 4.0))
+	var sb = null
+	match look:
+		"arcade":
+			sb = PixBox.make(color, {"lip": 1, "lip_color": color.darkened(0.45), "pad_h": pad, "pad_v": pad})
+		"clean":
+			sb = soft_box(Pal.with_alpha(color, 0.2), int(px / 2.0) + pad, null, 0, pad, pad)
+		"rpg":
+			sb = PixBox.make(Pal.WELL, {"inset": true, "lip": 0, "ring": color.darkened(0.2), "pad_h": pad, "pad_v": pad})
+		_:
+			sb = soft_box(Pal.with_alpha(color, 0.1), 6, color, 2, pad, pad, Pal.with_alpha(color, 0.45), 4)
+	p.add_theme_stylebox_override("panel", sb)
+	p.add_child(center(ic))
+	return p
 
 
 ## A row inside a section: a flat fill (Pal.slot) with a stripe of `stripe`
@@ -655,12 +740,45 @@ static func row(tap: Callable = Callable(), stripe = null, tint = null, pad_px: 
 static func sub_head(text: String, color: Color, right: Control = null, tip: String = "") -> HBoxContainer:
 	var h = hbox(6)
 	h.custom_minimum_size = Vector2(0, 22)
-	var bar = ColorRect.new()
-	bar.color = color
-	bar.custom_minimum_size = Vector2(4, 14)
-	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	h.add_child(vcenter(bar))
 	var l = label(text, 12, Pal.TEXT, true)
+	match look:
+		"arcade":
+			# A tag in its colour.
+			l = label(" %s " % text, 11, Pal.INK, true)
+			var tp = PanelContainer.new()
+			tp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			tp.add_theme_stylebox_override("panel", sbox(color, 2, null, 0, 4, 1))
+			tp.add_child(l)
+			h.add_child(vcenter(tp))
+		"clean":
+			l = label(text, 11, Pal.MUTED, true)
+			h.add_child(vcenter(l))
+		"rpg":
+			h.add_child(vcenter(label("◆", 10, Pal.ACCENT, true)))
+			l = label(text, 12, Pal.ACCENT, true)
+			h.add_child(vcenter(l))
+		"neon":
+			l = label(text, 12, color.lightened(0.2), true)
+			h.add_child(vcenter(l))
+		_:
+			var bar = ColorRect.new()
+			bar.color = color
+			bar.custom_minimum_size = Vector2(4, 14)
+			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			h.add_child(vcenter(bar))
+	if look != "stripe":
+		if tip != "":
+			l.tooltip_text = tip
+			l.mouse_filter = Control.MOUSE_FILTER_PASS
+		if right is Label:
+			right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			right.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			h.add_child(vcenter(right))
+		else:
+			h.add_child(spacer())
+			if right != null:
+				h.add_child(vcenter(right))
+		return h
 	if tip != "":
 		l.tooltip_text = tip
 		l.mouse_filter = Control.MOUSE_FILTER_PASS
